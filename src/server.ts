@@ -1910,9 +1910,35 @@ function acceptsRevision(schema: z.ZodType): schema is z.ZodObject {
 }
 
 const BATCH_REFERENCE = /^\$(\d+)\.(added|removed|regionsAdded)(?:\[(\d+)\])?$/;
+const BATCH_RESULT_REFERENCE = /^\$(\d+)\.result((?:\.[A-Za-z_$][\w$]*|\[\d+\]|\[\*\])*)$/;
 
-function resolveBatchReferences(value: unknown, steps: ReadonlyArray<Record<"added" | "removed" | "regionsAdded", ReadonlyArray<number | string>>>): unknown {
+type BatchStepRecord = Record<"added" | "removed" | "regionsAdded", ReadonlyArray<number | string>> & { result?: unknown };
+
+// Walks ".key", "[i]" and "[*]" (map over an array) through a read-only step's result.
+function readResultPath(value: unknown, path: string, reference: string): unknown {
+  const token = /^(?:\.([A-Za-z_$][\w$]*)|\[(\d+)\]|\[(\*)\])/.exec(path);
+  if (!token) return value;
+  const rest = path.slice(token[0].length);
+  if (token[3]) {
+    if (!Array.isArray(value)) throw new Error(`${reference}: [*] needs an array`);
+    return value.map((item) => readResultPath(item, rest, reference));
+  }
+  const next = token[1] !== undefined
+    ? (value && typeof value === "object" ? (value as Record<string, unknown>)[token[1]] : undefined)
+    : (Array.isArray(value) ? value[Number(token[2])] : undefined);
+  if (next === undefined) throw new Error(`${reference} does not resolve: missing ${token[0]}`);
+  return readResultPath(next, rest, reference);
+}
+
+function resolveBatchReferences(value: unknown, steps: ReadonlyArray<BatchStepRecord>): unknown {
   if (typeof value === "string") {
+    const resultMatch = BATCH_RESULT_REFERENCE.exec(value);
+    if (resultMatch) {
+      const step = steps[Number(resultMatch[1])];
+      if (!step) throw new Error(`${value} refers to a step that has not run`);
+      if (step.result === undefined) throw new Error(`${value}: step ${resultMatch[1]} is not a read-only step, so it has no result`);
+      return readResultPath(step.result, resultMatch[2] ?? "", value);
+    }
     const match = BATCH_REFERENCE.exec(value);
     if (!match) return value;
     const step = steps[Number(match[1])];
@@ -2397,14 +2423,14 @@ function createServerWithCatalog(
   }).strict();
   rawRegisterTool("plasticity_batch", {
     title: "Run several Plasticity operations in one call",
-    description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all), likewise removed and regionsAdded. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many.",
+    description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all), likewise removed and regionsAdded. Read a read-only step's output with \"$<step>.result.path\" using .key, [i] and [*], e.g. \"$3.result.matches[*].id\" after plasticity_find_edges. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many.",
     inputSchema: batchSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, async (rawInput, extra) => result(await exclusive(async () => {
     const input = batchSchema.parse(rawInput);
     const start = await session.get().state();
     if (input.revision !== undefined && input.revision !== start.revision) throw new Error(`Stale reference: expected revision ${input.revision}, current revision is ${start.revision}`);
-    const stepChanges: Array<{ added: number[]; removed: number[]; regionsAdded: string[] }> = [];
+    const stepChanges: Array<{ added: number[]; removed: number[]; regionsAdded: string[]; result?: unknown }> = [];
     const completed: Array<Record<string, unknown>> = [];
     let current = start;
     for (const [index, step] of input.steps.entries()) {
@@ -2418,12 +2444,16 @@ function createServerWithCatalog(
         const readOnly = selected.annotations.readOnlyHint;
         const after = readOnly ? current : await session.get().state();
         const change = diffScenes(current, after);
+        const stepResult = readOnly ? parseToolText(response) : undefined;
         stepChanges.push({
           added: change.added.map((body) => body.id),
           removed: change.removed.map((body) => body.id),
           regionsAdded: change.regionsAdded.map((region) => region.id),
+          ...(readOnly ? { result: stepResult } : {}),
         });
-        completed.push({ step: index, toolName: step.toolName, ...stepChanges[index], ...(readOnly ? { result: parseToolText(response) } : {}) });
+        completed.push(readOnly
+          ? { step: index, toolName: step.toolName, result: stepResult }
+          : { step: index, toolName: step.toolName, added: stepChanges[index]!.added, removed: stepChanges[index]!.removed, regionsAdded: stepChanges[index]!.regionsAdded });
         current = after;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

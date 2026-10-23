@@ -1346,7 +1346,10 @@ test("compact catalog exposes core tools while routing hidden operations through
     "plasticity_call", "plasticity_batch", "plasticity_list_windows", "plasticity_connect", "plasticity_status",
     "plasticity_current_selection", "plasticity_list_bodies", "plasticity_body_info",
     "plasticity_capture_snapshot", "plasticity_changes_since", "plasticity_reconcile",
-    "plasticity_screenshot",
+    "plasticity_screenshot", "plasticity_create_box", "plasticity_create_cylinder", "plasticity_create_sphere",
+    "plasticity_boolean", "plasticity_fillet", "plasticity_chamfer", "plasticity_extrude_faces",
+    "plasticity_extrude_profile", "plasticity_move", "plasticity_rotate", "plasticity_scale", "plasticity_mirror",
+    "plasticity_delete", "plasticity_undo", "plasticity_redo", "plasticity_find_edges", "plasticity_find_faces",
   ]));
   assert.equal(listed.tools[0]?.name, "plasticity_call");
 
@@ -5729,5 +5732,36 @@ test("plasticity_batch stops at the failing step, names it, and can undo complet
 
   const nested = await client.callTool({ name: "plasticity_batch", arguments: { steps: [{ toolName: "plasticity_batch", arguments: {} }] } });
   assert.equal(nested.isError, true);
+  await close();
+});
+
+test("plasticity_batch feeds a read-only step's result into a later step", async () => {
+  const edge = (id: string, line: boolean) => ({ id, line, circle: !line, curveType: line ? "Line" : "Circle", tangent: [1, 0, 0], lengthMm: 10, centerMm: [0, 0, 0], boundsMm: { min: [0, 0, 0], max: [1, 1, 1] }, faceIds: [] });
+  let state: RuntimeState = {
+    ...emptyState(),
+    bodies: [{ id: 7, versionId: 70, type: "Solid", name: "part", boundsMm: { min: [0, 0, 0], max: [1, 1, 1] }, faceIds: [], edgeIds: ["a", "b", "c"], faces: [], edges: [edge("a", true), edge("b", false), edge("c", true)] }] as unknown as RuntimeState["bodies"],
+  };
+  const filleted: unknown[][] = [];
+  const operations = {
+    async state() { return state; },
+    async fillet(...args: unknown[]) { filleted.push(args); state = { ...state, revision: "r2", undoDepth: 1 }; return state; },
+  } as unknown as PlasticityOperations;
+  const fake = {
+    async windows() { return []; }, async connect() { return state; }, get() { return operations; },
+    capabilities() { return { bindings: [], operations: unavailableConstruction() }; },
+    async captureSnapshot() { return {}; }, async changesSince() { return {}; }, async waitForChange() { return {}; },
+  } satisfies SessionLike;
+  const { client, close } = await batchClient(fake);
+  const response = await client.callTool({ name: "plasticity_batch", arguments: { steps: [
+    { toolName: "plasticity_find_edges", arguments: { query: { bodyIds: [7], line: true } } },
+    { toolName: "plasticity_fillet", arguments: { id: 7, edgeIds: "$0.result.matches[*].id", radiusMm: 1 } },
+  ] } });
+  assert.equal(response.isError, undefined, JSON.stringify(response.content));
+  assert.deepEqual(filleted[0]?.slice(0, 3), [7, ["a", "c"], 1]);
+  const bad = await client.callTool({ name: "plasticity_batch", arguments: { steps: [
+    { toolName: "plasticity_fillet", arguments: { id: 7, edgeIds: "$0.result.matches[*].id", radiusMm: 1 } },
+  ] } });
+  assert.equal(bad.isError, true, "a reference to a step that has not run fails before CAD is called");
+  assert.equal(filleted.length, 1);
   await close();
 });
