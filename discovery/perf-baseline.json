@@ -116,5 +116,22 @@
         }
       ]
     }
-  ]
+  ],
+  "roundTripsBoxHoleFillet": {
+    "turns": 11,
+    "flow": [
+      "catalog query create_box (272 KB response)",
+      "status (revision)",
+      "create_box",
+      "catalog query create_cylinder",
+      "create_cylinder (revision from previous result)",
+      "catalog query boolean",
+      "boolean",
+      "body_info (edge ids)",
+      "catalog query fillet",
+      "fillet",
+      "status (verify)"
+    ],
+    "note": "Compact mode before this work: every non-core op needs a catalog lookup, and each mutation needs a revision."
+  }
 }

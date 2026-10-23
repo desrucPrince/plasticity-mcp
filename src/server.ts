@@ -1904,6 +1904,11 @@ export function createServer(
   return createServerWithCatalog("full", session, suppliedStrength, threadQualifications, stepImportReferences, constructionHistory, stepReferenceDownloader);
 }
 
+function catalogSummary(description: string): string {
+  const sentence = description.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? description;
+  return sentence.length > 160 ? `${sentence.slice(0, 157)}...` : sentence;
+}
+
 export function createCompactServer(...args: Parameters<typeof createServer>): McpServer {
   return createServerWithCatalog("compact", ...args);
 }
@@ -1971,11 +1976,12 @@ function createServerWithCatalog(
     arguments: z.record(z.string(), z.unknown()).default({}),
     query: z.string().trim().min(1).max(200).optional(),
     offset: z.number().int().nonnegative().default(0),
-    limit: z.number().int().min(1).max(25).default(10),
+    limit: z.number().int().min(1).max(100).default(20),
+    schema: z.boolean().default(false),
   }).strict();
   rawRegisterTool("plasticity_call", {
     title: "Plasticity tool catalog and dispatcher",
-    description: "Browse the bounded catalog of registered Plasticity MCP operations or invoke one by its exact tool name. Use toolName='catalog' with query/offset/limit to read descriptions and JSON input schemas; set toolName to a returned operation name and pass its arguments object to invoke it. Only registered MCP operations are callable; the selected operation's original Zod schema and safety checks are applied. This is not JavaScript execution.",
+    description: "Find or invoke Plasticity MCP operations. toolName='catalog' with a query lists matching names and one-line summaries (name matches first); an exact tool name as query, or schema=true, also returns JSON input schemas. Then set toolName to the operation and pass its arguments. Only registered operations are callable, with their original validation. Not JavaScript execution.",
     inputSchema: plasticityCallSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   }, async (rawInput, extra) => {
@@ -1988,23 +1994,33 @@ function createServerWithCatalog(
     }
 
     const query = input.query?.toLocaleLowerCase();
-    const matching = [...routedTools.values()]
-      .filter((candidate) => candidate.name !== "plasticity_call")
-      .filter((candidate) => !query || candidate.name.toLocaleLowerCase().includes(query) || candidate.description.toLocaleLowerCase().includes(query))
-      .sort((left, right) => left.name.localeCompare(right.name));
-    const page = matching.slice(input.offset, input.offset + input.limit);
+    const candidates = [...routedTools.values()].filter((candidate) => candidate.name !== "plasticity_call");
+    const exact = query ? candidates.find((candidate) => candidate.name.toLocaleLowerCase() === query) : undefined;
+    // Name hits rank ahead of description hits so short queries like "box" surface the CAD tool, not long strength docs.
+    const byName = (candidate: RoutedTool) => !query || candidate.name.toLocaleLowerCase().includes(query);
+    const matching = exact ? [exact] : [
+      ...candidates.filter(byName).sort((left, right) => left.name.localeCompare(right.name)),
+      ...(query ? candidates.filter((candidate) => !byName(candidate) && candidate.description.toLocaleLowerCase().includes(query)).sort((left, right) => left.name.localeCompare(right.name)) : []),
+    ];
+    const includeSchema = exact !== undefined || input.schema;
+    const limit = includeSchema ? Math.min(input.limit, 5) : input.limit;
+    const page = matching.slice(input.offset, input.offset + limit);
     return result({
       total: matching.length,
       offset: input.offset,
-      limit: input.limit,
+      limit,
       nextOffset: input.offset + page.length < matching.length ? input.offset + page.length : null,
-      validationNote: "The original server-side Zod schema is authoritative; cross-field refinements may be stricter than the exported JSON Schema.",
-      tools: page.map((candidate) => ({
-        name: candidate.name,
-        description: candidate.description,
-        annotations: candidate.annotations,
-        inputSchema: z.toJSONSchema(candidate.inputSchema, { unrepresentable: "any" }),
-      })),
+      ...(includeSchema
+        ? { validationNote: "The original server-side Zod schema is authoritative; cross-field refinements may be stricter than the exported JSON Schema." }
+        : { hint: "Pass an exact tool name as query (or schema=true) to get input schemas." }),
+      tools: page.map((candidate) => includeSchema
+        ? {
+          name: candidate.name,
+          description: candidate.description,
+          annotations: candidate.annotations,
+          inputSchema: z.toJSONSchema(candidate.inputSchema, { unrepresentable: "any" }),
+        }
+        : { name: candidate.name, summary: catalogSummary(candidate.description), readOnly: candidate.annotations.readOnlyHint }),
     });
   });
   let toolTail: Promise<void> = Promise.resolve();

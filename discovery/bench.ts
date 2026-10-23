@@ -84,7 +84,9 @@ try {
 } finally {
   await undoTo(0);
   const end = await status();
-  if (end.revision !== base.revision) console.error("WARNING: document not back at baseline", end.bodies.length, end.undoDepth);
+  // Full revision includes redo depth, which is nonzero after undoing, so compare bodies and undo depth.
+  const ids = (st: { bodies: { id: number }[] }) => st.bodies.map((body) => body.id).join(",");
+  if (ids(end) !== ids(base) || end.undoDepth !== 0) console.error("WARNING: document not back at baseline", end.bodies.length, end.undoDepth);
   await s.close();
 }
 

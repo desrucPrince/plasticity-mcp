@@ -1357,6 +1357,13 @@ test("compact catalog exposes core tools while routing hidden operations through
   const catalog = parseToolJson(catalogResponse);
   assert.equal(catalog.total, 1);
   assert.equal(catalog.tools[0]?.name, "plasticity_create_box");
+  assert.equal(typeof catalog.tools[0]?.inputSchema, "object", "an exact name query returns the schema");
+
+  const fuzzyResponse = await client.callTool({ name: "plasticity_call", arguments: { toolName: "catalog", query: "box" } });
+  const fuzzy = parseToolJson(fuzzyResponse);
+  assert.equal(fuzzy.tools[0]?.name.includes("box"), true, "name matches rank before description matches");
+  assert.equal(fuzzy.tools.some((tool: { inputSchema?: unknown }) => tool.inputSchema !== undefined), false, "fuzzy queries return summaries only");
+  assert.ok(JSON.stringify(fuzzyResponse).length < 8_000, "a fuzzy catalog page stays small");
 
   const invalid = await client.callTool({ name: "plasticity_call", arguments: {
     toolName: "plasticity_create_box",
