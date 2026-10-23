@@ -3419,6 +3419,21 @@ export class PlasticityOperations {
     return await this.state();
   }
 
+  // Same native curve tool with "spline through points" off: the points are the control polygon.
+  async createControlPointCurve(pointsMm: Vector3[], closed: boolean, revision?: string): Promise<RuntimeState> {
+    if (pointsMm.length < 3) throw new Error("Control-point curve requires at least three control points");
+    if (revision) await this.assertRevision(revision);
+    await this.runtime.mutate(`async function (Factory, Vector, CurveType, args) {
+      ${commandStart("CurveCommand")}
+      factory.points = args.points.map(point => new Vector(...point));
+      factory.type = CurveType.NURBS;
+      factory.splineThrough = false;
+      factory.closed = args.closed;
+      ${commandEnd}
+    }`, ["CurveFactory", "Vector3", "CurveType"], [{ points: pointsMm.map(toMeters), closed }]);
+    return await this.state();
+  }
+
   async createHelix(
     axisStartMm: Vector3,
     axisEndMm: Vector3,

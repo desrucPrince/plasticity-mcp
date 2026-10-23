@@ -5755,6 +5755,21 @@ test("creates an interpolating native NURBS curve from millimeter points", async
   assert.match(call?.source ?? "", /factory\.type = CurveType\.NURBS/);
 });
 
+test("creates a native control-point curve with spline-through turned off", async () => {
+  let call: { source: string; bindings: string[]; values: unknown[] } | undefined;
+  const state: RuntimeState = { targetId: "window-1", title: "Untitled - Plasticity", documentToken: "document-1", revision: "current-revision", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [] };
+  const runtime = { async getState() { return state; }, async mutate(source: string, bindings: string[], values: unknown[]) { call = { source, bindings, values }; return {}; } } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+
+  await operations.createControlPointCurve([[0, 0, 0], [10, 20, 0], [30, 20, 0], [40, 0, 0]], true, state.revision);
+
+  assert.deepEqual(call?.bindings, ["CurveFactory", "Vector3", "CurveType"]);
+  assert.deepEqual(call?.values, [{ points: [[0, 0, 0], [0.01, 0.02, 0], [0.03, 0.02, 0], [0.04, 0, 0]], closed: true }]);
+  assert.match(call?.source ?? "", /factory\.type = CurveType\.NURBS/);
+  assert.match(call?.source ?? "", /factory\.splineThrough = false/);
+  await assert.rejects(operations.createControlPointCurve([[0, 0, 0], [1, 1, 1]], false), /at least three control points/);
+});
+
 test("creates a constant-radius native helix from a millimeter axis", async () => {
   let call: { source: string; bindings: string[]; values: unknown[] } | undefined;
   const state: RuntimeState = { targetId: "window-1", title: "Untitled - Plasticity", documentToken: "document-1", revision: "current-revision", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [] };

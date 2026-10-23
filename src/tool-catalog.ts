@@ -31,6 +31,7 @@ const compactTools = new Set([
   "plasticity_redo",
   "plasticity_find_edges",
   "plasticity_find_faces",
+  "plasticity_create_control_point_curve",
 ]);
 
 export function exposeDirectTool(mode: ToolCatalogMode, name: string): boolean {
