@@ -5303,19 +5303,19 @@ test("serializes compact curve inspection and all native rebuild modes", async (
   const inspected = await client.callTool({ name: "plasticity_inspect_curve_structure", arguments: { ids: [7], revision: state.revision } });
   assert.equal(inspected.isError, undefined);
   const inspectedText = (inspected.content as Array<{ type: string; text?: string }>).find((item) => item.type === "text")?.text;
-  assert.match(inspectedText ?? "", /"controlPointCount": 7/);
+  assert.match(inspectedText ?? "", /"controlPointCount": ?7/);
   assert.deepEqual(nativeCalls.at(-1)?.values, [{ ids: [7] }]);
   const evaluated = await client.callTool({ name: "plasticity_evaluate_curve_segments", arguments: {
     samples: [{ bodyId: 7, segmentEntityId: 99, normalizedParameter: 0.5 }], revision: state.revision,
   } });
   assert.equal(evaluated.isError, undefined);
   const evaluatedText = (evaluated.content as Array<{ type: string; text?: string }>).find((item) => item.type === "text")?.text;
-  assert.match(evaluatedText ?? "", /"positionMm": \[/);
+  assert.match(evaluatedText ?? "", /"positionMm": ?\[/);
   assert.deepEqual(nativeCalls.at(-1)?.values, [{ samples: [{ bodyId: 7, segmentEntityId: 99, normalizedParameter: 0.5 }] }]);
   const planarity = await client.callTool({ name: "plasticity_inspect_curve_planarity", arguments: { ids: [7], revision: state.revision } });
   assert.equal(planarity.isError, undefined);
   const planarityText = (planarity.content as Array<{ type: string; text?: string }>).find((item) => item.type === "text")?.text;
-  assert.match(planarityText ?? "", /"planar": false/);
+  assert.match(planarityText ?? "", /"planar": ?false/);
   const listedControlPoints = await client.callTool({ name: "plasticity_list_curve_control_points", arguments: { ids: [7], revision: state.revision } });
   assert.equal(listedControlPoints.isError, undefined);
   const listedControlPointsText = (listedControlPoints.content as Array<{ type: string; text?: string }>).find((item) => item.type === "text")?.text;
@@ -5458,7 +5458,7 @@ test("serializes exact surface inspection, degree elevation, face matching, and 
   const inspected = await client.callTool({ name: "plasticity_inspect_surface_structure", arguments: { faces, revision: state.revision } });
   assert.equal(inspected.isError, undefined);
   const inspectedText = (inspected.content as Array<{ type: string; text?: string }>).find((item) => item.type === "text")?.text;
-  assert.match(inspectedText ?? "", /"uControlPointCount": 6/);
+  assert.match(inspectedText ?? "", /"uControlPointCount": ?6/);
   assert.deepEqual(nativeCalls.at(-1)?.values, [{ faces }]);
 
   const raised = await client.callTool({ name: "plasticity_raise_surface_degree", arguments: { faces, revision: state.revision } });

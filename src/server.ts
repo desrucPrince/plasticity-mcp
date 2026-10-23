@@ -1958,6 +1958,19 @@ function resolveBatchReferences(value: unknown, steps: ReadonlyArray<BatchStepRe
   return value;
 }
 
+// Later steps read full results through $<step>.result; the response only echoes small ones.
+function summarizeBatchResult(value: unknown): unknown {
+  const text = JSON.stringify(value) ?? "null";
+  if (text.length <= 1_500) return value;
+  const record = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return {
+    truncated: true,
+    bytes: text.length,
+    ...(typeof record.count === "number" ? { count: record.count } : {}),
+    ...(Array.isArray(record.matches) ? { ids: record.matches.map((match) => (match as { id?: unknown }).id).slice(0, 100) } : {}),
+  };
+}
+
 function parseToolText(response: { content?: Array<{ type: string; text?: string }> }): unknown {
   const text = response.content?.find((part) => part.type === "text")?.text;
   if (text === undefined) return null;
@@ -2452,7 +2465,7 @@ function createServerWithCatalog(
           ...(readOnly ? { result: stepResult } : {}),
         });
         completed.push(readOnly
-          ? { step: index, toolName: step.toolName, result: stepResult }
+          ? { step: index, toolName: step.toolName, result: summarizeBatchResult(stepResult) }
           : { step: index, toolName: step.toolName, added: stepChanges[index]!.added, removed: stepChanges[index]!.removed, regionsAdded: stepChanges[index]!.regionsAdded });
         current = after;
       } catch (error) {
@@ -4050,5 +4063,5 @@ function provenanceSafeUrl(value: string): string {
 }
 
 function result(value: unknown) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] };
+  return { content: [{ type: "text" as const, text: JSON.stringify(value) }] };
 }
