@@ -5887,3 +5887,36 @@ test("MCP forwards cut-with-curves and knife curve inputs", async () => {
   assert.equal(onePoint.isError, true);
   await close();
 });
+
+test("plasticity_batch fills revision for union-schema tools and replies with only what changed", async () => {
+  let state: RuntimeState = emptyState();
+  const seen: unknown[][] = [];
+  const operations = {
+    async state() { return state; },
+    async createPolyline(...args: unknown[]) {
+      seen.push(args);
+      state = { ...state, revision: "r2", undoDepth: 1, bodies: [{ id: 5, versionId: 50, type: "Wire", name: "Polyline", boundsMm: { min: [0, 0, 0], max: [1, 1, 0] }, faceIds: [], edgeIds: [], faces: [], edges: [] }] as unknown as RuntimeState["bodies"] };
+      return state;
+    },
+  } as unknown as PlasticityOperations;
+  const fake = {
+    async windows() { return []; }, async connect() { return state; }, get() { return operations; },
+    capabilities() { return { bindings: [], operations: unavailableConstruction() }; },
+    async captureSnapshot() { return {}; }, async changesSince() { return {}; }, async waitForChange() { return {}; },
+  } satisfies SessionLike;
+  const { client, close } = await batchClient(fake);
+  const response = await client.callTool({ name: "plasticity_batch", arguments: { steps: [
+    { toolName: "plasticity_create_polyline", arguments: { pointsMm: [[0, 0, 0], [1, 1, 0]], closed: false } },
+  ] } });
+  assert.equal(response.isError, undefined, JSON.stringify(response.content));
+  assert.equal(seen.length, 1);
+  assert.ok(seen[0]!.includes("r1"), "the union-schema tool received the current revision");
+  const output = parseToolJson(response);
+  assert.equal(output.revision, "r2");
+  assert.equal(output.bodyCount, 1);
+  assert.deepEqual(output.change.added.map((body: { id: number }) => body.id), [5]);
+  assert.deepEqual(output.steps[0].addedBodies[0].boundsMm, { min: [0, 0, 0], max: [1, 1, 0] });
+  assert.equal("bodies" in output, false, "the default reply leaves out the full scene");
+  assert.equal("regions" in output, false);
+  await close();
+});

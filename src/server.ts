@@ -1949,8 +1949,12 @@ export function createServer(
   return createServerWithCatalog("full", session, suppliedStrength, threadQualifications, stepImportReferences, constructionHistory, stepReferenceDownloader);
 }
 
-function acceptsRevision(schema: z.ZodType): schema is z.ZodObject {
-  return schema instanceof z.ZodObject && "revision" in schema.shape;
+// Unions (e.g. polyline in world space or on a plane) count when any option takes a revision.
+function acceptsRevision(schema: z.ZodType): boolean {
+  if (schema instanceof z.ZodObject) return "revision" in schema.shape;
+  if (schema instanceof z.ZodUnion || schema instanceof z.ZodDiscriminatedUnion) return (schema.options as z.ZodType[]).some(acceptsRevision);
+  if (schema instanceof z.ZodPipe) return acceptsRevision(schema.in as z.ZodType);
+  return false;
 }
 
 const BATCH_REFERENCE = /^\$(\d+)\.(added|removed|regionsAdded)(?:\[(\d+)\])?$/;
@@ -2482,10 +2486,11 @@ function createServerWithCatalog(
     steps: z.array(batchStepSchema).min(1).max(50),
     revision: z.string().min(1).optional(),
     undoOnError: z.boolean().default(false),
+    verbose: z.boolean().default(false),
   }).strict();
   rawRegisterTool("plasticity_batch", {
     title: "Run several Plasticity operations in one call",
-    description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all), likewise removed and regionsAdded. Read a read-only step's output with \"$<step>.result.path\" using .key, [i] and [*], e.g. \"$3.result.matches[*].id\" after plasticity_find_edges. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many.",
+    description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all), likewise removed and regionsAdded. Read a read-only step's output with \"$<step>.result.path\" using .key, [i] and [*], e.g. \"$3.result.matches[*].id\" after plasticity_find_edges. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many. The reply lists what changed (new bodies with bounds); verbose=true adds the full scene summary.",
     inputSchema: batchSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, async (rawInput, extra) => result(await exclusive(async () => {
@@ -2516,7 +2521,14 @@ function createServerWithCatalog(
         });
         completed.push(readOnly
           ? { step: index, toolName: step.toolName, result: summarizeBatchResult(stepResult) }
-          : { step: index, toolName: step.toolName, added: stepChanges[index]!.added, removed: stepChanges[index]!.removed, regionsAdded: stepChanges[index]!.regionsAdded });
+          : {
+            step: index,
+            toolName: step.toolName,
+            added: stepChanges[index]!.added,
+            removed: stepChanges[index]!.removed,
+            regionsAdded: stepChanges[index]!.regionsAdded,
+            addedBodies: change.added.map(compactChangedBody),
+          });
         current = after;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -2532,7 +2544,22 @@ function createServerWithCatalog(
       }
     }
     const end = await session.get().state();
-    return { ...compactMutationResult<Record<string, unknown>>(end, diffScenes(start, end)), steps: completed, undoSteps: end.undoDepth - start.undoDepth };
+    const undoSteps = end.undoDepth - start.undoDepth;
+    if (input.verbose) return { ...compactMutationResult<Record<string, unknown>>(end, diffScenes(start, end)), steps: completed, undoSteps };
+    // Default reply: what changed, not the whole scene. Use plasticity_status for the rest.
+    const change = diffScenes(start, end);
+    return {
+      revision: end.revision,
+      undoSteps,
+      bodyCount: end.bodies.length,
+      change: {
+        added: change.added.map(compactChangedBody),
+        removed: change.removed.map((body) => body.id),
+        modified: change.modified.map((item) => ({ id: item.id, after: compactChangedBody(item.after) })),
+        regionsAdded: change.regionsAdded.map((region) => region.id),
+      },
+      steps: completed,
+    };
   })));
   tool("plasticity_list_windows", "List Plasticity document windows exposed on loopback CDP. If no Plasticity process is running, opens Plasticity with loopback CDP first (disable with PLASTICITY_AUTO_LAUNCH=0); a running instance without CDP is never restarted.", z.object({}), async () =>
     (await session.windows({ launch: true })).map(({ id, title, url }) => ({ targetId: id, title, url })), true);
