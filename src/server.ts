@@ -3793,8 +3793,15 @@ function createServerWithCatalog(
 
   tool("plasticity_set_view", "Set a named viewport orientation and optionally fit all geometry.", z.object({ view: z.enum(["front", "back", "left", "right", "top", "bottom", "isometric"]), fit: z.boolean().default(false) }), async ({ view, fit }) =>
     await session.get().setView(view, fit));
-  tool("plasticity_screenshot", "Save a PNG screenshot of the visible Plasticity renderer viewport to a new file without overwriting. Refuses hidden windows to avoid stale frames.", z.object({ path: z.string().min(1) }), async ({ path }) =>
-    await session.get().screenshot(path), false, { destructiveHint: false });
+  tool("plasticity_screenshot", "Screenshot the visible Plasticity viewport. Without path it returns a scaled JPEG image in the response (maxWidth, default 1024). With path it saves a full PNG to a new file without overwriting. Refuses hidden windows to avoid stale frames.", z.object({
+    path: z.string().min(1).optional(),
+    maxWidth: z.number().int().min(128).max(4096).default(1024),
+    quality: z.number().int().min(30).max(95).default(70),
+  }).strict(), async ({ path, maxWidth, quality }) => {
+    if (path !== undefined) return await session.get().screenshot(path);
+    const image = await session.get().screenshotImage(maxWidth, quality);
+    return { [INLINE_IMAGE]: { data: image.data, mimeType: image.mimeType }, width: image.width, height: image.height, bytes: image.bytes };
+  }, false, { destructiveHint: false });
   tool("plasticity_save_copy", "Save the current document to a new .plasticity file without overwriting.", z.object({ path: z.string().min(1) }), async ({ path }) =>
     await session.get().saveCopy(path), false, { destructiveHint: false });
   tool("plasticity_open_document", "Open a .plasticity document after writing the current document to a new backup file.", z.object({ path: z.string().min(1), backupPath: z.string().min(1), intent, revision }), async ({ path, backupPath, intent: purpose, revision: current }) =>
@@ -4092,6 +4099,15 @@ function provenanceSafeUrl(value: string): string {
   return url.href;
 }
 
+const INLINE_IMAGE = "__inlineImage";
+
 function result(value: unknown) {
+  if (value && typeof value === "object" && INLINE_IMAGE in value) {
+    const { [INLINE_IMAGE]: image, ...rest } = value as Record<string, unknown> & { [INLINE_IMAGE]: { data: string; mimeType: string } };
+    return { content: [
+      { type: "image" as const, data: image.data, mimeType: image.mimeType },
+      { type: "text" as const, text: JSON.stringify(rest) },
+    ] };
+  }
   return { content: [{ type: "text" as const, text: JSON.stringify(value) }] };
 }

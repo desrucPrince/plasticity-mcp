@@ -6590,3 +6590,30 @@ function planeLocalOperations(bodies: RuntimeState["bodies"] = []): { operations
   } as unknown as PlasticityRuntime;
   return { operations: new PlasticityOperations(runtime, "session-1"), argumentsSeen: () => seen, sourceSeen: () => source };
 }
+
+test("screenshotImage returns a scaled inline JPEG without writing a file", async () => {
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16]);
+  const calls: Array<{ method: string; params: Record<string, unknown> | undefined }> = [];
+  const runtime = {
+    async cdp(method: string, params?: Record<string, unknown>) {
+      calls.push({ method, params });
+      if (method === "Page.getLayoutMetrics") return { cssLayoutViewport: { clientWidth: 2048, clientHeight: 1024 } };
+      if (method === "Page.captureScreenshot") return { data: jpeg.toString("base64") };
+      return {};
+    },
+    async read() { return false; },
+  } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime, "session-1");
+  const image = await operations.screenshotImage(1024, 60);
+  assert.deepEqual({ mimeType: image.mimeType, width: image.width, height: image.height, bytes: image.bytes }, { mimeType: "image/jpeg", width: 1024, height: 512, bytes: jpeg.length });
+  const capture = calls.find((call) => call.method === "Page.captureScreenshot");
+  assert.deepEqual(capture?.params, { format: "jpeg", quality: 60, fromSurface: true, clip: { x: 0, y: 0, width: 2048, height: 1024, scale: 0.5 } });
+});
+
+test("screenshotImage refuses a hidden renderer", async () => {
+  const runtime = {
+    async cdp() { return {}; },
+    async read() { return true; },
+  } as unknown as PlasticityRuntime;
+  await assert.rejects(new PlasticityOperations(runtime, "session-1").screenshotImage(), /renderer is hidden/i);
+});

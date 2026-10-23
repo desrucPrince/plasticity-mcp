@@ -9635,6 +9635,28 @@ export class PlasticityOperations {
     return { path: output, bytes: data.length };
   }
 
+  // A scaled JPEG the agent can see in the same tool response; no file is written.
+  async screenshotImage(maxWidth = 1024, quality = 70): Promise<{ data: string; mimeType: "image/jpeg"; width: number; height: number; bytes: number }> {
+    await this.runtime.cdp("Page.bringToFront");
+    const hidden = await this.runtime.read<boolean>("function () { return document.hidden; }");
+    if (hidden) throw new Error("Plasticity renderer is hidden; activate Plasticity and retry the screenshot");
+    const metrics = await this.runtime.cdp("Page.getLayoutMetrics") as { cssLayoutViewport?: { clientWidth?: number; clientHeight?: number } };
+    const viewWidth = metrics.cssLayoutViewport?.clientWidth ?? 0;
+    const viewHeight = metrics.cssLayoutViewport?.clientHeight ?? 0;
+    if (!(viewWidth > 0 && viewHeight > 0)) throw new Error("Plasticity viewport size is unavailable");
+    const scale = Math.min(1, maxWidth / viewWidth);
+    const frame = await this.runtime.cdp("Page.captureScreenshot", {
+      format: "jpeg",
+      quality,
+      fromSurface: true,
+      clip: { x: 0, y: 0, width: viewWidth, height: viewHeight, scale },
+    }) as { data?: unknown };
+    if (typeof frame?.data !== "string" || frame.data.length === 0) throw new Error("Plasticity returned no screenshot image data");
+    const bytes = Buffer.from(frame.data, "base64");
+    if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) throw new Error("Plasticity returned an invalid JPEG frame");
+    return { data: frame.data, mimeType: "image/jpeg", width: Math.round(viewWidth * scale), height: Math.round(viewHeight * scale), bytes: bytes.length };
+  }
+
   async setView(view: "front" | "back" | "left" | "right" | "top" | "bottom" | "isometric", fit: boolean): Promise<unknown> {
     return await this.runtime.read(`async function (args) {
       if (this.executor.isBusy) throw new Error('Plasticity is busy');

@@ -124,6 +124,8 @@ To make it reachable by a tablet on the same private network, run `npm run start
 - **No connect step with one window.** When exactly one Plasticity window is open, the first tool
   call connects to it. `plasticity_connect` also accepts no `targetId` in that case. With several
   windows you still choose one.
+- **Screenshots come back inline.** `plasticity_screenshot` with no `path` returns a scaled JPEG
+  (default width 1024) in the same response. Pass `path` to save a full-size PNG instead.
 - **No status call before each edit.** Every edit result has the new revision and the changed bodies.
 - `PLASTICITY_TIMING=1` adds per-phase milliseconds to edit results. `discovery/bench.ts` is the
   live benchmark; see `discovery/PERF-SUMMARY.md`.

@@ -5784,3 +5784,25 @@ test("ensureConnected connects only when exactly one Plasticity window is open",
   await session.ensureConnected();
   assert.deepEqual(session.connected, ["a"]);
 });
+
+test("plasticity_screenshot without a path returns the image inline", async () => {
+  const operations = {
+    async state() { return emptyState(); },
+    async screenshotImage(maxWidth: number) { return { data: "/9j/AA==", mimeType: "image/jpeg", width: maxWidth, height: 300, bytes: 4 }; },
+    async screenshot(path: string) { return { path, bytes: 10 }; },
+  } as unknown as PlasticityOperations;
+  const fake = {
+    async windows() { return []; }, async connect() { return emptyState(); }, get() { return operations; },
+    capabilities() { return { bindings: [], operations: unavailableConstruction() }; },
+    async captureSnapshot() { return {}; }, async changesSince() { return {}; }, async waitForChange() { return {}; },
+  } satisfies SessionLike;
+  const { client, close } = await batchClient(fake);
+  const inline = await client.callTool({ name: "plasticity_screenshot", arguments: { maxWidth: 640 } });
+  const parts = inline.content as Array<{ type: string; data?: string; mimeType?: string; text?: string }>;
+  assert.equal(parts[0]?.type, "image");
+  assert.equal(parts[0]?.mimeType, "image/jpeg");
+  assert.deepEqual(JSON.parse(parts[1]!.text!), { width: 640, height: 300, bytes: 4 });
+  const saved = await client.callTool({ name: "plasticity_screenshot", arguments: { path: "/tmp/x.png" } });
+  assert.deepEqual(parseToolJson(saved), { path: "/tmp/x.png", bytes: 10 });
+  await close();
+});
