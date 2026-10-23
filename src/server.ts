@@ -1734,18 +1734,29 @@ export class PlasticitySession {
     return result.state;
   }
 
+  private autoConnectError: string | undefined;
+
   get(): PlasticityOperations {
-    if (!this.operations) throw new Error("Connect to an explicit Plasticity window first");
+    if (!this.operations) {
+      throw new Error(this.autoConnectError
+        ? `Could not connect to the only open Plasticity window: ${this.autoConnectError}`
+        : "Connect to an explicit Plasticity window first");
+    }
     return this.operations;
   }
 
   // Saves the list_windows + connect round trips when exactly one window is open. Never launches
-  // Plasticity and never picks between several windows.
+  // Plasticity and never picks between several windows. A failure is kept for get() to report.
   async ensureConnected(): Promise<void> {
     if (this.operations) return;
+    this.autoConnectError = undefined;
     const windows = await this.windows().catch(() => []);
     if (windows.length !== 1) return;
-    await this.connect(windows[0]!.id).catch(() => undefined);
+    try {
+      await this.connect(windows[0]!.id);
+    } catch (error) {
+      this.autoConnectError = error instanceof Error ? error.message : String(error);
+    }
   }
 
   capabilities(): {

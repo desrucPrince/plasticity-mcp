@@ -5783,6 +5783,14 @@ test("ensureConnected connects only when exactly one Plasticity window is open",
   session.available = [window("a")];
   await session.ensureConnected();
   assert.deepEqual(session.connected, ["a"]);
+
+  class OwnedSession extends PlasticitySession {
+    override async windows() { return [window("a")]; }
+    override async connect(): Promise<RuntimeState> { throw new Error("Plasticity window is already owned by another MCP process: a"); }
+  }
+  const owned = new OwnedSession();
+  await owned.ensureConnected();
+  assert.throws(() => owned.get(), /only open Plasticity window: Plasticity window is already owned by another MCP process/);
 });
 
 test("plasticity_screenshot without a path returns the image inline", async () => {

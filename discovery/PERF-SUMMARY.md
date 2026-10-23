@@ -30,9 +30,11 @@ size of each response, which the model must read:
 | Turns before the first real call in a session | 2 (list windows, connect) | **0** with one window open |
 | Seeing a screenshot | 2 turns (save, then read the file) | 1 turn (image in the response) |
 | Compact `tools/list` | 11 tools, 7.6 KB | 29 tools, 24.7 KB |
-| Status read | 10 ms | 4 ms |
-| Box edit, server side (state, CAD, state, diff, journal) | 52 ms | 33 ms |
+| Full-mode `tools/list` (not used by the compact registration) | 955 KB | 956 KB, unchanged |
 | Server start / connect | — | 0.4 s / 0.6 s |
+
+Single-operation server times did not change in a way that matters. Status is 4–11 ms and a box
+edit is 33–90 ms both before and after; the differences are run-to-run variance.
 
 The compact tool list grew because 17 modeling tools are now listed directly. That costs about
 4k tokens once per session and removes a catalog lookup before each operation.
@@ -51,7 +53,8 @@ The compact tool list grew because 17 modeling tools are now listed directly. Th
 4. **Smaller responses.** Compact JSON instead of pretty-printed JSON. Short hashed revisions. The
    six standard construction planes are named by id instead of repeated in full.
 5. **Auto-connect.** With exactly one Plasticity window open, the first tool call connects to it.
-   With several windows, nothing is guessed.
+   With several windows, nothing is guessed. If auto-connect fails (for example, another MCP
+   session owns the window), the tools report that reason.
 6. **Inline screenshots.** `plasticity_screenshot` without `path` returns a JPEG (width 1024,
    quality 70) in the response.
 7. **Server instructions** tell agents to batch, to skip status calls before edits, and to use the
@@ -69,6 +72,8 @@ The compact tool list grew because 17 modeling tools are now listed directly. Th
 - **State cache and cheap probe.** A full state read is 4–15 ms, so a cache would save almost nothing.
 - **Persistent renderer helper.** The CAD call is 15–30 ms. Re-sending the script is not the cost.
 - **Rounding floats in responses.** Tests require exact native values, so values stay at full precision.
+- **Shorter descriptions in full mode.** Your registration uses compact mode, where the long
+  strength-tool descriptions are not listed; full mode is unchanged.
 - **Fewer body summaries in edit results.** Tests require 20 body summaries per edit result. Batch
   returns one result for many steps.
 
@@ -81,3 +86,6 @@ The compact tool list grew because 17 modeling tools are now listed directly. Th
 - The inline screenshot path is unit-tested. It was not checked live, because the Plasticity window
   was hidden at the time.
 - One unrelated test failed once during the work and then passed on 3 reruns.
+- The workbench package does not read Plasticity revisions or construction planes. Its typecheck
+  passes, and its server (90) and web (23) tests pass after these changes.
+- Restart or reconnect the MCP server in Claude Code (`/mcp`) to load these changes.
