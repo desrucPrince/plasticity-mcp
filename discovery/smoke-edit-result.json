@@ -1,0 +1,130 @@
+{
+  "ranAt": "2026-10-23T04:21:57.796Z",
+  "log": [
+    {
+      "step": "baseline undoDepth is 0",
+      "ok": true,
+      "detail": {
+        "undoDepth": 0,
+        "bodies": 1
+      }
+    },
+    {
+      "step": "box created",
+      "ok": true,
+      "detail": {
+        "id": 2,
+        "createResultKeys": [
+          "targetId",
+          "title",
+          "documentToken",
+          "revision",
+          "dbVersion",
+          "undoDepth",
+          "redoDepth",
+          "materials",
+          "measurements",
+          "sectionAnalyses",
+          "instances",
+          "referenceMeshes",
+          "activeGroupId",
+          "groups",
+          "construction",
+          "regions",
+          "bodies",
+          "bodyPagination",
+          "change"
+        ]
+      }
+    },
+    {
+      "step": "box bounds 600..620 x 0..10 x 0..5",
+      "ok": true,
+      "detail": {
+        "min": [
+          600,
+          0,
+          0
+        ],
+        "max": [
+          620,
+          10,
+          5
+        ]
+      }
+    },
+    {
+      "step": "box topology 6F/12E/8V",
+      "ok": true,
+      "detail": [
+        6,
+        12,
+        8
+      ]
+    },
+    {
+      "step": "cylinder created",
+      "ok": true,
+      "detail": {
+        "id": 3,
+        "boundsMm": {
+          "min": [
+            607,
+            2,
+            -1
+          ],
+          "max": [
+            613,
+            8,
+            6
+          ]
+        }
+      }
+    },
+    {
+      "step": "boolean leaves one new body",
+      "ok": true,
+      "detail": [
+        [
+          2,
+          7
+        ]
+      ]
+    },
+    {
+      "step": "holed box gained faces (>6)",
+      "ok": true,
+      "detail": {
+        "faceCount": 7,
+        "edgeCount": 14,
+        "boundsMm": {
+          "min": [
+            600,
+            0,
+            0
+          ],
+          "max": [
+            620,
+            10,
+            5
+          ]
+        }
+      }
+    },
+    {
+      "step": "restored: undoDepth 0",
+      "ok": true,
+      "detail": {
+        "undoDepth": 0,
+        "redoDepth": 3
+      }
+    },
+    {
+      "step": "restored: bodies identical to baseline",
+      "ok": true,
+      "detail": [
+        1
+      ]
+    }
+  ]
+}

@@ -29,3 +29,10 @@ or only a keymap target. To get the runtime registry, start Plasticity with CDP 
 | `dump-live-catalog.ts` | Rerun: `node discovery/dump-live-catalog.ts` from the repo root (read-only; connects, pages capabilities and the catalog) |
 
 Bindings are class/function names, not the `command:*` ids in `commands.txt`; none of those ids appear in the bindings.
+
+## Live edit smoke test (macOS 27.0.1)
+
+`smoke-edit.ts` (uses `mcp-client.ts`) takes the open document as its baseline (it must have undo
+depth 0). It creates a 20×10×5 mm box at (600, 0, 0), checks it with body_info, then cuts a
+cylinder hole with a boolean difference. Then it undoes back to the baseline. It never saves.
+Result of the last run: `smoke-edit-result.json`.
