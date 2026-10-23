@@ -5226,6 +5226,26 @@ export class PlasticityOperations {
     return await this.state();
   }
 
+  // Native FilletCurveFactory: rounds the corner where two separate Wires meet or would meet.
+  async filletCurves(firstId: number, secondId: number, radiusMm: number, revision: string): Promise<RuntimeState> {
+    await this.assertRevision(revision);
+    if (!Number.isFinite(radiusMm) || radiusMm <= 0) throw new Error("Curve fillet radius must be positive");
+    if (firstId === secondId) throw new Error("Curve fillet needs two different Wires; use plasticity_fillet_curve_vertices for corners inside one Wire");
+    await this.runtime.mutate(`async function (Factory, args) {
+      ${findView}
+      ${commandStart("FilletCurveCommand")}
+      const curves = [args.first, args.second].map(id => {
+        const view = find(id);
+        if (view.constructor.name !== 'Wire') throw new Error('Body ' + id + ' is not a Wire');
+        return view;
+      });
+      factory.curves = curves;
+      factory.radius = args.radius;
+      ${commandEnd}
+    }`, ["FilletCurveFactory"], [{ first: firstId, second: secondId, radius: millimetersToMeters(radiusMm) }]);
+    return await this.state();
+  }
+
   async filletCurveVertices(vertices: VertexReference[], radiusMm: number, revision: string): Promise<RuntimeState> {
     await this.assertRevision(revision);
     if (!Number.isFinite(radiusMm) || radiusMm <= 0) throw new Error("Curve fillet radius must be positive");

@@ -1350,7 +1350,7 @@ test("compact catalog exposes core tools while routing hidden operations through
     "plasticity_boolean", "plasticity_fillet", "plasticity_chamfer", "plasticity_extrude_faces",
     "plasticity_extrude_profile", "plasticity_move", "plasticity_rotate", "plasticity_scale", "plasticity_mirror",
     "plasticity_delete", "plasticity_undo", "plasticity_redo", "plasticity_find_edges", "plasticity_find_faces",
-    "plasticity_create_control_point_curve", "plasticity_extrude_curves",
+    "plasticity_create_control_point_curve", "plasticity_extrude_curves", "plasticity_fillet_curves",
   ]));
   assert.equal(listed.tools[0]?.name, "plasticity_call");
 
@@ -5838,5 +5838,26 @@ test("MCP forwards extrude options and curve extrusion", async () => {
   assert.deepEqual(received.curves, [[4], 10, [0, 0, 1], "r1", {}]);
   const badDraft = await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_extrude_profile", arguments: { id: 21, distanceMm: 8, options: { draftAngleDeg: 95 }, revision: "r1" } } });
   assert.equal(badDraft.isError, true);
+  await close();
+});
+
+test("MCP forwards a fillet between two separate curves", async () => {
+  let received: unknown[] | undefined;
+  const state = emptyState();
+  const operations = {
+    async state() { return state; },
+    async filletCurves(...args: unknown[]) { received = args; return state; },
+  } as unknown as PlasticityOperations;
+  const fake = {
+    async windows() { return []; }, async connect() { return state; }, get() { return operations; },
+    capabilities() { return { bindings: [], operations: unavailableConstruction() }; },
+    async captureSnapshot() { return {}; }, async changesSince() { return {}; }, async waitForChange() { return {}; },
+  } satisfies SessionLike;
+  const { client, close } = await batchClient(fake);
+  const ok = await client.callTool({ name: "plasticity_fillet_curves", arguments: { firstId: 3, secondId: 4, radiusMm: 2.5, revision: "r1" } });
+  assert.equal(ok.isError, undefined);
+  assert.deepEqual(received, [3, 4, 2.5, "r1"]);
+  const zero = await client.callTool({ name: "plasticity_fillet_curves", arguments: { firstId: 3, secondId: 4, radiusMm: 0, revision: "r1" } });
+  assert.equal(zero.isError, true);
   await close();
 });

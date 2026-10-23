@@ -6661,3 +6661,19 @@ test("extrudes Wire curves along an optional world direction", async () => {
   await assert.rejects(operations.extrudeCurves([9], 20, [0, 0, 0], "r1"), /direction must be nonzero/);
   await assert.rejects(operations.extrudeCurves([9], 20, undefined, "stale"), /Stale reference/);
 });
+
+test("fillets two separate Wires through the native curve fillet factory", async () => {
+  let call: { source: string; bindings: string[]; values: unknown[] } | undefined;
+  const state: RuntimeState = { targetId: "window-1", title: "Untitled - Plasticity", documentToken: "document-1", revision: "r1", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [] };
+  const runtime = { async getState() { return state; }, async mutate(source: string, bindings: string[], values: unknown[]) { call = { source, bindings, values }; return {}; } } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+
+  await operations.filletCurves(3, 4, 2, "r1");
+  assert.deepEqual(call?.bindings, ["FilletCurveFactory"]);
+  assert.deepEqual(call?.values, [{ first: 3, second: 4, radius: 0.002 }]);
+  assert.match(call?.source ?? "", /FilletCurveCommand/);
+  assert.match(call?.source ?? "", /factory\.curves = curves/);
+  assert.match(call?.source ?? "", /factory\.radius = args\.radius/);
+  await assert.rejects(operations.filletCurves(3, 3, 2, "r1"), /two different Wires/);
+  await assert.rejects(operations.filletCurves(3, 4, -1, "r1"), /radius must be positive/);
+});

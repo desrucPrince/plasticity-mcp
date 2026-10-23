@@ -33,6 +33,7 @@ const compactTools = new Set([
   "plasticity_find_faces",
   "plasticity_create_control_point_curve",
   "plasticity_extrude_curves",
+  "plasticity_fillet_curves",
 ]);
 
 export function exposeDirectTool(mode: ToolCatalogMode, name: string): boolean {
