@@ -1293,7 +1293,7 @@ test("Codex tool router catalogs and validates every registered operation", asyn
     catalogOffset = page.nextOffset ?? 0;
     if (page.nextOffset === null) break;
   } while (true);
-  assert.equal(catalogTotal, registered.tools.length - 1);
+  assert.equal(catalogTotal, registered.tools.length - 2, "every tool except the plasticity_call router and plasticity_batch is in the catalog");
   assert.equal(catalogNames.size, catalogTotal, "catalog pages must cover every registered operation without duplicates");
 
   const invalid = await client.callTool({ name: "plasticity_call", arguments: {
@@ -1343,7 +1343,7 @@ test("compact catalog exposes core tools while routing hidden operations through
 
   const listed = await client.listTools();
   assert.deepEqual(new Set(listed.tools.map((tool) => tool.name)), new Set([
-    "plasticity_call", "plasticity_list_windows", "plasticity_connect", "plasticity_status",
+    "plasticity_call", "plasticity_batch", "plasticity_list_windows", "plasticity_connect", "plasticity_status",
     "plasticity_current_selection", "plasticity_list_bodies", "plasticity_body_info",
     "plasticity_capture_snapshot", "plasticity_changes_since", "plasticity_reconcile",
     "plasticity_screenshot",
@@ -5620,4 +5620,114 @@ test("orients a rigid Solid group only when its union native bounds match the Wo
   assert.equal(result.slicerFitVerified, false);
   assert.deepEqual(calls, [{ ids: [7, 8], pivot: [20, 5, 2.5], rotation: [90, 0, 90], revision: "r1" }]);
   await client.close(); await server.close();
+});
+
+function batchFake() {
+  let state: RuntimeState = emptyState();
+  let nextId = 10;
+  let version = 1;
+  const history: RuntimeState[] = [];
+  const calls: Array<{ op: string; args: unknown[] }> = [];
+  const body = (id: number, name: string): RuntimeState["bodies"][number] => ({
+    id, versionId: id * 10, type: "Solid", name, boundsMm: { min: [0, 0, 0], max: [1, 1, 1] },
+    faceIds: [], edgeIds: [], faces: [], edges: [],
+  });
+  const commit = (bodies: RuntimeState["bodies"]) => {
+    history.push(state);
+    version += 1;
+    state = { ...state, bodies, revision: `r${version}`, undoDepth: history.length, dbVersion: version };
+    return state;
+  };
+  const operations = {
+    async state() { return state; },
+    async createBox(...args: unknown[]) {
+      calls.push({ op: "createBox", args });
+      if (args[3] !== state.revision) throw new Error(`Stale reference: ${String(args[3])}`);
+      return commit([...state.bodies, body(nextId++, "box")]);
+    },
+    async createCylinder(...args: unknown[]) {
+      calls.push({ op: "createCylinder", args });
+      return commit([...state.bodies, body(nextId++, "cyl")]);
+    },
+    async boolean(targetIds: number[], toolIds: number[], ...rest: unknown[]) {
+      calls.push({ op: "boolean", args: [targetIds, toolIds, ...rest] });
+      if (toolIds.includes(999)) throw new Error("boolean failed");
+      return commit(state.bodies.filter((item) => !toolIds.includes(item.id)));
+    },
+    async undo() {
+      calls.push({ op: "undo", args: [] });
+      const previous = history.pop();
+      if (previous) state = { ...previous, undoDepth: history.length, revision: `${previous.revision}-undone` };
+      return state;
+    },
+  } as unknown as PlasticityOperations;
+  const fake = {
+    async windows() { return []; }, async connect() { return state; }, get() { return operations; },
+    capabilities() { return { bindings: [], operations: unavailableConstruction() }; },
+    async captureSnapshot() { return {}; }, async changesSince() { return {}; }, async waitForChange() { return {}; },
+  } satisfies SessionLike;
+  return { fake, calls, current: () => state };
+}
+
+async function batchClient(fake: SessionLike) {
+  const server = createCompactServer(fake, undefined, undefined, undefined, null);
+  const client = new Client({ name: "batch-client", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await server.connect(serverTransport); await client.connect(clientTransport);
+  return { client, close: async () => { await client.close(); await server.close(); } };
+}
+
+test("plasticity_batch runs dependent steps in one call with step references and auto-filled revisions", async () => {
+  const { fake, calls, current } = batchFake();
+  const { client, close } = await batchClient(fake);
+  const listed = await client.listTools();
+  assert.ok(listed.tools.some((tool) => tool.name === "plasticity_batch"), "batch is visible in compact mode");
+
+  const response = await client.callTool({ name: "plasticity_batch", arguments: { steps: [
+    { toolName: "plasticity_create_box", arguments: { originMm: [0, 0, 0], sizeMm: [20, 10, 5] } },
+    { toolName: "plasticity_create_cylinder", arguments: { centerMm: [10, 5, -1], radiusMm: 3, heightMm: 7 } },
+    { toolName: "plasticity_boolean", arguments: { targetIds: ["$0.added[0]"], toolIds: "$1.added", operation: "difference" } },
+  ] } });
+  assert.equal(response.isError, undefined, JSON.stringify(response.content));
+  const output = parseToolJson(response);
+  assert.equal(output.undoSteps, 3);
+  assert.deepEqual(output.steps.map((step: { added: number[] }) => step.added), [[10], [11], []]);
+  assert.deepEqual(output.steps[2].removed, [11]);
+  assert.deepEqual(current().bodies.map((item) => item.id), [10]);
+  assert.deepEqual(calls.find((call) => call.op === "boolean")?.args.slice(0, 2), [[10], [11]], "step references resolve to created ids");
+  assert.equal(calls[0]?.args[3], "r1", "an omitted revision is the revision the previous step left");
+  assert.equal(calls[1]?.args[4], "r2");
+  await close();
+});
+
+test("plasticity_batch stops at the failing step, names it, and can undo completed steps", async () => {
+  const { fake, current } = batchFake();
+  const { client, close } = await batchClient(fake);
+  const failed = await client.callTool({ name: "plasticity_batch", arguments: { undoOnError: true, steps: [
+    { toolName: "plasticity_create_box", arguments: { originMm: [0, 0, 0], sizeMm: [1, 1, 1] } },
+    { toolName: "plasticity_boolean", arguments: { targetIds: ["$0.added[0]"], toolIds: [999], operation: "difference" } },
+    { toolName: "plasticity_create_box", arguments: { originMm: [5, 0, 0], sizeMm: [1, 1, 1] } },
+  ] } });
+  assert.equal(failed.isError, true);
+  const text = JSON.stringify(failed.content);
+  assert.match(text, /failedStep\\?":1/);
+  assert.match(text, /plasticity_boolean/);
+  assert.match(text, /undoneSteps\\?":1/);
+  assert.equal(current().bodies.length, 0, "the completed box was undone");
+  assert.equal(current().undoDepth, 0);
+
+  const stale = await client.callTool({ name: "plasticity_batch", arguments: { revision: "not-current", steps: [
+    { toolName: "plasticity_create_box", arguments: { originMm: [0, 0, 0], sizeMm: [1, 1, 1] } },
+  ] } });
+  assert.equal(stale.isError, true, "an explicit stale batch revision is rejected before any step runs");
+  assert.equal(current().bodies.length, 0);
+
+  const explicitStale = await client.callTool({ name: "plasticity_batch", arguments: { steps: [
+    { toolName: "plasticity_create_box", arguments: { originMm: [0, 0, 0], sizeMm: [1, 1, 1], revision: "old" } },
+  ] } });
+  assert.equal(explicitStale.isError, true, "an explicit step revision keeps its stale check");
+
+  const nested = await client.callTool({ name: "plasticity_batch", arguments: { steps: [{ toolName: "plasticity_batch", arguments: {} }] } });
+  assert.equal(nested.isError, true);
+  await close();
 });

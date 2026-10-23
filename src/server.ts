@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createHash, randomUUID } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createReadStream } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
 import { extname, resolve } from "node:path";
@@ -1904,6 +1905,39 @@ export function createServer(
   return createServerWithCatalog("full", session, suppliedStrength, threadQualifications, stepImportReferences, constructionHistory, stepReferenceDownloader);
 }
 
+function acceptsRevision(schema: z.ZodType): schema is z.ZodObject {
+  return schema instanceof z.ZodObject && "revision" in schema.shape;
+}
+
+const BATCH_REFERENCE = /^\$(\d+)\.(added|removed|regionsAdded)(?:\[(\d+)\])?$/;
+
+function resolveBatchReferences(value: unknown, steps: ReadonlyArray<Record<"added" | "removed" | "regionsAdded", ReadonlyArray<number | string>>>): unknown {
+  if (typeof value === "string") {
+    const match = BATCH_REFERENCE.exec(value);
+    if (!match) return value;
+    const step = steps[Number(match[1])];
+    if (!step) throw new Error(`${value} refers to a step that has not run`);
+    const list = step[match[2] as "added" | "removed" | "regionsAdded"];
+    if (match[3] === undefined) return [...list];
+    const item = list[Number(match[3])];
+    if (item === undefined) throw new Error(`${value} is out of range: step ${match[1]} ${match[2]} has ${list.length}`);
+    return item;
+  }
+  if (Array.isArray(value)) return value.flatMap((item) => {
+    const resolved = resolveBatchReferences(item, steps);
+    // "$0.added" inside an id array splices in every id.
+    return typeof item === "string" && Array.isArray(resolved) ? resolved : [resolved];
+  });
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolveBatchReferences(item, steps)]));
+  return value;
+}
+
+function parseToolText(response: { content?: Array<{ type: string; text?: string }> }): unknown {
+  const text = response.content?.find((part) => part.type === "text")?.text;
+  if (text === undefined) return null;
+  try { return JSON.parse(text); } catch { return text; }
+}
+
 function catalogSummary(description: string): string {
   const sentence = description.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? description;
   return sentence.length > 160 ? `${sentence.slice(0, 157)}...` : sentence;
@@ -2024,13 +2058,16 @@ function createServerWithCatalog(
     });
   });
   let toolTail: Promise<void> = Promise.resolve();
+  // Reentrant so plasticity_batch can run routed tools while it already holds the lock.
+  const lockHeld = new AsyncLocalStorage<true>();
   const exclusive = async <T>(operation: () => Promise<T>): Promise<T> => {
+    if (lockHeld.getStore()) return await operation();
     const prior = toolTail;
     let release: (() => void) | undefined;
     toolTail = new Promise<void>((resolve) => { release = resolve; });
     await prior;
     try {
-      return await operation();
+      return await lockHeld.run(true, operation);
     } finally {
       release?.();
     }
@@ -2349,6 +2386,61 @@ function createServerWithCatalog(
     return { ...selection, status, currentRevision: state.revision, matches };
   };
 
+  const batchStepSchema = z.object({
+    toolName: z.string().trim().min(1).max(128),
+    arguments: z.record(z.string(), z.unknown()).default({}),
+  }).strict();
+  const batchSchema = z.object({
+    steps: z.array(batchStepSchema).min(1).max(50),
+    revision: z.string().min(1).optional(),
+    undoOnError: z.boolean().default(false),
+  }).strict();
+  rawRegisterTool("plasticity_batch", {
+    title: "Run several Plasticity operations in one call",
+    description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all), likewise removed and regionsAdded. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many.",
+    inputSchema: batchSchema,
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+  }, async (rawInput, extra) => result(await exclusive(async () => {
+    const input = batchSchema.parse(rawInput);
+    const start = await session.get().state();
+    if (input.revision !== undefined && input.revision !== start.revision) throw new Error(`Stale reference: expected revision ${input.revision}, current revision is ${start.revision}`);
+    const stepChanges: Array<{ added: number[]; removed: number[]; regionsAdded: string[] }> = [];
+    const completed: Array<Record<string, unknown>> = [];
+    let current = start;
+    for (const [index, step] of input.steps.entries()) {
+      const selected = routedTools.get(step.toolName);
+      try {
+        if (!selected || step.toolName === "plasticity_call" || step.toolName === "plasticity_batch") throw new Error(`Unknown Plasticity MCP operation: ${step.toolName}`);
+        let args = resolveBatchReferences(step.arguments, stepChanges) as Record<string, unknown>;
+        if (acceptsRevision(selected.inputSchema) && args.revision === undefined) args = { ...args, revision: current.revision };
+        const parsed = await selected.inputSchema.parseAsync(args);
+        const response = await selected.callback(parsed, extra);
+        const readOnly = selected.annotations.readOnlyHint;
+        const after = readOnly ? current : await session.get().state();
+        const change = diffScenes(current, after);
+        stepChanges.push({
+          added: change.added.map((body) => body.id),
+          removed: change.removed.map((body) => body.id),
+          regionsAdded: change.regionsAdded.map((region) => region.id),
+        });
+        completed.push({ step: index, toolName: step.toolName, ...stepChanges[index], ...(readOnly ? { result: parseToolText(response) } : {}) });
+        current = after;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        let undone = 0;
+        if (input.undoOnError) {
+          const undo = routedTools.get("plasticity_undo");
+          for (let remaining = (await session.get().state()).undoDepth - start.undoDepth; undo && remaining > 0; remaining -= 1) {
+            await undo.callback(await undo.inputSchema.parseAsync({ revision: (await session.get().state()).revision, intent: "plasticity_batch undoOnError" }), extra);
+            undone += 1;
+          }
+        }
+        throw new Error(JSON.stringify({ failedStep: index, toolName: step.toolName, error: message.slice(0, 4_000), completedSteps: completed, undoneSteps: undone }));
+      }
+    }
+    const end = await session.get().state();
+    return { ...compactMutationResult<Record<string, unknown>>(end, diffScenes(start, end)), steps: completed, undoSteps: end.undoDepth - start.undoDepth };
+  })));
   tool("plasticity_list_windows", "List Plasticity document windows exposed on loopback CDP. If no Plasticity process is running, opens Plasticity with loopback CDP first (disable with PLASTICITY_AUTO_LAUNCH=0); a running instance without CDP is never restarted.", z.object({}), async () =>
     (await session.windows({ launch: true })).map(({ id, title, url }) => ({ targetId: id, title, url })), true);
   tool("plasticity_diagnose", "Report MCP runtime and reachable Plasticity windows without changing a document.", z.object({}), async () =>
