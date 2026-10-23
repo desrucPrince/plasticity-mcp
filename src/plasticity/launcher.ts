@@ -89,6 +89,39 @@ export async function ensurePlasticityCdp(options: {
   return await waitForTargets(endpoint);
 }
 
+export const RUNNING_WITHOUT_CDP_MESSAGE = "Plasticity is running without MCP access. The MCP server will not close or restart it. Save your work, quit Plasticity, then open it again with the Plasticity MCP launcher app (or npm run start:plasticity).";
+
+export interface DiscoverOrLaunchDependencies {
+  discover(endpoint: string): Promise<PlasticityTarget[]>;
+  isRunning(): Promise<boolean>;
+  launch(): Promise<PlasticityTarget[]>;
+}
+
+// Auto-launch only when no Plasticity process exists at all; a running instance without CDP is never restarted.
+export async function discoverOrLaunch(
+  endpoint: string,
+  autoLaunch: boolean,
+  dependencies: DiscoverOrLaunchDependencies = { discover: discoverPlasticityTargets, isRunning: isPlasticityRunning, launch: () => ensurePlasticityCdp() },
+): Promise<PlasticityTarget[]> {
+  let discoveryError: unknown;
+  let targets: PlasticityTarget[] | undefined;
+  try {
+    targets = await dependencies.discover(endpoint);
+  } catch (error) {
+    discoveryError = error;
+  }
+  if (targets && targets.length > 0) return targets;
+  if (!autoLaunch) {
+    if (targets) return targets;
+    throw discoveryError;
+  }
+  if (await dependencies.isRunning()) {
+    if (targets) return targets;
+    throw new Error(RUNNING_WITHOUT_CDP_MESSAGE);
+  }
+  return await dependencies.launch();
+}
+
 async function isPlasticityRunning(): Promise<boolean> {
   try {
     await execFileAsync("pgrep", ["-x", "Plasticity"]);

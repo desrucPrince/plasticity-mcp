@@ -5,7 +5,7 @@ import { realpath, stat } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 import { z } from "zod";
 
-import { discoverPlasticityTargets } from "./cdp/discovery.ts";
+import { discoverOrLaunch } from "./plasticity/launcher.ts";
 import { diffScenes, type SceneDiff, type TrackedDatum } from "./plasticity/change-tracker.ts";
 import { ConstructionHistoryStore, type ConstructionHistoryEntry } from "./plasticity/construction-history.ts";
 import { StepImportReferenceStore } from "./plasticity/import-reference-store.ts";
@@ -1695,12 +1695,15 @@ export class PlasticitySession {
     datums: TrackedDatum[];
   }>();
 
-  async windows() {
-    return await discoverPlasticityTargets(process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223");
+  async windows(options: { launch?: boolean } = {}) {
+    const endpoint = process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223";
+    // The launcher only opens the default loopback port, so a custom endpoint never auto-launches.
+    const autoLaunch = options.launch === true && process.env.PLASTICITY_AUTO_LAUNCH !== "0" && process.env.PLASTICITY_CDP_URL === undefined;
+    return await discoverOrLaunch(endpoint, autoLaunch);
   }
 
   async connect(targetId: string) {
-    const target = (await this.windows()).find((candidate) => candidate.id === targetId);
+    const target = (await this.windows({ launch: true })).find((candidate) => candidate.id === targetId);
     if (!target) throw new Error(`Plasticity window not found: ${targetId}`);
     const current: SessionConnection<RuntimeState, PlasticityRuntime, PlasticityOperations, WindowOwnership> | undefined =
       this.runtime && this.operations && this.ownership && this.targetId
@@ -1792,7 +1795,7 @@ export class PlasticitySession {
 }
 
 export interface SessionLike {
-  windows(): Promise<Array<{ id: string; title: string; url: string }>>;
+  windows(options?: { launch?: boolean }): Promise<Array<{ id: string; title: string; url: string }>>;
   connect(targetId: string): Promise<unknown>;
   get(): PlasticityOperations;
   capabilities(): {
@@ -2317,8 +2320,8 @@ function createServerWithCatalog(
     return { ...selection, status, currentRevision: state.revision, matches };
   };
 
-  tool("plasticity_list_windows", "List Plasticity document windows exposed on loopback CDP.", z.object({}), async () =>
-    (await session.windows()).map(({ id, title, url }) => ({ targetId: id, title, url })), true);
+  tool("plasticity_list_windows", "List Plasticity document windows exposed on loopback CDP. If no Plasticity process is running, opens Plasticity with loopback CDP first (disable with PLASTICITY_AUTO_LAUNCH=0); a running instance without CDP is never restarted.", z.object({}), async () =>
+    (await session.windows({ launch: true })).map(({ id, title, url }) => ({ targetId: id, title, url })), true);
   tool("plasticity_diagnose", "Report MCP runtime and reachable Plasticity windows without changing a document.", z.object({}), async () =>
     ({ node: process.version, platform: process.platform, architecture: process.arch, supportedPlasticity: "26.1.3", endpoint: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223", windows: await session.windows() }), true);
   tool("plasticity_resolve_fastener_designation", "Interpret a bounded fastening request such as 'крепится на 4 болта M5x10 с гайками' or 'печать винта M6x20 и ответной части'. It defaults to combined strength and geometry intent, parses thread metadata, quantity, selected ISO/DIN head and drive family, explicit joint phrases and fixed/adjustable/pivot intent, and returns one active question package plus compatible Plasticity geometry/strength tools. Its bounded catalog recognizes common hex, socket-cap, button, pan, countersunk and headless set-screw standards with source URLs; set-screw standards also identify flat, truncated-cone, dog, or cup points and require the mating contact function to be resolved. Printed screw, nut, and generic mating-part phrases route to the custom matched-thread tools without importing an ISO pitch. A slot is proposed only for explicit adjustment. It never treats nominal thread diameter as a finished hole, insert pocket, head recess, or nut envelope.", fastenerDesignationInputSchema, async (input) =>

@@ -72,13 +72,7 @@ To make it reachable by a tablet on the same private network, run `npm run start
 
 ## Using with Claude Code
 
-1. Save your work and quit Plasticity. Then start it with loopback CDP enabled:
-
-   ```sh
-   npm run start:plasticity
-   ```
-
-2. Register the server once, at user scope, so it is available from every folder. Use an absolute
+1. Register the server once, at user scope, so it is available from every folder. Use an absolute
    path to a Node 24+ binary if your default `node` is older:
 
    ```sh
@@ -88,8 +82,22 @@ To make it reachable by a tablet on the same private network, run `npm run start
      "$HOME/Projects/plasticity-mcp/scripts/run-server.ts" --compact-tools
    ```
 
-3. Check that it is connected with `claude mcp list`. In a session, call `plasticity_list_windows`,
-   then `plasticity_connect` with the returned `targetId`.
+   Check that it is connected with `claude mcp list`.
+
+2. Plasticity must be started with loopback CDP. There are three ways:
+   - If Plasticity is not running, `plasticity_list_windows` and `plasticity_connect` start it with
+     CDP for you. Set `PLASTICITY_AUTO_LAUNCH=0` to turn this off. It also stays off when
+     `PLASTICITY_CDP_URL` is set.
+   - Open Plasticity with a launcher app instead of the normal icon. Build it once with
+     `osacompile -o ~/Applications/"Plasticity MCP.app" scripts/plasticity-mcp-launcher.applescript`,
+     then put it in the Dock.
+   - Run `npm run start:plasticity`.
+
+   If Plasticity was opened the normal way, it has no CDP. The server never quits or restarts it.
+   It returns an error that asks you to save, quit, and reopen with the launcher.
+
+3. In a session, call `plasticity_list_windows`, then call `plasticity_connect` with the returned
+   `targetId`.
 
 ## Development
 
