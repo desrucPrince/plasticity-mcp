@@ -70,6 +70,27 @@ In another terminal on the same Mac, run `npm --workspace workbench run open:own
 
 To make it reachable by a tablet on the same private network, run `npm run start:workbench -- --lan`; the server prints its local address. Do not expose it to the public internet. Follow the [Workbench guide](docs/workbench-operations.md) for registration, sharing, backup, and recovery.
 
+## Using with Claude Code
+
+1. Save your work and quit Plasticity. Then start it with loopback CDP enabled:
+
+   ```sh
+   npm run start:plasticity
+   ```
+
+2. Register the server once, at user scope, so it is available from every folder. Use an absolute
+   path to a Node 24+ binary if your default `node` is older:
+
+   ```sh
+   claude mcp add plasticity --scope user \
+     -e PLASTICITY_STRENGTH_ASSET_ROOT="$HOME/Projects/plasticity-mcp" \
+     -- "$HOME/.nvm/versions/node/v24.21.0/bin/node" \
+     "$HOME/Projects/plasticity-mcp/scripts/run-server.ts" --compact-tools
+   ```
+
+3. Check that it is connected with `claude mcp list`. In a session, call `plasticity_list_windows`,
+   then `plasticity_connect` with the returned `targetId`.
+
 ## Development
 
 ```sh
