@@ -1,0 +1,601 @@
+{
+  "source": "heuristic: key-chord string followed within 3 constant-pool entries by a namespaced id; expect gaps and some mispairs",
+  "count": 119,
+  "pairs": [
+    {
+      "key": "alt-mouse1",
+      "command": "viewport:set-and-center-focus-point",
+      "bundle": "renderer"
+    },
+    {
+      "key": "shift-space",
+      "command": "viewport:cplane:selection",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-numpad1",
+      "command": "viewport:navigate:back",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-numpad3",
+      "command": "viewport:navigate:left",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-numpad7",
+      "command": "viewport:navigate:bottom",
+      "bundle": "renderer"
+    },
+    {
+      "key": "mouse1",
+      "command": "orbit:rotate",
+      "bundle": "renderer"
+    },
+    {
+      "key": "mouse2",
+      "command": "orbit:pan",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-mouse1",
+      "command": "orbit:dolly",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-shift-mouse0",
+      "command": "selection:choose",
+      "bundle": "renderer"
+    },
+    {
+      "key": "shift-tab",
+      "command": "command:dialog:place",
+      "bundle": "renderer"
+    },
+    {
+      "key": "shift-wheel+up",
+      "command": "gizmo:polygon:add-vertex",
+      "bundle": "renderer"
+    },
+    {
+      "key": "shift-wheel+down",
+      "command": "gizmo:polygon:subtract-vertex",
+      "bundle": "renderer"
+    },
+    {
+      "key": "shift-q",
+      "command": "keyboard:revolve:slice",
+      "bundle": "renderer"
+    },
+    {
+      "key": "shift-e",
+      "command": "keyboard:revolve:intersect",
+      "bundle": "renderer"
+    },
+    {
+      "key": "shift-t",
+      "command": "gizmo:sweep:thickness",
+      "bundle": "renderer"
+    },
+    {
+      "key": "shift-z",
+      "command": "gizmo:move:xy",
+      "bundle": "renderer"
+    },
+    {
+      "key": "shift-x",
+      "command": "gizmo:move:yz",
+      "bundle": "renderer"
+    },
+    {
+      "key": "shift-y",
+      "command": "gizmo:move:xz",
+      "bundle": "renderer"
+    },
+    {
+      "key": "shift-r",
+      "command": "edit:repeat-last-command",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-shift-b",
+      "command": "app:quit",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-n",
+      "command": "file:new",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-o",
+      "command": "file:open",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-s",
+      "command": "file:save",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-shift-s",
+      "command": "file:save-as",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-shift-e",
+      "command": "file:export",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-shift-o",
+      "command": "file:import",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-c",
+      "command": "edit:copy",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-v",
+      "command": "edit:paste",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-shift-c",
+      "command": "edit:copy-with-placement",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-shift-v",
+      "command": "edit:paste-with-placement",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-,",
+      "command": "view:modal:preferences",
+      "bundle": "renderer"
+    },
+    {
+      "key": "cmd-f",
+      "command": "command:abort",
+      "bundle": "renderer"
+    },
+    {
+      "key": "ctrl-z",
+      "command": "command:undo",
+      "bundle": "renderer"
+    },
+    {
+      "key": "cmd-z",
+      "command": "gizmo:curve:toggle",
+      "bundle": "renderer"
+    },
+    {
+      "key": "shift-v",
+      "command": "gizmo:slide:n",
+      "bundle": "renderer"
+    },
+    {
+      "key": "alt-mouse1",
+      "command": "viewport:set-and-center-focus-point",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-space",
+      "command": "viewport:cplane:selection",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-space",
+      "command": "command:create-viewspace-construction-plane-at-origin",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-shift-space",
+      "command": "command:create-viewspace-construction-plane",
+      "bundle": "main"
+    },
+    {
+      "key": "numpad1",
+      "command": "viewport:navigate:front",
+      "bundle": "main"
+    },
+    {
+      "key": "numpad3",
+      "command": "viewport:navigate:right",
+      "bundle": "main"
+    },
+    {
+      "key": "numpad7",
+      "command": "viewport:navigate:top",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-numpad1",
+      "command": "viewport:navigate:back",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-numpad3",
+      "command": "viewport:navigate:left",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-numpad7",
+      "command": "viewport:navigate:bottom",
+      "bundle": "main"
+    },
+    {
+      "key": "numpad5",
+      "command": "viewport:toggle-orthographic",
+      "bundle": "main"
+    },
+    {
+      "key": "alt-z",
+      "command": "viewport:toggle-x-ray",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-alt-z",
+      "command": "viewport:toggle-overlays",
+      "bundle": "main"
+    },
+    {
+      "key": "mouse1",
+      "command": "orbit:rotate",
+      "bundle": "main"
+    },
+    {
+      "key": "mouse2",
+      "command": "orbit:pan",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-mouse1",
+      "command": "orbit:dolly",
+      "bundle": "main"
+    },
+    {
+      "key": "mouse0",
+      "command": "selection:replace",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-mouse0",
+      "command": "selection:add",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-mouse0",
+      "command": "selection:remove",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-shift-mouse0",
+      "command": "selection:choose",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-alt",
+      "command": "selection:option:extend-alt",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-shift-alt",
+      "command": "selection:toggle",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-tab",
+      "command": "command:dialog:place",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-wheel+up",
+      "command": "gizmo:polygon:add-vertex",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-wheel+down",
+      "command": "gizmo:polygon:subtract-vertex",
+      "bundle": "main"
+    },
+    {
+      "key": "down",
+      "command": "gizmo:polygon:toggle-vertical-horizontal",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-q",
+      "command": "keyboard:revolve:slice",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-e",
+      "command": "keyboard:revolve:intersect",
+      "bundle": "main"
+    },
+    {
+      "key": "tab",
+      "command": "keyboard:loft:cycle",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-t",
+      "command": "gizmo:sweep:thickness",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-z",
+      "command": "gizmo:move:xy",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-x",
+      "command": "gizmo:move:yz",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-y",
+      "command": "gizmo:move:xz",
+      "bundle": "main"
+    },
+    {
+      "key": "alt-v",
+      "command": "keyboard:move:remove-pivot",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-d",
+      "command": "command:duplicate",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-up",
+      "command": "outliner:navigate:up:add",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-down",
+      "command": "outliner:navigate:down:add",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-1",
+      "command": "selection:mode:toggle:control-point",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-2",
+      "command": "selection:mode:toggle:edge",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-3",
+      "command": "selection:mode:toggle:face",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-4",
+      "command": "selection:mode:toggle:solid",
+      "bundle": "main"
+    },
+    {
+      "key": "alt-.",
+      "command": "command:unisolate",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-j",
+      "command": "command:patch",
+      "bundle": "main"
+    },
+    {
+      "key": "alt-j",
+      "command": "command:unjoin",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-g",
+      "command": "command:slide",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-s",
+      "command": "command:raise-degree",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-p",
+      "command": "command:sweep",
+      "bundle": "main"
+    },
+    {
+      "key": "alt-t",
+      "command": "command:untrim",
+      "bundle": "main"
+    },
+    {
+      "key": "alt-x",
+      "command": "command:mirror",
+      "bundle": "main"
+    },
+    {
+      "key": "alt-l",
+      "command": "command:loft-guide",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-i",
+      "command": "command:imprint",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-=",
+      "command": "command:measure-distance",
+      "bundle": "main"
+    },
+    {
+      "key": "backspace",
+      "command": "command:delete",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-backspace",
+      "command": "command:set-material",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-m",
+      "command": "command:fork-material",
+      "bundle": "main"
+    },
+    {
+      "key": "alt-m",
+      "command": "command:remove-material",
+      "bundle": "main"
+    },
+    {
+      "key": "alt-d",
+      "command": "command:alternative-duplicate",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-d",
+      "command": "command:place",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-a",
+      "command": "command:line",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-c",
+      "command": "command:center-circle",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-b",
+      "command": "command:bridge",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-g",
+      "command": "command:group-selected",
+      "bundle": "main"
+    },
+    {
+      "key": "alt-g",
+      "command": "command:ungroup-selected",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-r",
+      "command": "command:isoparam",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-t",
+      "command": "command:select-previous-entity-collection",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-shift-t",
+      "command": "command:select-next-entity-collection",
+      "bundle": "main"
+    },
+    {
+      "key": "alt-a",
+      "command": "command:invert-selection",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-shift-=",
+      "command": "command:select-adjacent",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-shift-+",
+      "command": "command:deselect-all-and-reset-construction-plane",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-f",
+      "command": "view:context-menu:suggested",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-b",
+      "command": "view:sidebar:toggle-left",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-shift-b",
+      "command": "view:sidebar:toggle-right",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-q",
+      "command": "app:quit",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-shift-o",
+      "command": "file:import",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-c",
+      "command": "edit:copy",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-v",
+      "command": "edit:paste",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-shift-c",
+      "command": "edit:copy-with-placement",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-shift-v",
+      "command": "edit:paste-with-placement",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-,",
+      "command": "view:modal:preferences",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-f",
+      "command": "outliner:search",
+      "bundle": "main"
+    },
+    {
+      "key": "cmd-f",
+      "command": "command:abort",
+      "bundle": "main"
+    },
+    {
+      "key": "ctrl-z",
+      "command": "command:undo",
+      "bundle": "main"
+    },
+    {
+      "key": "cmd-z",
+      "command": "gizmo:curve:toggle",
+      "bundle": "main"
+    },
+    {
+      "key": "shift-v",
+      "command": "gizmo:slide:n",
+      "bundle": "main"
+    }
+  ]
+}

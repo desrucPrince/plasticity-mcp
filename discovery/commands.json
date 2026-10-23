@@ -1,0 +1,3086 @@
+{
+  "source": "strings recovered from V8 bytecode (.jsc) constant pools; not a runtime registry",
+  "plasticity_version": "26.1.3",
+  "total_ids": 619,
+  "command_namespace_count": 191,
+  "namespaces": {
+    "command": {
+      "count": 191,
+      "ids": [
+        "command:abort",
+        "command:align",
+        "command:alternative-duplicate",
+        "command:boolean",
+        "command:bridge",
+        "command:bridge-curve",
+        "command:bridge-edge",
+        "command:bridge-surface",
+        "command:bridge-vertex",
+        "command:center-box",
+        "command:center-circle",
+        "command:center-point-arc",
+        "command:center-rectangle",
+        "command:check",
+        "command:complete-edge",
+        "command:constrained-surface",
+        "command:control-point-curve",
+        "command:convert-vertex",
+        "command:copy-with-placement",
+        "command:corner-box",
+        "command:corner-rectangle",
+        "command:create-instance",
+        "command:create-outline",
+        "command:create-solid-from-faces",
+        "command:create-viewspace-construction-plane",
+        "command:create-viewspace-construction-plane-at-origin",
+        "command:curve",
+        "command:curve-array",
+        "command:cut",
+        "command:cut-curve",
+        "command:cylinder",
+        "command:deform",
+        "command:delete",
+        "command:delete-redundant-topology",
+        "command:deselect-all",
+        "command:deselect-all-and-reset-construction-plane",
+        "command:dialog:place",
+        "command:dimension",
+        "command:dissolve",
+        "command:draft-face",
+        "command:duplicate",
+        "command:duplicate-curve-and-project",
+        "command:duplicate-edge-and-project",
+        "command:ellipse",
+        "command:export-3-mf",
+        "command:export-asset-pack",
+        "command:export-hidden-line",
+        "command:export-iges",
+        "command:export-obj",
+        "command:export-parasolid",
+        "command:export-sat",
+        "command:export-screenshot",
+        "command:export-step",
+        "command:export-stl",
+        "command:export-svg",
+        "command:extend",
+        "command:extend-curve",
+        "command:extend-sheet",
+        "command:extrude",
+        "command:fillet",
+        "command:fillet-curve",
+        "command:fillet-shell",
+        "command:fillet-vertex",
+        "command:find-boundary-edges",
+        "command:finish",
+        "command:fork-material",
+        "command:freestyle-mirror",
+        "command:freestyle-move",
+        "command:freestyle-offset-planar-curve",
+        "command:freestyle-rotate",
+        "command:freestyle-scale",
+        "command:group-selected",
+        "command:hide-selected",
+        "command:hide-unselected",
+        "command:hollow",
+        "command:hollow-faces",
+        "command:hollow-solids",
+        "command:imprint",
+        "command:imprint-body-body",
+        "command:imprint-curve-body",
+        "command:insert-knot",
+        "command:invert-hidden",
+        "command:invert-selection",
+        "command:isolate",
+        "command:isoparam",
+        "command:join",
+        "command:join-curves",
+        "command:join-sheets",
+        "command:line",
+        "command:lock-selected",
+        "command:loft",
+        "command:loft-guide",
+        "command:manage-my-shared-documents",
+        "command:match-face",
+        "command:measure-continuity",
+        "command:measure-distance",
+        "command:measure-radius",
+        "command:mirror",
+        "command:move",
+        "command:move-control-point",
+        "command:move-face",
+        "command:move-item",
+        "command:offset-curve",
+        "command:offset-edge",
+        "command:offset-face",
+        "command:offset-face-loop",
+        "command:offset-planar-curve",
+        "command:offset-region",
+        "command:offset-vertex",
+        "command:paste-with-placement",
+        "command:patch",
+        "command:pipe",
+        "command:place",
+        "command:poly-splines",
+        "command:polygon",
+        "command:project",
+        "command:project-body-body",
+        "command:project-curve-body",
+        "command:project-curve-curve",
+        "command:project-outline",
+        "command:publish-to-plasticity-share",
+        "command:push-face",
+        "command:quasimode:start",
+        "command:quasimode:stop",
+        "command:radial-array",
+        "command:raise-degree",
+        "command:realize-instances",
+        "command:rebuild",
+        "command:rebuild-curve",
+        "command:rebuild-face",
+        "command:rectangular-array",
+        "command:refillet-face",
+        "command:remove-fillets-from-shell",
+        "command:remove-material",
+        "command:remove-nominal-surface",
+        "command:reverse",
+        "command:revolve",
+        "command:rotate",
+        "command:rotate-control-point",
+        "command:rotate-face",
+        "command:rotate-item",
+        "command:scale",
+        "command:scale-control-point",
+        "command:scale-face",
+        "command:scale-item",
+        "command:section-analysis",
+        "command:select-adjacent",
+        "command:select-all",
+        "command:select-all-curves",
+        "command:select-all-measurements",
+        "command:select-all-sheets",
+        "command:select-all-solids",
+        "command:select-next-entity-collection",
+        "command:select-previous-entity-collection",
+        "command:set-material",
+        "command:slide",
+        "command:slot",
+        "command:smart-command",
+        "command:sphere",
+        "command:spiral",
+        "command:split-segment",
+        "command:square",
+        "command:subdivide",
+        "command:sweep",
+        "command:sweep-tool",
+        "command:tangent-arc",
+        "command:tangent-circle",
+        "command:text",
+        "command:thicken",
+        "command:thicken-face",
+        "command:thicken-sheet",
+        "command:three-point-arc",
+        "command:three-point-box",
+        "command:three-point-circle",
+        "command:three-point-rectangle",
+        "command:toggle-curvature",
+        "command:toggle-points",
+        "command:trim",
+        "command:two-point-circle",
+        "command:undo",
+        "command:ungroup-selected",
+        "command:unhide-all",
+        "command:unisolate",
+        "command:unjoin",
+        "command:unjoin-curves",
+        "command:unjoin-faces",
+        "command:unjoin-shells",
+        "command:unlock-all",
+        "command:untrim",
+        "command:unwrap-face",
+        "command:xnurbs"
+      ]
+    },
+    "gizmo": {
+      "count": 128,
+      "ids": [
+        "gizmo:arc:knife",
+        "gizmo:array:add",
+        "gizmo:array:subtract",
+        "gizmo:array:toggle-instances",
+        "gizmo:boolean:difference",
+        "gizmo:boolean:intersect",
+        "gizmo:boolean:keep-tools",
+        "gizmo:boolean:slice",
+        "gizmo:boolean:union",
+        "gizmo:box:height",
+        "gizmo:box:length",
+        "gizmo:box:width",
+        "gizmo:bridge-surface:add-wall-pair",
+        "gizmo:bridge:tension:0",
+        "gizmo:circle:knife",
+        "gizmo:circle:mode",
+        "gizmo:circle:radius",
+        "gizmo:constrained-surface:undo",
+        "gizmo:curve:knife",
+        "gizmo:curve:toggle",
+        "gizmo:curve:undo",
+        "gizmo:cut:curves",
+        "gizmo:cut:extend",
+        "gizmo:cut:screen-space",
+        "gizmo:cylinder:height",
+        "gizmo:cylinder:radius",
+        "gizmo:draft-face:angle",
+        "gizmo:draft-face:offset",
+        "gizmo:export-hidden-line:capture-screen",
+        "gizmo:extend-sheet:distance",
+        "gizmo:extend:distance",
+        "gizmo:extrude:angle1",
+        "gizmo:extrude:angle2",
+        "gizmo:extrude:distance1",
+        "gizmo:extrude:distance2",
+        "gizmo:extrude:individual",
+        "gizmo:extrude:lock-distances",
+        "gizmo:extrude:thickness",
+        "gizmo:fillet-shell:angle",
+        "gizmo:fillet-shell:chamfer",
+        "gizmo:fillet-shell:fillet",
+        "gizmo:fillet-vertex:chamfer",
+        "gizmo:fillet-vertex:distance",
+        "gizmo:fillet-vertex:fillet",
+        "gizmo:finish",
+        "gizmo:hollow:thickness",
+        "gizmo:imprint:screen-space",
+        "gizmo:isoparam:add-cut",
+        "gizmo:isoparam:subtract-cut",
+        "gizmo:isoparam:toggle",
+        "gizmo:isoparam:toggle-subdivide",
+        "gizmo:line:knife",
+        "gizmo:line:undo",
+        "gizmo:loft-guide:add-vertex",
+        "gizmo:loft:tension",
+        "gizmo:loft:thickness",
+        "gizmo:mirror:toggle-instances",
+        "gizmo:mirror:x",
+        "gizmo:mirror:y",
+        "gizmo:mirror:z",
+        "gizmo:modify-contour:fillet-all",
+        "gizmo:move:screen",
+        "gizmo:move:x",
+        "gizmo:move:xy",
+        "gizmo:move:xz",
+        "gizmo:move:y",
+        "gizmo:move:yz",
+        "gizmo:move:z",
+        "gizmo:offset-edge:cycle",
+        "gizmo:offset-edge:distance",
+        "gizmo:offset-edge:free",
+        "gizmo:offset-edge:individual",
+        "gizmo:offset-edge:slot",
+        "gizmo:offset-edge:toggle",
+        "gizmo:offset-face:angle",
+        "gizmo:offset-face:distance",
+        "gizmo:offset-vertex:distance",
+        "gizmo:pipe:add-vertex",
+        "gizmo:pipe:angle",
+        "gizmo:pipe:custom-profile",
+        "gizmo:pipe:section-size",
+        "gizmo:pipe:subtract-vertex",
+        "gizmo:pipe:thickness",
+        "gizmo:place:angle",
+        "gizmo:place:flip",
+        "gizmo:place:offset",
+        "gizmo:place:scale",
+        "gizmo:place:toggle-instances",
+        "gizmo:place:x",
+        "gizmo:place:y",
+        "gizmo:place:z",
+        "gizmo:polygon:add-vertex",
+        "gizmo:polygon:knife",
+        "gizmo:polygon:subtract-vertex",
+        "gizmo:polygon:toggle-circumscribed-inscribed",
+        "gizmo:polygon:toggle-vertical-horizontal",
+        "gizmo:project:screen-space",
+        "gizmo:rectangle:knife",
+        "gizmo:rectangle:length",
+        "gizmo:rectangle:width",
+        "gizmo:refillet-face:distance",
+        "gizmo:revolve:angle",
+        "gizmo:rotate:screen",
+        "gizmo:rotate:x",
+        "gizmo:rotate:y",
+        "gizmo:rotate:z",
+        "gizmo:scale:x",
+        "gizmo:scale:xy",
+        "gizmo:scale:xyz",
+        "gizmo:scale:xz",
+        "gizmo:scale:y",
+        "gizmo:scale:yz",
+        "gizmo:scale:z",
+        "gizmo:section-analysis:distance",
+        "gizmo:section-analysis:flip",
+        "gizmo:shell",
+        "gizmo:slide:n",
+        "gizmo:slide:undo",
+        "gizmo:sphere:radius",
+        "gizmo:spiral:angle",
+        "gizmo:spiral:length",
+        "gizmo:spiral:radius",
+        "gizmo:sweep:thickness",
+        "gizmo:sweep:twist",
+        "gizmo:tangent-arc:flip",
+        "gizmo:tangent-circle:freeze",
+        "gizmo:thicken-sheet:lock-distances",
+        "gizmo:thicken-sheet:thickness"
+      ]
+    },
+    "keyboard": {
+      "count": 86,
+      "ids": [
+        "keyboard:align-edge:show-original",
+        "keyboard:boolean:move",
+        "keyboard:boolean:rotate",
+        "keyboard:boolean:scale",
+        "keyboard:box:difference",
+        "keyboard:box:intersect",
+        "keyboard:box:keep-tools",
+        "keyboard:box:new-body",
+        "keyboard:box:slice",
+        "keyboard:box:union",
+        "keyboard:bridge:cycle",
+        "keyboard:bridge:trim",
+        "keyboard:change-face:toggle",
+        "keyboard:cylinder:difference",
+        "keyboard:cylinder:intersect",
+        "keyboard:cylinder:keep-tools",
+        "keyboard:cylinder:new-body",
+        "keyboard:cylinder:slice",
+        "keyboard:cylinder:union",
+        "keyboard:draft-face:modify-selection",
+        "keyboard:extend:cycle",
+        "keyboard:extrude:difference",
+        "keyboard:extrude:intersect",
+        "keyboard:extrude:keep-tools",
+        "keyboard:extrude:modify-selection",
+        "keyboard:extrude:new-body",
+        "keyboard:extrude:slice",
+        "keyboard:extrude:union",
+        "keyboard:fillet-shell:add-limit-point",
+        "keyboard:fillet-shell:add-variation-point",
+        "keyboard:fillet-shell:modify-selection",
+        "keyboard:fillet-shell:toggle-tangent-edges",
+        "keyboard:loft:add-limit-point",
+        "keyboard:loft:cycle",
+        "keyboard:measure-continuity:cycle",
+        "keyboard:mirror:free",
+        "keyboard:mirror:pivot",
+        "keyboard:mirror:union",
+        "keyboard:move:free",
+        "keyboard:move:pivot",
+        "keyboard:move:remove-pivot",
+        "keyboard:move:toggle-orientation",
+        "keyboard:offset-face:modify-selection",
+        "keyboard:patch:cycle",
+        "keyboard:pipe:difference",
+        "keyboard:pipe:intersect",
+        "keyboard:pipe:keep-tools",
+        "keyboard:pipe:new-body",
+        "keyboard:pipe:slice",
+        "keyboard:pipe:union",
+        "keyboard:place:difference",
+        "keyboard:place:intersect",
+        "keyboard:place:keep-tools",
+        "keyboard:place:new-body",
+        "keyboard:place:slice",
+        "keyboard:place:union",
+        "keyboard:rectangle:mode",
+        "keyboard:revolve:difference",
+        "keyboard:revolve:intersect",
+        "keyboard:revolve:keep-tools",
+        "keyboard:revolve:new-body",
+        "keyboard:revolve:slice",
+        "keyboard:revolve:union",
+        "keyboard:rotate:free",
+        "keyboard:rotate:pivot",
+        "keyboard:rotate:remove-pivot",
+        "keyboard:rotate:toggle-orientation",
+        "keyboard:scale:free",
+        "keyboard:scale:pivot",
+        "keyboard:scale:remove-pivot",
+        "keyboard:scale:toggle-orientation",
+        "keyboard:slide:modify-selection",
+        "keyboard:sphere:difference",
+        "keyboard:sphere:intersect",
+        "keyboard:sphere:keep-tools",
+        "keyboard:sphere:new-body",
+        "keyboard:sphere:slice",
+        "keyboard:sphere:union",
+        "keyboard:sweep:difference",
+        "keyboard:sweep:intersect",
+        "keyboard:sweep:keep-tools",
+        "keyboard:sweep:new-body",
+        "keyboard:sweep:slice",
+        "keyboard:sweep:union",
+        "keyboard:untrim:keep-edges",
+        "keyboard:xnurbs:cycle"
+      ]
+    },
+    "selection": {
+      "count": 28,
+      "ids": [
+        "selection:add",
+        "selection:choose",
+        "selection:convert:control-point",
+        "selection:convert:edge",
+        "selection:convert:face",
+        "selection:convert:group-children",
+        "selection:convert:solid",
+        "selection:mode:set:all",
+        "selection:mode:set:control-point",
+        "selection:mode:set:default",
+        "selection:mode:set:edge",
+        "selection:mode:set:face",
+        "selection:mode:set:solid",
+        "selection:mode:toggle:all",
+        "selection:mode:toggle:control-point",
+        "selection:mode:toggle:edge",
+        "selection:mode:toggle:face",
+        "selection:mode:toggle:solid",
+        "selection:option:extend",
+        "selection:option:extend-alt",
+        "selection:option:ignore-mode",
+        "selection:remove",
+        "selection:replace",
+        "selection:toggle",
+        "selection:toggle:control-point",
+        "selection:toggle:edge",
+        "selection:toggle:face",
+        "selection:toggle:solid"
+      ]
+    },
+    "outliner": {
+      "count": 24,
+      "ids": [
+        "outliner:delete-empty-groups",
+        "outliner:focus",
+        "outliner:group:collapse:recursive",
+        "outliner:group:delete",
+        "outliner:group:dissolve",
+        "outliner:group:expand:recursive",
+        "outliner:group:new-subgroup",
+        "outliner:isolate",
+        "outliner:item:fork-material",
+        "outliner:item:move:root",
+        "outliner:item:remove-material",
+        "outliner:item:set-active-construction-plane",
+        "outliner:item:set-active-construction-plane-and-orient-camera",
+        "outliner:item:set-material",
+        "outliner:navigate:collapse",
+        "outliner:navigate:down",
+        "outliner:navigate:down:add",
+        "outliner:navigate:expand",
+        "outliner:navigate:up",
+        "outliner:navigate:up:add",
+        "outliner:rename",
+        "outliner:root:collapse:recursive",
+        "outliner:root:expand:recursive",
+        "outliner:search"
+      ]
+    },
+    "viewport": {
+      "count": 21,
+      "ids": [
+        "viewport:cplane:reset",
+        "viewport:cplane:selection",
+        "viewport:focus",
+        "viewport:grid:decr",
+        "viewport:grid:incr",
+        "viewport:navigate:back",
+        "viewport:navigate:bottom",
+        "viewport:navigate:front",
+        "viewport:navigate:left",
+        "viewport:navigate:right",
+        "viewport:navigate:selection",
+        "viewport:navigate:top",
+        "viewport:set-and-center-focus-point",
+        "viewport:toggle-continuity-labels",
+        "viewport:toggle-curves",
+        "viewport:toggle-edges",
+        "viewport:toggle-faces",
+        "viewport:toggle-orthographic",
+        "viewport:toggle-overlays",
+        "viewport:toggle-render-mode",
+        "viewport:toggle-x-ray"
+      ]
+    },
+    "orbit": {
+      "count": 16,
+      "ids": [
+        "orbit:align",
+        "orbit:dolly",
+        "orbit:dolly-pan",
+        "orbit:dolly:in",
+        "orbit:dolly:out",
+        "orbit:pan",
+        "orbit:pan:down",
+        "orbit:pan:left",
+        "orbit:pan:right",
+        "orbit:pan:up",
+        "orbit:rotate",
+        "orbit:rotate:down",
+        "orbit:rotate:left",
+        "orbit:rotate:right",
+        "orbit:rotate:up",
+        "orbit:snap"
+      ]
+    },
+    "snaps": {
+      "count": 11,
+      "ids": [
+        "snaps:set-binormal",
+        "snaps:set-normal",
+        "snaps:set-square",
+        "snaps:set-tangent",
+        "snaps:set-x",
+        "snaps:set-y",
+        "snaps:set-z",
+        "snaps:temporarily-disable",
+        "snaps:temporarily-enable",
+        "snaps:toggle-grid",
+        "snaps:toggle-snaps"
+      ]
+    },
+    "view": {
+      "count": 8,
+      "ids": [
+        "view:context-menu:suggested",
+        "view:modal:cancel",
+        "view:modal:command-palette",
+        "view:modal:preferences",
+        "view:radial:cancel",
+        "view:sidebar:toggle-left",
+        "view:sidebar:toggle-right",
+        "view:window:license"
+      ]
+    },
+    "edit": {
+      "count": 7,
+      "ids": [
+        "edit:copy",
+        "edit:copy-with-placement",
+        "edit:paste",
+        "edit:paste-with-placement",
+        "edit:redo",
+        "edit:repeat-last-command",
+        "edit:undo"
+      ]
+    },
+    "file": {
+      "count": 7,
+      "ids": [
+        "file:export",
+        "file:import",
+        "file:new",
+        "file:open",
+        "file:save",
+        "file:save-as",
+        "file:save-version"
+      ]
+    },
+    "move": {
+      "count": 7,
+      "ids": [
+        "move:screen",
+        "move:x",
+        "move:xy",
+        "move:xz",
+        "move:y",
+        "move:yz",
+        "move:z"
+      ]
+    },
+    "scale": {
+      "count": 7,
+      "ids": [
+        "scale:x",
+        "scale:xy",
+        "scale:xyz",
+        "scale:xz",
+        "scale:y",
+        "scale:yz",
+        "scale:z"
+      ]
+    },
+    "box": {
+      "count": 5,
+      "ids": [
+        "box:height",
+        "box:length-left",
+        "box:length-right",
+        "box:width-left",
+        "box:width-right"
+      ]
+    },
+    "rotate": {
+      "count": 5,
+      "ids": [
+        "rotate:occluder",
+        "rotate:screen",
+        "rotate:x",
+        "rotate:y",
+        "rotate:z"
+      ]
+    },
+    "assets": {
+      "count": 4,
+      "ids": [
+        "assets:material:select-all",
+        "assets:navigate:down",
+        "assets:navigate:up",
+        "assets:rename"
+      ]
+    },
+    "extrude": {
+      "count": 4,
+      "ids": [
+        "extrude:angle1",
+        "extrude:distance1",
+        "extrude:shear",
+        "extrude:thickness"
+      ]
+    },
+    "fillet-shell": {
+      "count": 4,
+      "ids": [
+        "fillet-shell:angle",
+        "fillet-shell:chamfer",
+        "fillet-shell:distance",
+        "fillet-shell:fillet"
+      ]
+    },
+    "hover": {
+      "count": 4,
+      "ids": [
+        "hover:bg-black-100-alpha",
+        "hover:rounded",
+        "hover:rounded-b",
+        "hover:rounded-t"
+      ]
+    },
+    "mirror": {
+      "count": 4,
+      "ids": [
+        "mirror:move",
+        "mirror:x",
+        "mirror:y",
+        "mirror:z"
+      ]
+    },
+    "point-picker": {
+      "count": 4,
+      "ids": [
+        "point-picker:cplane:last-picked-point",
+        "point-picker:cplane:screen-space",
+        "point-picker:finish",
+        "point-picker:navigate:last-picked-point"
+      ]
+    },
+    "extend-sheet": {
+      "count": 3,
+      "ids": [
+        "extend-sheet:bias1",
+        "extend-sheet:bias2",
+        "extend-sheet:distance"
+      ]
+    },
+    "fillet-vertex": {
+      "count": 3,
+      "ids": [
+        "fillet-vertex:chamfer",
+        "fillet-vertex:fillet",
+        "fillet-vertex:radius"
+      ]
+    },
+    "place": {
+      "count": 3,
+      "ids": [
+        "place:angle",
+        "place:offset",
+        "place:scale"
+      ]
+    },
+    "spiral": {
+      "count": 3,
+      "ids": [
+        "spiral:angle",
+        "spiral:length",
+        "spiral:radius"
+      ]
+    },
+    "app": {
+      "count": 2,
+      "ids": [
+        "app:new-window",
+        "app:quit"
+      ]
+    },
+    "bridge-vertex": {
+      "count": 2,
+      "ids": [
+        "bridge-vertex:continuity:1",
+        "bridge-vertex:continuity:2"
+      ]
+    },
+    "cylinder": {
+      "count": 2,
+      "ids": [
+        "cylinder:height",
+        "cylinder:radius"
+      ]
+    },
+    "direction": {
+      "count": 2,
+      "ids": [
+        "direction:extrude:free",
+        "direction:extrude:pivot"
+      ]
+    },
+    "draft-face": {
+      "count": 2,
+      "ids": [
+        "draft-face:angle",
+        "draft-face:offset"
+      ]
+    },
+    "offset-face": {
+      "count": 2,
+      "ids": [
+        "offset-face:angle",
+        "offset-face:distance"
+      ]
+    },
+    "tab": {
+      "count": 2,
+      "ids": [
+        "tab:focus-next",
+        "tab:focus-previous"
+      ]
+    },
+    "align-vertex": {
+      "count": 1,
+      "ids": [
+        "align-vertex:continuity"
+      ]
+    },
+    "array": {
+      "count": 1,
+      "ids": [
+        "array:distance1"
+      ]
+    },
+    "color": {
+      "count": 1,
+      "ids": [
+        "color:unset"
+      ]
+    },
+    "dialog": {
+      "count": 1,
+      "ids": [
+        "dialog:finish"
+      ]
+    },
+    "extend": {
+      "count": 1,
+      "ids": [
+        "extend:distance"
+      ]
+    },
+    "hollow": {
+      "count": 1,
+      "ids": [
+        "hollow:thickness"
+      ]
+    },
+    "loft": {
+      "count": 1,
+      "ids": [
+        "loft:tension"
+      ]
+    },
+    "offset-edge": {
+      "count": 1,
+      "ids": [
+        "offset-edge:distance"
+      ]
+    },
+    "offset-vertex": {
+      "count": 1,
+      "ids": [
+        "offset-vertex:distance"
+      ]
+    },
+    "pipe": {
+      "count": 1,
+      "ids": [
+        "pipe:section-size"
+      ]
+    },
+    "refillet-face": {
+      "count": 1,
+      "ids": [
+        "refillet-face:distance"
+      ]
+    },
+    "revolve": {
+      "count": 1,
+      "ids": [
+        "revolve:angle"
+      ]
+    },
+    "section-analysis": {
+      "count": 1,
+      "ids": [
+        "section-analysis:distance"
+      ]
+    },
+    "slide": {
+      "count": 1,
+      "ids": [
+        "slide:n"
+      ]
+    },
+    "sphere": {
+      "count": 1,
+      "ids": [
+        "sphere:radius"
+      ]
+    },
+    "sweep": {
+      "count": 1,
+      "ids": [
+        "sweep:twist"
+      ]
+    },
+    "thicken-sheet": {
+      "count": 1,
+      "ids": [
+        "thicken-sheet:thickness"
+      ]
+    },
+    "xlink": {
+      "count": 1,
+      "ids": [
+        "xlink:href"
+      ]
+    }
+  },
+  "bundles": {
+    "align-vertex:continuity": [
+      "renderer"
+    ],
+    "app:new-window": [
+      "renderer"
+    ],
+    "app:quit": [
+      "main",
+      "renderer"
+    ],
+    "array:distance1": [
+      "renderer"
+    ],
+    "assets:material:select-all": [
+      "renderer"
+    ],
+    "assets:navigate:down": [
+      "renderer"
+    ],
+    "assets:navigate:up": [
+      "main",
+      "renderer"
+    ],
+    "assets:rename": [
+      "main",
+      "renderer"
+    ],
+    "box:height": [
+      "renderer"
+    ],
+    "box:length-left": [
+      "renderer"
+    ],
+    "box:length-right": [
+      "renderer"
+    ],
+    "box:width-left": [
+      "renderer"
+    ],
+    "box:width-right": [
+      "renderer"
+    ],
+    "bridge-vertex:continuity:1": [
+      "renderer"
+    ],
+    "bridge-vertex:continuity:2": [
+      "renderer"
+    ],
+    "color:unset": [
+      "main"
+    ],
+    "command:abort": [
+      "main",
+      "renderer"
+    ],
+    "command:align": [
+      "renderer"
+    ],
+    "command:alternative-duplicate": [
+      "main",
+      "renderer"
+    ],
+    "command:boolean": [
+      "main",
+      "renderer"
+    ],
+    "command:bridge": [
+      "main",
+      "renderer"
+    ],
+    "command:bridge-curve": [
+      "renderer"
+    ],
+    "command:bridge-edge": [
+      "renderer"
+    ],
+    "command:bridge-surface": [
+      "renderer"
+    ],
+    "command:bridge-vertex": [
+      "renderer"
+    ],
+    "command:center-box": [
+      "renderer"
+    ],
+    "command:center-circle": [
+      "main",
+      "renderer"
+    ],
+    "command:center-point-arc": [
+      "renderer"
+    ],
+    "command:center-rectangle": [
+      "renderer"
+    ],
+    "command:check": [
+      "renderer"
+    ],
+    "command:complete-edge": [
+      "renderer"
+    ],
+    "command:constrained-surface": [
+      "renderer"
+    ],
+    "command:control-point-curve": [
+      "renderer"
+    ],
+    "command:convert-vertex": [
+      "renderer"
+    ],
+    "command:copy-with-placement": [
+      "renderer"
+    ],
+    "command:corner-box": [
+      "renderer"
+    ],
+    "command:corner-rectangle": [
+      "renderer"
+    ],
+    "command:create-instance": [
+      "renderer"
+    ],
+    "command:create-outline": [
+      "renderer"
+    ],
+    "command:create-solid-from-faces": [
+      "renderer"
+    ],
+    "command:create-viewspace-construction-plane": [
+      "main",
+      "renderer"
+    ],
+    "command:create-viewspace-construction-plane-at-origin": [
+      "main",
+      "renderer"
+    ],
+    "command:curve": [
+      "renderer"
+    ],
+    "command:curve-array": [
+      "renderer"
+    ],
+    "command:cut": [
+      "main",
+      "renderer"
+    ],
+    "command:cut-curve": [
+      "renderer"
+    ],
+    "command:cylinder": [
+      "renderer"
+    ],
+    "command:deform": [
+      "renderer"
+    ],
+    "command:delete": [
+      "main",
+      "renderer"
+    ],
+    "command:delete-redundant-topology": [
+      "renderer"
+    ],
+    "command:deselect-all": [
+      "main",
+      "renderer"
+    ],
+    "command:deselect-all-and-reset-construction-plane": [
+      "main",
+      "renderer"
+    ],
+    "command:dialog:place": [
+      "main",
+      "renderer"
+    ],
+    "command:dimension": [
+      "main",
+      "renderer"
+    ],
+    "command:dissolve": [
+      "main",
+      "renderer"
+    ],
+    "command:draft-face": [
+      "renderer"
+    ],
+    "command:duplicate": [
+      "main",
+      "renderer"
+    ],
+    "command:duplicate-curve-and-project": [
+      "renderer"
+    ],
+    "command:duplicate-edge-and-project": [
+      "renderer"
+    ],
+    "command:ellipse": [
+      "renderer"
+    ],
+    "command:export-3-mf": [
+      "renderer"
+    ],
+    "command:export-asset-pack": [
+      "renderer"
+    ],
+    "command:export-hidden-line": [
+      "renderer"
+    ],
+    "command:export-iges": [
+      "renderer"
+    ],
+    "command:export-obj": [
+      "renderer"
+    ],
+    "command:export-parasolid": [
+      "renderer"
+    ],
+    "command:export-sat": [
+      "renderer"
+    ],
+    "command:export-screenshot": [
+      "renderer"
+    ],
+    "command:export-step": [
+      "renderer"
+    ],
+    "command:export-stl": [
+      "renderer"
+    ],
+    "command:export-svg": [
+      "renderer"
+    ],
+    "command:extend": [
+      "renderer"
+    ],
+    "command:extend-curve": [
+      "renderer"
+    ],
+    "command:extend-sheet": [
+      "renderer"
+    ],
+    "command:extrude": [
+      "main",
+      "renderer"
+    ],
+    "command:fillet": [
+      "main",
+      "renderer"
+    ],
+    "command:fillet-curve": [
+      "renderer"
+    ],
+    "command:fillet-shell": [
+      "renderer"
+    ],
+    "command:fillet-vertex": [
+      "renderer"
+    ],
+    "command:find-boundary-edges": [
+      "renderer"
+    ],
+    "command:finish": [
+      "main",
+      "renderer"
+    ],
+    "command:fork-material": [
+      "main",
+      "renderer"
+    ],
+    "command:freestyle-mirror": [
+      "renderer"
+    ],
+    "command:freestyle-move": [
+      "renderer"
+    ],
+    "command:freestyle-offset-planar-curve": [
+      "renderer"
+    ],
+    "command:freestyle-rotate": [
+      "renderer"
+    ],
+    "command:freestyle-scale": [
+      "renderer"
+    ],
+    "command:group-selected": [
+      "main",
+      "renderer"
+    ],
+    "command:hide-selected": [
+      "main",
+      "renderer"
+    ],
+    "command:hide-unselected": [
+      "main",
+      "renderer"
+    ],
+    "command:hollow": [
+      "renderer"
+    ],
+    "command:hollow-faces": [
+      "renderer"
+    ],
+    "command:hollow-solids": [
+      "renderer"
+    ],
+    "command:imprint": [
+      "main",
+      "renderer"
+    ],
+    "command:imprint-body-body": [
+      "renderer"
+    ],
+    "command:imprint-curve-body": [
+      "renderer"
+    ],
+    "command:insert-knot": [
+      "renderer"
+    ],
+    "command:invert-hidden": [
+      "main",
+      "renderer"
+    ],
+    "command:invert-selection": [
+      "main",
+      "renderer"
+    ],
+    "command:isolate": [
+      "main",
+      "renderer"
+    ],
+    "command:isoparam": [
+      "main",
+      "renderer"
+    ],
+    "command:join": [
+      "main",
+      "renderer"
+    ],
+    "command:join-curves": [
+      "renderer"
+    ],
+    "command:join-sheets": [
+      "renderer"
+    ],
+    "command:line": [
+      "main",
+      "renderer"
+    ],
+    "command:lock-selected": [
+      "renderer"
+    ],
+    "command:loft": [
+      "main",
+      "renderer"
+    ],
+    "command:loft-guide": [
+      "main",
+      "renderer"
+    ],
+    "command:manage-my-shared-documents": [
+      "renderer"
+    ],
+    "command:match-face": [
+      "renderer"
+    ],
+    "command:measure-continuity": [
+      "renderer"
+    ],
+    "command:measure-distance": [
+      "main",
+      "renderer"
+    ],
+    "command:measure-radius": [
+      "renderer"
+    ],
+    "command:mirror": [
+      "main",
+      "renderer"
+    ],
+    "command:move": [
+      "main",
+      "renderer"
+    ],
+    "command:move-control-point": [
+      "renderer"
+    ],
+    "command:move-face": [
+      "renderer"
+    ],
+    "command:move-item": [
+      "renderer"
+    ],
+    "command:offset-curve": [
+      "main",
+      "renderer"
+    ],
+    "command:offset-edge": [
+      "renderer"
+    ],
+    "command:offset-face": [
+      "renderer"
+    ],
+    "command:offset-face-loop": [
+      "renderer"
+    ],
+    "command:offset-planar-curve": [
+      "renderer"
+    ],
+    "command:offset-region": [
+      "renderer"
+    ],
+    "command:offset-vertex": [
+      "renderer"
+    ],
+    "command:paste-with-placement": [
+      "renderer"
+    ],
+    "command:patch": [
+      "main",
+      "renderer"
+    ],
+    "command:pipe": [
+      "main",
+      "renderer"
+    ],
+    "command:place": [
+      "main",
+      "renderer"
+    ],
+    "command:poly-splines": [
+      "renderer"
+    ],
+    "command:polygon": [
+      "renderer"
+    ],
+    "command:project": [
+      "main",
+      "renderer"
+    ],
+    "command:project-body-body": [
+      "renderer"
+    ],
+    "command:project-curve-body": [
+      "renderer"
+    ],
+    "command:project-curve-curve": [
+      "renderer"
+    ],
+    "command:project-outline": [
+      "renderer"
+    ],
+    "command:publish-to-plasticity-share": [
+      "renderer"
+    ],
+    "command:push-face": [
+      "renderer"
+    ],
+    "command:quasimode:start": [
+      "main",
+      "renderer"
+    ],
+    "command:quasimode:stop": [
+      "main",
+      "renderer"
+    ],
+    "command:radial-array": [
+      "renderer"
+    ],
+    "command:raise-degree": [
+      "main",
+      "renderer"
+    ],
+    "command:realize-instances": [
+      "renderer"
+    ],
+    "command:rebuild": [
+      "renderer"
+    ],
+    "command:rebuild-curve": [
+      "renderer"
+    ],
+    "command:rebuild-face": [
+      "renderer"
+    ],
+    "command:rectangular-array": [
+      "renderer"
+    ],
+    "command:refillet-face": [
+      "renderer"
+    ],
+    "command:remove-fillets-from-shell": [
+      "renderer"
+    ],
+    "command:remove-material": [
+      "main",
+      "renderer"
+    ],
+    "command:remove-nominal-surface": [
+      "renderer"
+    ],
+    "command:reverse": [
+      "renderer"
+    ],
+    "command:revolve": [
+      "renderer"
+    ],
+    "command:rotate": [
+      "main",
+      "renderer"
+    ],
+    "command:rotate-control-point": [
+      "renderer"
+    ],
+    "command:rotate-face": [
+      "renderer"
+    ],
+    "command:rotate-item": [
+      "renderer"
+    ],
+    "command:scale": [
+      "main",
+      "renderer"
+    ],
+    "command:scale-control-point": [
+      "renderer"
+    ],
+    "command:scale-face": [
+      "renderer"
+    ],
+    "command:scale-item": [
+      "renderer"
+    ],
+    "command:section-analysis": [
+      "renderer"
+    ],
+    "command:select-adjacent": [
+      "main",
+      "renderer"
+    ],
+    "command:select-all": [
+      "main",
+      "renderer"
+    ],
+    "command:select-all-curves": [
+      "renderer"
+    ],
+    "command:select-all-measurements": [
+      "renderer"
+    ],
+    "command:select-all-sheets": [
+      "renderer"
+    ],
+    "command:select-all-solids": [
+      "renderer"
+    ],
+    "command:select-next-entity-collection": [
+      "main",
+      "renderer"
+    ],
+    "command:select-previous-entity-collection": [
+      "main",
+      "renderer"
+    ],
+    "command:set-material": [
+      "main",
+      "renderer"
+    ],
+    "command:slide": [
+      "main",
+      "renderer"
+    ],
+    "command:slot": [
+      "renderer"
+    ],
+    "command:smart-command": [
+      "renderer"
+    ],
+    "command:sphere": [
+      "renderer"
+    ],
+    "command:spiral": [
+      "renderer"
+    ],
+    "command:split-segment": [
+      "renderer"
+    ],
+    "command:square": [
+      "renderer"
+    ],
+    "command:subdivide": [
+      "renderer"
+    ],
+    "command:sweep": [
+      "main",
+      "renderer"
+    ],
+    "command:sweep-tool": [
+      "renderer"
+    ],
+    "command:tangent-arc": [
+      "renderer"
+    ],
+    "command:tangent-circle": [
+      "renderer"
+    ],
+    "command:text": [
+      "renderer"
+    ],
+    "command:thicken": [
+      "renderer"
+    ],
+    "command:thicken-face": [
+      "renderer"
+    ],
+    "command:thicken-sheet": [
+      "renderer"
+    ],
+    "command:three-point-arc": [
+      "renderer"
+    ],
+    "command:three-point-box": [
+      "renderer"
+    ],
+    "command:three-point-circle": [
+      "renderer"
+    ],
+    "command:three-point-rectangle": [
+      "renderer"
+    ],
+    "command:toggle-curvature": [
+      "renderer"
+    ],
+    "command:toggle-points": [
+      "renderer"
+    ],
+    "command:trim": [
+      "main",
+      "renderer"
+    ],
+    "command:two-point-circle": [
+      "renderer"
+    ],
+    "command:undo": [
+      "main",
+      "renderer"
+    ],
+    "command:ungroup-selected": [
+      "main",
+      "renderer"
+    ],
+    "command:unhide-all": [
+      "main",
+      "renderer"
+    ],
+    "command:unisolate": [
+      "main",
+      "renderer"
+    ],
+    "command:unjoin": [
+      "main",
+      "renderer"
+    ],
+    "command:unjoin-curves": [
+      "renderer"
+    ],
+    "command:unjoin-faces": [
+      "renderer"
+    ],
+    "command:unjoin-shells": [
+      "renderer"
+    ],
+    "command:unlock-all": [
+      "renderer"
+    ],
+    "command:untrim": [
+      "main",
+      "renderer"
+    ],
+    "command:unwrap-face": [
+      "renderer"
+    ],
+    "command:xnurbs": [
+      "renderer"
+    ],
+    "cylinder:height": [
+      "renderer"
+    ],
+    "cylinder:radius": [
+      "renderer"
+    ],
+    "dialog:finish": [
+      "main",
+      "renderer"
+    ],
+    "direction:extrude:free": [
+      "main",
+      "renderer"
+    ],
+    "direction:extrude:pivot": [
+      "main",
+      "renderer"
+    ],
+    "draft-face:angle": [
+      "renderer"
+    ],
+    "draft-face:offset": [
+      "renderer"
+    ],
+    "edit:copy": [
+      "main",
+      "renderer"
+    ],
+    "edit:copy-with-placement": [
+      "main",
+      "renderer"
+    ],
+    "edit:paste": [
+      "main",
+      "renderer"
+    ],
+    "edit:paste-with-placement": [
+      "main",
+      "renderer"
+    ],
+    "edit:redo": [
+      "main",
+      "renderer"
+    ],
+    "edit:repeat-last-command": [
+      "main",
+      "renderer"
+    ],
+    "edit:undo": [
+      "main",
+      "renderer"
+    ],
+    "extend-sheet:bias1": [
+      "renderer"
+    ],
+    "extend-sheet:bias2": [
+      "renderer"
+    ],
+    "extend-sheet:distance": [
+      "renderer"
+    ],
+    "extend:distance": [
+      "renderer"
+    ],
+    "extrude:angle1": [
+      "renderer"
+    ],
+    "extrude:distance1": [
+      "renderer"
+    ],
+    "extrude:shear": [
+      "renderer"
+    ],
+    "extrude:thickness": [
+      "renderer"
+    ],
+    "file:export": [
+      "main",
+      "renderer"
+    ],
+    "file:import": [
+      "main",
+      "renderer"
+    ],
+    "file:new": [
+      "main",
+      "renderer"
+    ],
+    "file:open": [
+      "main",
+      "renderer"
+    ],
+    "file:save": [
+      "main",
+      "renderer"
+    ],
+    "file:save-as": [
+      "main",
+      "renderer"
+    ],
+    "file:save-version": [
+      "renderer"
+    ],
+    "fillet-shell:angle": [
+      "renderer"
+    ],
+    "fillet-shell:chamfer": [
+      "renderer"
+    ],
+    "fillet-shell:distance": [
+      "renderer"
+    ],
+    "fillet-shell:fillet": [
+      "renderer"
+    ],
+    "fillet-vertex:chamfer": [
+      "renderer"
+    ],
+    "fillet-vertex:fillet": [
+      "renderer"
+    ],
+    "fillet-vertex:radius": [
+      "renderer"
+    ],
+    "gizmo:arc:knife": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:array:add": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:array:subtract": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:array:toggle-instances": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:boolean:difference": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:boolean:intersect": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:boolean:keep-tools": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:boolean:slice": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:boolean:union": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:box:height": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:box:length": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:box:width": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:bridge-surface:add-wall-pair": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:bridge:tension:0": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:circle:knife": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:circle:mode": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:circle:radius": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:constrained-surface:undo": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:curve:knife": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:curve:toggle": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:curve:undo": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:cut:curves": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:cut:extend": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:cut:screen-space": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:cylinder:height": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:cylinder:radius": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:draft-face:angle": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:draft-face:offset": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:export-hidden-line:capture-screen": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:extend-sheet:distance": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:extend:distance": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:extrude:angle1": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:extrude:angle2": [
+      "renderer"
+    ],
+    "gizmo:extrude:distance1": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:extrude:distance2": [
+      "renderer"
+    ],
+    "gizmo:extrude:individual": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:extrude:lock-distances": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:extrude:thickness": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:fillet-shell:angle": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:fillet-shell:chamfer": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:fillet-shell:fillet": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:fillet-vertex:chamfer": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:fillet-vertex:distance": [
+      "renderer"
+    ],
+    "gizmo:fillet-vertex:fillet": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:finish": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:hollow:thickness": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:imprint:screen-space": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:isoparam:add-cut": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:isoparam:subtract-cut": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:isoparam:toggle": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:isoparam:toggle-subdivide": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:line:knife": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:line:undo": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:loft-guide:add-vertex": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:loft:tension": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:loft:thickness": [
+      "renderer"
+    ],
+    "gizmo:mirror:toggle-instances": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:mirror:x": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:mirror:y": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:mirror:z": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:modify-contour:fillet-all": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:move:screen": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:move:x": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:move:xy": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:move:xz": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:move:y": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:move:yz": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:move:z": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:offset-edge:cycle": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:offset-edge:distance": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:offset-edge:free": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:offset-edge:individual": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:offset-edge:slot": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:offset-edge:toggle": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:offset-face:angle": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:offset-face:distance": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:offset-vertex:distance": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:pipe:add-vertex": [
+      "renderer"
+    ],
+    "gizmo:pipe:angle": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:pipe:custom-profile": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:pipe:section-size": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:pipe:subtract-vertex": [
+      "renderer"
+    ],
+    "gizmo:pipe:thickness": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:place:angle": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:place:flip": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:place:offset": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:place:scale": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:place:toggle-instances": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:place:x": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:place:y": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:place:z": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:polygon:add-vertex": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:polygon:knife": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:polygon:subtract-vertex": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:polygon:toggle-circumscribed-inscribed": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:polygon:toggle-vertical-horizontal": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:project:screen-space": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:rectangle:knife": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:rectangle:length": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:rectangle:width": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:refillet-face:distance": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:revolve:angle": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:rotate:screen": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:rotate:x": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:rotate:y": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:rotate:z": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:scale:x": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:scale:xy": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:scale:xyz": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:scale:xz": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:scale:y": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:scale:yz": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:scale:z": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:section-analysis:distance": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:section-analysis:flip": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:shell": [
+      "renderer"
+    ],
+    "gizmo:slide:n": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:slide:undo": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:sphere:radius": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:spiral:angle": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:spiral:length": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:spiral:radius": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:sweep:thickness": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:sweep:twist": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:tangent-arc:flip": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:tangent-circle:freeze": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:thicken-sheet:lock-distances": [
+      "main",
+      "renderer"
+    ],
+    "gizmo:thicken-sheet:thickness": [
+      "main",
+      "renderer"
+    ],
+    "hollow:thickness": [
+      "renderer"
+    ],
+    "hover:bg-black-100-alpha": [
+      "renderer"
+    ],
+    "hover:rounded": [
+      "renderer"
+    ],
+    "hover:rounded-b": [
+      "renderer"
+    ],
+    "hover:rounded-t": [
+      "renderer"
+    ],
+    "keyboard:align-edge:show-original": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:boolean:move": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:boolean:rotate": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:boolean:scale": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:box:difference": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:box:intersect": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:box:keep-tools": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:box:new-body": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:box:slice": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:box:union": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:bridge:cycle": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:bridge:trim": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:change-face:toggle": [
+      "renderer"
+    ],
+    "keyboard:cylinder:difference": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:cylinder:intersect": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:cylinder:keep-tools": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:cylinder:new-body": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:cylinder:slice": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:cylinder:union": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:draft-face:modify-selection": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:extend:cycle": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:extrude:difference": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:extrude:intersect": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:extrude:keep-tools": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:extrude:modify-selection": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:extrude:new-body": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:extrude:slice": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:extrude:union": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:fillet-shell:add-limit-point": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:fillet-shell:add-variation-point": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:fillet-shell:modify-selection": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:fillet-shell:toggle-tangent-edges": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:loft:add-limit-point": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:loft:cycle": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:measure-continuity:cycle": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:mirror:free": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:mirror:pivot": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:mirror:union": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:move:free": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:move:pivot": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:move:remove-pivot": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:move:toggle-orientation": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:offset-face:modify-selection": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:patch:cycle": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:pipe:difference": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:pipe:intersect": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:pipe:keep-tools": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:pipe:new-body": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:pipe:slice": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:pipe:union": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:place:difference": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:place:intersect": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:place:keep-tools": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:place:new-body": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:place:slice": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:place:union": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:rectangle:mode": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:revolve:difference": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:revolve:intersect": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:revolve:keep-tools": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:revolve:new-body": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:revolve:slice": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:revolve:union": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:rotate:free": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:rotate:pivot": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:rotate:remove-pivot": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:rotate:toggle-orientation": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:scale:free": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:scale:pivot": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:scale:remove-pivot": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:scale:toggle-orientation": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:slide:modify-selection": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:sphere:difference": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:sphere:intersect": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:sphere:keep-tools": [
+      "renderer"
+    ],
+    "keyboard:sphere:new-body": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:sphere:slice": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:sphere:union": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:sweep:difference": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:sweep:intersect": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:sweep:keep-tools": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:sweep:new-body": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:sweep:slice": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:sweep:union": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:untrim:keep-edges": [
+      "main",
+      "renderer"
+    ],
+    "keyboard:xnurbs:cycle": [
+      "main",
+      "renderer"
+    ],
+    "loft:tension": [
+      "renderer"
+    ],
+    "mirror:move": [
+      "renderer"
+    ],
+    "mirror:x": [
+      "renderer"
+    ],
+    "mirror:y": [
+      "renderer"
+    ],
+    "mirror:z": [
+      "renderer"
+    ],
+    "move:screen": [
+      "renderer"
+    ],
+    "move:x": [
+      "renderer"
+    ],
+    "move:xy": [
+      "renderer"
+    ],
+    "move:xz": [
+      "renderer"
+    ],
+    "move:y": [
+      "renderer"
+    ],
+    "move:yz": [
+      "renderer"
+    ],
+    "move:z": [
+      "renderer"
+    ],
+    "offset-edge:distance": [
+      "renderer"
+    ],
+    "offset-face:angle": [
+      "renderer"
+    ],
+    "offset-face:distance": [
+      "renderer"
+    ],
+    "offset-vertex:distance": [
+      "renderer"
+    ],
+    "orbit:align": [
+      "main",
+      "renderer"
+    ],
+    "orbit:dolly": [
+      "main",
+      "renderer"
+    ],
+    "orbit:dolly-pan": [
+      "renderer"
+    ],
+    "orbit:dolly:in": [
+      "renderer"
+    ],
+    "orbit:dolly:out": [
+      "renderer"
+    ],
+    "orbit:pan": [
+      "main",
+      "renderer"
+    ],
+    "orbit:pan:down": [
+      "renderer"
+    ],
+    "orbit:pan:left": [
+      "renderer"
+    ],
+    "orbit:pan:right": [
+      "renderer"
+    ],
+    "orbit:pan:up": [
+      "renderer"
+    ],
+    "orbit:rotate": [
+      "main",
+      "renderer"
+    ],
+    "orbit:rotate:down": [
+      "renderer"
+    ],
+    "orbit:rotate:left": [
+      "renderer"
+    ],
+    "orbit:rotate:right": [
+      "renderer"
+    ],
+    "orbit:rotate:up": [
+      "renderer"
+    ],
+    "orbit:snap": [
+      "main",
+      "renderer"
+    ],
+    "outliner:delete-empty-groups": [
+      "renderer"
+    ],
+    "outliner:focus": [
+      "main",
+      "renderer"
+    ],
+    "outliner:group:collapse:recursive": [
+      "renderer"
+    ],
+    "outliner:group:delete": [
+      "renderer"
+    ],
+    "outliner:group:dissolve": [
+      "renderer"
+    ],
+    "outliner:group:expand:recursive": [
+      "renderer"
+    ],
+    "outliner:group:new-subgroup": [
+      "renderer"
+    ],
+    "outliner:isolate": [
+      "main",
+      "renderer"
+    ],
+    "outliner:item:fork-material": [
+      "renderer"
+    ],
+    "outliner:item:move:root": [
+      "renderer"
+    ],
+    "outliner:item:remove-material": [
+      "renderer"
+    ],
+    "outliner:item:set-active-construction-plane": [
+      "renderer"
+    ],
+    "outliner:item:set-active-construction-plane-and-orient-camera": [
+      "renderer"
+    ],
+    "outliner:item:set-material": [
+      "renderer"
+    ],
+    "outliner:navigate:collapse": [
+      "main",
+      "renderer"
+    ],
+    "outliner:navigate:down": [
+      "main",
+      "renderer"
+    ],
+    "outliner:navigate:down:add": [
+      "main",
+      "renderer"
+    ],
+    "outliner:navigate:expand": [
+      "main"
+    ],
+    "outliner:navigate:up": [
+      "main"
+    ],
+    "outliner:navigate:up:add": [
+      "main"
+    ],
+    "outliner:rename": [
+      "main",
+      "renderer"
+    ],
+    "outliner:root:collapse:recursive": [
+      "main"
+    ],
+    "outliner:root:expand:recursive": [
+      "renderer"
+    ],
+    "outliner:search": [
+      "main",
+      "renderer"
+    ],
+    "pipe:section-size": [
+      "renderer"
+    ],
+    "place:angle": [
+      "renderer"
+    ],
+    "place:offset": [
+      "renderer"
+    ],
+    "place:scale": [
+      "renderer"
+    ],
+    "point-picker:cplane:last-picked-point": [
+      "main",
+      "renderer"
+    ],
+    "point-picker:cplane:screen-space": [
+      "main",
+      "renderer"
+    ],
+    "point-picker:finish": [
+      "main",
+      "renderer"
+    ],
+    "point-picker:navigate:last-picked-point": [
+      "main",
+      "renderer"
+    ],
+    "refillet-face:distance": [
+      "renderer"
+    ],
+    "revolve:angle": [
+      "renderer"
+    ],
+    "rotate:occluder": [
+      "renderer"
+    ],
+    "rotate:screen": [
+      "renderer"
+    ],
+    "rotate:x": [
+      "renderer"
+    ],
+    "rotate:y": [
+      "renderer"
+    ],
+    "rotate:z": [
+      "renderer"
+    ],
+    "scale:x": [
+      "renderer"
+    ],
+    "scale:xy": [
+      "renderer"
+    ],
+    "scale:xyz": [
+      "renderer"
+    ],
+    "scale:xz": [
+      "renderer"
+    ],
+    "scale:y": [
+      "renderer"
+    ],
+    "scale:yz": [
+      "renderer"
+    ],
+    "scale:z": [
+      "renderer"
+    ],
+    "section-analysis:distance": [
+      "renderer"
+    ],
+    "selection:add": [
+      "main",
+      "renderer"
+    ],
+    "selection:choose": [
+      "main",
+      "renderer"
+    ],
+    "selection:convert:control-point": [
+      "main",
+      "renderer"
+    ],
+    "selection:convert:edge": [
+      "main",
+      "renderer"
+    ],
+    "selection:convert:face": [
+      "main",
+      "renderer"
+    ],
+    "selection:convert:group-children": [
+      "main",
+      "renderer"
+    ],
+    "selection:convert:solid": [
+      "main",
+      "renderer"
+    ],
+    "selection:mode:set:all": [
+      "main",
+      "renderer"
+    ],
+    "selection:mode:set:control-point": [
+      "renderer"
+    ],
+    "selection:mode:set:default": [
+      "renderer"
+    ],
+    "selection:mode:set:edge": [
+      "main",
+      "renderer"
+    ],
+    "selection:mode:set:face": [
+      "main",
+      "renderer"
+    ],
+    "selection:mode:set:solid": [
+      "renderer"
+    ],
+    "selection:mode:toggle:all": [
+      "renderer"
+    ],
+    "selection:mode:toggle:control-point": [
+      "main",
+      "renderer"
+    ],
+    "selection:mode:toggle:edge": [
+      "main",
+      "renderer"
+    ],
+    "selection:mode:toggle:face": [
+      "main",
+      "renderer"
+    ],
+    "selection:mode:toggle:solid": [
+      "main",
+      "renderer"
+    ],
+    "selection:option:extend": [
+      "main",
+      "renderer"
+    ],
+    "selection:option:extend-alt": [
+      "main",
+      "renderer"
+    ],
+    "selection:option:ignore-mode": [
+      "main",
+      "renderer"
+    ],
+    "selection:remove": [
+      "main",
+      "renderer"
+    ],
+    "selection:replace": [
+      "main",
+      "renderer"
+    ],
+    "selection:toggle": [
+      "main",
+      "renderer"
+    ],
+    "selection:toggle:control-point": [
+      "renderer"
+    ],
+    "selection:toggle:edge": [
+      "renderer"
+    ],
+    "selection:toggle:face": [
+      "renderer"
+    ],
+    "selection:toggle:solid": [
+      "renderer"
+    ],
+    "slide:n": [
+      "renderer"
+    ],
+    "snaps:set-binormal": [
+      "main",
+      "renderer"
+    ],
+    "snaps:set-normal": [
+      "main",
+      "renderer"
+    ],
+    "snaps:set-square": [
+      "main",
+      "renderer"
+    ],
+    "snaps:set-tangent": [
+      "main",
+      "renderer"
+    ],
+    "snaps:set-x": [
+      "main",
+      "renderer"
+    ],
+    "snaps:set-y": [
+      "main",
+      "renderer"
+    ],
+    "snaps:set-z": [
+      "main",
+      "renderer"
+    ],
+    "snaps:temporarily-disable": [
+      "main",
+      "renderer"
+    ],
+    "snaps:temporarily-enable": [
+      "main",
+      "renderer"
+    ],
+    "snaps:toggle-grid": [
+      "renderer"
+    ],
+    "snaps:toggle-snaps": [
+      "renderer"
+    ],
+    "sphere:radius": [
+      "renderer"
+    ],
+    "spiral:angle": [
+      "renderer"
+    ],
+    "spiral:length": [
+      "renderer"
+    ],
+    "spiral:radius": [
+      "renderer"
+    ],
+    "sweep:twist": [
+      "renderer"
+    ],
+    "tab:focus-next": [
+      "main",
+      "renderer"
+    ],
+    "tab:focus-previous": [
+      "main",
+      "renderer"
+    ],
+    "thicken-sheet:thickness": [
+      "renderer"
+    ],
+    "view:context-menu:suggested": [
+      "main",
+      "renderer"
+    ],
+    "view:modal:cancel": [
+      "main",
+      "renderer"
+    ],
+    "view:modal:command-palette": [
+      "main",
+      "renderer"
+    ],
+    "view:modal:preferences": [
+      "main",
+      "renderer"
+    ],
+    "view:radial:cancel": [
+      "main",
+      "renderer"
+    ],
+    "view:sidebar:toggle-left": [
+      "main",
+      "renderer"
+    ],
+    "view:sidebar:toggle-right": [
+      "main",
+      "renderer"
+    ],
+    "view:window:license": [
+      "renderer"
+    ],
+    "viewport:cplane:reset": [
+      "renderer"
+    ],
+    "viewport:cplane:selection": [
+      "main",
+      "renderer"
+    ],
+    "viewport:focus": [
+      "main",
+      "renderer"
+    ],
+    "viewport:grid:decr": [
+      "renderer"
+    ],
+    "viewport:grid:incr": [
+      "renderer"
+    ],
+    "viewport:navigate:back": [
+      "main",
+      "renderer"
+    ],
+    "viewport:navigate:bottom": [
+      "main",
+      "renderer"
+    ],
+    "viewport:navigate:front": [
+      "main",
+      "renderer"
+    ],
+    "viewport:navigate:left": [
+      "main",
+      "renderer"
+    ],
+    "viewport:navigate:right": [
+      "main",
+      "renderer"
+    ],
+    "viewport:navigate:selection": [
+      "main",
+      "renderer"
+    ],
+    "viewport:navigate:top": [
+      "main",
+      "renderer"
+    ],
+    "viewport:set-and-center-focus-point": [
+      "main",
+      "renderer"
+    ],
+    "viewport:toggle-continuity-labels": [
+      "renderer"
+    ],
+    "viewport:toggle-curves": [
+      "renderer"
+    ],
+    "viewport:toggle-edges": [
+      "renderer"
+    ],
+    "viewport:toggle-faces": [
+      "renderer"
+    ],
+    "viewport:toggle-orthographic": [
+      "main",
+      "renderer"
+    ],
+    "viewport:toggle-overlays": [
+      "main",
+      "renderer"
+    ],
+    "viewport:toggle-render-mode": [
+      "renderer"
+    ],
+    "viewport:toggle-x-ray": [
+      "main",
+      "renderer"
+    ],
+    "xlink:href": [
+      "renderer"
+    ]
+  }
+}

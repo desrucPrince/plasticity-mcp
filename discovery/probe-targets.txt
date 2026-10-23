@@ -1,0 +1,16 @@
+
+> plasticity-mcp@0.2.2 probe:targets
+> node scripts/probe-targets.ts
+
+{
+  "endpoint": "http://127.0.0.1:9223",
+  "status": "available",
+  "targets": [
+    {
+      "id": "75463486C6BADAFE19D8C12577096F22",
+      "title": "Untitled - Plasticity",
+      "url": "file:///Applications/Plasticity.app/Contents/Resources/app/.webpack/renderer/app_window/index.html",
+      "webSocketDebuggerUrl": "ws://127.0.0.1:9223/devtools/page/75463486C6BADAFE19D8C12577096F22"
+    }
+  ]
+}
