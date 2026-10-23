@@ -4663,6 +4663,53 @@ export class PlasticityOperations {
     return await this.state();
   }
 
+  // MultiCutFactory with Wire cutters: each curve is swept along direction (Plasticity's own choice
+  // when omitted) and splits the targets; extend lengthens the swept cutter past the curve ends.
+  async cutWithCurves(targetIds: number[], curveIds: number[], directionVector: Vector3 | undefined, extend: boolean, revision: string): Promise<RuntimeState> {
+    const state = await this.assertRevision(revision);
+    const uniqueTargetIds = [...new Set(targetIds)];
+    const uniqueCurveIds = [...new Set(curveIds)];
+    if (uniqueTargetIds.length === 0) throw new Error("At least one cut target is required");
+    if (uniqueCurveIds.length === 0) throw new Error("At least one cutter Wire is required");
+    if (uniqueTargetIds.some((id) => uniqueCurveIds.includes(id))) throw new Error("Cut targets and cutter Wires must not overlap");
+    const typeOf = (id: number) => state.bodies.find((body) => body.id === id)?.type;
+    const badTargets = uniqueTargetIds.filter((id) => typeOf(id) !== "Solid" && typeOf(id) !== "Sheet");
+    if (badTargets.length > 0) throw new Error(`Cut targets must be current Solid or Sheet bodies: ${badTargets.join(", ")}`);
+    const badCurves = uniqueCurveIds.filter((id) => typeOf(id) !== "Wire");
+    if (badCurves.length > 0) throw new Error(`Cutters must be current Wire bodies: ${badCurves.join(", ")}`);
+    if (directionVector && !(Math.hypot(...directionVector) > 0)) throw new Error("Cut direction must be nonzero");
+    await this.runtime.mutate(`async function (Factory, Vector, args) {
+      ${findView}
+      ${commandStart("CutCommand")}
+      factory.shells = args.targetIds.map(find);
+      factory.curves = args.curveIds.map(find);
+      if (args.direction) factory.direction = new Vector(...args.direction).normalize();
+      factory.shouldExtend = args.extend;
+      ${commandEnd}
+    }`, ["MultiCutFactory", "Vector3"], [{ targetIds: uniqueTargetIds, curveIds: uniqueCurveIds, direction: directionVector ?? null, extend }]);
+    return await this.state();
+  }
+
+  // Knife mode of the native curve tool: the curve is drawn onto the target body and splits its faces.
+  async knifeCurve(targetId: number, pointsMm: Vector3[], closed: boolean, controlPoints: boolean, revision: string): Promise<RuntimeState> {
+    const state = await this.assertRevision(revision);
+    const type = state.bodies.find((body) => body.id === targetId)?.type;
+    if (type !== "Solid" && type !== "Sheet") throw new Error(`Knife target must be a current Solid or Sheet body: ${targetId}`);
+    if (pointsMm.length < 2) throw new Error("Knife curve requires at least two points");
+    await this.runtime.mutate(`async function (Factory, Vector, CurveType, args) {
+      ${findView}
+      ${commandStart("CurveCommand")}
+      factory.target = find(args.targetId);
+      factory.isKnife = true;
+      factory.points = args.points.map(point => new Vector(...point));
+      factory.type = args.points.length === 2 ? CurveType.Polyline : CurveType.NURBS;
+      factory.splineThrough = !args.controlPoints;
+      factory.closed = args.closed;
+      ${commandEnd}
+    }`, ["KnifeCurveFactory", "Vector3", "CurveType"], [{ targetId, points: pointsMm.map(toMeters), closed, controlPoints }]);
+    return await this.state();
+  }
+
   async cutWithFaces(
     targetIds: number[],
     cutterFaces: Array<{ bodyId: number; faceId: string }>,

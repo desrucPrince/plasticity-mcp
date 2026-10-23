@@ -5861,3 +5861,28 @@ test("MCP forwards a fillet between two separate curves", async () => {
   assert.equal(zero.isError, true);
   await close();
 });
+
+test("MCP forwards cut-with-curves and knife curve inputs", async () => {
+  const received: Record<string, unknown[]> = {};
+  const state = emptyState();
+  const operations = {
+    async state() { return state; },
+    async cutWithCurves(...args: unknown[]) { received.cut = args; return state; },
+    async knifeCurve(...args: unknown[]) { received.knife = args; return state; },
+  } as unknown as PlasticityOperations;
+  const fake = {
+    async windows() { return []; }, async connect() { return state; }, get() { return operations; },
+    capabilities() { return { bindings: [], operations: unavailableConstruction() }; },
+    async captureSnapshot() { return {}; }, async changesSince() { return {}; }, async waitForChange() { return {}; },
+  } satisfies SessionLike;
+  const { client, close } = await batchClient(fake);
+  const cut = await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_cut_with_curves", arguments: { targetIds: [1], curveIds: [2], revision: "r1" } } });
+  assert.equal(cut.isError, undefined);
+  assert.deepEqual(received.cut, [[1], [2], undefined, false, "r1"]);
+  const knife = await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_knife_curve", arguments: { targetId: 1, pointsMm: [[0, 0, 5], [10, 0, 5]], revision: "r1" } } });
+  assert.equal(knife.isError, undefined);
+  assert.deepEqual(received.knife, [1, [[0, 0, 5], [10, 0, 5]], false, false, "r1"]);
+  const onePoint = await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_knife_curve", arguments: { targetId: 1, pointsMm: [[0, 0, 5]], revision: "r1" } } });
+  assert.equal(onePoint.isError, true);
+  await close();
+});

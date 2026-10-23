@@ -6677,3 +6677,37 @@ test("fillets two separate Wires through the native curve fillet factory", async
   await assert.rejects(operations.filletCurves(3, 3, 2, "r1"), /two different Wires/);
   await assert.rejects(operations.filletCurves(3, 4, -1, "r1"), /radius must be positive/);
 });
+
+test("cuts bodies with Wire curves through the native multi-cut factory", async () => {
+  let call: { source: string; bindings: string[]; values: unknown[] } | undefined;
+  const body = (id: number, type: string) => ({ id, versionId: id * 10, type, name: null, boundsMm: null, faceIds: [], edgeIds: [], faces: [], edges: [] });
+  const state: RuntimeState = { targetId: "window-1", title: "Untitled - Plasticity", documentToken: "document-1", revision: "r1", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [body(1, "Solid"), body(2, "Wire"), body(3, "Wire")] as unknown as RuntimeState["bodies"] };
+  const runtime = { async getState() { return state; }, async mutate(source: string, bindings: string[], values: unknown[]) { call = { source, bindings, values }; return {}; } } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+
+  await operations.cutWithCurves([1], [2, 3], [0, 0, 1], true, "r1");
+  assert.deepEqual(call?.bindings, ["MultiCutFactory", "Vector3"]);
+  assert.deepEqual(call?.values, [{ targetIds: [1], curveIds: [2, 3], direction: [0, 0, 1], extend: true }]);
+  assert.match(call?.source ?? "", /factory\.curves = args\.curveIds\.map\(find\)/);
+  assert.match(call?.source ?? "", /factory\.shouldExtend = args\.extend/);
+  await assert.rejects(operations.cutWithCurves([2], [3], undefined, false, "r1"), /Cut targets must be current Solid or Sheet/);
+  await assert.rejects(operations.cutWithCurves([1], [1], undefined, false, "r1"), /must not overlap/);
+  await assert.rejects(operations.cutWithCurves([1], [2], [0, 0, 0], false, "r1"), /direction must be nonzero/);
+  await assert.rejects(operations.cutWithCurves([1], [2], undefined, false, "stale"), /Stale reference/);
+});
+
+test("draws a knife curve onto a body with the native knife curve factory", async () => {
+  let call: { source: string; bindings: string[]; values: unknown[] } | undefined;
+  const state: RuntimeState = { targetId: "window-1", title: "Untitled - Plasticity", documentToken: "document-1", revision: "r1", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [{ id: 1, versionId: 10, type: "Solid", name: null, boundsMm: null, faceIds: [], edgeIds: [], faces: [], edges: [] }, { id: 2, versionId: 20, type: "Wire", name: null, boundsMm: null, faceIds: [], edgeIds: [], faces: [], edges: [] }] };
+  const runtime = { async getState() { return state; }, async mutate(source: string, bindings: string[], values: unknown[]) { call = { source, bindings, values }; return {}; } } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+
+  await operations.knifeCurve(1, [[0, 0, 10], [10, 10, 10], [20, 0, 10]], false, true, "r1");
+  assert.deepEqual(call?.bindings, ["KnifeCurveFactory", "Vector3", "CurveType"]);
+  assert.deepEqual(call?.values, [{ targetId: 1, points: [[0, 0, 0.01], [0.01, 0.01, 0.01], [0.02, 0, 0.01]], closed: false, controlPoints: true }]);
+  assert.match(call?.source ?? "", /factory\.isKnife = true/);
+  assert.match(call?.source ?? "", /factory\.target = find\(args\.targetId\)/);
+  assert.match(call?.source ?? "", /factory\.splineThrough = !args\.controlPoints/);
+  await assert.rejects(operations.knifeCurve(2, [[0, 0, 0], [1, 0, 0]], false, false, "r1"), /Knife target must be a current Solid or Sheet/);
+  await assert.rejects(operations.knifeCurve(1, [[0, 0, 0]], false, false, "r1"), /at least two points/);
+});
