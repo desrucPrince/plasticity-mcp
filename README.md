@@ -121,6 +121,9 @@ To make it reachable by a tablet on the same private network, run `npm run start
   chamfer, extrude, move, rotate, scale, mirror, delete, undo, redo, and find edges or faces.
 - **The catalog is small.** A query returns names and one-line summaries. To get the input schema,
   query the exact tool name.
+- **No connect step with one window.** When exactly one Plasticity window is open, the first tool
+  call connects to it. `plasticity_connect` also accepts no `targetId` in that case. With several
+  windows you still choose one.
 - **No status call before each edit.** Every edit result has the new revision and the changed bodies.
 - `PLASTICITY_TIMING=1` adds per-phase milliseconds to edit results. `discovery/bench.ts` is the
   live benchmark; see `discovery/PERF-SUMMARY.md`.

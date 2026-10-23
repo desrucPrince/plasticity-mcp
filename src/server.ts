@@ -1739,6 +1739,15 @@ export class PlasticitySession {
     return this.operations;
   }
 
+  // Saves the list_windows + connect round trips when exactly one window is open. Never launches
+  // Plasticity and never picks between several windows.
+  async ensureConnected(): Promise<void> {
+    if (this.operations) return;
+    const windows = await this.windows().catch(() => []);
+    if (windows.length !== 1) return;
+    await this.connect(windows[0]!.id).catch(() => undefined);
+  }
+
   capabilities(): {
     bindings: string[];
     operations: ReturnType<PlasticityOperations["constructionCapabilities"]>;
@@ -1807,6 +1816,7 @@ export interface SessionLike {
   windows(options?: { launch?: boolean }): Promise<Array<{ id: string; title: string; url: string }>>;
   connect(targetId: string): Promise<unknown>;
   get(): PlasticityOperations;
+  ensureConnected?(): Promise<void>;
   capabilities(): {
     bindings: string[];
     operations: ReturnType<PlasticityOperations["constructionCapabilities"]>;
@@ -1984,6 +1994,8 @@ function parseToolText(response: { content?: Array<{ type: string; text?: string
   if (text === undefined) return null;
   try { return JSON.parse(text); } catch { return text; }
 }
+
+const CONNECTION_TOOLS = new Set(["plasticity_list_windows", "plasticity_connect", "plasticity_diagnose"]);
 
 function catalogSummary(description: string): string {
   const sentence = description.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? description;
@@ -2167,7 +2179,10 @@ function createServerWithCatalog(
       }).catch(() => undefined);
     }, 10_000);
     try {
-      return result(await exclusive(() => handler(schema.parse(input) as z.output<T>, extra)));
+      return result(await exclusive(async () => {
+        if (!CONNECTION_TOOLS.has(name)) await session.ensureConnected?.();
+        return await handler(schema.parse(input) as z.output<T>, extra);
+      }));
     } finally {
       if (progressTimer) clearInterval(progressTimer);
     }
@@ -2449,6 +2464,7 @@ function createServerWithCatalog(
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, async (rawInput, extra) => result(await exclusive(async () => {
     const input = batchSchema.parse(rawInput);
+    await session.ensureConnected?.();
     const start = await session.get().state();
     if (input.revision !== undefined && input.revision !== start.revision) throw new Error(`Stale reference: expected revision ${input.revision}, current revision is ${start.revision}`);
     const stepChanges: Array<{ added: number[]; removed: number[]; regionsAdded: string[]; result?: unknown }> = [];
@@ -2506,7 +2522,13 @@ function createServerWithCatalog(
     await threadQualifications.match(query), true);
   tool("plasticity_check_fastener_stack", "Check whether the nominal length in an ISO metric screw or bolt designation fits an explicit clamped stack and either a nut or threaded receiver. All layers, nut/washer envelope, engagement, tip clearance, and the product's under-head versus overall length datum remain explicit inputs. This deterministic check does not claim strength, preload, access, fit, or thread-stripping capacity.", fastenerStackInputSchema, async (input) =>
     checkFastenerStack(input), true);
-  tool("plasticity_connect", "Connect this MCP process to one explicit Plasticity window and return its compact initial scene summary. Body bounds/counts are paginated; use plasticity_body_info for exact topology of a selected body.", z.object({ targetId: z.string().min(1) }), async ({ targetId }) => {
+  tool("plasticity_connect", "Connect this MCP process to one explicit Plasticity window and return its compact initial scene summary. targetId may be omitted when exactly one window is open. Tools also connect on their own in that case. Body bounds/counts are paginated; use plasticity_body_info for exact topology of a selected body.", z.object({ targetId: z.string().min(1).optional() }), async ({ targetId: requested }) => {
+    let targetId = requested;
+    if (targetId === undefined) {
+      const windows = await session.windows({ launch: true });
+      if (windows.length !== 1) throw new Error(`targetId is required when ${windows.length} Plasticity windows are open: ${JSON.stringify(windows.map(({ id, title }) => ({ targetId: id, title })))}`);
+      targetId = windows[0]!.id;
+    }
     const state = await session.connect(targetId);
     if (!isRuntimeState(state)) throw new Error("Plasticity returned an invalid connected document state");
     return compactStatusSummary(state, 0, 50);

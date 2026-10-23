@@ -5765,3 +5765,22 @@ test("plasticity_batch feeds a read-only step's result into a later step", async
   assert.equal(filleted.length, 1);
   await close();
 });
+
+test("ensureConnected connects only when exactly one Plasticity window is open", async () => {
+  const window = (id: string) => ({ id, title: `${id} - Plasticity`, url: "file:///app_window/index.html", webSocketDebuggerUrl: `ws://127.0.0.1:9223/devtools/page/${id}` });
+  class ProbeSession extends PlasticitySession {
+    available: ReturnType<typeof window>[] = [];
+    connected: string[] = [];
+    override async windows() { return this.available; }
+    override async connect(targetId: string) { this.connected.push(targetId); return emptyState(); }
+  }
+  const session = new ProbeSession();
+  await session.ensureConnected();
+  assert.deepEqual(session.connected, [], "no window: nothing to connect to");
+  session.available = [window("a"), window("b")];
+  await session.ensureConnected();
+  assert.deepEqual(session.connected, [], "several windows: never guess");
+  session.available = [window("a")];
+  await session.ensureConnected();
+  assert.deepEqual(session.connected, ["a"]);
+});
