@@ -45,15 +45,16 @@ It never saves. Results: `build-result.json`. Views: `spaceship-iso.png`, `space
 4. **Two-sided extrude sign.** The native second distance runs along the extrude direction. A probe
    (`probe-reverse-extrude.ts`) confirmed the current code is right for every case tried.
 5. **The intake cut keeps the "wrong" part by default.** The cut leaves one part in the original
-   body and adds the other, and which part stays depends on the cutter. The script now keeps the
-   longer part. A `keep: "larger" | "both"` option on the cut tools would help.
+   body and adds the other, and which part stays depends on the cutter. Fixed: `cut_with_curves` and
+   `cut_with_faces` take `keep: "larger" | "smaller" | "both"` (by bounding-box volume, one target).
 6. **View names.** `plasticity_set_view` "right" looks at the nose of an X-forward model, and
    "front" shows its side. The script now labels the files by what they show.
-7. **Rerunning needs many undos.** There is no "undo to depth N" or "undo N steps", so a rerun costs
-   two calls per history step. Worth adding.
+7. **Rerunning needed many undos.** Fixed: `plasticity_undo` and `plasticity_redo` take `steps`, so
+   the baseline reset is one call. build.ts uses it.
 8. **Section points were computed by hand.** There is no ellipse or "section from width/height"
    helper, so the script computes control points itself.
-9. **Junction edges were found by bounds.** There is no "edges created by this union" query. A
-   bounds filter worked here (16 edges, r3 fillet).
+9. **Junction edges were found by bounds.** Fixed: `plasticity_boolean` returns `createdEdges`
+   (edges whose geometry did not exist before, i.e. the seams plus trimmed input edges), and batch
+   steps can use them: `"$2.result.createdEdges[*].edgeId"`.
 10. **A hidden startup cube still framed the view.** After `set_visibility` false the cube stayed in
     the viewport until it was deleted. The script deletes it instead.

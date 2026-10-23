@@ -5920,3 +5920,72 @@ test("plasticity_batch fills revision for union-schema tools and replies with on
   assert.equal("regions" in output, false);
   await close();
 });
+
+function followUpFake() {
+  const edge = (id: string, curveType: string, lengthMm: number, centerMm: number[]) => ({ id, curveType, lengthMm, centerMm, line: curveType === "Line", circle: false, tangent: [1, 0, 0], boundsMm: { min: centerMm, max: centerMm }, faceIds: [], vertexIds: [] });
+  const body = (id: number, edges: unknown[], max: number[]) => ({ id, versionId: id * 10, type: "Solid", name: null, boundsMm: { min: [0, 0, 0], max }, faceIds: [], edgeIds: [], faces: [], edges });
+  let state: RuntimeState = { ...emptyState(), undoDepth: 2, bodies: [body(1, [edge("a", "Line", 10, [5, 0, 0])], [10, 10, 10]), body(2, [edge("b", "Line", 4, [0, 2, 0])], [4, 4, 4])] as unknown as RuntimeState["bodies"] };
+  const calls: Array<{ op: string; args: unknown[] }> = [];
+  const operations = {
+    async state() { return state; },
+    async undo(...args: unknown[]) { calls.push({ op: "undo", args }); state = { ...state, undoDepth: Math.max(0, state.undoDepth - 1), revision: `u${calls.length}` }; return state; },
+    async redo(...args: unknown[]) { calls.push({ op: "redo", args }); return state; },
+    async cutWithCurves(...args: unknown[]) {
+      calls.push({ op: "cut", args });
+      state = { ...state, revision: "cut", bodies: [body(1, [], [10, 10, 3]), state.bodies[1]!, body(7, [], [10, 10, 10])] as unknown as RuntimeState["bodies"] };
+      return state;
+    },
+    async remove(...args: unknown[]) { calls.push({ op: "remove", args }); state = { ...state, bodies: state.bodies.filter((b) => !(args[0] as number[]).includes(b.id)) }; return state; },
+    async boolean(...args: unknown[]) {
+      calls.push({ op: "boolean", args });
+      state = { ...state, revision: "bool", bodies: [body(1, [edge("a", "Line", 10, [5, 0, 0]), edge("seam", "Circle", 12.566, [5, 5, 0]), edge("trimmed", "Line", 3, [0, 2, 0])], [10, 10, 10])] as unknown as RuntimeState["bodies"] };
+      return state;
+    },
+    async fillet(...args: unknown[]) { calls.push({ op: "fillet", args }); return state; },
+  } as unknown as PlasticityOperations;
+  const fake = {
+    async windows() { return []; }, async connect() { return state; }, get() { return operations; },
+    capabilities() { return { bindings: [], operations: unavailableConstruction() }; },
+    async captureSnapshot() { return {}; }, async changesSince() { return {}; }, async waitForChange() { return {}; },
+  } satisfies SessionLike;
+  return { fake, calls, current: () => state };
+}
+
+test("plasticity_undo takes steps and stops when the history runs out", async () => {
+  const { fake, calls, current } = followUpFake();
+  const { client, close } = await batchClient(fake);
+  const response = await client.callTool({ name: "plasticity_undo", arguments: { steps: 5, revision: "r1" } });
+  assert.equal(response.isError, undefined, JSON.stringify(response.content));
+  assert.equal(calls.filter((call) => call.op === "undo").length, 2, "two edits in history, so two undos");
+  assert.deepEqual(calls[0]!.args, ["r1"], "only the first undo carries the revision check");
+  assert.equal(current().undoDepth, 0);
+  const tooMany = await client.callTool({ name: "plasticity_undo", arguments: { steps: 0, revision: "u2" } });
+  assert.equal(tooMany.isError, true);
+  await close();
+});
+
+test("cut keep larger deletes the smaller part; keep needs a single target", async () => {
+  const { fake, calls, current } = followUpFake();
+  const { client, close } = await batchClient(fake);
+  const response = await client.callTool({ name: "plasticity_cut_with_curves", arguments: { targetIds: [1], curveIds: [2], keep: "larger", revision: "r1" } });
+  assert.equal(response.isError, undefined, JSON.stringify(response.content));
+  const removed = calls.find((call) => call.op === "remove");
+  assert.deepEqual(removed?.args, [[1], "cut"], "body 1 (10x10x3) is smaller than new body 7 (10x10x10)");
+  assert.deepEqual(current().bodies.map((b) => b.id).sort(), [2, 7]);
+  const two = await client.callTool({ name: "plasticity_cut_with_curves", arguments: { targetIds: [1, 2], curveIds: [3], keep: "smaller", revision: "r1" } });
+  assert.equal(two.isError, true);
+  await close();
+});
+
+test("boolean reports created edges that a batch can fillet directly", async () => {
+  const { fake, calls } = followUpFake();
+  const { client, close } = await batchClient(fake);
+  const response = await client.callTool({ name: "plasticity_batch", arguments: { steps: [
+    { toolName: "plasticity_boolean", arguments: { targetIds: [1], toolIds: [2], operation: "union" } },
+    { toolName: "plasticity_fillet", arguments: { id: 1, edgeIds: "$0.result.createdEdges[*].edgeId", radiusMm: 1 } },
+  ] } });
+  assert.equal(response.isError, undefined, JSON.stringify(response.content));
+  const fillet = calls.find((call) => call.op === "fillet");
+  assert.deepEqual(fillet?.args.slice(0, 3), [1, ["seam", "trimmed"], 1], "unchanged edge a is excluded; the seam and the trimmed edge are new");
+  await close();
+});

@@ -52,11 +52,8 @@ const round = (v: number) => Math.round(v * 100) / 100;
 // ---- 0. baseline: undo back to depth 0 and require only the startup cube or nothing
 let fuselage = 0, canopy = 0, wingR = 0, wingL = 0, nacelleR = 0, nacelleL = 0, finR = 0, finL = 0, hull = 0;
 await stage("baseline", async (notes) => {
-  for (let i = 0; i < 200; i++) {
-    const st = await status();
-    if (st.undoDepth === 0) break;
-    await raw("plasticity_undo", { revision: st.revision });
-  }
+  const first = await status();
+  if (first.undoDepth > 0) await raw("plasticity_undo", { steps: first.undoDepth, revision: first.revision });
   const st = await status();
   const startupCube = (b: { boundsMm: { min: number[]; max: number[] } }) => b.boundsMm.min.join() === "-500,-500,0" && b.boundsMm.max.join() === "500,500,1000";
   if (st.undoDepth !== 0 || st.bodies.length > 1 || (st.bodies.length === 1 && !startupCube(st.bodies[0]))) {

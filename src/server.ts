@@ -1356,6 +1356,23 @@ function compactExtrudeOptions(options: z.infer<typeof extrudeOptionsSchema>): E
   if (options?.thicknessMm !== undefined) out.thicknessMm = options.thicknessMm;
   return out;
 }
+const cutKeep = z.enum(["both", "larger", "smaller"]).default("both");
+
+// Edges on the result bodies whose curve type, length and center match no edge that existed before.
+function createdEdges(before: RuntimeState, after: RuntimeState, targetIds: number[]): Array<{ bodyId: number; edgeId: string; curveType: string; lengthMm: number }> {
+  const key = (edge: { curveType: string; lengthMm: number; centerMm: number[] }) =>
+    [edge.curveType, edge.lengthMm.toFixed(3), ...edge.centerMm.map((value) => value.toFixed(3))].join("|");
+  const existing = new Set(before.bodies.flatMap((body) => body.edges.map(key)));
+  const resultBodies = after.bodies.filter((body) => targetIds.includes(body.id) || !before.bodies.some((old) => old.id === body.id));
+  return resultBodies.flatMap((body) => body.edges
+    .filter((edge) => !existing.has(key(edge)))
+    .map((edge) => ({ bodyId: body.id, edgeId: edge.id, curveType: edge.curveType, lengthMm: edge.lengthMm })));
+}
+
+function boundsVolume(bounds: { min: number[]; max: number[] } | null | undefined): number {
+  if (!bounds) return 0;
+  return [0, 1, 2].reduce((product, axis) => product * Math.max(bounds.max[axis]! - bounds.min[axis]!, 1e-3), 1);
+}
 const edgeQuerySchema = z.object({
   bodyIds: z.array(z.number().int().positive()).max(4096).optional(),
   curveTypes: z.array(z.string().trim().min(1).max(80)).max(32).optional(),
@@ -1984,7 +2001,7 @@ function resolveBatchReferences(value: unknown, steps: ReadonlyArray<BatchStepRe
     if (resultMatch) {
       const step = steps[Number(resultMatch[1])];
       if (!step) throw new Error(`${value} refers to a step that has not run`);
-      if (step.result === undefined) throw new Error(`${value}: step ${resultMatch[1]} is not a read-only step, so it has no result`);
+      if (step.result === undefined) throw new Error(`${value}: step ${resultMatch[1]} returned no result`);
       return readResultPath(step.result, resultMatch[2] ?? "", value);
     }
     const match = BATCH_REFERENCE.exec(value);
@@ -2490,7 +2507,7 @@ function createServerWithCatalog(
   }).strict();
   rawRegisterTool("plasticity_batch", {
     title: "Run several Plasticity operations in one call",
-    description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all), likewise removed and regionsAdded. Read a read-only step's output with \"$<step>.result.path\" using .key, [i] and [*], e.g. \"$3.result.matches[*].id\" after plasticity_find_edges. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many. The reply lists what changed (new bodies with bounds); verbose=true adds the full scene summary.",
+    description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all), likewise removed and regionsAdded. Read any step's output with \"$<step>.result.path\" using .key, [i] and [*], e.g. \"$3.result.matches[*].id\" after plasticity_find_edges or \"$2.result.createdEdges[*].edgeId\" after plasticity_boolean. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many. The reply lists what changed (new bodies with bounds); verbose=true adds the full scene summary.",
     inputSchema: batchSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, async (rawInput, extra) => result(await exclusive(async () => {
@@ -2512,12 +2529,13 @@ function createServerWithCatalog(
         const readOnly = selected.annotations.readOnlyHint;
         const after = readOnly ? current : await session.get().state();
         const change = diffScenes(current, after);
-        const stepResult = readOnly ? parseToolText(response) : undefined;
+        // Every step's result is kept for $<step>.result references (e.g. a boolean's createdEdges).
+        const stepResult = parseToolText(response);
         stepChanges.push({
           added: change.added.map((body) => body.id),
           removed: change.removed.map((body) => body.id),
           regionsAdded: change.regionsAdded.map((region) => region.id),
-          ...(readOnly ? { result: stepResult } : {}),
+          result: stepResult,
         });
         completed.push(readOnly
           ? { step: index, toolName: step.toolName, result: summarizeBatchResult(stepResult) }
@@ -3387,14 +3405,18 @@ function createServerWithCatalog(
     await journaled("set-radius-dimension", purpose, { face, radiusMm }, () => session.get().setRadiusDimension(face, radiusMm, current)));
   tool("plasticity_set_rectangle_dimensions", "Set Plasticity's exact local width and length for one closed planar Wire that the native dimension command recognizes as a rectangle. The profile remains centered and its Region updates in one Undo step. This is a direct edit, not a persistent constraint; read the resulting Wire B-Rep bounds back.", z.object({ id: z.number().int().positive(), widthMm: z.number().finite().positive(), lengthMm: z.number().finite().positive(), intent, revision }).strict(), async ({ id, widthMm, lengthMm, intent: purpose, revision: current }) =>
     await journaled("set-rectangle-dimensions", purpose, { id, widthMm, lengthMm }, () => session.get().setRectangleDimensions(id, widthMm, lengthMm, current)));
-  tool("plasticity_boolean", "Apply exact CAD union, difference, or intersection.", z.object({ targetIds: ids, toolIds: ids, operation: z.enum(["union", "difference", "intersection"]), keepTools: z.boolean().default(false), intent, revision }), async ({ targetIds, toolIds, operation, keepTools, intent: purpose, revision: current }) =>
-    await journaled(`boolean-${operation}`, purpose, { targetIds, toolIds, keepTools }, () => session.get().boolean(targetIds, toolIds, operation, keepTools, current)));
-  tool("plasticity_cut_with_curves", "Split current Solid or Sheet bodies with Wire curves swept along direction (Plasticity's own choice when omitted). The curves may be non-planar. extend lengthens the cutter past the curve ends. Cutter Wires are preserved.", z.object({ targetIds: ids, curveIds: ids, direction: direction.optional(), extend: z.boolean().default(false), intent, revision }).strict(), async ({ targetIds, curveIds, direction: along, extend, intent: purpose, revision: current }) =>
-    await journaled("cut-with-curves", purpose, { targetIds, curveIds, direction: along, extend }, () => session.get().cutWithCurves(targetIds, curveIds, along, extend, current)));
+  tool("plasticity_boolean", "Apply exact CAD union, difference, or intersection. The reply's createdEdges lists edges whose geometry did not exist before (the seams where the bodies met, plus input edges the operation trimmed), ready for plasticity_fillet.", z.object({ targetIds: ids, toolIds: ids, operation: z.enum(["union", "difference", "intersection"]), keepTools: z.boolean().default(false), intent, revision }), async ({ targetIds, toolIds, operation, keepTools, intent: purpose, revision: current }) => {
+    const before = await session.get().state();
+    const output = await journaled(`boolean-${operation}`, purpose, { targetIds, toolIds, keepTools }, () => session.get().boolean(targetIds, toolIds, operation, keepTools, current));
+    const after = await session.get().state();
+    return { ...(output as unknown as Record<string, unknown>), createdEdges: createdEdges(before, after, targetIds) };
+  });
+  tool("plasticity_cut_with_curves", "Split current Solid or Sheet bodies with Wire curves swept along direction (Plasticity's own choice when omitted). The curves may be non-planar. extend lengthens the cutter past the curve ends. Cutter Wires are preserved. keep \"larger\" or \"smaller\" (one target only) deletes the other parts by bounding-box volume in a second Undo step.", z.object({ targetIds: ids, curveIds: ids, direction: direction.optional(), extend: z.boolean().default(false), keep: cutKeep, intent, revision }).strict(), async ({ targetIds, curveIds, direction: along, extend, keep, intent: purpose, revision: current }) =>
+    await journaled("cut-with-curves", purpose, { targetIds, curveIds, direction: along, extend, keep }, () => keepCutParts(targetIds, keep, () => session.get().cutWithCurves(targetIds, curveIds, along, extend, current))));
   tool("plasticity_knife_curve", "Knife: draw a curve onto a Solid or Sheet body through world-space points (millimeters) so it splits the faces it lies on. Two points make a straight cut; more make a spline (through the points, or using them as control points with controlPoints=true).", z.object({ targetId: z.number().int().positive(), pointsMm: z.array(vector).min(2).max(1000), closed: z.boolean().default(false), controlPoints: z.boolean().default(false), intent, revision }).strict(), async ({ targetId, pointsMm, closed, controlPoints, intent: purpose, revision: current }) =>
     await journaled("knife-curve", purpose, { targetId, pointsMm, closed, controlPoints }, () => session.get().knifeCurve(targetId, pointsMm, closed, controlPoints, current)));
-  tool("plasticity_cut_with_faces", "Split current Solid or Sheet bodies with current planar cutter faces. Cutter bodies are preserved. To trim an open Sheet, inspect the returned exact Sheet parts and delete only the unwanted part at the returned revision.", z.object({ targetIds: ids, cutterFaces: z.array(faceRef).min(1).max(4096), intent, revision }).strict(), async ({ targetIds, cutterFaces, intent: purpose, revision: current }) =>
-    await journaled("cut-with-faces", purpose, { targetIds, cutterFaces }, () => session.get().cutWithFaces(targetIds, cutterFaces, current)));
+  tool("plasticity_cut_with_faces", "Split current Solid or Sheet bodies with current planar cutter faces. Cutter bodies are preserved. keep \"larger\" or \"smaller\" (one target only) deletes the other parts by bounding-box volume in a second Undo step; default \"both\". To trim an open Sheet, inspect the returned exact Sheet parts and delete only the unwanted part at the returned revision.", z.object({ targetIds: ids, cutterFaces: z.array(faceRef).min(1).max(4096), keep: cutKeep, intent, revision }).strict(), async ({ targetIds, cutterFaces, keep, intent: purpose, revision: current }) =>
+    await journaled("cut-with-faces", purpose, { targetIds, cutterFaces, keep }, () => keepCutParts(targetIds, keep, () => session.get().cutWithFaces(targetIds, cutterFaces, current))));
   tool("plasticity_split_solid_by_plane", "Split one current Solid into exactly two native Solid parts with one explicit plane that crosses its interior. The tool derives an oversized planar cutter from exact B-Rep bounds, cuts the Solid, verifies both native volumes sum to the original within tolerance, checks unrelated bodies are unchanged, and removes its temporary cutter geometry. It does not add an assembly joint; create a qualified locating-pin or tongue-and-groove joint afterward if required. The plane origin, normal, and in-plane x direction are millimeters/world vectors and the tool occupies four native history steps.", splitSolidByPlaneInputSchema, async (input) =>
     await journaled("split-solid-by-plane", input.intent, input, () => new SplitSolidByPlaneRecipe(session.get()).split(input)));
   tool("plasticity_split_solid_by_planes", "Split one current Solid into a grid using an ordered list of explicit world-space planes. Each plane is applied only to current Solid parts whose exact B-Rep bounds it crosses; each native cut must produce exactly two valid Solid results and preserve volume, temporary cutters are removed, and the final part volumes are checked against the source. Planes are processed sequentially and partial results remain if a later cut fails; reconcile and inspect before continuing. This tool does not choose planes from a Workbench splitPlan, orient the source, or add joints. Each successful cut uses four native history steps.", splitSolidByPlanesInputSchema, async (input) =>
@@ -3849,10 +3871,33 @@ function createServerWithCatalog(
     await journaled("rename", purpose, { id, name }, () => session.get().rename(id, name, current)));
   tool("plasticity_delete", "Delete selected body IDs with Undo support.", z.object({ ids, intent, revision }), async ({ ids: bodyIds, intent: purpose, revision: current }) =>
     await journaled("delete", purpose, { bodyIds }, () => session.get().remove(bodyIds, current)));
-  tool("plasticity_undo", "Undo the most recent document edit.", z.object({ intent, revision }), async ({ intent: purpose, revision: current }) =>
-    await journaled("undo", purpose, {}, () => session.get().undo(current)));
-  tool("plasticity_redo", "Redo the most recent undone document edit.", z.object({ intent, revision }), async ({ intent: purpose, revision: current }) =>
-    await journaled("redo", purpose, {}, () => session.get().redo(current)));
+  // After a split, the target keeps one part and the others are new bodies. keep picks by
+  // bounding-box volume and deletes the rest as a separate Undo step.
+  const keepCutParts = async (targetIds: number[], keep: "both" | "larger" | "smaller", cut: () => Promise<RuntimeState>): Promise<RuntimeState> => {
+    if (keep !== "both" && targetIds.length !== 1) throw new Error("keep \"larger\" or \"smaller\" needs exactly one target");
+    const before = keep === "both" ? undefined : await session.get().state();
+    const after = await cut();
+    if (!before) return after;
+    const parts = after.bodies.filter((body) => body.id === targetIds[0] || !before.bodies.some((old) => old.id === body.id));
+    if (parts.length < 2) return after;
+    const ranked = [...parts].sort((left, right) => boundsVolume(right.boundsMm) - boundsVolume(left.boundsMm));
+    const chosen = keep === "larger" ? ranked[0]! : ranked[ranked.length - 1]!;
+    return await session.get().remove(parts.filter((body) => body !== chosen).map((body) => body.id), after.revision);
+  };
+  // steps > 1 checks revision once, then repeats; it stops early when the history runs out.
+  const stepHistory = async (direction: "undo" | "redo", steps: number, current: string) => {
+    let state = await session.get()[direction](current);
+    for (let step = 1; step < steps; step += 1) {
+      if ((direction === "undo" ? state.undoDepth : state.redoDepth) === 0) break;
+      state = await session.get()[direction]();
+    }
+    return state;
+  };
+  const historySteps = z.number().int().min(1).max(500).default(1);
+  tool("plasticity_undo", "Undo the most recent document edit, or the last `steps` edits in one call.", z.object({ steps: historySteps, intent, revision }), async ({ steps, intent: purpose, revision: current }) =>
+    await journaled("undo", purpose, { steps }, () => stepHistory("undo", steps, current)));
+  tool("plasticity_redo", "Redo the most recent undone document edit, or the next `steps` in one call.", z.object({ steps: historySteps, intent, revision }), async ({ steps, intent: purpose, revision: current }) =>
+    await journaled("redo", purpose, { steps }, () => stepHistory("redo", steps, current)));
 
   tool("plasticity_set_view", "Set a named viewport orientation and optionally fit all geometry.", z.object({ view: z.enum(["front", "back", "left", "right", "top", "bottom", "isometric"]), fit: z.boolean().default(false) }), async ({ view, fit }) =>
     await session.get().setView(view, fit));
