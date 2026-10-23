@@ -1,0 +1,207 @@
+{
+  "builtAt": "2026-10-23T21:42:46.668Z",
+  "totalMs": 11640,
+  "mcpCalls": 114,
+  "bodies": [
+    {
+      "id": 111,
+      "type": "Solid",
+      "name": "Lofted.002",
+      "boundsMm": {
+        "min": [
+          165.99817629152315,
+          -16.442209223488366,
+          10.53017993035162
+        ],
+        "max": [
+          250.0017358151564,
+          16.243880625226627,
+          35.04262693962337
+        ]
+      },
+      "faces": 3
+    },
+    {
+      "id": 120,
+      "type": "Solid",
+      "name": null,
+      "boundsMm": {
+        "min": [
+          17.99926684065299,
+          37.693195186257846,
+          -13.306804813742149
+        ],
+        "max": [
+          95.15590101262707,
+          54.30680481374216,
+          3.3068048137421515
+        ]
+      },
+      "faces": 3
+    },
+    {
+      "id": 121,
+      "type": "Solid",
+      "name": "Solid.001",
+      "boundsMm": {
+        "min": [
+          17.99926684065299,
+          -54.30680481374216,
+          -13.306804813742168
+        ],
+        "max": [
+          95.15590101262707,
+          -37.693195186257846,
+          3.3068048137421315
+        ]
+      },
+      "faces": 3
+    },
+    {
+      "id": 123,
+      "type": "Solid",
+      "name": "Extruded.001",
+      "boundsMm": {
+        "min": [
+          6.089971005659557,
+          15.410900760110584,
+          7.957155887685022
+        ],
+        "max": [
+          61.41794798880108,
+          30.80062802339719,
+          51.781432287409096
+        ]
+      },
+      "faces": 26
+    },
+    {
+      "id": 124,
+      "type": "Solid",
+      "name": "Extruded.002",
+      "boundsMm": {
+        "min": [
+          6.089971005659557,
+          -30.800628023397216,
+          7.957155887685015
+        ],
+        "max": [
+          61.41794798880109,
+          -15.410900760110588,
+          51.78143228740908
+        ]
+      },
+      "faces": 26
+    },
+    {
+      "id": 106,
+      "type": "Solid",
+      "name": "Lofted.001",
+      "boundsMm": {
+        "min": [
+          7.99,
+          -111.77043733965915,
+          -11.739890476229428
+        ],
+        "max": [
+          297.01000000000005,
+          111.77043733965915,
+          30.463322747869928
+        ]
+      },
+      "faces": 53
+    }
+  ],
+  "undoDepth": 43,
+  "stages": [
+    {
+      "stage": "baseline",
+      "ms": 3584,
+      "calls": 89,
+      "ok": true,
+      "notes": [
+        "blank document confirmed"
+      ]
+    },
+    {
+      "stage": "fuselage loft",
+      "ms": 574,
+      "calls": 1,
+      "ok": true,
+      "notes": [
+        "fuselage 106"
+      ]
+    },
+    {
+      "stage": "canopy loft",
+      "ms": 521,
+      "calls": 1,
+      "ok": true,
+      "notes": [
+        "canopy 111"
+      ]
+    },
+    {
+      "stage": "wings",
+      "ms": 470,
+      "calls": 2,
+      "ok": true,
+      "notes": [
+        "wings 113, 114"
+      ]
+    },
+    {
+      "stage": "wing-fuselage union + junction fillet",
+      "ms": 412,
+      "calls": 3,
+      "ok": true,
+      "notes": [
+        "hull 106",
+        "16 junction edges",
+        "junction filleted r3"
+      ]
+    },
+    {
+      "stage": "nacelles + intake cut",
+      "ms": 1004,
+      "calls": 3,
+      "ok": true,
+      "notes": [
+        "kept 120 (77 mm), deleted offcut 118",
+        "nacelles 120, 121"
+      ]
+    },
+    {
+      "stage": "tail fins",
+      "ms": 939,
+      "calls": 2,
+      "ok": true,
+      "notes": [
+        "fins 123, 124"
+      ]
+    },
+    {
+      "stage": "knife panel line",
+      "ms": 266,
+      "calls": 2,
+      "ok": true,
+      "notes": [
+        "hull bounds {\"min\":[7.996483851473923,-111.77043733965915,-11.730593705934645],\"max\":[297.0029256751245,111.77043733965915,30.454025977575142]}",
+        "knife line drawn at x=255"
+      ]
+    },
+    {
+      "stage": "screenshots",
+      "ms": 2447,
+      "calls": 8,
+      "ok": true,
+      "notes": [
+        "/Users/neocortez/Projects/plasticity-mcp/discovery/spaceship/spaceship-iso.png",
+        "/Users/neocortez/Projects/plasticity-mcp/discovery/spaceship/spaceship-top.png",
+        "/Users/neocortez/Projects/plasticity-mcp/discovery/spaceship/spaceship-side.png",
+        "/Users/neocortez/Projects/plasticity-mcp/discovery/spaceship/spaceship-nose-on.png"
+      ]
+    }
+  ],
+  "painPoints": []
+}
