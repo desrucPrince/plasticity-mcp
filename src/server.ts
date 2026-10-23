@@ -2080,7 +2080,11 @@ function createServerWithCatalog(
     onCompleted?: (before: RuntimeState, after: RuntimeState) => void,
     stateTimeoutMs = NATIVE_STATE_READ_TIMEOUT_MS,
   ): Promise<T> => {
+    const timing = process.env.PLASTICITY_TIMING === "1" ? { startedAt: performance.now(), marks: {} as Record<string, number> } : undefined;
+    const mark = (phase: string, since: number) => { if (timing) timing.marks[phase] = Math.round((performance.now() - since) * 10) / 10; return performance.now(); };
+    let phaseStart = performance.now();
     const before = await session.get().state(stateTimeoutMs);
+    phaseStart = mark("stateBeforeMs", phaseStart);
     const entry: JournalEntry = {
       id: randomUUID(),
       operation,
@@ -2097,16 +2101,25 @@ function createServerWithCatalog(
     };
     try {
       const value = await mutation();
+      phaseStart = mark("mutationMs", phaseStart);
       const after = await session.get().state(stateTimeoutMs);
+      phaseStart = mark("stateAfterMs", phaseStart);
       entry.afterDocumentToken = after.documentToken;
       entry.afterRevision = after.revision;
       entry.status = "completed";
       const sceneDiff = diffScenes(before, after);
       entry.diff = compactJournalChange(sceneDiff);
+      phaseStart = mark("diffMs", phaseStart);
       journal.push(entry);
       await persistJournalEntry(entry);
+      mark("journalMs", phaseStart);
       onCompleted?.(before, after);
-      return isRuntimeState(value) ? compactMutationResult(after, sceneDiff) : value;
+      const output = isRuntimeState(value) ? compactMutationResult(after, sceneDiff) : value;
+      if (timing && output && typeof output === "object") {
+        mark("totalMs", timing.startedAt);
+        return { ...output, timing: timing.marks } as T;
+      }
+      return output as T;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       entry.status = /timed?\s*out|(?:socket|connection|transport|session|client)\s+(?:was\s+)?closed|uncertain/i.test(message) ? "unknown" : "failed";

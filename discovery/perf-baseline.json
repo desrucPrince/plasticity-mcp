@@ -1,0 +1,120 @@
+{
+  "measuredAt": "2026-10-23T05:03:18.301Z",
+  "repeats": 5,
+  "toolsList": {
+    "compact": {
+      "tools": 11,
+      "bytes": 7622
+    },
+    "full": {
+      "tools": 371,
+      "bytes": 954854
+    }
+  },
+  "runs": [
+    {
+      "bodies": 1,
+      "results": [
+        {
+          "label": "status",
+          "wallMsMedian": 10,
+          "serverPhasesMsMedian": {}
+        },
+        {
+          "label": "body_info",
+          "wallMsMedian": 4,
+          "serverPhasesMsMedian": {}
+        },
+        {
+          "label": "create_box (status read + box with revision)",
+          "wallMsMedian": 58,
+          "serverPhasesMsMedian": {
+            "stateBeforeMs": 5.9,
+            "mutationMs": 30.6,
+            "stateAfterMs": 5.4,
+            "diffMs": 0.4,
+            "journalMs": 9,
+            "totalMs": 52
+          }
+        },
+        {
+          "label": "create_box (with known revision)",
+          "wallMsMedian": 66,
+          "serverPhasesMsMedian": {
+            "stateBeforeMs": 5.9,
+            "mutationMs": 23.8,
+            "stateAfterMs": 6.5,
+            "diffMs": 0.5,
+            "journalMs": 6.8,
+            "totalMs": 58.3,
+            "boxOnlyWallMs": 59
+          }
+        },
+        {
+          "label": "undo (status read + undo)",
+          "wallMsMedian": 52,
+          "serverPhasesMsMedian": {
+            "stateBeforeMs": 7.8,
+            "mutationMs": 20.8,
+            "stateAfterMs": 6,
+            "diffMs": 0.5,
+            "journalMs": 7.5,
+            "totalMs": 40.5
+          }
+        }
+      ]
+    },
+    {
+      "bodies": 20,
+      "results": [
+        {
+          "label": "status",
+          "wallMsMedian": 11,
+          "serverPhasesMsMedian": {}
+        },
+        {
+          "label": "body_info",
+          "wallMsMedian": 11,
+          "serverPhasesMsMedian": {}
+        },
+        {
+          "label": "create_box (status read + box with revision)",
+          "wallMsMedian": 70,
+          "serverPhasesMsMedian": {
+            "stateBeforeMs": 10.2,
+            "mutationMs": 31,
+            "stateAfterMs": 10.5,
+            "diffMs": 1,
+            "journalMs": 6.2,
+            "totalMs": 59.1
+          }
+        },
+        {
+          "label": "create_box (with known revision)",
+          "wallMsMedian": 86,
+          "serverPhasesMsMedian": {
+            "stateBeforeMs": 14.9,
+            "mutationMs": 36.7,
+            "stateAfterMs": 12.4,
+            "diffMs": 1.2,
+            "journalMs": 6.4,
+            "totalMs": 72.1,
+            "boxOnlyWallMs": 73
+          }
+        },
+        {
+          "label": "undo (status read + undo)",
+          "wallMsMedian": 79,
+          "serverPhasesMsMedian": {
+            "stateBeforeMs": 13,
+            "mutationMs": 31.8,
+            "stateAfterMs": 13.3,
+            "diffMs": 1.4,
+            "journalMs": 6.3,
+            "totalMs": 64.7
+          }
+        }
+      ]
+    }
+  ]
+}

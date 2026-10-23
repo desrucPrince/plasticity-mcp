@@ -2,8 +2,10 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
-export async function openSession() {
-  const transport = new StdioClientTransport({ command: process.execPath, args: ["scripts/run-server.ts", "--compact-tools"], stderr: "inherit" });
+export async function openSession(options: { full?: boolean; env?: Record<string, string> } = {}) {
+  const args = ["scripts/run-server.ts", ...(options.full ? [] : ["--compact-tools"])];
+  const env = { ...(process.env as Record<string, string>), ...options.env };
+  const transport = new StdioClientTransport({ command: process.execPath, args, env, stderr: "inherit" });
   const client = new Client({ name: "discovery", version: "0" });
   await client.connect(transport);
   const raw = async (name: string, args: Record<string, unknown> = {}) => {
@@ -19,5 +21,5 @@ export async function openSession() {
   const targetId = targets[0]?.targetId ?? targets[0]?.id;
   if (!targetId) throw new Error(`No Plasticity window: ${JSON.stringify(windows)}`);
   const connected = await raw("plasticity_connect", { targetId });
-  return { raw, op, windows, connected, close: () => client.close() };
+  return { client, raw, op, windows, connected, close: () => client.close() };
 }
