@@ -50,8 +50,16 @@ const positiveVector = vector.refine((values) => values.every((value) => value >
 function compactStatusSummary(state: RuntimeState, bodyOffset: number, bodyLimit: number) {
   const totalBodies = state.bodies.length;
   const bodies = state.bodies.slice(bodyOffset, bodyOffset + bodyLimit);
+  // The six standard planes never change, so summaries name them instead of repeating their frames.
+  const planes = state.construction?.planes ?? [];
+  const construction = state.construction && {
+    ...state.construction,
+    planes: planes.filter((plane) => (plane as { source?: string }).source !== "standard"),
+    standardPlaneIds: planes.filter((plane) => (plane as { source?: string }).source === "standard").map((plane) => plane.id),
+  };
   return {
     ...state,
+    ...(construction ? { construction } : {}),
     bodies: bodies.map((body) => {
       const summary: Partial<RuntimeState["bodies"][number]> = { ...body };
       delete summary.faceIds;

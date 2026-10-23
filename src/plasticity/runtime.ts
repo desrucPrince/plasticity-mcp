@@ -870,7 +870,8 @@ export class PlasticityRuntime {
       const referenceMeshToken = 'reference-meshes:' + token(JSON.stringify(referenceMeshes));
       const sectionToken = 'sections:' + token(JSON.stringify(sectionAnalyses));
       const groupToken = 'groups:' + token(JSON.stringify([activeGroupId, groups]));
-      const revision = [documentToken, dbVersion, undoDepth, redoDepth, bodyToken, planeStateToken, materialToken, measurementToken, instanceToken, referenceMeshToken, sectionToken, groupToken].join('|');
+      // Hash every component into a short token: agents echo the revision on every edit.
+      const revision = 'r' + undoDepth + '.' + token([documentToken, dbVersion, undoDepth, redoDepth, bodyToken, planeStateToken, materialToken, measurementToken, instanceToken, referenceMeshToken, sectionToken, groupToken].join('|'));
       return {
         documentToken,
         revision,
