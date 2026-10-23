@@ -422,6 +422,33 @@ const commandEnd = `
   await this.exec(command);
   if (failure) throw failure;`;
 
+export interface ExtrudeOptions {
+  reverseDistanceMm?: number;
+  draftAngleDeg?: number;
+  reverseDraftAngleDeg?: number;
+  thicknessMm?: number;
+}
+
+// Native ExtrudeFactory fields: distance2 is the opposite side, degrees1/2 are draft angles, and
+// thickness turns the extrusion into a thin wall of that thickness.
+const applyExtrudeOptions = `
+      if (args.options.reverseDistance !== undefined) factory.distance2 = args.options.reverseDistance;
+      if (args.options.draftAngleDeg !== undefined) factory.degrees1 = args.options.draftAngleDeg;
+      if (args.options.reverseDraftAngleDeg !== undefined) factory.degrees2 = args.options.reverseDraftAngleDeg;
+      if (args.options.thickness !== undefined) factory.thickness = args.options.thickness;`;
+
+function nativeExtrudeOptions(options: ExtrudeOptions): Record<string, number> {
+  const native: Record<string, number> = {};
+  if (options.reverseDistanceMm !== undefined) native.reverseDistance = millimetersToMeters(options.reverseDistanceMm);
+  if (options.draftAngleDeg !== undefined) native.draftAngleDeg = options.draftAngleDeg;
+  if (options.reverseDraftAngleDeg !== undefined) native.reverseDraftAngleDeg = options.reverseDraftAngleDeg;
+  if (options.thicknessMm !== undefined) {
+    if (!(options.thicknessMm > 0)) throw new Error("Extrude thickness must be positive");
+    native.thickness = millimetersToMeters(options.thicknessMm);
+  }
+  return native;
+}
+
 export class PlasticityOperations {
   readonly runtime: PlasticityRuntime;
   readonly datumRegistry: DatumRegistry;
@@ -4894,7 +4921,7 @@ export class PlasticityOperations {
     return await this.state();
   }
 
-  async extrudeProfile(id: number, distanceMm: number, revision: string): Promise<RuntimeState> {
+  async extrudeProfile(id: number, distanceMm: number, revision: string, options: ExtrudeOptions = {}): Promise<RuntimeState> {
     await this.assertRevision(revision);
     await this.runtime.mutate(`async function (Factory, args) {
       ${findView}
@@ -4923,13 +4950,13 @@ export class PlasticityOperations {
       if (regions.length === 0) throw new Error('Profile is open or has no native region');
       if (regions.length > 1) throw new Error('Profile is ambiguous; use plasticity_list_regions and plasticity_extrude_regions');
       factory.regions = regions;
-      factory.distance1 = args.distance;
+      factory.distance1 = args.distance;${applyExtrudeOptions}
       ${commandEnd}
-    }`, ["ExtrudeFactory"], [{ id, distance: millimetersToMeters(distanceMm) }]);
+    }`, ["ExtrudeFactory"], [{ id, distance: millimetersToMeters(distanceMm), options: nativeExtrudeOptions(options) }]);
     return await this.state();
   }
 
-  async extrudeRegions(regionIds: string[], distanceMm: number, revision: string): Promise<RuntimeState> {
+  async extrudeRegions(regionIds: string[], distanceMm: number, revision: string, options: ExtrudeOptions = {}): Promise<RuntimeState> {
     await this.assertRevision(revision);
     if (regionIds.length === 0) throw new Error("At least one Region ID is required");
     const uniqueIds = [...new Set(regionIds)];
@@ -4949,9 +4976,31 @@ export class PlasticityOperations {
       const missing = args.regionIds.filter(id => !found.has(id));
       if (missing.length > 0) throw new Error('Stale or unknown regions: ' + missing.join(', '));
       factory.regions = regions;
-      factory.distance1 = args.distance;
+      factory.distance1 = args.distance;${applyExtrudeOptions}
       ${commandEnd}
-    }`, ["ExtrudeFactory"], [{ regionIds: uniqueIds, distance: millimetersToMeters(distanceMm) }]);
+    }`, ["ExtrudeFactory"], [{ regionIds: uniqueIds, distance: millimetersToMeters(distanceMm), options: nativeExtrudeOptions(options) }]);
+    return await this.state();
+  }
+
+  // Open or closed Wires extruded along a world direction; open Wires make Sheets.
+  async extrudeCurves(ids: number[], distanceMm: number, directionVector: Vector3 | undefined, revision: string, options: ExtrudeOptions = {}): Promise<RuntimeState> {
+    await this.assertRevision(revision);
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) throw new Error("At least one Wire ID is required");
+    if (directionVector && !(Math.hypot(...directionVector) > 0)) throw new Error("Extrude direction must be nonzero");
+    await this.runtime.mutate(`async function (Factory, Vector, args) {
+      ${findView}
+      ${commandStart("ExtrudeCommand")}
+      const curves = args.ids.map(id => {
+        const view = find(id);
+        if (view.constructor.name !== 'Wire') throw new Error('Body ' + id + ' is not a Wire');
+        return view;
+      });
+      factory.curves = curves;
+      if (args.direction) factory.direction = new Vector(...args.direction).normalize();
+      factory.distance1 = args.distance;${applyExtrudeOptions}
+      ${commandEnd}
+    }`, ["ExtrudeFactory", "Vector3"], [{ ids: uniqueIds, distance: millimetersToMeters(distanceMm), direction: directionVector ?? null, options: nativeExtrudeOptions(options) }]);
     return await this.state();
   }
 

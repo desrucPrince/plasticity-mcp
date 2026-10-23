@@ -3002,9 +3002,9 @@ test("extrudes closed profiles and explicit regions through native Region inputs
   assert.match(calls[0]!.source, /IsClosed/);
   assert.doesNotMatch(calls[0]!.source, /factory\.curves = \[view\]/);
   assert.deepEqual(calls[0]!.bindings, ["ExtrudeFactory"]);
-  assert.deepEqual(calls[0]!.values, [{ id: 7, distance: 0.012 }]);
+  assert.deepEqual(calls[0]!.values, [{ id: 7, distance: 0.012, options: {} }]);
   assert.match(calls[1]!.source, /Stale or unknown regions/);
-  assert.deepEqual(calls[1]!.values, [{ regionIds: ["5r42", "6r43"], distance: -0.004 }]);
+  assert.deepEqual(calls[1]!.values, [{ regionIds: ["5r42", "6r43"], distance: -0.004, options: {} }]);
 });
 
 test("rejects stale and duplicate explicit region references before mutation", async () => {
@@ -6631,4 +6631,33 @@ test("screenshotImage refuses a hidden renderer", async () => {
     async read() { return true; },
   } as unknown as PlasticityRuntime;
   await assert.rejects(new PlasticityOperations(runtime, "session-1").screenshotImage(), /renderer is hidden/i);
+});
+
+test("extrude options map to native two-sided, draft and thin-wall fields", async () => {
+  const calls: Array<{ source: string; bindings: string[]; values: unknown[] }> = [];
+  const state: RuntimeState = { targetId: "window-1", title: "Untitled - Plasticity", documentToken: "document-1", revision: "r1", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [] };
+  const runtime = { async getState() { return state; }, async mutate(source: string, bindings: string[], values: unknown[]) { calls.push({ source, bindings, values }); return {}; } } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+
+  await operations.extrudeRegions(["5r42"], 10, "r1", { reverseDistanceMm: 4, draftAngleDeg: 3, reverseDraftAngleDeg: -2, thicknessMm: 1.5 });
+  assert.deepEqual(calls[0]!.values, [{ regionIds: ["5r42"], distance: 0.01, options: { reverseDistance: 0.004, draftAngleDeg: 3, reverseDraftAngleDeg: -2, thickness: 0.0015 } }]);
+  for (const field of [/factory\.distance2 = args\.options\.reverseDistance/, /factory\.degrees1 = args\.options\.draftAngleDeg/, /factory\.degrees2 = args\.options\.reverseDraftAngleDeg/, /factory\.thickness = args\.options\.thickness/]) {
+    assert.match(calls[0]!.source, field);
+  }
+  await assert.rejects(operations.extrudeRegions(["5r42"], 10, "r1", { thicknessMm: 0 }), /thickness must be positive/);
+});
+
+test("extrudes Wire curves along an optional world direction", async () => {
+  let call: { source: string; bindings: string[]; values: unknown[] } | undefined;
+  const state: RuntimeState = { targetId: "window-1", title: "Untitled - Plasticity", documentToken: "document-1", revision: "r1", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [] };
+  const runtime = { async getState() { return state; }, async mutate(source: string, bindings: string[], values: unknown[]) { call = { source, bindings, values }; return {}; } } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+
+  await operations.extrudeCurves([9, 9, 11], 20, [0, 0, 2], "r1");
+  assert.deepEqual(call?.bindings, ["ExtrudeFactory", "Vector3"]);
+  assert.deepEqual(call?.values, [{ ids: [9, 11], distance: 0.02, direction: [0, 0, 2], options: {} }]);
+  assert.match(call?.source ?? "", /factory\.curves = curves/);
+  assert.match(call?.source ?? "", /is not a Wire/);
+  await assert.rejects(operations.extrudeCurves([9], 20, [0, 0, 0], "r1"), /direction must be nonzero/);
+  await assert.rejects(operations.extrudeCurves([9], 20, undefined, "stale"), /Stale reference/);
 });

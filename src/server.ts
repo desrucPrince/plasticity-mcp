@@ -11,7 +11,7 @@ import { diffScenes, type SceneDiff, type TrackedDatum } from "./plasticity/chan
 import { ConstructionHistoryStore, type ConstructionHistoryEntry } from "./plasticity/construction-history.ts";
 import { StepImportReferenceStore } from "./plasticity/import-reference-store.ts";
 import { StepReferenceDownloader, type StepReferenceDownloaderLike } from "./plasticity/step-reference-downloader.ts";
-import { PlasticityOperations } from "./plasticity/operations.ts";
+import { PlasticityOperations, type ExtrudeOptions } from "./plasticity/operations.ts";
 import { boundsCenter, quaternionFromXyzDegrees, rotateBoundsAroundPivot, unionBounds } from "./plasticity/print-orientation.ts";
 import { PlasticityRecipes } from "./plasticity/recipes.ts";
 import { SplitSolidByPlaneRecipe } from "./plasticity/split-solid.ts";
@@ -1341,6 +1341,21 @@ const faceQuerySchema = z.object({
   edgeCount: z.number().int().nonnegative().optional(),
   adjacentEdgeIds: z.array(z.string().min(1)).max(4096).optional(),
 }).strict();
+const extrudeOptionsSchema = z.object({
+  reverseDistanceMm: z.number().finite().optional(),
+  draftAngleDeg: z.number().finite().min(-89).max(89).optional(),
+  reverseDraftAngleDeg: z.number().finite().min(-89).max(89).optional(),
+  thicknessMm: z.number().finite().positive().optional(),
+}).strict().optional();
+
+function compactExtrudeOptions(options: z.infer<typeof extrudeOptionsSchema>): ExtrudeOptions {
+  const out: ExtrudeOptions = {};
+  if (options?.reverseDistanceMm !== undefined) out.reverseDistanceMm = options.reverseDistanceMm;
+  if (options?.draftAngleDeg !== undefined) out.draftAngleDeg = options.draftAngleDeg;
+  if (options?.reverseDraftAngleDeg !== undefined) out.reverseDraftAngleDeg = options.reverseDraftAngleDeg;
+  if (options?.thicknessMm !== undefined) out.thicknessMm = options.thicknessMm;
+  return out;
+}
 const edgeQuerySchema = z.object({
   bodyIds: z.array(z.number().int().positive()).max(4096).optional(),
   curveTypes: z.array(z.string().trim().min(1).max(80)).max(32).optional(),
@@ -3371,10 +3386,12 @@ function createServerWithCatalog(
     await journaled("refillet-faces", purpose, { faces, deltaMm }, () => session.get().refilletFaces(faces, deltaMm, current)));
   tool("plasticity_extrude_faces", "Extrude current face IDs by a distance in millimeters.", z.object({ id: z.number().int().positive(), faceIds: z.array(z.string()).min(1), distanceMm: z.number().finite(), intent, revision }), async ({ id, faceIds, distanceMm, intent: purpose, revision: current }) =>
     await journaled("extrude-faces", purpose, { id, faceIds, distanceMm }, () => session.get().extrudeFaces(id, faceIds, distanceMm, current)));
-  tool("plasticity_extrude_profile", "Extrude one unambiguous closed planar Wire profile into a native Solid.", z.object({ id: z.number().int().positive(), distanceMm: z.number().finite(), intent, revision }), async ({ id, distanceMm, intent: purpose, revision: current }) =>
-    await journaled("extrude-profile", purpose, { id, distanceMm }, () => session.get().extrudeProfile(id, distanceMm, current)));
-  tool("plasticity_extrude_regions", "Extrude one or more explicit revision-bound planar regions into native solids.", z.object({ regionIds, distanceMm: z.number().finite(), intent, revision }).strict(), async ({ regionIds: selectedRegions, distanceMm, intent: purpose, revision: current }) =>
-    await journaled("extrude-regions", purpose, { regionIds: selectedRegions, distanceMm }, () => session.get().extrudeRegions(selectedRegions, distanceMm, current)));
+  tool("plasticity_extrude_profile", "Extrude one unambiguous closed planar Wire profile into a native Solid. options: reverseDistanceMm (two-sided), draftAngleDeg / reverseDraftAngleDeg, thicknessMm (thin wall).", z.object({ id: z.number().int().positive(), distanceMm: z.number().finite(), options: extrudeOptionsSchema, intent, revision }), async ({ id, distanceMm, options, intent: purpose, revision: current }) =>
+    await journaled("extrude-profile", purpose, { id, distanceMm, options }, () => session.get().extrudeProfile(id, distanceMm, current, compactExtrudeOptions(options))));
+  tool("plasticity_extrude_regions", "Extrude one or more explicit revision-bound planar regions into native solids. options: reverseDistanceMm (two-sided), draftAngleDeg / reverseDraftAngleDeg, thicknessMm (thin wall).", z.object({ regionIds, distanceMm: z.number().finite(), options: extrudeOptionsSchema, intent, revision }).strict(), async ({ regionIds: selectedRegions, distanceMm, options, intent: purpose, revision: current }) =>
+    await journaled("extrude-regions", purpose, { regionIds: selectedRegions, distanceMm, options }, () => session.get().extrudeRegions(selectedRegions, distanceMm, current, compactExtrudeOptions(options))));
+  tool("plasticity_extrude_curves", "Extrude Wire curves along a world direction (default: Plasticity's own choice for the curve). Open Wires become Sheets. options as in plasticity_extrude_profile.", z.object({ ids, distanceMm: z.number().finite(), direction: direction.optional(), options: extrudeOptionsSchema, intent, revision }).strict(), async ({ ids: curveIds, distanceMm, direction: along, options, intent: purpose, revision: current }) =>
+    await journaled("extrude-curves", purpose, { ids: curveIds, distanceMm, direction: along, options }, () => session.get().extrudeCurves(curveIds, distanceMm, along, current, compactExtrudeOptions(options))));
   tool("plasticity_offset_planar_curves", "Create native offsets from planar Wire bodies. Signed distance follows each Wire orientation and is measured in millimeters.", z.object({ ids, distanceMm: nonzeroDistance, intent, revision }).strict(), async ({ ids: wireIds, distanceMm, intent: purpose, revision: current }) =>
     await journaled("offset-planar-curves", purpose, { ids: wireIds, distanceMm }, () => session.get().offsetPlanarCurves(wireIds, distanceMm, current)));
   tool("plasticity_offset_regions", "Create one or two native signed offsets from explicit Regions in the same sketch, preserving the source curves.", z.object({ regionIds, offsetsMm: regionOffsets, individual: z.boolean().default(true), intent, revision }).strict(), async ({ regionIds: selectedRegions, offsetsMm, individual, intent: purpose, revision: current }) =>

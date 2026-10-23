@@ -1350,7 +1350,7 @@ test("compact catalog exposes core tools while routing hidden operations through
     "plasticity_boolean", "plasticity_fillet", "plasticity_chamfer", "plasticity_extrude_faces",
     "plasticity_extrude_profile", "plasticity_move", "plasticity_rotate", "plasticity_scale", "plasticity_mirror",
     "plasticity_delete", "plasticity_undo", "plasticity_redo", "plasticity_find_edges", "plasticity_find_faces",
-    "plasticity_create_control_point_curve",
+    "plasticity_create_control_point_curve", "plasticity_extrude_curves",
   ]));
   assert.equal(listed.tools[0]?.name, "plasticity_call");
 
@@ -3039,7 +3039,7 @@ test("MCP validates and forwards native closed-profile extrusion", async () => {
     id: 21, distanceMm: -8, intent: "Extrude the closed plate profile downwards", revision: "r1",
   } });
   assert.equal(response.isError, undefined);
-  assert.deepEqual(received, [21, -8, "r1"]);
+  assert.deepEqual(received, [21, -8, "r1", {}]);
   const invalidId = await client.callTool({ name: "plasticity_extrude_profile", arguments: { id: 0, distanceMm: 8, revision: "r1" } });
   const missingRevision = await client.callTool({ name: "plasticity_extrude_profile", arguments: { id: 21, distanceMm: 8 } });
   assert.equal(invalidId.isError, true);
@@ -5813,5 +5813,30 @@ test("plasticity_screenshot without a path returns the image inline", async () =
   assert.deepEqual(JSON.parse(parts[1]!.text!), { width: 640, height: 300, bytes: 4 });
   const saved = await client.callTool({ name: "plasticity_screenshot", arguments: { path: "/tmp/x.png" } });
   assert.deepEqual(parseToolJson(saved), { path: "/tmp/x.png", bytes: 10 });
+  await close();
+});
+
+test("MCP forwards extrude options and curve extrusion", async () => {
+  const received: Record<string, unknown[]> = {};
+  const state = emptyState();
+  const operations = {
+    async state() { return state; },
+    async extrudeProfile(...args: unknown[]) { received.profile = args; return state; },
+    async extrudeCurves(...args: unknown[]) { received.curves = args; return state; },
+  } as unknown as PlasticityOperations;
+  const fake = {
+    async windows() { return []; }, async connect() { return state; }, get() { return operations; },
+    capabilities() { return { bindings: [], operations: unavailableConstruction() }; },
+    async captureSnapshot() { return {}; }, async changesSince() { return {}; }, async waitForChange() { return {}; },
+  } satisfies SessionLike;
+  const { client, close } = await batchClient(fake);
+  const profile = await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_extrude_profile", arguments: { id: 21, distanceMm: 8, options: { reverseDistanceMm: 2, draftAngleDeg: 5 }, revision: "r1" } } });
+  assert.equal(profile.isError, undefined);
+  assert.deepEqual(received.profile, [21, 8, "r1", { reverseDistanceMm: 2, draftAngleDeg: 5 }]);
+  const curves = await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_extrude_curves", arguments: { ids: [4], distanceMm: 10, direction: [0, 0, 1], revision: "r1" } } });
+  assert.equal(curves.isError, undefined);
+  assert.deepEqual(received.curves, [[4], 10, [0, 0, 1], "r1", {}]);
+  const badDraft = await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_extrude_profile", arguments: { id: 21, distanceMm: 8, options: { draftAngleDeg: 95 }, revision: "r1" } } });
+  assert.equal(badDraft.isError, true);
   await close();
 });
