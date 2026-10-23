@@ -1351,6 +1351,7 @@ test("compact catalog exposes core tools while routing hidden operations through
     "plasticity_extrude_profile", "plasticity_move", "plasticity_rotate", "plasticity_scale", "plasticity_mirror",
     "plasticity_delete", "plasticity_undo", "plasticity_redo", "plasticity_find_edges", "plasticity_find_faces",
     "plasticity_create_control_point_curve", "plasticity_extrude_curves", "plasticity_fillet_curves",
+    "plasticity_cut_with_curves", "plasticity_knife_curve",
   ]));
   assert.equal(listed.tools[0]?.name, "plasticity_call");
 

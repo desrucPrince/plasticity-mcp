@@ -1,0 +1,114 @@
+{
+  "ranAt": "2026-10-23T21:28:44.986Z",
+  "log": [
+    {
+      "test": "control-point curve keeps the given points as its control points",
+      "ok": true,
+      "detail": {
+        "controlPointCurve": [
+          [
+            2009.9999904632568,
+            19.999999552965164,
+            0
+          ],
+          [
+            2029.9999713897705,
+            19.999999552965164,
+            0
+          ]
+        ],
+        "interpolatingCurve": [
+          [
+            1995.1125383377075,
+            79.48194444179535,
+            0
+          ],
+          [
+            2044.8875427246094,
+            79.48194444179535,
+            0
+          ]
+        ]
+      }
+    },
+    {
+      "test": "extrude_profile with reverse distance, draft and a thin wall",
+      "ok": true,
+      "detail": {
+        "twoSidedZ": [
+          -4,
+          10
+        ]
+      }
+    },
+    {
+      "test": "extrude_profile with a draft angle",
+      "ok": true,
+      "detail": {
+        "topWidth": 16.47329330444336
+      }
+    },
+    {
+      "test": "extrude_profile thin wall",
+      "ok": true,
+      "detail": {
+        "faces": 10
+      }
+    },
+    {
+      "test": "extrude_curves turns an open curve into a Sheet",
+      "ok": true,
+      "detail": {
+        "sheetFaces": 2,
+        "height": 15
+      }
+    },
+    {
+      "test": "fillet_curves rounds the corner between two separate lines",
+      "ok": true,
+      "detail": {
+        "added": [],
+        "removed": [],
+        "modified": [
+          48,
+          49
+        ],
+        "wireEdges": [
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "test": "cut_with_curves splits a box with a curved cutter",
+      "ok": true,
+      "detail": {
+        "newParts": [
+          {
+            "min": [
+              2000,
+              600,
+              -3.271407849703991e-18
+            ],
+            "max": [
+              2040,
+              612.8410225323223,
+              10
+            ]
+          }
+        ],
+        "originalModified": true
+      }
+    },
+    {
+      "test": "knife_curve splits the top face of a box",
+      "ok": true,
+      "detail": {
+        "faces": [
+          6,
+          7
+        ]
+      }
+    }
+  ]
+}

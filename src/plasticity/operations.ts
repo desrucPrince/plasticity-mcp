@@ -439,7 +439,9 @@ const applyExtrudeOptions = `
 
 function nativeExtrudeOptions(options: ExtrudeOptions): Record<string, number> {
   const native: Record<string, number> = {};
-  if (options.reverseDistanceMm !== undefined) native.reverseDistance = millimetersToMeters(options.reverseDistanceMm);
+  // distance2 runs along the extrude direction too (live check: +4 started the solid at z=+4), so a
+  // reverse distance is passed negated.
+  if (options.reverseDistanceMm !== undefined) native.reverseDistance = -millimetersToMeters(options.reverseDistanceMm);
   if (options.draftAngleDeg !== undefined) native.draftAngleDeg = options.draftAngleDeg;
   if (options.reverseDraftAngleDeg !== undefined) native.reverseDraftAngleDeg = options.reverseDraftAngleDeg;
   if (options.thicknessMm !== undefined) {
@@ -3452,10 +3454,10 @@ export class PlasticityOperations {
     if (revision) await this.assertRevision(revision);
     await this.runtime.mutate(`async function (Factory, Vector, CurveType, args) {
       ${commandStart("CurveCommand")}
-      factory.points = args.points.map(point => new Vector(...point));
       factory.type = CurveType.NURBS;
       factory.splineThrough = false;
       factory.closed = args.closed;
+      factory.points = args.points.map(point => new Vector(...point));
       ${commandEnd}
     }`, ["CurveFactory", "Vector3", "CurveType"], [{ points: pointsMm.map(toMeters), closed }]);
     return await this.state();

@@ -6640,7 +6640,7 @@ test("extrude options map to native two-sided, draft and thin-wall fields", asyn
   const operations = new PlasticityOperations(runtime);
 
   await operations.extrudeRegions(["5r42"], 10, "r1", { reverseDistanceMm: 4, draftAngleDeg: 3, reverseDraftAngleDeg: -2, thicknessMm: 1.5 });
-  assert.deepEqual(calls[0]!.values, [{ regionIds: ["5r42"], distance: 0.01, options: { reverseDistance: 0.004, draftAngleDeg: 3, reverseDraftAngleDeg: -2, thickness: 0.0015 } }]);
+  assert.deepEqual(calls[0]!.values, [{ regionIds: ["5r42"], distance: 0.01, options: { reverseDistance: -0.004, draftAngleDeg: 3, reverseDraftAngleDeg: -2, thickness: 0.0015 } }]);
   for (const field of [/factory\.distance2 = args\.options\.reverseDistance/, /factory\.degrees1 = args\.options\.draftAngleDeg/, /factory\.degrees2 = args\.options\.reverseDraftAngleDeg/, /factory\.thickness = args\.options\.thickness/]) {
     assert.match(calls[0]!.source, field);
   }

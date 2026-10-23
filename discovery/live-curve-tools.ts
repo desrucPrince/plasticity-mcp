@@ -46,16 +46,20 @@ const added = (out: { change?: { added?: unknown[] } }) => (out.change?.added ??
 const X = 2000; // well clear of the startup cube
 
 try {
-  await check("control-point curve differs from interpolating curve", async () => {
+  await check("control-point curve keeps the given points as its control points", async () => {
     const points = [[X, 0, 0], [X + 10, 20, 0], [X + 30, 20, 0], [X + 40, 0, 0]];
     const cp = await s.raw("plasticity_create_control_point_curve", { pointsMm: points, revision: (await status()).revision });
-    const interp = await s.raw("plasticity_create_nurbs_curve", { pointsMm: points.map(([x, y, z]) => [x!, y! + 50, z!]), revision: cp.revision });
-    const a = added(cp)[0]!, b = added(interp)[0]!;
-    const cpMaxY = (a.boundsMm as { max: number[] }).max[1]!, interpMaxY = (b.boundsMm as { max: number[] }).max[1]! - 50;
-    if (a.type !== "Wire") throw new Error(`expected Wire, got ${a.type}`);
-    // A control-point curve stays inside its control polygon (max y < 20); an interpolating one reaches y = 20.
-    if (!(cpMaxY < 19.9)) throw new Error(`control-point curve reaches y=${cpMaxY}, looks interpolating`);
-    return { controlPointMaxY: cpMaxY, interpolatingMaxY: interpMaxY };
+    const interp = await s.raw("plasticity_call", { toolName: "plasticity_create_nurbs_curve", arguments: { pointsMm: points.map(([x, y, z]) => [x!, y! + 50, z!]), closed: false, revision: cp.revision } });
+    const ids = [added(cp)[0]!.id, added(interp)[0]!.id];
+    const list = await s.raw("plasticity_call", { toolName: "plasticity_list_curve_control_points", arguments: { ids, revision: interp.revision } });
+    const interior = (id: number) => (list.curves.find((c: { id: number }) => c.id === id).interiorControlPoints as Array<{ positionMm: number[] }>).map((p) => p.positionMm);
+    const close = (a: number[], b: number[]) => a.every((v, k) => Math.abs(v - b[k]!) < 1e-3);
+    const cpInterior = interior(ids[0]!);
+    // A control-point curve keeps (10,20) and (30,20); an interpolating curve's handles overshoot.
+    if (!(cpInterior.length === 2 && close(cpInterior[0]!, points[1]!) && close(cpInterior[1]!, points[2]!))) throw new Error(`control points ${JSON.stringify(cpInterior)}`);
+    const interpInterior = interior(ids[1]!);
+    if (close(interpInterior[0]!, [X + 10, 70, 0])) throw new Error("interpolating curve has the same control points");
+    return { controlPointCurve: cpInterior, interpolatingCurve: interpInterior };
   });
 
   await check("extrude_profile with reverse distance, draft and a thin wall", async () => {
@@ -72,10 +76,14 @@ try {
     const rect = await s.raw("plasticity_call", { toolName: "plasticity_create_rectangle", arguments: { centerMm: [X + 10, 210, 0], widthMm: 20, heightMm: 20, normal: [0, 0, 1], xDirection: [1, 0, 0], angleDegrees: 0, revision: (await status()).revision } });
     const out = await s.raw("plasticity_extrude_profile", { id: added(rect)[0]!.id, distanceMm: 10, options: { draftAngleDeg: 10 }, revision: rect.revision });
     const solid = added(out).find((b) => b.type === "Solid")!;
-    const bounds = solid.boundsMm as { min: number[]; max: number[] };
-    const width = bounds.max[0]! - bounds.min[0]!;
-    if (Math.abs(width - 20) < 0.01) throw new Error(`draft had no effect: width ${width}`);
-    return { xWidthAfterDraft: width, faces: solid.faceCount };
+    const info = await s.raw("plasticity_body_info", { id: solid.id });
+    const faces = (info.body?.faces ?? info.faces) as Array<{ boundsMm: { min: number[]; max: number[] } }>;
+    const top = faces.find((face) => Math.abs(face.boundsMm.min[2]! - 10) < 1e-3 && Math.abs(face.boundsMm.max[2]! - 10) < 1e-3);
+    if (!top) throw new Error("no top face at z=10");
+    const topWidth = top.boundsMm.max[0]! - top.boundsMm.min[0]!;
+    // 10 mm high with a 10 degree draft moves each side by 10*tan(10deg) = 1.763 mm.
+    if (Math.abs(Math.abs(20 - topWidth) - 2 * 10 * Math.tan(Math.PI / 18)) > 0.01) throw new Error(`top width ${topWidth}, want 20 -/+ 3.527`);
+    return { topWidth };
   });
 
   await check("extrude_profile thin wall", async () => {
@@ -101,16 +109,22 @@ try {
     const first = await s.raw("plasticity_call", { toolName: "plasticity_create_polyline", arguments: { pointsMm: [[X, 500, 0], [X + 20, 500, 0]], closed: false, revision: (await status()).revision } });
     const second = await s.raw("plasticity_call", { toolName: "plasticity_create_polyline", arguments: { pointsMm: [[X + 20, 500, 0], [X + 20, 520, 0]], closed: false, revision: first.revision } });
     const out = await s.raw("plasticity_fillet_curves", { firstId: added(first)[0]!.id, secondId: added(second)[0]!.id, radiusMm: 5, revision: second.revision });
-    return { added: added(out).map((b) => [b.id, b.type, b.edgeCount]), removed: (out.change?.removed ?? []).length };
+    const change = out.change ?? {};
+    const touched = (change.added?.length ?? 0) + (change.removed?.length ?? 0) + (change.modified?.length ?? 0);
+    if (!change.sceneChanged || touched === 0) throw new Error(`fillet changed nothing: ${JSON.stringify(change).slice(0, 300)}`);
+    const wires = (await status()).bodies.filter((b: { type: string }) => b.type === "Wire");
+    return { added: (change.added ?? []).map((b: { id: number; edgeCount: number }) => [b.id, b.edgeCount]), removed: (change.removed ?? []).map((b: { id: number }) => b.id), modified: (change.modified ?? []).map((m: { id: number }) => m.id), wireEdges: wires.map((b: { edgeCount: number }) => b.edgeCount) };
   });
   await check("cut_with_curves splits a box with a curved cutter", async () => {
     const box = await s.raw("plasticity_create_box", { originMm: [X, 600, 0], sizeMm: [40, 20, 10], revision: (await status()).revision });
     const boxId = added(box)[0]!.id;
-    const curve = await s.raw("plasticity_create_nurbs_curve", { pointsMm: [[X - 5, 610, 20], [X + 20, 605, 20], [X + 45, 612, 20]], revision: box.revision });
+    const curve = await s.raw("plasticity_call", { toolName: "plasticity_create_nurbs_curve", arguments: { pointsMm: [[X - 5, 610, 20], [X + 20, 605, 20], [X + 45, 612, 20]], revision: box.revision } });
     const out = await s.raw("plasticity_call", { toolName: "plasticity_cut_with_curves", arguments: { targetIds: [boxId], curveIds: [added(curve)[0]!.id], direction: [0, 0, -1], extend: true, revision: curve.revision } });
+    // The cut keeps one part in the original body and adds the other.
     const parts = added(out).filter((b) => b.type === "Solid");
-    if (parts.length < 2) throw new Error(`expected 2 solid parts, got ${JSON.stringify(added(out).map((b) => b.type))}`);
-    return { parts: parts.map((b) => b.faceCount) };
+    const kept = (out.change?.modified ?? []).some((m: { id: number }) => m.id === boxId);
+    if (parts.length < 1 || !kept) throw new Error(`expected the box modified plus a new part: ${JSON.stringify(out.change).slice(0, 300)}`);
+    return { newParts: parts.map((b) => b.boundsMm), originalModified: kept };
   });
 
   await check("knife_curve splits the top face of a box", async () => {
