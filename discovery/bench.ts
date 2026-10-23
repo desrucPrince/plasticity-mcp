@@ -68,6 +68,22 @@ async function suite(bodies: number) {
     const st = await status();
     return await s.op("plasticity_undo", { revision: st.revision });
   }));
+  const batchAvailable = (await s.client.listTools()).tools.some((tool) => tool.name === "plasticity_batch");
+  if (batchAvailable) {
+    results.push(await timed("batch: box + hole + fillet (one call), then undo", async () => {
+      const start = performance.now();
+      const out = await s.raw("plasticity_batch", { steps: [
+        { toolName: "plasticity_create_box", arguments: { originMm: [3000, 0, 0], sizeMm: [20, 10, 5] } },
+        { toolName: "plasticity_create_cylinder", arguments: { centerMm: [3010, 5, -1], radiusMm: 3, heightMm: 7 } },
+        { toolName: "plasticity_boolean", arguments: { targetIds: ["$0.added[0]"], toolIds: "$1.added", operation: "difference" } },
+        { toolName: "plasticity_find_edges", arguments: { query: { bodyIds: ["$0.added[0]"], line: true } } },
+        { toolName: "plasticity_fillet", arguments: { id: "$0.added[0]", edgeIds: "$3.result.matches[*].id", radiusMm: 1 } },
+      ] });
+      const batchMs = Math.round(performance.now() - start);
+      await s.raw("plasticity_batch", { steps: Array.from({ length: out.undoSteps }, () => ({ toolName: "plasticity_undo", arguments: {} })) });
+      return { timing: { batchCallMs: batchMs, responseBytes: JSON.stringify(out).length } };
+    }));
+  }
   return { bodies, results };
 }
 

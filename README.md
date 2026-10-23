@@ -99,6 +99,32 @@ To make it reachable by a tablet on the same private network, run `npm run start
 3. In a session, call `plasticity_list_windows`, then call `plasticity_connect` with the returned
    `targetId`.
 
+## Working fast
+
+- **Batch builds.** `plasticity_batch` runs up to 50 operations in one call and returns one
+  combined change. A step may leave out `revision`. A later step can use what an earlier step made:
+  `"$0.added[0]"` is the first body that step 0 created, and `"$3.result.matches[*].id"` is every
+  edge id that a `plasticity_find_edges` step returned. Set `undoOnError: true` to undo the
+  completed steps if a step fails. Example (box with a through hole and filleted edges, one call):
+
+  ```json
+  {"steps": [
+    {"toolName": "plasticity_create_box", "arguments": {"originMm": [0,0,0], "sizeMm": [20,10,5]}},
+    {"toolName": "plasticity_create_cylinder", "arguments": {"centerMm": [10,5,-1], "radiusMm": 3, "heightMm": 7}},
+    {"toolName": "plasticity_boolean", "arguments": {"targetIds": ["$0.added[0]"], "toolIds": "$1.added", "operation": "difference"}},
+    {"toolName": "plasticity_find_edges", "arguments": {"query": {"bodyIds": ["$0.added[0]"], "line": true}}},
+    {"toolName": "plasticity_fillet", "arguments": {"id": "$0.added[0]", "edgeIds": "$3.result.matches[*].id", "radiusMm": 1}}
+  ]}
+  ```
+
+- **Common tools are listed directly** in compact mode: box, cylinder, sphere, boolean, fillet,
+  chamfer, extrude, move, rotate, scale, mirror, delete, undo, redo, and find edges or faces.
+- **The catalog is small.** A query returns names and one-line summaries. To get the input schema,
+  query the exact tool name.
+- **No status call before each edit.** Every edit result has the new revision and the changed bodies.
+- `PLASTICITY_TIMING=1` adds per-phase milliseconds to edit results. `discovery/bench.ts` is the
+  live benchmark; see `discovery/PERF-SUMMARY.md`.
+
 ## Development
 
 ```sh

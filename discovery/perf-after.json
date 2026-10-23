@@ -1,0 +1,136 @@
+{
+  "measuredAt": "2026-10-23T05:22:49.458Z",
+  "repeats": 5,
+  "toolsList": {
+    "compact": {
+      "tools": 29,
+      "bytes": 24336
+    },
+    "full": {
+      "tools": 372,
+      "bytes": 956261
+    }
+  },
+  "runs": [
+    {
+      "bodies": 1,
+      "results": [
+        {
+          "label": "status",
+          "wallMsMedian": 4,
+          "serverPhasesMsMedian": {}
+        },
+        {
+          "label": "body_info",
+          "wallMsMedian": 4,
+          "serverPhasesMsMedian": {}
+        },
+        {
+          "label": "create_box (status read + box with revision)",
+          "wallMsMedian": 38,
+          "serverPhasesMsMedian": {
+            "stateBeforeMs": 4.4,
+            "mutationMs": 17.7,
+            "stateAfterMs": 4,
+            "diffMs": 0.4,
+            "journalMs": 6.4,
+            "totalMs": 32.8
+          }
+        },
+        {
+          "label": "create_box (with known revision)",
+          "wallMsMedian": 47,
+          "serverPhasesMsMedian": {
+            "stateBeforeMs": 5.5,
+            "mutationMs": 19.5,
+            "stateAfterMs": 5.4,
+            "diffMs": 0.4,
+            "journalMs": 6.4,
+            "totalMs": 40.5,
+            "boxOnlyWallMs": 41
+          }
+        },
+        {
+          "label": "undo (status read + undo)",
+          "wallMsMedian": 41,
+          "serverPhasesMsMedian": {
+            "stateBeforeMs": 6.5,
+            "mutationMs": 14,
+            "stateAfterMs": 5.3,
+            "diffMs": 0.4,
+            "journalMs": 6.4,
+            "totalMs": 32.4
+          }
+        },
+        {
+          "label": "batch: box + hole + fillet (one call), then undo",
+          "wallMsMedian": 401,
+          "serverPhasesMsMedian": {
+            "batchCallMs": 227,
+            "responseBytes": 5093
+          }
+        }
+      ]
+    },
+    {
+      "bodies": 20,
+      "results": [
+        {
+          "label": "status",
+          "wallMsMedian": 9,
+          "serverPhasesMsMedian": {}
+        },
+        {
+          "label": "body_info",
+          "wallMsMedian": 10,
+          "serverPhasesMsMedian": {}
+        },
+        {
+          "label": "create_box (status read + box with revision)",
+          "wallMsMedian": 67,
+          "serverPhasesMsMedian": {
+            "stateBeforeMs": 9.3,
+            "mutationMs": 28.3,
+            "stateAfterMs": 9.5,
+            "diffMs": 1,
+            "journalMs": 6.3,
+            "totalMs": 54.8
+          }
+        },
+        {
+          "label": "create_box (with known revision)",
+          "wallMsMedian": 77,
+          "serverPhasesMsMedian": {
+            "stateBeforeMs": 11,
+            "mutationMs": 30.5,
+            "stateAfterMs": 11.8,
+            "diffMs": 1.1,
+            "journalMs": 6.6,
+            "totalMs": 63.3,
+            "boxOnlyWallMs": 64
+          }
+        },
+        {
+          "label": "undo (status read + undo)",
+          "wallMsMedian": 73,
+          "serverPhasesMsMedian": {
+            "stateBeforeMs": 11.8,
+            "mutationMs": 26.3,
+            "stateAfterMs": 11.5,
+            "diffMs": 1.2,
+            "journalMs": 5.9,
+            "totalMs": 59.5
+          }
+        },
+        {
+          "label": "batch: box + hole + fillet (one call), then undo",
+          "wallMsMedian": 670,
+          "serverPhasesMsMedian": {
+            "batchCallMs": 352,
+            "responseBytes": 7721
+          }
+        }
+      ]
+    }
+  ]
+}
