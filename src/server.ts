@@ -1383,6 +1383,8 @@ const edgeQuerySchema = z.object({
   center: pointMatch.optional(),
   boundsMm: bounds.optional(),
   adjacentFaceIds: z.array(z.string().min(1)).max(4096).optional(),
+  // Narrow to a known set, e.g. a boolean's createdEdges, then filter by direction or length.
+  edgeIds: z.array(z.string().min(1)).max(4096).optional(),
 }).strict();
 const referenceIdentitySchema = z.object({
   id: z.string().trim().min(1),
@@ -1974,10 +1976,11 @@ function acceptsRevision(schema: z.ZodType): boolean {
   return false;
 }
 
-const BATCH_REFERENCE = /^\$(\d+)\.(added|removed|regionsAdded)(?:\[(\d+)\])?$/;
+const BATCH_REFERENCE = /^\$(\d+)\.(added|addedSolids|addedSheets|addedWires|removed|regionsAdded)(?:\[(\d+)\])?$/;
 const BATCH_RESULT_REFERENCE = /^\$(\d+)\.result((?:\.[A-Za-z_$][\w$]*|\[\d+\]|\[\*\])*)$/;
 
-type BatchStepRecord = Record<"added" | "removed" | "regionsAdded", ReadonlyArray<number | string>> & { result?: unknown };
+type BatchListKey = "added" | "addedSolids" | "addedSheets" | "addedWires" | "removed" | "regionsAdded";
+type BatchStepRecord = Record<BatchListKey, ReadonlyArray<number | string>> & { result?: unknown };
 
 // Walks ".key", "[i]" and "[*]" (map over an array) through a read-only step's result.
 function readResultPath(value: unknown, path: string, reference: string): unknown {
@@ -2008,7 +2011,7 @@ function resolveBatchReferences(value: unknown, steps: ReadonlyArray<BatchStepRe
     if (!match) return value;
     const step = steps[Number(match[1])];
     if (!step) throw new Error(`${value} refers to a step that has not run`);
-    const list = step[match[2] as "added" | "removed" | "regionsAdded"];
+    const list = step[match[2] as BatchListKey];
     if (match[3] === undefined) return [...list];
     const item = list[Number(match[3])];
     if (item === undefined) throw new Error(`${value} is out of range: step ${match[1]} ${match[2]} has ${list.length}`);
@@ -2507,7 +2510,7 @@ function createServerWithCatalog(
   }).strict();
   rawRegisterTool("plasticity_batch", {
     title: "Run several Plasticity operations in one call",
-    description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all), likewise removed and regionsAdded. Read any step's output with \"$<step>.result.path\" using .key, [i] and [*], e.g. \"$3.result.matches[*].id\" after plasticity_find_edges or \"$2.result.createdEdges[*].edgeId\" after plasticity_boolean. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many. The reply lists what changed (new bodies with bounds); verbose=true adds the full scene summary.",
+    description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all); addedSolids, addedSheets and addedWires filter by type (create_cone adds a Solid and its profile Wire); likewise removed and regionsAdded. Read any step's output with \"$<step>.result.path\" using .key, [i] and [*], e.g. \"$3.result.matches[*].id\" after plasticity_find_edges or \"$2.result.createdEdges[*].edgeId\" after plasticity_boolean. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many. The reply lists what changed (new bodies with bounds); verbose=true adds the full scene summary.",
     inputSchema: batchSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, async (rawInput, extra) => result(await exclusive(async () => {
@@ -2515,7 +2518,7 @@ function createServerWithCatalog(
     await session.ensureConnected?.();
     const start = await session.get().state();
     if (input.revision !== undefined && input.revision !== start.revision) throw new Error(`Stale reference: expected revision ${input.revision}, current revision is ${start.revision}`);
-    const stepChanges: Array<{ added: number[]; removed: number[]; regionsAdded: string[]; result?: unknown }> = [];
+    const stepChanges: Array<BatchStepRecord> = [];
     const completed: Array<Record<string, unknown>> = [];
     let current = start;
     for (const [index, step] of input.steps.entries()) {
@@ -2531,8 +2534,13 @@ function createServerWithCatalog(
         const change = diffScenes(current, after);
         // Every step's result is kept for $<step>.result references (e.g. a boolean's createdEdges).
         const stepResult = parseToolText(response);
+        // Typed lists: some tools add a Solid plus its editable profile Wire (e.g. create_cone).
+        const addedOfType = (type: string) => change.added.filter((body) => body.type === type).map((body) => body.id);
         stepChanges.push({
           added: change.added.map((body) => body.id),
+          addedSolids: addedOfType("Solid"),
+          addedSheets: addedOfType("Sheet"),
+          addedWires: addedOfType("Wire"),
           removed: change.removed.map((body) => body.id),
           regionsAdded: change.regionsAdded.map((region) => region.id),
           result: stepResult,
@@ -2546,6 +2554,7 @@ function createServerWithCatalog(
             removed: stepChanges[index]!.removed,
             regionsAdded: stepChanges[index]!.regionsAdded,
             addedBodies: change.added.map(compactChangedBody),
+            ...(stepResult && typeof stepResult === "object" && "createdEdges" in stepResult ? { createdEdges: (stepResult as { createdEdges: unknown }).createdEdges } : {}),
           });
         current = after;
       } catch (error) {

@@ -5987,5 +5987,32 @@ test("boolean reports created edges that a batch can fillet directly", async () 
   assert.equal(response.isError, undefined, JSON.stringify(response.content));
   const fillet = calls.find((call) => call.op === "fillet");
   assert.deepEqual(fillet?.args.slice(0, 3), [1, ["seam", "trimmed"], 1], "unchanged edge a is excluded; the seam and the trimmed edge are new");
+  const output = parseToolJson(response);
+  assert.deepEqual(output.steps[0].createdEdges.map((edge: { edgeId: string }) => edge.edgeId), ["seam", "trimmed"], "the batch step echoes createdEdges");
+  await close();
+});
+
+test("plasticity_batch filters created bodies by type with addedSolids and addedWires", async () => {
+  let state: RuntimeState = emptyState();
+  const booleans: unknown[][] = [];
+  const body = (id: number, type: string) => ({ id, versionId: id * 10, type, name: null, boundsMm: { min: [0, 0, 0], max: [1, 1, 1] }, faceIds: [], edgeIds: [], faces: [], edges: [] });
+  const operations = {
+    async state() { return state; },
+    // Like create_cone: the profile Wire is listed before the Solid.
+    async createCone() { state = { ...state, revision: "r2", undoDepth: 1, bodies: [...state.bodies, body(10, "Wire"), body(11, "Solid")] as unknown as RuntimeState["bodies"] }; return state; },
+    async boolean(...args: unknown[]) { booleans.push(args); return state; },
+  } as unknown as PlasticityOperations;
+  const fake = {
+    async windows() { return []; }, async connect() { return state; }, get() { return operations; },
+    capabilities() { return { bindings: [], operations: unavailableConstruction() }; },
+    async captureSnapshot() { return {}; }, async changesSince() { return {}; }, async waitForChange() { return {}; },
+  } satisfies SessionLike;
+  const { client, close } = await batchClient(fake);
+  const response = await client.callTool({ name: "plasticity_batch", arguments: { steps: [
+    { toolName: "plasticity_create_cone", arguments: { bottomCenterMm: [0, 0, 0], bottomRadiusMm: 2, topRadiusMm: 1, heightMm: 3, axis: [0, 0, 1], radialDirection: [1, 0, 0] } },
+    { toolName: "plasticity_boolean", arguments: { targetIds: [7], toolIds: ["$0.addedSolids[0]"], operation: "union" } },
+  ] } });
+  assert.equal(response.isError, undefined, JSON.stringify(response.content));
+  assert.deepEqual(booleans[0]?.slice(0, 2), [[7], [11]], "addedSolids skips the profile Wire");
   await close();
 });

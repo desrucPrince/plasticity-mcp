@@ -58,6 +58,7 @@ export interface EdgeQuery {
   center?: PointMatch | undefined;
   boundsMm?: Bounds | undefined;
   adjacentFaceIds?: string[] | undefined;
+  edgeIds?: string[] | undefined;
 }
 
 export type FaceMatch = RuntimeState["bodies"][number]["faces"][number] & { bodyId: number };
@@ -86,6 +87,7 @@ export function findEdges(state: RuntimeState, query: EdgeQuery): EdgeMatch[] {
     .filter((body) => !query.bodyIds || query.bodyIds.includes(body.id))
     .flatMap((body) => body.edges.map((edge) => ({ bodyId: body.id, ...edge })))
     .filter((edge) => {
+      if (query.edgeIds && !query.edgeIds.includes(edge.id)) return false;
       if (query.curveTypes && !query.curveTypes.some((type) => equalType(type, edge.curveType))) return false;
       if (query.line !== undefined && edge.line !== query.line) return false;
       if (query.circle !== undefined && edge.circle !== query.circle) return false;

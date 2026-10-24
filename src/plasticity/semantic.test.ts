@@ -129,3 +129,12 @@ function syncedRegistry(): DatumRegistry {
   registry.sync(state);
   return registry;
 }
+
+test("narrows edge matches to an explicit id set before other filters", () => {
+  const all = findEdges(state, {}).map((match) => match.id);
+  assert.ok(all.includes("vertical"));
+  assert.deepEqual(findEdges(state, { edgeIds: ["vertical"], line: true }).map((match) => match.id), ["vertical"]);
+  assert.deepEqual(findEdges(state, { edgeIds: ["no-such-edge"] }), []);
+  const others = all.filter((id) => id !== "vertical");
+  if (others.length > 0) assert.deepEqual(findEdges(state, { edgeIds: others, direction: { vector: [0, 0, 1], toleranceDeg: 0.1 }, lengthMm: { value: 8, tolerance: 0.01 } }), []);
+});
