@@ -8612,14 +8612,24 @@ export class PlasticityOperations {
     return await this.state();
   }
 
+  // Plasticity's undo/redo wait for a redraw, which never comes while the window is minimized or
+  // on another Space, so the call would hang. Fail fast instead.
+  private async assertWindowVisibleForHistory(): Promise<void> {
+    await this.runtime.cdp("Page.bringToFront");
+    const hidden = await this.runtime.read<boolean>("function () { return document.hidden; }");
+    if (hidden) throw new Error("Plasticity window is hidden (minimized or on another Space); bring it to the front and retry. Undo and redo wait for a redraw and would hang");
+  }
+
   async undo(revision?: string): Promise<RuntimeState> {
     if (revision) await this.assertRevision(revision);
+    await this.assertWindowVisibleForHistory();
     await this.runtime.mutate(`async function () { if (this.executor.isBusy) throw new Error('Plasticity is busy'); await this.undo(); }`, []);
     return await this.state();
   }
 
   async redo(revision?: string): Promise<RuntimeState> {
     if (revision) await this.assertRevision(revision);
+    await this.assertWindowVisibleForHistory();
     await this.runtime.mutate(`async function () { if (this.executor.isBusy) throw new Error('Plasticity is busy'); await this.redo(); }`, []);
     return await this.state();
   }

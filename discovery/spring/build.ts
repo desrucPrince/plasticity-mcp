@@ -1,4 +1,6 @@
-// Print-in-place spring-loaded push button, ~40 x 40 x 14 mm, built through the MCP server.
+// Print-in-place spring-loaded push button for PETG, ~40 x 40 x 18 mm, built through the MCP server.
+// v2 (PETG): 45-degree conical pocket roof so the top plate needs no support, 0.5 mm plunger
+// clearance, and 1.5 mm-tall arms for ~0.5 N/mm. v1 (PLA, flat plate) is in git history.
 // Refuses unless the open document has no bodies (or only the startup cube). Keeps the result,
 // never saves, and does not undo edits it did not make.
 // Usage: PLASTICITY_CDP_URL=http://127.0.0.1:9223 node discovery/spring/build.ts
@@ -25,13 +27,19 @@ async function stage(name: string, run: (notes: string[]) => Promise<void>) {
   try { await run(notes); } catch (error) { ok = false; notes.push(`FAILED: ${String(error).slice(0, 600)}`); }
   stages.push({ stage: name, ms: Math.round(performance.now() - t), calls: calls - c, ok, notes });
   console.log(ok ? "OK  " : "FAIL", name, Math.round(performance.now() - t), "ms", notes.join(" | "));
+  if (!ok && name === "baseline") { await s.close(); throw new Error("baseline check failed; nothing was built"); }
 }
 
 // Dimensions (mm). The spring layer sits on the print bed (z 0..1.2); the plunger rises through a
 // top plate and ends in a 45-degree cone cap, so nothing overhangs flat over air.
-const FRAME = 40, FRAME_H = 10.4, POCKET_R = 15, PLATE_Z = 8.4;
-const PLUNGER_R = 5, HOLE_R = PLUNGER_R + 0.4, PLUNGER_TOP = 12.4, CAP_R = 9, CAP_H = 4;
-const ARM_T = 1.2, ARM_W = 2.0, ARM_SWEEP_DEG = 240, ARMS = 3;
+const ARM_T = 1.5, ARM_W = 2.0, ARM_SWEEP_DEG = 240, ARMS = 3;
+const FRAME = 40, POCKET_R = 15, PLUNGER_R = 5, CLEARANCE = 0.5, HOLE_R = PLUNGER_R + CLEARANCE;
+// The roof cone starts 0.6 mm above the arms at the wall and closes at 45 degrees to the plunger hole.
+const ROOF_Z = ARM_T + 0.6, ROOF_H = POCKET_R - HOLE_R, PLATE_MIN = 1.2;
+const FRAME_H = ROOF_Z + ROOF_H + PLATE_MIN;
+const TRAVEL = 2.0, CAP_R = 9, CAP_H = 4;
+// The 45-degree cap reaches the hole radius CLEARANCE above its base, so it meets the plate after TRAVEL.
+const PLUNGER_TOP = FRAME_H + TRAVEL - CLEARANCE;
 const MOUNT_R = 1.6, MOUNT_AT = 16;
 
 function spiral(startDeg: number) {
@@ -59,14 +67,15 @@ await stage("baseline", async (notes) => {
   notes.push(`blank document ${st.documentToken}, undo depth ${st.undoDepth} left as is`);
 });
 
-await stage("frame: block, pocket, plunger hole, 4 mounting holes", async (notes) => {
+await stage("frame: block, pocket with 45-degree roof, plunger hole, 4 mounting holes", async (notes) => {
   const hole = (x: number, y: number) => ({ toolName: "plasticity_create_cylinder", arguments: { centerMm: [x, y, -1], radiusMm: MOUNT_R, heightMm: FRAME_H + 2 } });
   const out = await batch([
     { toolName: "plasticity_create_box", arguments: { originMm: [-FRAME / 2, -FRAME / 2, 0], sizeMm: [FRAME, FRAME, FRAME_H], name: "Frame" } },
-    { toolName: "plasticity_create_cylinder", arguments: { centerMm: [0, 0, -1], radiusMm: POCKET_R, heightMm: PLATE_Z + 1 } },
-    { toolName: "plasticity_create_cylinder", arguments: { centerMm: [0, 0, PLATE_Z - 1], radiusMm: HOLE_R, heightMm: FRAME_H - PLATE_Z + 2 } },
+    { toolName: "plasticity_create_cylinder", arguments: { centerMm: [0, 0, -1], radiusMm: POCKET_R, heightMm: ROOF_Z + 1 } },
+    { toolName: "plasticity_create_cone", arguments: { bottomCenterMm: [0, 0, ROOF_Z], bottomRadiusMm: POCKET_R, topRadiusMm: HOLE_R, heightMm: ROOF_H, axis: [0, 0, 1], radialDirection: [1, 0, 0] } },
+    { toolName: "plasticity_create_cylinder", arguments: { centerMm: [0, 0, ROOF_Z + ROOF_H - 1], radiusMm: HOLE_R, heightMm: PLATE_MIN + 2 } },
     hole(MOUNT_AT, MOUNT_AT), hole(-MOUNT_AT, MOUNT_AT), hole(-MOUNT_AT, -MOUNT_AT), hole(MOUNT_AT, -MOUNT_AT),
-    { toolName: "plasticity_boolean", arguments: { targetIds: ["$0.added[0]"], toolIds: ["$1.added[0]", "$2.added[0]", "$3.added[0]", "$4.added[0]", "$5.added[0]", "$6.added[0]"], operation: "difference" } },
+    { toolName: "plasticity_boolean", arguments: { targetIds: ["$0.added[0]"], toolIds: ["$1.added[0]", "$2.addedSolids[0]", "$3.added[0]", "$4.added[0]", "$5.added[0]", "$6.added[0]", "$7.added[0]"], operation: "difference" } },
   ]);
   frame = out.steps[0].added[0];
   notes.push(`frame ${frame}`);
@@ -84,7 +93,7 @@ await stage("plunger: column + 45-degree cone cap", async (notes) => {
   notes.push(`plunger ${plunger}`);
 });
 
-await stage("spring arms: 3 control-point spirals extruded 1.2 mm with 2.0 mm wall", async (notes) => {
+await stage("spring arms: 3 control-point spirals extruded ARM_T with ARM_W wall", async (notes) => {
   for (let i = 0; i < ARMS; i++) {
     const out = await batch([
       { toolName: "plasticity_create_control_point_curve", arguments: { pointsMm: spiral((360 / ARMS) * i), closed: false } },
@@ -147,18 +156,30 @@ await stage("views, section and screenshots", async (notes) => {
     await raw("plasticity_screenshot", { path });
     notes.push(path);
   };
+  // Leftover construction curves (section profiles, cone profiles, arm paths) are deleted.
+  const wires = (await status()).bodies.filter((b: { type: string }) => b.type === "Wire").map((b: { id: number }) => b.id);
+  if (wires.length > 0) await batch([{ toolName: "plasticity_delete", arguments: { ids: wires } }]);
+  notes.push(`deleted ${wires.length} construction curves`);
   await shot("isometric", "button-iso");
   await shot("top", "button-top");
-  const section = await batch([{ toolName: "plasticity_create_section_analysis", arguments: { originMm: [0, 0, 0], normal: [0, 1, 0], xDirection: [1, 0, 0], name: "Center section" } }]);
-  await shot("front", "button-section");
-  const sectionId = (await status()).sectionAnalyses?.[0]?.id;
-  if (sectionId !== undefined) await batch([{ toolName: "plasticity_delete_section_analysis", arguments: { id: sectionId } }]);
-  notes.push(`section undo steps ${section.undoSteps}`);
+  // Viewport sections: through the plunger axis, along one arm, and across the spring layer.
+  const sectionShot = async (originMm: number[], normal: number[], xDirection: number[], view: string, name: string) => {
+    // Only remove the section this script made; leave any the user applied.
+    const existing = new Set(((await status()).sectionAnalyses ?? []).map((section: { id: number }) => section.id));
+    await batch([{ toolName: "plasticity_create_section_analysis", arguments: { originMm, normal, xDirection, name } }]);
+    await shot(view, name);
+    for (const section of (await status()).sectionAnalyses ?? []) {
+      if (!existing.has(section.id)) await batch([{ toolName: "plasticity_delete_section_analysis", arguments: { id: section.id } }]);
+    }
+  };
+  await sectionShot([0, 0, 0], [0, 1, 0], [1, 0, 0], "isometric", "section-axis-iso");
+  await sectionShot([0, 0, 0], [0, 1, 0], [1, 0, 0], "front", "section-axis-side");
+  await sectionShot([0, 0, ARM_T / 2], [0, 0, 1], [1, 0, 0], "top", "section-spring-top");
   await shot("isometric", "button-iso-final");
 });
 
 await stage("export 3MF", async (notes) => {
-  const path = resolve(outDir, "push-button.3mf");
+  const path = resolve(outDir, "push-button-petg.3mf");
   await rm(path, { force: true });
   const out = await call("plasticity_export_3mf", { ids: [frame], path, chordToleranceMm: 0.01, angleToleranceDegrees: 10, revision: (await status()).revision });
   notes.push(`${path} ${out.bytes} bytes, ${out.triangles} triangles`);
@@ -174,8 +195,10 @@ const estimate = Object.fromEntries([["PLA", 3500], ["PETG", 2100]].map(([materi
   const E = modulusMpa as number, I = (ARM_W * ARM_T ** 3) / 12, travel = 2;
   const kArm = (12 * E * I) / armLength ** 3;
   const stress = (6 * E * travel * (ARM_T / 2)) / armLength ** 2;
-  return [material, { modulusMpa: E, stiffnessNPerMm: round(kArm * ARMS), forceAt2mmN: round(kArm * ARMS * travel), maxBendingStressMpaAt2mm: round(stress) }];
+  const yieldMpa = material === "PLA" ? 50 : 50;
+  return [material, { modulusMpa: E, stiffnessNPerMm: round(kArm * ARMS), forceAt2mmN: round(kArm * ARMS * travel), maxBendingStressMpaAt2mm: round(stress), stressToYield: round(stress / yieldMpa) }];
 }));
+checks.geometry = JSON.stringify({ FRAME_H: round(FRAME_H), ROOF_Z: round(ROOF_Z), PLUNGER_TOP: round(PLUNGER_TOP), capTop: round(PLUNGER_TOP + CAP_H), clearanceMm: CLEARANCE, armToRoofAtWallMm: round(ROOF_Z - ARM_T), travelMm: TRAVEL });
 checks.estimate = JSON.stringify({ armLengthMm: round(armLength), ...estimate });
 
 const final = await status();

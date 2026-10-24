@@ -6711,3 +6711,22 @@ test("draws a knife curve onto a body with the native knife curve factory", asyn
   await assert.rejects(operations.knifeCurve(2, [[0, 0, 0], [1, 0, 0]], false, false, "r1"), /Knife target must be a current Solid or Sheet/);
   await assert.rejects(operations.knifeCurve(1, [[0, 0, 0]], false, false, "r1"), /at least two points/);
 });
+
+test("undo and redo fail fast while the Plasticity window is hidden", async () => {
+  const calls: string[] = [];
+  let hidden = true;
+  const state: RuntimeState = { targetId: "window-1", title: "Untitled - Plasticity", documentToken: "document-1", revision: "r1", dbVersion: 1, undoDepth: 1, redoDepth: 1, construction: emptyConstruction, regions: [], bodies: [] };
+  const runtime = {
+    async getState() { return state; },
+    async cdp(method: string) { calls.push(method); },
+    async read() { return hidden; },
+    async mutate() { calls.push("mutate"); return {}; },
+  } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+  await assert.rejects(operations.undo("r1"), /window is hidden/);
+  await assert.rejects(operations.redo(), /window is hidden/);
+  assert.equal(calls.includes("mutate"), false, "no native undo is started while hidden");
+  hidden = false;
+  await operations.undo("r1");
+  assert.deepEqual(calls.slice(-2), ["Page.bringToFront", "mutate"]);
+});
