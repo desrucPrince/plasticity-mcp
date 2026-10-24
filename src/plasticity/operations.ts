@@ -8612,25 +8612,38 @@ export class PlasticityOperations {
     return await this.state();
   }
 
-  // Plasticity's undo/redo wait for a redraw, which never comes while the window is minimized or
-  // on another Space, so the call would hang. Fail fast instead.
-  private async assertWindowVisibleForHistory(): Promise<void> {
-    await this.runtime.cdp("Page.bringToFront");
-    const hidden = await this.runtime.read<boolean>("function () { return document.hidden; }");
-    if (hidden) throw new Error("Plasticity window is hidden (minimized or on another Space); bring it to the front and retry. Undo and redo wait for a redraw and would hang");
+  // Plasticity's undo()/redo() promise can stay pending after the history step has already been
+  // applied (seen live, with the window focused or hidden). Treat the step as done once the stack
+  // shrinks and the executor is idle, instead of waiting on the promise.
+  private async stepHistory(direction: "undo" | "redo"): Promise<void> {
+    await this.runtime.mutate(`async function (args) {
+      if (this.executor.isBusy) throw new Error('Plasticity is busy');
+      const stack = () => args.direction === 'undo' ? this.history.undoStack : this.history.redoStack;
+      const before = stack().length;
+      if (before === 0) return 'empty';
+      let settled = false;
+      let failure = null;
+      this[args.direction]().then(() => { settled = true; }, (error) => { failure = error; });
+      const deadline = Date.now() + args.timeoutMs;
+      while (Date.now() < deadline) {
+        if (failure) throw failure;
+        if (settled) return 'resolved';
+        if (stack().length < before && !this.executor.isBusy) return 'applied';
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      throw new Error(args.direction + ' did not complete within ' + args.timeoutMs + ' ms');
+    }`, [], [{ direction, timeoutMs: 10_000 }]);
   }
 
   async undo(revision?: string): Promise<RuntimeState> {
     if (revision) await this.assertRevision(revision);
-    await this.assertWindowVisibleForHistory();
-    await this.runtime.mutate(`async function () { if (this.executor.isBusy) throw new Error('Plasticity is busy'); await this.undo(); }`, []);
+    await this.stepHistory("undo");
     return await this.state();
   }
 
   async redo(revision?: string): Promise<RuntimeState> {
     if (revision) await this.assertRevision(revision);
-    await this.assertWindowVisibleForHistory();
-    await this.runtime.mutate(`async function () { if (this.executor.isBusy) throw new Error('Plasticity is busy'); await this.redo(); }`, []);
+    await this.stepHistory("redo");
     return await this.state();
   }
 

@@ -6712,21 +6712,18 @@ test("draws a knife curve onto a body with the native knife curve factory", asyn
   await assert.rejects(operations.knifeCurve(1, [[0, 0, 0]], false, false, "r1"), /at least two points/);
 });
 
-test("undo and redo fail fast while the Plasticity window is hidden", async () => {
-  const calls: string[] = [];
-  let hidden = true;
+test("undo and redo treat a changed history stack as done instead of awaiting the native promise", async () => {
+  const calls: Array<{ source: string; values: unknown[] }> = [];
   const state: RuntimeState = { targetId: "window-1", title: "Untitled - Plasticity", documentToken: "document-1", revision: "r1", dbVersion: 1, undoDepth: 1, redoDepth: 1, construction: emptyConstruction, regions: [], bodies: [] };
   const runtime = {
     async getState() { return state; },
-    async cdp(method: string) { calls.push(method); },
-    async read() { return hidden; },
-    async mutate() { calls.push("mutate"); return {}; },
+    async mutate(source: string, _bindings: string[], values: unknown[]) { calls.push({ source, values }); return "applied"; },
   } as unknown as PlasticityRuntime;
   const operations = new PlasticityOperations(runtime);
-  await assert.rejects(operations.undo("r1"), /window is hidden/);
-  await assert.rejects(operations.redo(), /window is hidden/);
-  assert.equal(calls.includes("mutate"), false, "no native undo is started while hidden");
-  hidden = false;
   await operations.undo("r1");
-  assert.deepEqual(calls.slice(-2), ["Page.bringToFront", "mutate"]);
+  await operations.redo();
+  assert.deepEqual(calls.map((call) => (call.values[0] as { direction: string }).direction), ["undo", "redo"]);
+  assert.match(calls[0]!.source, /stack\(\)\.length < before && !this\.executor\.isBusy/, "done when the stack shrinks and the executor is idle");
+  assert.match(calls[0]!.source, /did not complete within/, "a bounded wait, not an unbounded await");
+  await assert.rejects(operations.undo("stale"), /Stale reference/);
 });

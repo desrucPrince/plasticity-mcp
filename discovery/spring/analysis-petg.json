@@ -1,0 +1,271 @@
+{
+  "bodyId": 51,
+  "boundsMm": {
+    "min": [
+      -20,
+      -19.999999999999996,
+      -0.23432167771170925
+    ],
+    "max": [
+      20,
+      19.999999999999996,
+      18.300024999999998
+    ]
+  },
+  "validity": {
+    "documentToken": "01a16c84-9b17-7385-9795-bca827034281",
+    "revision": "r27.a7b9252d9c01032a",
+    "measurementSource": "native-brep",
+    "bodies": [
+      {
+        "id": 51,
+        "versionId": 104,
+        "type": "Solid",
+        "name": "Frame",
+        "measurementSource": "native-brep",
+        "faceCount": 40,
+        "edgeCount": 109,
+        "boundaryEdgeIds": [],
+        "closed": true,
+        "nativeCheckCodes": [],
+        "nativeValid": true,
+        "printableSolid": true
+      }
+    ]
+  },
+  "properties": {
+    "sessionId": "6278194b-3df9-4fdd-996a-a65d77c58123",
+    "documentToken": "01a16c84-9b17-7385-9795-bca827034281",
+    "revision": "r27.a7b9252d9c01032a",
+    "source": "native-brep-mass-properties",
+    "bodies": [
+      {
+        "id": 51,
+        "versionId": 104,
+        "name": "Frame",
+        "volumeMm3": 17578.310938456427,
+        "surfaceAreaMm2": 8122.986607040721,
+        "volumeCentroidMm": [
+          0.0002654911124661476,
+          0.0004454536655277951,
+          7.177885756029227
+        ],
+        "nativeCheckCodes": []
+      }
+    ],
+    "totals": {
+      "volumeMm3": 17578.310938456427,
+      "surfaceAreaMm2": 8122.986607040721,
+      "volumeWeightedCentroidMm": [
+        0.0002654911124661476,
+        0.0004454536655277951,
+        7.177885756029227
+      ]
+    }
+  },
+  "planes": {
+    "verticalThroughAxis": {
+      "originMm": [
+        0,
+        0,
+        0
+      ],
+      "normal": [
+        0,
+        1,
+        0
+      ],
+      "xDirection": [
+        1,
+        0,
+        0
+      ]
+    },
+    "verticalThroughArm": {
+      "originMm": [
+        0,
+        0,
+        0
+      ],
+      "normal": [
+        -0.49999999999999994,
+        0.8660254037844387,
+        0
+      ],
+      "xDirection": [
+        0.8660254037844387,
+        0.49999999999999994,
+        0
+      ]
+    },
+    "horizontalMidSpring": {
+      "originMm": [
+        0,
+        0,
+        0.75
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "xDirection": [
+        1,
+        0,
+        0
+      ]
+    },
+    "horizontalThroughPlate": {
+      "originMm": [
+        0,
+        0,
+        12.2
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "xDirection": [
+        1,
+        0,
+        0
+      ]
+    }
+  },
+  "sections": {
+    "status": "complete",
+    "binding": {
+      "sessionId": "6278194b-3df9-4fdd-996a-a65d77c58123",
+      "documentToken": "01a16c84-9b17-7385-9795-bca827034281",
+      "revision": "r27.a7b9252d9c01032a",
+      "bodyId": 51
+    },
+    "sections": [
+      {
+        "status": "unsupported",
+        "binding": {
+          "sessionId": "6278194b-3df9-4fdd-996a-a65d77c58123",
+          "documentToken": "01a16c84-9b17-7385-9795-bca827034281",
+          "revision": "r27.a7b9252d9c01032a",
+          "bodyId": 51,
+          "plane": {
+            "originMm": [
+              0,
+              0,
+              0
+            ],
+            "normal": [
+              0,
+              1,
+              0
+            ],
+            "xDirection": [
+              1,
+              0,
+              0
+            ]
+          },
+          "topologySignature": "unavailable"
+        },
+        "source": "native-brep-temporary-section",
+        "reasons": [
+          "invalid-section-boundary"
+        ]
+      },
+      {
+        "status": "unsupported",
+        "binding": {
+          "sessionId": "6278194b-3df9-4fdd-996a-a65d77c58123",
+          "documentToken": "01a16c84-9b17-7385-9795-bca827034281",
+          "revision": "r27.a7b9252d9c01032a",
+          "bodyId": 51,
+          "plane": {
+            "originMm": [
+              0,
+              0,
+              0
+            ],
+            "normal": [
+              -0.49999999999999994,
+              0.8660254037844387,
+              0
+            ],
+            "xDirection": [
+              0.8660254037844387,
+              0.49999999999999994,
+              0
+            ]
+          },
+          "topologySignature": "unavailable"
+        },
+        "source": "native-brep-temporary-section",
+        "reasons": [
+          "invalid-section-boundary"
+        ]
+      },
+      {
+        "status": "unsupported",
+        "binding": {
+          "sessionId": "6278194b-3df9-4fdd-996a-a65d77c58123",
+          "documentToken": "01a16c84-9b17-7385-9795-bca827034281",
+          "revision": "r27.a7b9252d9c01032a",
+          "bodyId": 51,
+          "plane": {
+            "originMm": [
+              0,
+              0,
+              0.75
+            ],
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "xDirection": [
+              1,
+              0,
+              0
+            ]
+          },
+          "topologySignature": "unavailable"
+        },
+        "source": "native-brep-temporary-section",
+        "reasons": [
+          "invalid-section-boundary"
+        ]
+      },
+      {
+        "status": "unsupported",
+        "binding": {
+          "sessionId": "6278194b-3df9-4fdd-996a-a65d77c58123",
+          "documentToken": "01a16c84-9b17-7385-9795-bca827034281",
+          "revision": "r27.a7b9252d9c01032a",
+          "bodyId": 51,
+          "plane": {
+            "originMm": [
+              0,
+              0,
+              12.2
+            ],
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "xDirection": [
+              1,
+              0,
+              0
+            ]
+          },
+          "topologySignature": "unavailable"
+        },
+        "source": "native-brep-temporary-section",
+        "reasons": [
+          "invalid-section-boundary"
+        ]
+      }
+    ]
+  }
+}

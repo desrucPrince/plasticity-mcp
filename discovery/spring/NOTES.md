@@ -1,5 +1,56 @@
 # Print-in-place spring push button
 
+## v2 for PETG (current, in the document)
+
+**Ready to print in PETG: yes**, with the settings below. It is one closed solid that passes
+Plasticity's native check (`analysis-petg.json`: closed, valid, printable). It sits flat on the bed
+at z = 0, and nothing floats. File: `push-button-petg.3mf`.
+
+What changed from v1, and why:
+
+| Issue in v1 | v2 |
+|---|---|
+| The 2 mm top plate was held only at the outer wall, so its inner edge overhung ~10 mm | The pocket roof is a 45° cone from the wall (z 2.1) to the plunger hole (z 11.6), so it prints without support |
+| 0.4 mm plunger clearance, tight for PETG | 0.5 mm radial clearance |
+| PETG spring too soft (0.27 N/mm) | Arms 1.5 mm in Z (were 1.2); still 2.0 mm wide (5 perimeters at 0.4 mm) |
+| Leftover construction curves | Deleted; the document holds only the part |
+
+Geometry: frame 40 × 40 × 12.8 mm; cap top at 18.3 mm; 0.6 mm between the arms and the roof at the
+wall (more toward the center); about 3 mm between neighbouring arm turns; 2.0 mm of travel to the
+stop; 17.6 cm³ of material.
+
+Spring estimate (same guided-beam model as below):
+
+| Material | Stiffness | Force at 2 mm | Peak stress at 2 mm | Stress / yield (~50 MPa) |
+|---|---|---|---|---|
+| PETG (2.1 GPa) | 0.52 N/mm | 1.05 N | 10.1 MPa | 0.20 |
+| PLA (3.5 GPa) | 0.87 N/mm | 1.75 N | 16.8 MPa | 0.34 |
+
+PETG print settings: 0.4 mm nozzle, 0.2 mm layers, no supports, 4–5 walls. For the first layer, use
+no brim inside the pocket, and keep elephant-foot compensation on so the arms do not fuse to the
+plunger or the wall. Mount it over a hole of at least Ø11 mm so the plunger can travel 2 mm.
+
+Cross-sections (Plasticity viewport section, the cut face toward the camera): `section-axis-iso.png`
+and `section-axis-side.png` (through the plunger axis), and `section-spring-top.png` (across the
+spring layer). The repo's exact-section tool returned "unsupported" for every plane on this part. It
+handles only simple line and arc boundaries, so the gaps above are from the design values, and the
+images confirm them.
+
+Live fixes made while doing this:
+- **Undo hung.** Plasticity's `undo()` promise can stay pending after the step has applied. Undo and
+  redo now finish when the history stack changes. 30 steps took 4.6 s; before the fix it hung.
+- **The launcher disables background throttling** (`disable-renderer-backgrounding`,
+  `disable-background-timer-throttling`, `disable-backgrounding-occluded-windows`). This takes effect
+  the next time Plasticity is started with the Plasticity MCP app.
+- **Section shots.** Plasticity allows one section at a time, so the build saves the user's section,
+  takes its shots, and restores it. It waits 1.5 s before each capture so the clipping finishes
+  drawing. The section normal points at the half that is removed.
+- **The build stops if the baseline check fails**, so it can no longer build into a non-empty document.
+
+---
+
+## v1 (PLA, superseded)
+
 Built by `build.ts` through the MCP server in a new blank document. The result is kept, and nothing
 was saved. Run it with Plasticity open on an empty document:
 

@@ -33,6 +33,11 @@ export async function unlockMainProcess(client: InspectorClient, rendererPort: n
         if (name === 'remote-debugging-port' || name === 'remote-debugging-pipe') return;
         return originalRemoveSwitch(name);
       };
+      // Keep the renderer running at full speed when Plasticity is unfocused, occluded or minimized,
+      // so MCP edits do not stall in the background.
+      commandLine.appendSwitch('disable-renderer-backgrounding');
+      commandLine.appendSwitch('disable-background-timer-throttling');
+      commandLine.appendSwitch('disable-backgrounding-occluded-windows');
       commandLine.appendSwitch('remote-debugging-address', '127.0.0.1');
       commandLine.appendSwitch('remote-debugging-port', '${rendererPort}');
       return { patched: true, port: commandLine.getSwitchValue('remote-debugging-port') };

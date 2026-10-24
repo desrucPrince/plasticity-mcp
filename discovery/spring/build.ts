@@ -22,7 +22,10 @@ const status = () => raw("plasticity_status");
 type Stage = { stage: string; ms: number; calls: number; ok: boolean; notes: string[] };
 const stages: Stage[] = [];
 const checks: Record<string, string> = {};
+// SPRING_ONLY_STAGE=views reruns one stage (by name prefix) on an already-built part.
+const onlyStage = process.env.SPRING_ONLY_STAGE;
 async function stage(name: string, run: (notes: string[]) => Promise<void>) {
+  if (onlyStage && !name.startsWith(onlyStage)) return;
   const t = performance.now(); const c = calls; const notes: string[] = []; let ok = true;
   try { await run(notes); } catch (error) { ok = false; notes.push(`FAILED: ${String(error).slice(0, 600)}`); }
   stages.push({ stage: name, ms: Math.round(performance.now() - t), calls: calls - c, ok, notes });
@@ -162,19 +165,30 @@ await stage("views, section and screenshots", async (notes) => {
   notes.push(`deleted ${wires.length} construction curves`);
   await shot("isometric", "button-iso");
   await shot("top", "button-top");
-  // Viewport sections: through the plunger axis, along one arm, and across the spring layer.
+  // Viewport sections: Plasticity allows one section at a time, so an active section the user set
+  // is saved, replaced for these shots, and restored exactly afterwards.
+  const active = ((await status()).sectionAnalyses ?? []) as Array<{ id: number; originMm: number[]; normal: number[]; name: string | null }>;
+  for (const section of active) await batch([{ toolName: "plasticity_delete_section_analysis", arguments: { id: section.id } }]);
   const sectionShot = async (originMm: number[], normal: number[], xDirection: number[], view: string, name: string) => {
-    // Only remove the section this script made; leave any the user applied.
-    const existing = new Set(((await status()).sectionAnalyses ?? []).map((section: { id: number }) => section.id));
     await batch([{ toolName: "plasticity_create_section_analysis", arguments: { originMm, normal, xDirection, name } }]);
+    await call("plasticity_set_view", { view, fit: true });
+    // Clipping of large faces lags the camera move; capturing at once showed the cut only on some faces.
+    await new Promise((settle) => setTimeout(settle, 1500));
     await shot(view, name);
-    for (const section of (await status()).sectionAnalyses ?? []) {
-      if (!existing.has(section.id)) await batch([{ toolName: "plasticity_delete_section_analysis", arguments: { id: section.id } }]);
-    }
+    for (const section of (await status()).sectionAnalyses ?? []) await batch([{ toolName: "plasticity_delete_section_analysis", arguments: { id: section.id } }]);
   };
-  await sectionShot([0, 0, 0], [0, 1, 0], [1, 0, 0], "isometric", "section-axis-iso");
-  await sectionShot([0, 0, 0], [0, 1, 0], [1, 0, 0], "front", "section-axis-side");
-  await sectionShot([0, 0, ARM_T / 2], [0, 0, 1], [1, 0, 0], "top", "section-spring-top");
+  try {
+    // The normal points at the half that is clipped away, so -Y leaves the cut face toward the camera.
+    await sectionShot([0, 0, 0], [0, -1, 0], [1, 0, 0], "isometric", "section-axis-iso");
+    await sectionShot([0, 0, 0], [0, -1, 0], [1, 0, 0], "front", "section-axis-side");
+    await sectionShot([0, 0, ARM_T / 2], [0, 0, 1], [1, 0, 0], "top", "section-spring-top");
+  } finally {
+    for (const section of active) {
+      const x = Math.abs(section.normal[0]!) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+      await batch([{ toolName: "plasticity_create_section_analysis", arguments: { originMm: section.originMm, normal: section.normal, xDirection: x, ...(section.name ? { name: section.name } : {}) } }]);
+      notes.push(`restored the user's section at ${JSON.stringify(section.originMm)}`);
+    }
+  }
   await shot("isometric", "button-iso-final");
 });
 

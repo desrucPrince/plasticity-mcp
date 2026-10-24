@@ -6,18 +6,20 @@ import { discoverOrLaunch, RUNNING_WITHOUT_CDP_MESSAGE, unlockMainProcess, type 
 test("unlocks renderer CDP before resuming Plasticity main", async () => {
   const calls: string[] = [];
   let paused: ((params: unknown) => void) | undefined;
+  let expression = "";
   const client: InspectorClient = {
     on(method, listener) {
       assert.equal(method, "Debugger.paused");
       paused = listener;
       return () => {};
     },
-    async send(method) {
+    async send(method, params) {
       calls.push(method);
       if (method === "Runtime.runIfWaitingForDebugger") {
         paused?.({ callFrames: [{ callFrameId: "frame-1" }] });
       }
       if (method === "Debugger.evaluateOnCallFrame") {
+        expression = String((params as { expression?: string } | undefined)?.expression ?? "");
         return { result: { value: { patched: true, port: "9223" } } };
       }
       return {};
@@ -33,6 +35,9 @@ test("unlocks renderer CDP before resuming Plasticity main", async () => {
     "Debugger.evaluateOnCallFrame",
     "Debugger.resume",
   ]);
+  for (const flag of ["disable-renderer-backgrounding", "disable-background-timer-throttling", "disable-backgrounding-occluded-windows"]) {
+    assert.match(expression, new RegExp(`appendSwitch\\('${flag}'\\)`), `${flag} is set before the renderer starts`);
+  }
 });
 
 const target = { id: "t1", title: "Untitled - Plasticity", url: "file:///app_window/index.html", webSocketDebuggerUrl: "ws://127.0.0.1:9223/devtools/page/t1" };

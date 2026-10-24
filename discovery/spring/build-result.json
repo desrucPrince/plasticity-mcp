@@ -1,111 +1,44 @@
 {
-  "builtAt": "2026-10-24T06:15:39.783Z",
-  "totalMs": 4086,
-  "mcpCalls": 30,
+  "builtAt": "2026-10-24T07:10:06.203Z",
+  "totalMs": 8214,
+  "mcpCalls": 31,
   "stages": [
     {
-      "stage": "baseline",
-      "ms": 2,
-      "calls": 1,
-      "ok": true,
-      "notes": [
-        "blank document 01a16c84-9b17-7385-9795-bca827034281, undo depth 2 left as is"
-      ]
-    },
-    {
-      "stage": "frame: block, pocket, plunger hole, 4 mounting holes",
-      "ms": 309,
-      "calls": 1,
-      "ok": true,
-      "notes": [
-        "frame 21"
-      ]
-    },
-    {
-      "stage": "plunger: column + 45-degree cone cap",
-      "ms": 158,
-      "calls": 1,
-      "ok": true,
-      "notes": [
-        "plunger 28"
-      ]
-    },
-    {
-      "stage": "spring arms: 3 control-point spirals extruded 1.2 mm with 2.0 mm wall",
-      "ms": 400,
-      "calls": 3,
-      "ok": true,
-      "notes": [
-        "arm 32 z -0.23429196464067503..1.434291964640675",
-        "arm 34 z -0.23432167771170903..1.4343216777117094",
-        "arm 36 z -0.23431851621255498..1.4343185162125551"
-      ]
-    },
-    {
-      "stage": "join arms to frame and plunger, fillet the roots from createdEdges",
-      "ms": 332,
-      "calls": 2,
-      "ok": true,
-      "notes": [
-        "worked: 48 created edges reported",
-        "filleted 12 root edges at r0.8"
-      ]
-    },
-    {
-      "stage": "tool checks on a scratch box: cut keep larger, then undo steps",
-      "ms": 373,
-      "calls": 6,
-      "ok": true,
-      "notes": [
-        "worked: one part left, the 14 mm side",
-        "worked: one call undid 4 steps",
-        "box batch undoSteps 4"
-      ]
-    },
-    {
       "stage": "views, section and screenshots",
-      "ms": 1437,
-      "calls": 11,
+      "ms": 7287,
+      "calls": 28,
       "ok": true,
       "notes": [
+        "deleted 0 construction curves",
         "/Users/neocortez/Projects/plasticity-mcp/discovery/spring/button-iso.png",
         "/Users/neocortez/Projects/plasticity-mcp/discovery/spring/button-top.png",
-        "/Users/neocortez/Projects/plasticity-mcp/discovery/spring/button-section.png",
-        "section undo steps 0",
+        "/Users/neocortez/Projects/plasticity-mcp/discovery/spring/section-axis-iso.png",
+        "/Users/neocortez/Projects/plasticity-mcp/discovery/spring/section-axis-side.png",
+        "/Users/neocortez/Projects/plasticity-mcp/discovery/spring/section-spring-top.png",
+        "restored the user's section at [0,9.105766854690316,5.2]",
         "/Users/neocortez/Projects/plasticity-mcp/discovery/spring/button-iso-final.png"
-      ]
-    },
-    {
-      "stage": "export 3MF",
-      "ms": 205,
-      "calls": 2,
-      "ok": true,
-      "notes": [
-        "/Users/neocortez/Projects/plasticity-mcp/discovery/spring/push-button.3mf 49710 bytes, 3966 triangles"
       ]
     }
   ],
   "checks": {
-    "createdEdges": "worked: 48 created edges reported",
-    "cutKeepLarger": "worked: one part left, the 14 mm side",
-    "undoSteps": "worked: one call undid 4 steps",
-    "estimate": "{\"armLengthMm\":43.295,\"PLA\":{\"modulusMpa\":3500,\"stiffnessNPerMm\":0.447,\"forceAt2mmN\":0.894,\"maxBendingStressMpaAt2mm\":13.444},\"PETG\":{\"modulusMpa\":2100,\"stiffnessNPerMm\":0.268,\"forceAt2mmN\":0.537,\"maxBendingStressMpaAt2mm\":8.066}}"
+    "geometry": "{\"FRAME_H\":12.8,\"ROOF_Z\":2.1,\"PLUNGER_TOP\":14.3,\"capTop\":18.3,\"clearanceMm\":0.5,\"armToRoofAtWallMm\":0.6,\"travelMm\":2}",
+    "estimate": "{\"armLengthMm\":43.295,\"PLA\":{\"modulusMpa\":3500,\"stiffnessNPerMm\":0.873,\"forceAt2mmN\":1.747,\"maxBendingStressMpaAt2mm\":16.805,\"stressToYield\":0.336},\"PETG\":{\"modulusMpa\":2100,\"stiffnessNPerMm\":0.524,\"forceAt2mmN\":1.048,\"maxBendingStressMpaAt2mm\":10.083,\"stressToYield\":0.202}}"
   },
   "bodies": [
     {
-      "id": 21,
+      "id": 51,
       "type": "Solid",
       "name": "Frame",
       "boundsMm": {
         "min": [
           -20,
-          -20,
-          -0.23432167771170903
+          -19.999999999999996,
+          -0.23432167771170925
         ],
         "max": [
           20,
-          20,
-          16.400025
+          19.999999999999996,
+          18.300024999999998
         ]
       },
       "faces": 40
