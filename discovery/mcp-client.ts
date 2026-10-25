@@ -8,6 +8,11 @@ export async function openSession(options: { full?: boolean; env?: Record<string
   const transport = new StdioClientTransport({ command: process.execPath, args, env, stderr: "inherit" });
   const client = new Client({ name: "discovery", version: "0" });
   await client.connect(transport);
+  // A crashing script must not leave its server child running (it would hold the window lock and stdio pipes).
+  const stop = () => { try { void client.close(); transport.close?.(); } catch {} };
+  process.once("exit", stop);
+  process.once("uncaughtException", (error) => { console.error(error); stop(); process.exit(1); });
+  process.once("unhandledRejection", (error) => { console.error(error); stop(); process.exit(1); });
   const raw = async (name: string, args: Record<string, unknown> = {}) => {
     const response = await client.callTool({ name, arguments: args });
     const text = (response.content as { type: string; text?: string }[]).find((part) => part.type === "text")?.text ?? "";

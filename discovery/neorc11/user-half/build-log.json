@@ -1,0 +1,20 @@
+{
+ "split": {
+  "ok": true,
+  "ms": 689,
+  "notes": [
+   "cut body at X=0 (faces 37 -> 30)",
+   "centre faces on X=0: 1 (Plane x -5.55e-14..2.22e-13); faces reaching X<0: 0; face bounds minX -5.551115123125783e-14",
+   "validate: [{\"id\":7,\"versionId\":34,\"type\":\"Solid\",\"name\":\"Solid.001\",\"measurementSource\":\"native-brep\",\"faceCount\":30,\"edgeCount\":79,\"boundaryEdgeIds\":[],\"closed\":true,\"nativeCheckCodes\":[],\"nativeValid\":true,\"printableSolid\":true},{\"id\":6,\"versionId\":6,\"type\":\"Solid\",\"name\":\"Solid.003\",\"measurementSource\":\"native-brep\",\"faceCount\":38,\"edgeCount\":92,\"boundaryEdgeIds\":[],\"closed\":true,\"nativeCheckCodes\":[],\"nativeValid\":true,\"printableSolid\":true}]",
+   "instances: 0<-7 scale -1,1,1; 1<-6 scale -1,1,1"
+  ]
+ },
+ "link-test": {
+  "ok": true,
+  "ms": 1156,
+  "notes": [
+   "pod z 1239.9999999999998 -> moved 1639.9999999999998 -> undone 1239.9999999999998; screenshot failed: Error: plasticity_screenshot: Plasticity renderer is hidden; activate Plasticity and retry the screenshot",
+   "mirrored pod instance linked to source: true"
+  ]
+ }
+}
