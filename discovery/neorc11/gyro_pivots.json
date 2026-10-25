@@ -1,0 +1,66 @@
+{
+ "units": "millimetres, Z up, nose +Y (Plasticity world); Blender scene uses metres (x 0.001)",
+ "centre": [
+  0,
+  -4250,
+  3280
+ ],
+ "parts": {
+  "rc11_Gyro_OuterGimbal": {
+   "pivot": [
+    0,
+    -4250,
+    3280
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "note": "pivots in the trunnions; tilted 18 deg about X at rest"
+  },
+  "rc11_Gyro_InnerGimbal": {
+   "pivot": [
+    0,
+    -4250,
+    3280
+   ],
+   "axis": [
+    0,
+    0.951057,
+    0.309017
+   ],
+   "note": "the outer's local Y; inner tilted 22 deg about it at rest; child of the outer"
+  },
+  "rc11_Gyro_Rotor": {
+   "pivot": [
+    0,
+    -4250,
+    3280
+   ],
+   "axis": [
+    0.374607,
+    -0.286516,
+    0.881804
+   ],
+   "note": "spin axis (rotor, rim light, core, spokes); child of the inner"
+  }
+ },
+ "restNormals": {
+  "inner": [
+   0.374607,
+   -0.286516,
+   0.881804
+  ],
+  "rotor": [
+   0.374607,
+   -0.286516,
+   0.881804
+  ]
+ },
+ "animation": {
+  "rotorRps": 2,
+  "innerPrecessionDegPerSec": 12,
+  "outerPrecessionDegPerSec": 6
+ }
+}

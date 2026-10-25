@@ -9912,6 +9912,42 @@ export class PlasticityOperations {
     }`, [{ view, fit }]);
   }
 
+  // Point the viewport camera from eye toward target (millimetres) and frame a sphere of frameRadiusMm around the
+  // target. View only: no document or history change.
+  async setCamera(eyeMm: Vector3, targetMm: Vector3, frameRadiusMm: number): Promise<unknown> {
+    if (eyeMm.every((value, index) => Math.abs(value - targetMm[index]!) < 1e-6)) throw new Error("Camera eye and target must differ");
+    if (!(frameRadiusMm > 0)) throw new Error("Frame radius must be positive");
+    return await this.runtime.read(`async function (args) {
+      if (this.executor.isBusy) throw new Error('Plasticity is busy');
+      const viewport = Array.from(this.viewports)[0];
+      if (!viewport) throw new Error('Plasticity viewport is unavailable');
+      const camera = viewport.camera;
+      const controls = viewport.orbitControls;
+      const target = camera.target.clone().fromArray(args.target);
+      const eye = camera.target.clone().fromArray(args.eye);
+      const aim = camera.clone();
+      aim.position.copy(eye);
+      aim.up.set(0, 0, 1);
+      aim.lookAt(target);
+      controls.setQuaternion(aim.quaternion);
+      controls.target.copy(target);
+      controls.targetEnd.copy(target);
+      controls.focalOffset.set(0, 0, 0);
+      controls.focalOffsetEnd.set(0, 0, 0);
+      controls.radius = controls.radiusEnd = eye.distanceTo(target);
+      const width = camera.orthographic.right - camera.orthographic.left;
+      const height = camera.orthographic.top - camera.orthographic.bottom;
+      const zoom = Math.min(width, height) / (args.radius * 2);
+      controls.zoom = controls.zoomEnd = zoom;
+      camera.zoom = zoom;
+      controls.setNeedsUpdate();
+      controls.update(1 / 60);
+      camera.updateProjectionMatrix();
+      viewport.setNeedsRender();
+      return { position: camera.position.toArray(), target: camera.target.toArray(), mode: camera.mode };
+    }`, [{ eye: toMeters(eyeMm), target: toMeters(targetMm), radius: millimetersToMeters(frameRadiusMm) }]);
+  }
+
   private async assertCurveControlPointReferences(points: CurveControlPointReference[], revision: string): Promise<{
     documentToken: string;
     revision: string;

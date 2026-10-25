@@ -1673,6 +1673,24 @@ test("creates a mirrored linked instance with a negative scale about the mirror 
   assert.equal(calls.length, 2);
 });
 
+test("set camera aims the viewport and frames a radius, without touching the document", async () => {
+  const reads: Array<{ source: string; values: unknown[] }> = [];
+  let mutations = 0;
+  const runtime = {
+    async read(source: string, values: unknown[]) { reads.push({ source, values }); return {}; },
+    async mutate() { mutations += 1; return {}; },
+  } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+
+  await operations.setCamera([7000, -13000, 9000], [0, -4250, 3280], 1500);
+
+  assert.deepEqual(reads[0]?.values, [{ eye: [7, -13, 9], target: [0, -4.25, 3.28], radius: 1.5 }]);
+  assert.match(reads[0]?.source ?? "", /controls\.setQuaternion\(aim\.quaternion\)/);
+  assert.equal(mutations, 0);
+  await assert.rejects(operations.setCamera([1, 2, 3], [1, 2, 3], 10), /must differ/);
+  await assert.rejects(operations.setCamera([0, 0, 1], [0, 0, 0], 0), /positive/);
+});
+
 test("mirror is a plain copy: it turns off the native cut and union", async () => {
   const calls: Array<{ source: string; bindings: string[]; values: unknown[] }> = [];
   const state: RuntimeState = { targetId: "window-1", title: "Untitled - Plasticity", documentToken: "document-1", revision: "current-revision", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [] };

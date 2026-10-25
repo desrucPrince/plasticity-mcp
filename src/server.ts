@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createHash, randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { execFile } from "node:child_process";
 import { createReadStream } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
 import { extname, resolve } from "node:path";
@@ -30,6 +31,7 @@ import type { CadBinding } from "./strength/contracts.ts";
 import { registerStrengthTools, type StrengthDependencies } from "./strength/mcp.ts";
 import { StrengthStore } from "./strength/store.ts";
 import { FemReportStore } from "./strength/fem/fem-report-store.ts";
+import { Hud, hudScript } from "./hud.ts";
 import { CohesiveReportStore } from "./strength/fem/cohesive-report-store.ts";
 import { analyzeStaticSolid } from "./strength/fem/analyze-static.ts";
 import { analyzeCohesiveInterface, type CohesiveAnalysisRequest } from "./strength/fem/cohesive-analysis.ts";
@@ -1957,6 +1959,9 @@ export function strengthDependenciesForSession(
   };
 }
 
+// View-only tools: they change no geometry, so the activity badge ignores them.
+const HUD_UNTRACKED_TOOLS = new Set(["plasticity_screenshot", "plasticity_set_view", "plasticity_set_camera", "plasticity_capture_snapshot", "plasticity_save_copy"]);
+
 export function createServer(
   session?: SessionLike,
   suppliedStrength?: StrengthDependencies,
@@ -2114,6 +2119,23 @@ function createServerWithCatalog(
     return registered;
   };
   const registerTool = server.registerTool.bind(server) as unknown as RegisterTool;
+  // Activity badge in the Plasticity window (PLASTICITY_HUD=0 disables it). Drawing never blocks or fails a tool.
+  let hudDrawing = false;
+  const hud = new Hud(async (frame) => {
+    if (hudDrawing) return;
+    let operations: PlasticityOperations;
+    try { operations = session.get(); } catch { return; }
+    hudDrawing = true;
+    try { await operations.runtime.drawOverlay(hudScript(frame)); } finally { hudDrawing = false; }
+  }, {
+    enabled: process.env.PLASTICITY_HUD !== "0",
+    tickMs: 1_000,
+    onLongJobEnd: (op, ms, error) => {
+      if (process.platform !== "darwin" || process.env.PLASTICITY_HUD_NOTIFY === "0") return;
+      const text = error ? `${op} failed after ${Math.round(ms / 1000)}s: ${error.slice(0, 120)}` : `${op} finished in ${Math.round(ms / 1000)}s`;
+      execFile("osascript", ["-e", `display notification ${JSON.stringify(text)} with title "Plasticity MCP"`], () => undefined);
+    },
+  });
   const plasticityCallSchema = z.object({
     toolName: z.string().trim().min(1).max(128).default("catalog"),
     arguments: z.record(z.string(), z.unknown()).default({}),
@@ -2228,11 +2250,20 @@ function createServerWithCatalog(
         },
       }).catch(() => undefined);
     }, 10_000);
+    const tracked = !readOnly && !HUD_UNTRACKED_TOOLS.has(name);
+    if (tracked) hud.start(name.replace(/^plasticity_/, ""));
     try {
-      return result(await exclusive(async () => {
+      const value = result(await exclusive(async () => {
         if (!CONNECTION_TOOLS.has(name)) await session.ensureConnected?.();
-        return await handler(schema.parse(input) as z.output<T>, extra);
+        if (name !== "plasticity_screenshot") return await handler(schema.parse(input) as z.output<T>, extra);
+        await hud.hideNow(); // keep the badge out of the picture
+        try { return await handler(schema.parse(input) as z.output<T>, extra); } finally { hud.tick(); }
       }));
+      if (tracked) hud.finish();
+      return value;
+    } catch (error) {
+      if (tracked) hud.fail(error);
+      throw error;
     } finally {
       if (progressTimer) clearInterval(progressTimer);
     }
@@ -2515,6 +2546,17 @@ function createServerWithCatalog(
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, async (rawInput, extra) => result(await exclusive(async () => {
     const input = batchSchema.parse(rawInput);
+    hud.start("batch");
+    try {
+      const value = await runBatch(input, extra);
+      hud.finish();
+      return value;
+    } catch (error) {
+      hud.fail(error);
+      throw error;
+    }
+  })));
+  const runBatch = async (input: z.output<typeof batchSchema>, extra: ToolExtra) => {
     await session.ensureConnected?.();
     const start = await session.get().state();
     if (input.revision !== undefined && input.revision !== start.revision) throw new Error(`Stale reference: expected revision ${input.revision}, current revision is ${start.revision}`);
@@ -2522,6 +2564,7 @@ function createServerWithCatalog(
     const completed: Array<Record<string, unknown>> = [];
     let current = start;
     for (const [index, step] of input.steps.entries()) {
+      hud.step(index, input.steps.length, step.toolName.replace(/^plasticity_/, ""));
       const selected = routedTools.get(step.toolName);
       try {
         if (!selected || step.toolName === "plasticity_call" || step.toolName === "plasticity_batch") throw new Error(`Unknown Plasticity MCP operation: ${step.toolName}`);
@@ -2587,7 +2630,7 @@ function createServerWithCatalog(
       },
       steps: completed,
     };
-  })));
+  };
   tool("plasticity_list_windows", "List Plasticity document windows exposed on loopback CDP. If no Plasticity process is running, opens Plasticity with loopback CDP first (disable with PLASTICITY_AUTO_LAUNCH=0); a running instance without CDP is never restarted.", z.object({}), async () =>
     (await session.windows({ launch: true })).map(({ id, title, url }) => ({ targetId: id, title, url })), true);
   tool("plasticity_diagnose", "Report MCP runtime and reachable Plasticity windows without changing a document.", z.object({}), async () =>
@@ -3910,6 +3953,8 @@ function createServerWithCatalog(
   tool("plasticity_redo", "Redo the most recent undone document edit, or the next `steps` in one call.", z.object({ steps: historySteps, intent, revision }), async ({ steps, intent: purpose, revision: current }) =>
     await journaled("redo", purpose, { steps }, () => stepHistory("redo", steps, current)));
 
+  tool("plasticity_set_camera", "Point the viewport camera from eyeMm toward targetMm and frame a sphere of frameRadiusMm around the target (millimetres, world space). View only: no document or Undo change. Use for custom angles that plasticity_set_view's named views do not cover.", z.object({ eyeMm: vector, targetMm: vector, frameRadiusMm: z.number().finite().positive() }).strict(), async ({ eyeMm, targetMm, frameRadiusMm }) =>
+    await session.get().setCamera(eyeMm, targetMm, frameRadiusMm), true);
   tool("plasticity_set_view", "Set a named viewport orientation and optionally fit all geometry.", z.object({ view: z.enum(["front", "back", "left", "right", "top", "bottom", "isometric"]), fit: z.boolean().default(false) }), async ({ view, fit }) =>
     await session.get().setView(view, fit));
   tool("plasticity_screenshot", "Screenshot the visible Plasticity viewport. Without path it returns a scaled JPEG image in the response (maxWidth, default 1024). With path it saves a full PNG to a new file without overwriting. Refuses hidden windows to avoid stale frames.", z.object({

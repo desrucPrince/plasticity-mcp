@@ -897,6 +897,12 @@ export class PlasticityRuntime {
     this.client.close();
   }
 
+  // Draw-only evaluate for the activity HUD. It does not join the operation queue, so the badge can update while a
+  // long operation holds the queue; it must never touch Plasticity state.
+  async drawOverlay(expression: string): Promise<void> {
+    await this.client.send("Runtime.evaluate", { expression, returnByValue: true, silent: true });
+  }
+
   async cdp(method: string, params?: Record<string, unknown>): Promise<unknown> {
     return await this.enqueue(() => this.client.send(method, params));
   }

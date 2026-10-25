@@ -1,0 +1,234 @@
+{
+ "totalBodiesInDoc": 539,
+ "exported": 528,
+ "solids": 526,
+ "valid": 526,
+ "invalid": [],
+ "boundsAllMm": {
+  "min": [
+   -4925,
+   -7440,
+   1168
+  ],
+  "max": [
+   4925,
+   7911,
+   4870
+  ]
+ },
+ "sides": {
+  "rc11_Visor": [
+   1,
+   1
+  ],
+  "rc11_grille_bar": [
+   14,
+   14
+  ],
+  "rc11_louvre": [
+   4,
+   4
+  ],
+  "rc11_hover_pad": [
+   5,
+   5
+  ],
+  "rc11_trim": [
+   1,
+   1
+  ],
+  "rc11_drive_vane": [
+   9,
+   9
+  ],
+  "rc11_drive_vane_front": [
+   3,
+   3
+  ],
+  "rc11_drive_vane_rear": [
+   3,
+   3
+  ],
+  "rc11_headlight": [
+   2,
+   2
+  ],
+  "rc11_taillight": [
+   3,
+   3
+  ],
+  "rc11_sill": [
+   1,
+   1
+  ],
+  "rc11_drive_core": [
+   1,
+   0
+  ],
+  "rc11_drive_ring_0": [
+   1,
+   0
+  ],
+  "rc11_drive_ring_1": [
+   1,
+   0
+  ],
+  "rc11_drive_ring_2": [
+   1,
+   0
+  ],
+  "rc11_exhaust_glow": [
+   1,
+   0
+  ],
+  "rc11_exhaust_vane": [
+   4,
+   0
+  ],
+  "rc11_nose_strip": [
+   1,
+   0
+  ],
+  "rc11_p_bolt_side": [
+   56,
+   56
+  ],
+  "rc11_p_bolt_belly": [
+   39,
+   39
+  ],
+  "rc11_p_bolt_rear": [
+   13,
+   13
+  ],
+  "rc11_p_rivet": [
+   46,
+   46
+  ],
+  "rc11_p_conduit_pod_0": [
+   1,
+   1
+  ],
+  "rc11_p_conduit_pod_1": [
+   1,
+   1
+  ],
+  "rc11_p_conduit_belly_0": [
+   1,
+   1
+  ],
+  "rc11_p_conduit_belly_1": [
+   1,
+   1
+  ],
+  "rc11_p_flange_pod": [
+   4,
+   4
+  ],
+  "rc11_p_flange_belly": [
+   2,
+   2
+  ],
+  "rc11_p_clamp_pod": [
+   18,
+   18
+  ],
+  "rc11_p_clamp_belly": [
+   8,
+   8
+  ],
+  "rc11_p_latch_side": [
+   1,
+   1
+  ],
+  "rc11_p_latch_top": [
+   1,
+   1
+  ],
+  "rc11_p_tiedown": [
+   2,
+   2
+  ],
+  "rc11_p_puck": [
+   2,
+   2
+  ],
+  "rc11_p_marker_front": [
+   1,
+   1
+  ],
+  "rc11_p_marker_rear": [
+   1,
+   1
+  ],
+  "rc11_hull": [
+   1,
+   0
+  ],
+  "rc11_Gyro_Trunnion": [
+   1,
+   1
+  ],
+  "rc11_Gyro_Bolt": [
+   8,
+   8
+  ],
+  "rc11_Gyro_OuterGimbal": [
+   1,
+   0
+  ],
+  "rc11_Gyro_InnerGimbal": [
+   1,
+   0
+  ],
+  "rc11_Gyro_Rotor": [
+   1,
+   0
+  ],
+  "rc11_Gyro_RimLight": [
+   1,
+   0
+  ],
+  "rc11_Gyro_Core": [
+   1,
+   0
+  ],
+  "rc11_Gyro_Spoke": [
+   3,
+   3
+  ]
+ },
+ "stepAll": 7454621,
+ "stepHull": 3041408,
+ "stl": {
+  "bytes": 18510384,
+  "triangles": 370206
+ },
+ "obj": {
+  "bytes": 43346976,
+  "triangles": 369804,
+  "objects": 528,
+  "boundsMm": {
+   "min": [
+    -4904.25146484,
+    -7440,
+    1168
+   ],
+   "max": [
+    4904.25146484,
+    7910.80175781,
+    4490
+   ],
+   "size": [
+    9808.50292968,
+    15350.80175781,
+    3322
+   ]
+  }
+ },
+ "renderObj": {
+  "bytes": 164269530,
+  "triangles": 1380514,
+  "objects": 528
+ }
+}
