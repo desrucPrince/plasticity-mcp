@@ -1,0 +1,165 @@
+{
+ "instancesDropped": 91,
+ "restoredCopies": [
+  "rc11_grille_bar+(165,0,0)",
+  "rc11_grille_bar+(330,0,0)",
+  "rc11_grille_bar+(495,0,0)",
+  "rc11_grille_bar+(660,0,0)",
+  "rc11_grille_bar+(825,0,0)",
+  "rc11_grille_bar+(990,0,0)",
+  "rc11_grille_bar+(1155,0,0)",
+  "rc11_grille_bar+(1320,0,0)",
+  "rc11_grille_bar+(1485,0,0)",
+  "rc11_grille_bar+(1650,0,0)",
+  "rc11_grille_bar+(1815,0,0)",
+  "rc11_grille_bar+(1980,0,0)",
+  "rc11_grille_bar+(2145,0,0)",
+  "rc11_louvre+(0,0,85)",
+  "rc11_louvre+(0,0,170)",
+  "rc11_louvre+(0,0,255)",
+  "rc11_hover_pad+(0,-5000,0)",
+  "rc11_hover_pad+(0,-2500,0)",
+  "rc11_hover_pad+(0,2500,0)",
+  "rc11_hover_pad+(0,4800,0)",
+  "rc11_drive_vane+(0,-1100,0)",
+  "rc11_drive_vane+(0,-825,0)",
+  "rc11_drive_vane+(0,-550,0)",
+  "rc11_drive_vane+(0,-275,0)",
+  "rc11_drive_vane+(0,275,0)",
+  "rc11_drive_vane+(0,550,0)",
+  "rc11_drive_vane+(0,825,0)",
+  "rc11_drive_vane+(0,1100,0)",
+  "rc11_exhaust_vane+(0,0,70)",
+  "rc11_exhaust_vane+(0,0,140)",
+  "rc11_exhaust_vane+(0,0,210)",
+  "rc11_headlight+(90,0,0)",
+  "rc11_taillight+(0,14,100)",
+  "rc11_taillight+(0,28,200)",
+  "rc11_drive_vane_front rot 30",
+  "rc11_drive_vane_front rot 60",
+  "rc11_drive_vane_rear rot -30",
+  "rc11_drive_vane_rear rot -60"
+ ],
+ "buttressBlend": "failed on 8 deck edges: Error: plasticity_fillet: Plasticity command failed: Error: Operation Blend failed at PK_BODY_fix_blends with error `16063`.",
+ "hull": {
+  "body": "rc11_hull#7 [-4925,-7440,1240]..[4925,7903,4870]",
+  "faces": 330,
+  "closed": true,
+  "nativeValid": true,
+  "checkCodes": []
+ },
+ "detailsValid": "100/100",
+ "invalidDetails": [],
+ "boundsAllMm": {
+  "min": [
+   -4925,
+   -7440,
+   1205
+  ],
+  "max": [
+   4925,
+   7911,
+   4870
+  ],
+  "size": [
+   9851,
+   15351,
+   3665
+  ]
+ },
+ "boundsHullMm": {
+  "min": [
+   -4925,
+   -7440,
+   1240
+  ],
+  "max": [
+   4925,
+   7903,
+   4870
+  ],
+  "size": [
+   9851,
+   15343,
+   3630
+  ]
+ },
+ "bodies": {
+  "rc11_Visor": 2,
+  "rc11_grille_bar": 28,
+  "rc11_louvre": 8,
+  "rc11_hover_pad": 10,
+  "rc11_trim": 2,
+  "rc11_drive_vane": 18,
+  "rc11_drive_vane_front": 6,
+  "rc11_drive_vane_rear": 6,
+  "rc11_headlight": 4,
+  "rc11_taillight": 6,
+  "rc11_sill": 2,
+  "rc11_hull": 1,
+  "rc11_drive_core": 1,
+  "rc11_drive_ring_0": 1,
+  "rc11_drive_ring_1": 1,
+  "rc11_drive_ring_2": 1,
+  "rc11_exhaust_glow": 1,
+  "rc11_exhaust_vane": 4,
+  "rc11_nose_strip": 1
+ },
+ "exports": {
+  "bodies": 103,
+  "solids": 101,
+  "stepAll": {
+   "path": "/Users/neocortez/Projects/plasticity-mcp/discovery/neorc11/export/neoRC11-2026-10-25T19-43-39.step",
+   "bytes": 4044821
+  },
+  "stepHull": {
+   "path": "/Users/neocortez/Projects/plasticity-mcp/discovery/neorc11/export/neoRC11-hull-2026-10-25T19-43-39.step",
+   "bytes": 3005228
+  },
+  "stl": {
+   "path": "/Users/neocortez/Projects/plasticity-mcp/discovery/neorc11/export/neoRC11-2026-10-25T19-43-39.stl",
+   "bytes": 1110984,
+   "triangles": 22218,
+   "chordToleranceMm": 2,
+   "angleToleranceDegrees": 10
+  },
+  "stlHull": {
+   "path": "/Users/neocortez/Projects/plasticity-mcp/discovery/neorc11/export/neoRC11-hull-2026-10-25T19-43-39.stl",
+   "bytes": 909684,
+   "triangles": 18192,
+   "chordToleranceMm": 2,
+   "angleToleranceDegrees": 10
+  },
+  "obj": {
+   "path": "/Users/neocortez/Projects/plasticity-mcp/discovery/neorc11/export/neoRC11-2026-10-25T19-43-39.obj",
+   "bytes": 2499661,
+   "sourceUnits": "millimeter",
+   "upAxis": "z",
+   "objects": 103,
+   "vertices": 11447,
+   "textureCoordinates": 17722,
+   "normals": 17722,
+   "faces": 22332,
+   "triangles": 22332,
+   "boundsMm": {
+    "min": [
+     -4904.25146484,
+     -7440,
+     1205
+    ],
+    "max": [
+     4904.25146484,
+     7910.80175781,
+     4481.68994141
+    ],
+    "size": [
+     9808.50292968,
+     15350.80175781,
+     3276.68994141
+    ]
+   },
+   "chordToleranceMm": 2,
+   "angleToleranceDegrees": 10
+  }
+ }
+}

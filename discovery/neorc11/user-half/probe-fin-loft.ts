@@ -16,7 +16,7 @@ try {
       const out = await s.raw("plasticity_batch", { undoOnError: true, steps: [sec(-120, -1200, -5200), sec(1360, -5040, -6240),
         { toolName: "plasticity_loft_curves", arguments: { profileIds: ["$0.added[0]", "$1.added[0]"], ...loft } }] });
       console.log(label, "OK", JSON.stringify(out.steps[2].addedBodies?.map((b: any) => [b.type, b.faceCount])));
-      const st = await s.raw("plasticity_status");
+      const st = await s.raw("plasticity_status", { bodyLimit: 200 });
       await s.raw("plasticity_delete", { ids: out.steps.flatMap((x: any) => x.added), revision: st.revision });
       break;
     } catch (e) { console.log(label, "FAIL", String(e).match(/error `?\d+`?|failed[^"]{0,80}/)?.[0]); }

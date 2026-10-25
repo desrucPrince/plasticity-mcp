@@ -19,5 +19,34 @@
   "maxG1deg": 0,
   "maxRelG2": 0,
   "verdict": "G2"
+ },
+ "buttress root blend": "Parasolid refused the blend (error 16053) at r60/40/25: left as a G0 crease",
+ "cabin-to-deck blend (G2 r300)": {
+  "blendFaces": 6,
+  "edges": 21,
+  "tangentEdges": 15,
+  "g2Edges": 9,
+  "g1OnlyEdges": 6,
+  "creaseEdges": 6,
+  "maxG0mm": 0,
+  "maxG1degTangent": 0.52,
+  "maxRelG2Tangent": 1
+ },
+ "fin root blend (G2 r80)": {
+  "blendFaces": 8,
+  "edges": 24,
+  "tangentEdges": 21,
+  "g2Edges": 12,
+  "g1OnlyEdges": 9,
+  "creaseEdges": 3,
+  "maxG0mm": 0,
+  "maxG1degTangent": 0.37,
+  "maxRelG2Tangent": 1
+ },
+ "X=0 centre seam": {
+  "edges": 5,
+  "maxG0mm": 0,
+  "maxG1deg": 90,
+  "maxRelG2": 0
  }
 }

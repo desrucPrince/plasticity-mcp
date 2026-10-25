@@ -8542,6 +8542,10 @@ export class PlasticityOperations {
       factory.origin.fromArray(args.origin);
       factory.normal.fromArray(args.normal);
       factory.move = !args.keepOriginal;
+      // MirrorFactory defaults to shouldCut = true (Plasticity's symmetry mode, which may trim sources that cross
+      // the plane). This tool is a plain mirror, so it never cuts or unions.
+      factory.shouldCut = false;
+      factory.shouldUnion = false;
       ${commandEnd}
     }`, ["MirrorFactory"], [{ ids, origin: toMeters(planeOriginMm), normal: planeNormal, keepOriginal }]);
     return await this.state();

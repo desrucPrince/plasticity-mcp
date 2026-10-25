@@ -1,7 +1,7 @@
 import { openSession } from "../../mcp-client.ts";
 const s = await openSession();
 try {
-  const st = await s.raw("plasticity_status");
+  const st = await s.raw("plasticity_status", { bodyLimit: 200 });
   const body = st.bodies.find((b: any) => b.name === process.argv[2]);
   const b = (await s.raw("plasticity_body_info", { id: body.id })).body;
   console.log(body.id, "faces", b.faces.length, "edges", b.edges.length, "undo", st.undoDepth);

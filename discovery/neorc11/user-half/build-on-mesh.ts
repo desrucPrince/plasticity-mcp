@@ -22,7 +22,7 @@ const s = await openSession();
 const raw = (name: string, args: Record<string, unknown> = {}) => s.raw(name, args);
 const call = (toolName: string, args: Record<string, unknown> = {}) => raw("plasticity_call", { toolName, arguments: args });
 const batch = (steps: Step[], undoOnError = true) => raw("plasticity_batch", { steps, undoOnError });
-const status = () => raw("plasticity_status");
+const status = () => raw("plasticity_status", { bodyLimit: 200 });
 const rev = async () => (await status()).revision as string;
 const step = (toolName: string, args: Record<string, unknown> = {}): Step => ({ toolName, arguments: args });
 const r = (v: number) => Math.round(v * 100) / 100;
@@ -378,9 +378,9 @@ const material = async (ids: number[], name: string, colorHex: string, roughness
 const BAY = { yc: -500, half: 1100, a: 900, depth: 160 };
 await stage("drive", async (notes) => {
   await clear("rc11_drive");
-  const body = await byName("Solid.001");
   const ceiling = BELLY + BAY.depth;
   if (once("drive-bay")) {
+    const body = await byName("Solid.001");
     const cutter = await halfStadium(BAY.a, BAY.half, BAY.yc, BELLY - 50, BAY.depth + 50, "rc11_drive_bay_cutter");
     const before = new Set((await info(body.id)).edges.map((e) => e.id));
     await raw("plasticity_boolean", { targetIds: [body.id], toolIds: [cutter], operation: "difference", revision: await rev() });
@@ -417,8 +417,11 @@ await stage("drive", async (notes) => {
 // ---- 11. rear drive exhaust: a framed nozzle on the lower tail face between the pods (centreline half), recessed,
 // with horizontal vanes arrayed in Z and a glow plate at the back of the recess.
 await stage("exhaust", async (notes) => {
-  await clear("rc11_exhaust");
   const E = { x: 1150, y0: -6900, y1: -6450, z0: 1300, z1: 1720 };
+  // After the join the frame is part of rc11_hull; then only the glow and vanes are rebuilt.
+  const merged = (await bodies()).some((b) => b.name === "rc11_hull");
+  for (const p of merged ? ["rc11_exhaust_glow", "rc11_exhaust_vane"] : ["rc11_exhaust"]) await clear(p);
+  if (!merged) {
   const box = (await batch([step("plasticity_create_box", { originMm: [0, E.y0, E.z0], sizeMm: [E.x, E.y1 - E.y0, E.z1 - E.z0], name: "rc11_exhaust_frame" })])).steps[0].added[0] as number;
   const rearEdges = (await info(box)).edges.filter((e) => e.boundsMm.max[1] < E.y0 + 0.5 && !(e.boundsMm.max[0] < 0.5)).map((e) => e.id);
   await raw("plasticity_chamfer", { id: box, edgeIds: rearEdges, distanceMm: 30, revision: await rev() });
@@ -428,6 +431,7 @@ await stage("exhaust", async (notes) => {
   ]));
   await material([box], "Drive housing", "#3a3f45", 0.4, 0.7);
   notes.push(`frame ${fmt(await byName("rc11_exhaust_frame"))}; instances ${await place(box, [])}`);
+  }
   const glow = (await batch([step("plasticity_create_box", { originMm: [0, E.y0 + 214, E.z0 + 60], sizeMm: [E.x - 70, 6, E.z1 - E.z0 - 120], name: "rc11_exhaust_glow" })])).steps[0].added[0] as number;
   await material([glow], "Repulsor glow", "#5fe6ff", 0.1, 0);
   notes.push(`glow; instances ${await place(glow, [])}`);

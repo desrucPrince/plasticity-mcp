@@ -1,0 +1,242 @@
+[
+ {
+  "edge": {
+   "bodyId": 7,
+   "edgeId": "580e2207707"
+  },
+  "adjacentFaces": [
+   {
+    "bodyId": 7,
+    "faceId": "580f2251200"
+   },
+   {
+    "bodyId": 7,
+    "faceId": "580f2207437"
+   }
+  ],
+  "bodyVersionId": 580,
+  "measurementSource": "native-brep-100-samples",
+  "sampleCount": 100,
+  "maximumPositionDeviationMm": 4.440892098500626e-13,
+  "maximumPositionDeviationAtMm": [
+   0,
+   1717.3881530761719,
+   1264.9999856948853
+  ],
+  "maximumNormalAngleDeviationDeg": 89.99999999999997,
+  "maximumNormalAngleDeviationAtMm": [
+   0,
+   5804.285526275635,
+   1264.9999856948853
+  ],
+  "maximumRelativeCurvatureDeviation": 0,
+  "maximumRelativeCurvatureDeviationAtMm": [
+   0,
+   5804.285526275635,
+   1264.9999856948853
+  ],
+  "tolerances": {
+   "positionMm": 0.01,
+   "normalAngleDeg": 0.1,
+   "relativeCurvature": 0.05
+  },
+  "passes": {
+   "G0": true,
+   "G1": false,
+   "G2": false
+  },
+  "achievedContinuity": "G0"
+ },
+ {
+  "edge": {
+   "bodyId": 7,
+   "edgeId": "580e2207701"
+  },
+  "adjacentFaces": [
+   {
+    "bodyId": 7,
+    "faceId": "580f2251208"
+   },
+   {
+    "bodyId": 7,
+    "faceId": "580f2207590"
+   }
+  ],
+  "bodyVersionId": 580,
+  "measurementSource": "native-brep-100-samples",
+  "sampleCount": 100,
+  "maximumPositionDeviationMm": 0,
+  "maximumPositionDeviationAtMm": [
+   0,
+   -2500,
+   1264.9999856948853
+  ],
+  "maximumNormalAngleDeviationDeg": 89.99999999999997,
+  "maximumNormalAngleDeviationAtMm": [
+   0,
+   -2500,
+   1264.9999856948853
+  ],
+  "maximumRelativeCurvatureDeviation": 0,
+  "maximumRelativeCurvatureDeviationAtMm": [
+   0,
+   -2500,
+   1264.9999856948853
+  ],
+  "tolerances": {
+   "positionMm": 0.01,
+   "normalAngleDeg": 0.1,
+   "relativeCurvature": 0.05
+  },
+  "passes": {
+   "G0": true,
+   "G1": false,
+   "G2": false
+  },
+  "achievedContinuity": "G0"
+ },
+ {
+  "edge": {
+   "bodyId": 7,
+   "edgeId": "580e2199010"
+  },
+  "adjacentFaces": [
+   {
+    "bodyId": 7,
+    "faceId": "580f2252085"
+   },
+   {
+    "bodyId": 7,
+    "faceId": "580f2198743"
+   }
+  ],
+  "bodyVersionId": 580,
+  "measurementSource": "native-brep-100-samples",
+  "sampleCount": 100,
+  "maximumPositionDeviationMm": 9.658442104759183e-10,
+  "maximumPositionDeviationAtMm": [
+   -1.349686226835762e-12,
+   4582.876682281494,
+   3125.936508178711
+  ],
+  "maximumNormalAngleDeviationDeg": 0.0000014787793334710982,
+  "maximumNormalAngleDeviationAtMm": [
+   -1.344921242990983e-12,
+   4598.329067230225,
+   3119.5170879364014
+  ],
+  "maximumRelativeCurvatureDeviation": 0,
+  "maximumRelativeCurvatureDeviationAtMm": [
+   -1.3739009929736312e-12,
+   4533.611297607422,
+   3154.25443649292
+  ],
+  "tolerances": {
+   "positionMm": 0.01,
+   "normalAngleDeg": 0.1,
+   "relativeCurvature": 0.05
+  },
+  "passes": {
+   "G0": true,
+   "G1": true,
+   "G2": true
+  },
+  "achievedContinuity": "G2"
+ },
+ {
+  "edge": {
+   "bodyId": 7,
+   "edgeId": "580e2199005"
+  },
+  "adjacentFaces": [
+   {
+    "bodyId": 7,
+    "faceId": "580f2253104"
+   },
+   {
+    "bodyId": 7,
+    "faceId": "580f2198656"
+   }
+  ],
+  "bodyVersionId": 580,
+  "measurementSource": "native-brep-100-samples",
+  "sampleCount": 100,
+  "maximumPositionDeviationMm": 9.41189528698702e-10,
+  "maximumPositionDeviationAtMm": [
+   -8.573633881840681e-10,
+   -3181.9417476654053,
+   3104.207754135132
+  ],
+  "maximumNormalAngleDeviationDeg": 0.0000012074182697257333,
+  "maximumNormalAngleDeviationAtMm": [
+   -1.8076244711132117e-9,
+   -3232.228994369507,
+   3100.0001430511475
+  ],
+  "maximumRelativeCurvatureDeviation": 0,
+  "maximumRelativeCurvatureDeviationAtMm": [
+   -1.8612576757615074e-9,
+   -3233.5827350616455,
+   3099.9999046325684
+  ],
+  "tolerances": {
+   "positionMm": 0.01,
+   "normalAngleDeg": 0.1,
+   "relativeCurvature": 0.05
+  },
+  "passes": {
+   "G0": true,
+   "G1": true,
+   "G2": true
+  },
+  "achievedContinuity": "G2"
+ },
+ {
+  "edge": {
+   "bodyId": 7,
+   "edgeId": "580e2198913"
+  },
+  "adjacentFaces": [
+   {
+    "bodyId": 7,
+    "faceId": "580f2250750"
+   },
+   {
+    "bodyId": 7,
+    "faceId": "580f1486357"
+   }
+  ],
+  "bodyVersionId": 580,
+  "measurementSource": "native-brep-100-samples",
+  "sampleCount": 100,
+  "maximumPositionDeviationMm": 4.8948083430685005e-9,
+  "maximumPositionDeviationAtMm": [
+   -8.326672684688674e-14,
+   -2861.818790435791,
+   3280.2042961120605
+  ],
+  "maximumNormalAngleDeviationDeg": 0.0000014787793334710982,
+  "maximumNormalAngleDeviationAtMm": [
+   -8.326672684688674e-14,
+   -2264.3797397613525,
+   3613.34490776062
+  ],
+  "maximumRelativeCurvatureDeviation": 0,
+  "maximumRelativeCurvatureDeviationAtMm": [
+   -8.326672684688674e-14,
+   -3069.50044631958,
+   3148.848533630371
+  ],
+  "tolerances": {
+   "positionMm": 0.01,
+   "normalAngleDeg": 0.1,
+   "relativeCurvature": 0.05
+  },
+  "passes": {
+   "G0": true,
+   "G1": true,
+   "G2": true
+  },
+  "achievedContinuity": "G2"
+ }
+]

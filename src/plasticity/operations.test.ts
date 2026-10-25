@@ -1673,6 +1673,23 @@ test("creates a mirrored linked instance with a negative scale about the mirror 
   assert.equal(calls.length, 2);
 });
 
+test("mirror is a plain copy: it turns off the native cut and union", async () => {
+  const calls: Array<{ source: string; bindings: string[]; values: unknown[] }> = [];
+  const state: RuntimeState = { targetId: "window-1", title: "Untitled - Plasticity", documentToken: "document-1", revision: "current-revision", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [] };
+  const runtime = {
+    async getState() { return state; },
+    async mutate(source: string, bindings: string[], values: unknown[]) { calls.push({ source, bindings, values }); return {}; },
+  } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+
+  await operations.mirror([7, 8], [0, 0, 0], [1, 0, 0], true, state.revision);
+
+  assert.deepEqual(calls[0]?.bindings, ["MirrorFactory"]);
+  assert.match(calls[0]?.source ?? "", /factory\.shouldCut = false/);
+  assert.match(calls[0]?.source ?? "", /factory\.shouldUnion = false/);
+  assert.match(calls[0]?.source ?? "", /factory\.move = !args\.keepOriginal/);
+});
+
 test("fillet sets the native curvature-continuous blend shape only for shape g2", async () => {
   const calls: Array<{ source: string; bindings: string[]; values: unknown[] }> = [];
   const state: RuntimeState = { targetId: "window-1", title: "Untitled - Plasticity", documentToken: "document-1", revision: "current-revision", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [] };

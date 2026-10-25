@@ -2,7 +2,7 @@
 // and keep only the +X halves. Prints body ids. Run once on the doc holding the 4 imported blockout solids.
 import { openSession } from "../mcp-client.ts";
 const s = await openSession();
-const st = await s.raw("plasticity_status");
+const st = await s.raw("plasticity_status", { bodyLimit: 200 });
 const ids = st.bodies.map((b: any) => b.id).sort((a: number, b: number) => a - b);
 if (ids.join() !== "2,3,4,5") throw new Error("unexpected bodies " + ids.join());
 const dup = await s.raw("plasticity_batch", { undoOnError: true, steps: [

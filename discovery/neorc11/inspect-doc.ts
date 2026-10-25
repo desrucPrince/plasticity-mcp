@@ -3,7 +3,7 @@ import { openSession } from "../mcp-client.ts";
 const s = await openSession();
 try {
   const call = (toolName: string, args: Record<string, unknown> = {}) => s.raw("plasticity_call", { toolName, arguments: args });
-  const st = await s.raw("plasticity_status");
+  const st = await s.raw("plasticity_status", { bodyLimit: 200 });
   console.log("title", st.title, "undo", st.undoDepth, "bodies", st.bodies.length);
   for (const b of st.bodies) console.log(b.id, b.type, JSON.stringify(b.name), "faces", b.faceCount, b.boundsMm.min.map(Math.round).join(","), "→", b.boundsMm.max.map(Math.round).join(","));
   const g = await call("plasticity_list_groups");

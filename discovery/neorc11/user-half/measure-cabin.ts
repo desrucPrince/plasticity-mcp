@@ -2,7 +2,7 @@
 import { openSession } from "../../mcp-client.ts";
 const s = await openSession();
 try {
-  const st = await s.raw("plasticity_status");
+  const st = await s.raw("plasticity_status", { bodyLimit: 200 });
   const body = st.bodies.find((b: any) => b.name === "Solid.001");
   const b = (await s.raw("plasticity_body_info", { id: body.id })).body;
   const blends = new Set(b.faces.filter((f: any) => f.surfaceType === "BSurf" && f.boundsMm.min[2] < 3101 && f.boundsMm.max[2] <= 3401).map((f: any) => f.id));

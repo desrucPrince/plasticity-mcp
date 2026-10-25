@@ -24,7 +24,7 @@ const s = await openSession();
 const raw = (name: string, args: Record<string, unknown> = {}) => s.raw(name, args);
 const call = (toolName: string, args: Record<string, unknown> = {}) => raw("plasticity_call", { toolName, arguments: args });
 const batch = (steps: Step[], undoOnError = true) => raw("plasticity_batch", { steps, undoOnError });
-const status = () => raw("plasticity_status");
+const status = () => raw("plasticity_status", { bodyLimit: 200 });
 const rev = async () => (await status()).revision as string;
 const step = (toolName: string, args: Record<string, unknown> = {}): Step => ({ toolName, arguments: args });
 const r = (v: number) => Math.round(v * 100) / 100;

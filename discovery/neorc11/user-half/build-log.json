@@ -52,16 +52,16 @@
  },
  "grille": {
   "ok": true,
-  "ms": 7219,
+  "ms": 9122,
   "notes": [
-   "rc11_grille_bar#36 [300,6375,2071]..[330,6473,2366]; instances 27"
+   "rc11_grille_bar#245 [300,6375,2071]..[330,6473,2366]; instances 27"
   ]
  },
  "louvres": {
   "ok": true,
-  "ms": 2160,
+  "ms": 2879,
   "notes": [
-   "rc11_louvre#37 [3609,950,2351]..[3657,4250,2409]; instances 7"
+   "rc11_louvre#246 [3609,950,2351]..[3657,4250,2409]; instances 7"
   ]
  },
  "strakes": {
@@ -74,17 +74,17 @@
  },
  "pads": {
   "ok": true,
-  "ms": 3153,
+  "ms": 3745,
   "notes": [
-   "rc11_hover_pad#40 [2300,-700,1205]..[2880,700,1245]; instances 9"
+   "rc11_hover_pad#247 [2300,-700,1205]..[2880,700,1245]; instances 9"
   ]
  },
  "trim": {
   "ok": true,
-  "ms": 871,
+  "ms": 1049,
   "notes": [
    "trim top edges: 2 edges r8 round",
-   "rc11_trim#41 [3385,-7100,3098]..[3425,7400,3116]; instances 1"
+   "rc11_trim#248 [3385,-7100,3098]..[3425,7400,3116]; instances 1"
   ]
  },
  "drive-bay": {
@@ -96,9 +96,8 @@
  },
  "drive": {
   "ok": true,
-  "ms": 26874,
+  "ms": 28109,
   "notes": [
-   "bay cut, lip chamfer 25 on 8 edges",
    "core plate; instances 1",
    "ring 0 (420..520, Z 1355); instances 1",
    "ring 1 (600..690, Z 1320); instances 1",
@@ -110,9 +109,8 @@
  },
  "exhaust": {
   "ok": true,
-  "ms": 5223,
+  "ms": 4194,
   "notes": [
-   "frame rc11_exhaust_frame#77 [0,-6900,1300]..[1150,-6450,1720]; instances 1",
    "glow; instances 1",
    "vanes; instances 7"
   ]
@@ -127,18 +125,18 @@
  },
  "lights": {
   "ok": true,
-  "ms": 4108,
+  "ms": 4491,
   "notes": [
-   "rc11_headlight#83 [2700,7799,2501]..[2750,7911,2939]; instances 3",
-   "rc11_taillight#84 [2880,-7362,1545]..[3440,-7332,1585]; instances 5"
+   "rc11_headlight#282 [2700,7799,2501]..[2750,7911,2939]; instances 3",
+   "rc11_taillight#283 [2880,-7362,1545]..[3440,-7332,1585]; instances 5"
   ]
  },
  "sill": {
   "ok": true,
-  "ms": 1933,
+  "ms": 2066,
   "notes": [
-   "rc11_sill#85 [3650,-6900,2160]..[3672,6200,2190]; instances 1",
-   "rc11_nose_strip#86 [0,6412,2793]..[2300,6450,2847]; instances 1"
+   "rc11_sill#284 [3650,-6900,2160]..[3672,6200,2190]; instances 1",
+   "rc11_nose_strip#285 [0,6412,2793]..[2300,6450,2847]; instances 1"
   ]
  }
 }
