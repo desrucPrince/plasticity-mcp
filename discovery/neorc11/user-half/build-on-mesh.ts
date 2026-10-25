@@ -324,4 +324,167 @@ await stage("trim", async (notes) => {
   notes.push(`${fmt(await byName("rc11_trim"))}; instances ${await place(trim, [])}`);
 });
 
+
+const BELLY = 1240; // user mesh: flat belly of body and pods
+
+// Rotation-only placements (no translation), so the mirrored copy is exact: mirror(rotate(a, θ)) equals
+// rotate(mirrored pivot, axis (ax, -ay, -az), θ) applied to the mirrored source.
+async function placeRotations(sourceId: number, pivot: Vec, axis: Vec, degrees: number[]) {
+  let n = 0;
+  const newest = async (make: () => Promise<unknown>) => {
+    const before = new Set((await instances()).map((i) => i.id));
+    await make();
+    return (await instances()).find((i) => !before.has(i.id))!.id;
+  };
+  for (const deg of degrees) {
+    const a = await newest(async () => call("plasticity_create_instance", { bodyId: sourceId, translationMm: [0, 0, 0], revision: await rev() }));
+    await call("plasticity_rotate_instances", { ids: [a], pivotMm: pivot, axis, degrees: deg, revision: await rev() });
+    const m = await newest(async () => call("plasticity_create_mirrored_instance", { bodyId: sourceId, axis: "x", planeOffsetMm: 0, revision: await rev() }));
+    await call("plasticity_rotate_instances", { ids: [m], pivotMm: [-pivot[0], pivot[1], pivot[2]], axis: [axis[0], -axis[1], -axis[2]], degrees: deg, revision: await rev() });
+    n += 2;
+  }
+  return n;
+}
+// A stadium solid (long in Y, round ends of radius a about the centreline), Z from z0 to z0+h, cut to X >= 0.
+async function halfStadium(a: number, half: number, yc: number, z0: number, h: number, name: string): Promise<number> {
+  const out = await batch(chain([
+    step("plasticity_create_box", { originMm: [-a, yc - half, z0], sizeMm: [2 * a, 2 * half, h], name }),
+    step("plasticity_create_cylinder", { centerMm: [0, yc + half, z0], radiusMm: a, heightMm: h }),
+    step("plasticity_create_cylinder", { centerMm: [0, yc - half, z0], radiusMm: a, heightMm: h }),
+  ]));
+  const id = out.steps[0].added[0] as number;
+  const cyl = [out.steps[1].added[0], out.steps[2].added[0]] as number[];
+  const c = (await bodies()).find((b) => b.id === cyl[0])!;
+  const dz = z0 - c.boundsMm.min[2];
+  if (Math.abs(dz) > 1e-6) await raw("plasticity_move", { ids: cyl, deltaMm: [0, 0, dz], revision: await rev() });
+  await union(id, cyl);
+  await batch(chain([
+    step("plasticity_create_box", { originMm: [-9000, -12000, -1000], sizeMm: [9000, 24000, 9000], name: "rc11_cutter" }),
+    step("plasticity_boolean", { targetIds: [id], toolIds: ["$PREV.addedSolids[0]"], operation: "difference" }),
+  ]));
+  await rename(id, name);
+  return id;
+}
+async function union(target: number, tools: number[]) {
+  return await raw("plasticity_boolean", { targetIds: [target], toolIds: tools, operation: "union", revision: await rev() });
+}
+const material = async (ids: number[], name: string, colorHex: string, roughness: number, metalness: number, opacity = 1) =>
+  await call("plasticity_set_appearance_material", { ids, name, colorHex, roughness, metalness, opacity, revision: await rev() });
+
+// ---- 10. centre repulsion drive: a stadium bay 160 mm deep cut into the belly on the centreline under the cabin
+// (Y -2500..1500, 1800 wide), chamfered lip; inside, a glowing stadium core plate at the ceiling, three flat stadium
+// emitter rings stepped toward the opening, and guide vanes (straight run plus radial fans at both ends) that tie
+// the rings to the ceiling. Everything is a +X half on X = 0 with mirrored instances.
+const BAY = { yc: -500, half: 1100, a: 900, depth: 160 };
+await stage("drive", async (notes) => {
+  await clear("rc11_drive");
+  const body = await byName("Solid.001");
+  const ceiling = BELLY + BAY.depth;
+  if (once("drive-bay")) {
+    const cutter = await halfStadium(BAY.a, BAY.half, BAY.yc, BELLY - 50, BAY.depth + 50, "rc11_drive_bay_cutter");
+    const before = new Set((await info(body.id)).edges.map((e) => e.id));
+    await raw("plasticity_boolean", { targetIds: [body.id], toolIds: [cutter], operation: "difference", revision: await rev() });
+    const lip = (await info(body.id)).edges.filter((e) => !before.has(e.id) && Math.abs(e.boundsMm.min[2] - BELLY) < 0.5 && Math.abs(e.boundsMm.max[2] - BELLY) < 0.5).map((e) => e.id);
+    try { await raw("plasticity_chamfer", { id: body.id, edgeIds: lip, distanceMm: 25, revision: await rev() }); notes.push(`bay cut, lip chamfer 25 on ${lip.length} edges`); }
+    catch (error) { notes.push(`bay cut; lip chamfer failed (${String(error).slice(0, 160)})`); }
+    log["drive-bay"] = { ok: true, ms: 0, notes: ["bay cut into Solid.001"] };
+  }
+  const core = await halfStadium(300, BAY.half, BAY.yc, ceiling - 12, 12, "rc11_drive_core");
+  await material([core], "Repulsor glow", "#5fe6ff", 0.1, 0);
+  notes.push(`core plate; instances ${await place(core, [])}`);
+  for (const [i, [ri, ro, z]] of ([[420, 520, ceiling - 45], [600, 690, ceiling - 80], [770, 840, ceiling - 115]] as Array<[number, number, number]>).entries()) {
+    const outer = await halfStadium(ro, BAY.half, BAY.yc, z, 14, `rc11_drive_ring_${i}`);
+    const inner = await halfStadium(ri, BAY.half, BAY.yc, z - 5, 24, "rc11_drive_ring_cutter");
+    await raw("plasticity_boolean", { targetIds: [outer], toolIds: [inner], operation: "difference", revision: await rev() });
+    await material([outer], "Emitter ring", "#9aa3ad", 0.15, 1);
+    notes.push(`ring ${i} (${ri}..${ro}, Z ${z}); instances ${await place(outer, [])}`);
+  }
+  // Guide vanes: 20 thick, from the core edge (X 300) to the bay wall (X 880), ceiling down to the lowest ring.
+  const vaneBox = (y: number, name: string) => step("plasticity_create_box", { originMm: [300, y - 10, ceiling - 130], sizeMm: [580, 20, 130], name });
+  const mid = (await batch([vaneBox(BAY.yc, "rc11_drive_vane")])).steps[0].added[0] as number;
+  await material([mid], "Gunmetal", "#2b2f33", 0.35, 0.8);
+  const straight = [-1100, -825, -550, -275, 275, 550, 825, 1100].map((dy) => [0, dy, 0] as Vec);
+  notes.push(`straight vanes; instances ${await place(mid, straight)}`);
+  for (const [end, sign] of [[BAY.yc + BAY.half, 1], [BAY.yc - BAY.half, -1]] as Array<[number, number]>) {
+    // Each end fan has its own source at the end centre: instances cannot combine translate and rotate exactly
+    // for the mirror, so the fans are rotation-only copies.
+    const src = (await batch([vaneBox(end, sign > 0 ? "rc11_drive_vane_front" : "rc11_drive_vane_rear")])).steps[0].added[0] as number;
+    await material([src], "Gunmetal", "#2b2f33", 0.35, 0.8);
+    notes.push(`${sign > 0 ? "front" : "rear"} fan; instances ${await placeRotations(src, [0, end, 0], [0, 0, 1], [30 * sign, 60 * sign])}`);
+  }
+});
+
+// ---- 11. rear drive exhaust: a framed nozzle on the lower tail face between the pods (centreline half), recessed,
+// with horizontal vanes arrayed in Z and a glow plate at the back of the recess.
+await stage("exhaust", async (notes) => {
+  await clear("rc11_exhaust");
+  const E = { x: 1150, y0: -6900, y1: -6450, z0: 1300, z1: 1720 };
+  const box = (await batch([step("plasticity_create_box", { originMm: [0, E.y0, E.z0], sizeMm: [E.x, E.y1 - E.y0, E.z1 - E.z0], name: "rc11_exhaust_frame" })])).steps[0].added[0] as number;
+  const rearEdges = (await info(box)).edges.filter((e) => e.boundsMm.max[1] < E.y0 + 0.5 && !(e.boundsMm.max[0] < 0.5)).map((e) => e.id);
+  await raw("plasticity_chamfer", { id: box, edgeIds: rearEdges, distanceMm: 30, revision: await rev() });
+  await batch(chain([
+    step("plasticity_create_box", { originMm: [-10, E.y0 - 10, E.z0 + 60], sizeMm: [E.x - 60, 230, E.z1 - E.z0 - 120], name: "rc11_exhaust_cutter" }),
+    step("plasticity_boolean", { targetIds: [box], toolIds: ["$PREV.addedSolids[0]"], operation: "difference" }),
+  ]));
+  await material([box], "Drive housing", "#3a3f45", 0.4, 0.7);
+  notes.push(`frame ${fmt(await byName("rc11_exhaust_frame"))}; instances ${await place(box, [])}`);
+  const glow = (await batch([step("plasticity_create_box", { originMm: [0, E.y0 + 214, E.z0 + 60], sizeMm: [E.x - 70, 6, E.z1 - E.z0 - 120], name: "rc11_exhaust_glow" })])).steps[0].added[0] as number;
+  await material([glow], "Repulsor glow", "#5fe6ff", 0.1, 0);
+  notes.push(`glow; instances ${await place(glow, [])}`);
+  const slat = (await batch([step("plasticity_create_box", { originMm: [0, E.y0 + 20, E.z0 + 100], sizeMm: [E.x - 70, 180, 22], name: "rc11_exhaust_vane" })])).steps[0].added[0] as number;
+  await material([slat], "Gunmetal", "#2b2f33", 0.35, 0.8);
+  notes.push(`vanes; instances ${await place(slat, [1, 2, 3].map((k) => [0, 0, 70 * k] as Vec))}`);
+});
+
+// ---- 12. buttresses (spec): tapered sail panels from the cabin's rear quarter aft along the deck, side-view wedge
+// extruded across X, top edges rounded G2. Their root blend into deck and cabin happens at the final join.
+await stage("buttress", async (notes) => {
+  await clear("rc11_buttress");
+  const x0 = 2000, w = 260;
+  const out = await batch(chain([
+    step("plasticity_create_polyline", { pointsMm: [[x0, -2300, DECK - 5], [x0, -2300, 3640], [x0, -2700, 3600], [x0, -4700, DECK - 5]], closed: true }),
+    step("plasticity_extrude_profile", { id: "$PREV.added[0]", distanceMm: w }),
+  ]));
+  await rename(out.steps[0].added[0], "rc11_buttress_profile");
+  await hide([out.steps[0].added[0]]);
+  const b = out.steps[1].added[0] as number;
+  await rename(b, "rc11_buttress");
+  const top = (await info(b)).edges.filter((e) => e.boundsMm.max[2] > DECK + 50 && Math.abs(e.boundsMm.max[0] - e.boundsMm.min[0]) < 1 && e.lengthMm > 300).map((e) => e.id);
+  if (!(await fillet(b, top, 110, "g2", "buttress top edges", notes))) await fillet(b, top, 80, "g2", "buttress top edges", notes);
+  notes.push(`${fmt(await byName("rc11_buttress"))}; instances ${await place(b, [])}`);
+});
+
+// ---- 13. Eldorado lighting: slim vertical headlight strips on the pod's front blade face (leans 10.8° forward at
+// the top) and thin horizontal taillight bars on the pod's rear blade face (leans 8.1°), below its existing panel.
+await stage("lights", async (notes) => {
+  await clear("rc11_headlight"); await clear("rc11_taillight");
+  const head = await batch(chain([
+    step("plasticity_create_box", { originMm: [2700, 7840, 2500], sizeMm: [50, 30, 440], name: "rc11_headlight" }),
+    step("plasticity_rotate", { ids: ["$PREV.addedSolids[0]"], pivotMm: [2725, 7855, 2720], axis: [1, 0, 0], degrees: -Math.atan(0.19) / D }),
+  ]));
+  const h = head.steps[0].added[0] as number;
+  await material([h], "Headlight", "#f4f8ff", 0.05, 0);
+  notes.push(`${fmt(await byName("rc11_headlight"))}; instances ${await place(h, [[90, 0, 0]])}`);
+  const tail = (await batch([step("plasticity_create_box", { originMm: [2880, -7362, 1545], sizeMm: [560, 30, 40], name: "rc11_taillight" })])).steps[0].added[0] as number;
+  await material([tail], "Tail light", "#ff2a2a", 0.15, 0);
+  notes.push(`${fmt(await byName("rc11_taillight"))}; instances ${await place(tail, [[0, 14, 100], [0, 28, 200]])}`);
+});
+
+// ---- 14. sill line along the pod's outer face (chrome strip at the base of its flat face) and a dark sensor/ID
+// strip across the upper nose face (tilted 22.4° back, centreline half).
+await stage("sill", async (notes) => {
+  await clear("rc11_sill"); await clear("rc11_nose_strip");
+  const sill = (await batch([step("plasticity_create_box", { originMm: [3650, -6900, 2160], sizeMm: [22, 13100, 30], name: "rc11_sill" })])).steps[0].added[0] as number;
+  await material([sill], "Chrome", "#d9dde2", 0.08, 1);
+  notes.push(`${fmt(await byName("rc11_sill"))}; instances ${await place(sill, [])}`);
+  const tilt = Math.atan(0.38 / 0.92) / D;
+  const strip = await batch(chain([
+    step("plasticity_create_box", { originMm: [0, 6421, 2795], sizeMm: [2300, 20, 50], name: "rc11_nose_strip" }),
+    step("plasticity_rotate", { ids: ["$PREV.addedSolids[0]"], pivotMm: [0, 6431, 2820], axis: [1, 0, 0], degrees: tilt }),
+  ]));
+  const st = strip.steps[0].added[0] as number;
+  await material([st], "Sensor glass", "#0b0d10", 0.05, 0.4);
+  notes.push(`${fmt(await byName("rc11_nose_strip"))}; instances ${await place(st, [])}`);
+});
+
 await s.close();

@@ -86,5 +86,59 @@
    "trim top edges: 2 edges r8 round",
    "rc11_trim#41 [3385,-7100,3098]..[3425,7400,3116]; instances 1"
   ]
+ },
+ "drive-bay": {
+  "ok": true,
+  "ms": 0,
+  "notes": [
+   "bay cut into Solid.001"
+  ]
+ },
+ "drive": {
+  "ok": true,
+  "ms": 26874,
+  "notes": [
+   "bay cut, lip chamfer 25 on 8 edges",
+   "core plate; instances 1",
+   "ring 0 (420..520, Z 1355); instances 1",
+   "ring 1 (600..690, Z 1320); instances 1",
+   "ring 2 (770..840, Z 1285); instances 1",
+   "straight vanes; instances 17",
+   "front fan; instances 4",
+   "rear fan; instances 4"
+  ]
+ },
+ "exhaust": {
+  "ok": true,
+  "ms": 5223,
+  "notes": [
+   "frame rc11_exhaust_frame#77 [0,-6900,1300]..[1150,-6450,1720]; instances 1",
+   "glow; instances 1",
+   "vanes; instances 7"
+  ]
+ },
+ "buttress": {
+  "ok": true,
+  "ms": 1972,
+  "notes": [
+   "buttress top edges: 6 edges r110 g2",
+   "rc11_buttress#82 [2000,-4712,2985]..[2260,-2269,3642]; instances 1"
+  ]
+ },
+ "lights": {
+  "ok": true,
+  "ms": 4108,
+  "notes": [
+   "rc11_headlight#83 [2700,7799,2501]..[2750,7911,2939]; instances 3",
+   "rc11_taillight#84 [2880,-7362,1545]..[3440,-7332,1585]; instances 5"
+  ]
+ },
+ "sill": {
+  "ok": true,
+  "ms": 1933,
+  "notes": [
+   "rc11_sill#85 [3650,-6900,2160]..[3672,6200,2190]; instances 1",
+   "rc11_nose_strip#86 [0,6412,2793]..[2300,6450,2847]; instances 1"
+  ]
  }
 }
