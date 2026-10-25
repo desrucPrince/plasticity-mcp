@@ -16,5 +16,75 @@
    "pod z 1239.9999999999998 -> moved 1639.9999999999998 -> undone 1239.9999999999998; screenshot failed: Error: plasticity_screenshot: Plasticity renderer is hidden; activate Plasticity and retry the screenshot",
    "mirrored pod instance linked to source: true"
   ]
+ },
+ "refine": {
+  "ok": true,
+  "ms": 1140,
+  "notes": [
+   "visor sheets: Face sheet.001#19 [0,-2000,3659]..[2303,3754,3840] (5 faces), mirrored instances 1"
+  ]
+ },
+ "refine-fillet": {
+  "ok": true,
+  "ms": 0,
+  "notes": [
+   "r300 g2 on 5 edges (first run; measurement failed afterwards)"
+  ]
+ },
+ "cuts": {
+  "ok": true,
+  "ms": 1756,
+  "notes": [
+   "grooves: 3 (14 wide, 8 deep)",
+   "pod louvre recess: Y 900..4300, Z 2330..2700, 30 deep"
+  ]
+ },
+ "fins": {
+  "ok": true,
+  "ms": 1777,
+  "notes": [
+   "slab rc11_fin#35 [3498,-6240,1825]..[4913,-1200,2563]",
+   "LE edges 2, TE edges 2",
+   "fin leading/trailing edges: 4 edges r52 g2",
+   "fin tip edge: 8 edges r30 g2",
+   "rc11_fin#35 [3446,-6224,1825]..[4926,-1177,2588]; instances 1"
+  ]
+ },
+ "grille": {
+  "ok": true,
+  "ms": 7219,
+  "notes": [
+   "rc11_grille_bar#36 [300,6375,2071]..[330,6473,2366]; instances 27"
+  ]
+ },
+ "louvres": {
+  "ok": true,
+  "ms": 2160,
+  "notes": [
+   "rc11_louvre#37 [3609,950,2351]..[3657,4250,2409]; instances 7"
+  ]
+ },
+ "strakes": {
+  "ok": true,
+  "ms": 2712,
+  "notes": [
+   "strake top edges: 2 edges r10 round",
+   "rc11_strake#39 [464,-4800,3095]..[488,-3650,3190]; instances 7"
+  ]
+ },
+ "pads": {
+  "ok": true,
+  "ms": 3153,
+  "notes": [
+   "rc11_hover_pad#40 [2300,-700,1205]..[2880,700,1245]; instances 9"
+  ]
+ },
+ "trim": {
+  "ok": true,
+  "ms": 871,
+  "notes": [
+   "trim top edges: 2 edges r8 round",
+   "rc11_trim#41 [3385,-7100,3098]..[3425,7400,3116]; instances 1"
+  ]
  }
 }

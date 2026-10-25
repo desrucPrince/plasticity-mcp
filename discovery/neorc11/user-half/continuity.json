@@ -1,1 +1,16 @@
-{}
+{
+ "fin leading/trailing edges": {
+  "edges": 8,
+  "maxG0mm": 0,
+  "maxG1deg": 0,
+  "maxRelG2": 0,
+  "verdict": "G2"
+ },
+ "fin tip edge": {
+  "edges": 32,
+  "maxG0mm": 0,
+  "maxG1deg": 0.1584,
+  "maxRelG2": 1,
+  "verdict": "G1 only"
+ }
+}

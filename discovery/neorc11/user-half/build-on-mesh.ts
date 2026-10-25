@@ -57,6 +57,8 @@ async function rename(id: number, name: string) { await call("plasticity_rename"
 async function hide(ids: number[]) { if (ids.length) await call("plasticity_set_visibility", { bodyIds: ids, visible: false, revision: await rev() }); }
 const instances = async () => ((await call("plasticity_list_instances")).instances ?? []) as Array<{ id: number; sourceBodyIds: number[]; scale: Vec; translationMm: Vec }>;
 async function measure(label: string, id: number, edgeIds: string[]) {
+  const twoFaced = new Set((await info(id)).edges.filter((e) => e.faceIds.length === 2).map((e) => e.id));
+  edgeIds = edgeIds.filter((e) => twoFaced.has(e));
   if (!edgeIds.length) return;
   const res = await call("plasticity_analyze_surface_continuity", { edges: edgeIds.slice(0, 400).map((edgeId) => ({ bodyId: id, edgeId })), revision: await rev() });
   const tangent = (res.analyses ?? []).filter((a: any) => a.maximumNormalAngleDeviationDeg < 1);
@@ -85,31 +87,23 @@ async function clear(prefix: string) {
   await raw("plasticity_delete", { ids: [...ids], revision: await rev() });
   return mine.length;
 }
-// One linked instance per placement (translation, optional rotation about pivot/axis) plus a mirrored instance
-// across X = 0 for the source and for each placement.
-async function place(sourceId: number, placements: Array<{ t: Vec; rotate?: { pivot: Vec; axis: Vec; deg: number } }>, mirror = true) {
+// One linked instance per translation of the source, plus a mirrored instance across X = 0 for the source and
+// for each translation (a mirrored instance moved by the X-flipped delta). Rotations belong in the source.
+async function place(sourceId: number, translations: Vec[], mirror = true) {
   let n = 0;
-  const all = [{ t: [0, 0, 0] as Vec, source: true }, ...placements.map((p) => ({ ...p, source: false }))];
-  for (const p of all) {
-    if (!p.source) {
-      const before = new Set((await instances()).map((i) => i.id));
-      await call("plasticity_create_instance", { bodyId: sourceId, translationMm: p.t, revision: await rev() });
-      const id = (await instances()).find((i) => !before.has(i.id))!.id;
-      if ("rotate" in p && p.rotate) await call("plasticity_rotate_instances", { ids: [id], pivotMm: p.rotate.pivot, axis: p.rotate.axis, degrees: p.rotate.deg, revision: await rev() });
-      n++;
-    }
-    if (mirror) {
-      const before = new Set((await instances()).map((i) => i.id));
-      await call("plasticity_create_mirrored_instance", { bodyId: sourceId, axis: "x", planeOffsetMm: 0, revision: await rev() });
-      const id = (await instances()).find((i) => !before.has(i.id))!.id;
-      // Mirror of a placement: rotate (mirrored axis) then translate by the X-flipped delta.
-      if ("rotate" in p && p.rotate) {
-        const { pivot, axis, deg } = p.rotate;
-        await call("plasticity_rotate_instances", { ids: [id], pivotMm: [-pivot[0], pivot[1], pivot[2]], axis: [axis[0], -axis[1], -axis[2]], degrees: deg, revision: await rev() });
-      }
-      if (p.t.some((v) => v !== 0)) await call("plasticity_move_instances", { ids: [id], deltaMm: [-p.t[0], p.t[1], p.t[2]], revision: await rev() });
-      n++;
-    }
+  const newest = async (make: () => Promise<unknown>) => {
+    const before = new Set((await instances()).map((i) => i.id));
+    await make();
+    return (await instances()).find((i) => !before.has(i.id))!.id;
+  };
+  for (const t of translations) {
+    await newest(async () => call("plasticity_create_instance", { bodyId: sourceId, translationMm: t, revision: await rev() }));
+    n++;
+  }
+  if (mirror) for (const t of [[0, 0, 0] as Vec, ...translations]) {
+    const id = await newest(async () => call("plasticity_create_mirrored_instance", { bodyId: sourceId, axis: "x", planeOffsetMm: 0, revision: await rev() }));
+    if (t.some((v) => v !== 0)) await call("plasticity_move_instances", { ids: [id], deltaMm: [-t[0], t[1], t[2]], revision: await rev() });
+    n++;
   }
   return n;
 }
@@ -165,6 +159,169 @@ await stage("link-test", async (notes) => {
   notes.push(`pod z ${pod.boundsMm.min[2]} -> moved ${moved.boundsMm.min[2]} -> undone ${back.boundsMm.min[2]}; ${typeof shot === "string" ? shot : "screenshot saved"}`);
   const linked = (await instances()).some((i) => i.sourceBodyIds.includes(pod.id) && i.scale[0] < 0);
   notes.push(`mirrored pod instance linked to source: ${linked}`);
+});
+
+
+// Stages that change the user's own bodies run once; FORCE=1 reruns them.
+const once = (name: string) => !log[name]?.ok || process.env.FORCE === "1";
+const DECK = 3100; // user mesh: deck and pod tops are both flat at Z 3100
+
+// ---- 2. refine the +X sources where the user's mesh allows: G2 cabin-to-deck blend; visor glass band.
+// (Their deck and pod tops are coplanar at Z 3100, so the spec's 250 mm hood-to-fender valley has no step to
+// blend; their pod keeps its own 45° top chamfer and end shapes.)
+await stage("refine", async (notes) => {
+  const body = await byName("Solid.001");
+  if (once("refine-fillet")) {
+    const seam = (await info(body.id)).edges.filter((e) => Math.abs(e.boundsMm.min[2] - DECK) < 0.5 && Math.abs(e.boundsMm.max[2] - DECK) < 0.5
+      && e.boundsMm.max[0] <= 2310 && e.boundsMm.min[1] >= -3400 && e.boundsMm.max[1] <= 4720).map((e) => e.id);
+    notes.push(`cabin/deck seam edges: ${seam.length}`);
+    for (const radius of [300, 220, 150]) if (await fillet(body.id, seam, radius, "g2", "cabin-to-deck", notes)) { log["refine-fillet"] = { ok: true, ms: 0, notes: [`r${radius}`] }; break; }
+  }
+  // Visor: the cabin surface in a 140 mm band at the waist (Z 3700..3840), front and sides, copied to a sheet.
+  await clear("rc11_Visor");
+  const band = await batch(chain([
+    step("plasticity_duplicate_bodies", { ids: [body.id] }),
+    step("plasticity_create_box", { originMm: [0, -2000, 3700], sizeMm: [2500, 7000, 140], name: "rc11_visor_band" }),
+    step("plasticity_boolean", { targetIds: ["$0.added[0]"], toolIds: ["$1.addedSolids[0]"], operation: "intersection" }),
+  ]));
+  const bandId = band.steps[0].added[0] as number;
+  const onBox = (f: Face) => ([[2, 3700], [2, 3840], [1, -2000], [0, 0]] as Array<[number, number]>).some(([axis, v]) => Math.abs(f.boundsMm.min[axis] - v) < 0.5 && Math.abs(f.boundsMm.max[axis] - v) < 0.5);
+  const outer = (await info(bandId)).faces.filter((f) => !onBox(f));
+  if (!outer.length) throw new Error("visor: band has no cabin faces");
+  const before = new Set((await bodies()).map((b) => b.id));
+  await call("plasticity_extract_faces", { faces: outer.map((f) => ({ bodyId: bandId, faceId: f.id })), revision: await rev() });
+  let sheets = (await bodies()).filter((b) => !before.has(b.id)).map((b) => b.id);
+  if (sheets.length > 1) {
+    await call("plasticity_join_sheets", { ids: sheets, revision: await rev() });
+    const now = new Set((await bodies()).map((b) => b.id));
+    sheets = sheets.filter((id) => now.has(id));
+  }
+  await raw("plasticity_delete", { ids: [bandId], revision: await rev() });
+  const visor = (await bodies()).filter((b) => sheets.includes(b.id));
+  for (const [i, v] of visor.entries()) await rename(v.id, i ? `rc11_Visor_${i}` : "rc11_Visor");
+  await call("plasticity_set_appearance_material", { ids: visor.map((v) => v.id), name: "Visor glass", colorHex: "#14202b", roughness: 0.05, metalness: 0.3, opacity: 0.6, revision: await rev() });
+  let n = 0;
+  for (const v of visor) n += await place(v.id, []);
+  notes.push(`visor sheets: ${visor.map(fmt).join("; ")} (${outer.length} faces), mirrored instances ${n}`);
+});
+
+// ---- 3. shallow cuts into the sources: hood and deck panel-line grooves (body), louvre recess (pod side).
+await stage("cuts", async (notes) => {
+  if (!once("cuts")) { notes.push("already cut"); return; }
+  const body = await byName("Solid.001"), pod = await byName("Solid.003");
+  const g = 14, d = 8;
+  const grooves: Array<[Vec, Vec]> = [
+    [[-10, 5450 - g / 2, DECK - d], [2650, g, 40]], // hood seam ahead of the windscreen
+    [[-10, -3520 - g / 2, DECK - d], [2650, g, 40]], // deck seam behind the cabin
+    [[2450 - g / 2, 4760, DECK - d], [g, 1500, 40]], // hood panel side line
+  ];
+  for (const [o, sz] of grooves) await batch(chain([
+    step("plasticity_create_box", { originMm: o, sizeMm: sz, name: "rc11_groove_cutter" }),
+    step("plasticity_boolean", { targetIds: [body.id], toolIds: ["$PREV.addedSolids[0]"], operation: "difference" }),
+  ]));
+  notes.push(`grooves: ${grooves.length} (14 wide, 8 deep)`);
+  await batch(chain([
+    step("plasticity_create_box", { originMm: [3627, 900, 2330], sizeMm: [100, 3400, 370], name: "rc11_recess_cutter" }),
+    step("plasticity_boolean", { targetIds: [pod.id], toolIds: ["$PREV.addedSolids[0]"], operation: "difference" }),
+  ]));
+  notes.push("pod louvre recess: Y 900..4300, Z 2330..2700, 30 deep");
+});
+
+// ---- 4. side fins: planform in a plane canted 25° down from the pod's flat outer face (X 3657; root at Z 2450,
+// the middle of that face, instead of the spec's 2120, which would land on their lower fillet), extruded 55 mm
+// to each side (110 thick), leading and trailing edges rounded G2 almost to a full round, tip edges G2.
+// (A loft between closed 110 mm sections failed in Parasolid, error 21555, for every curvature option.)
+// The root blend into the pod happens at the final join.
+const FIN = { x: 3657, z: 2450, cant: 25, rootLe: -1200, rootTe: -5200, span: 1360, tipLe: -5040, tipTe: -6240, t: 110 };
+await stage("fins", async (notes) => {
+  await clear("rc11_fin");
+  const dir: Vec = [Math.cos(FIN.cant * D), 0, -Math.sin(FIN.cant * D)];
+  const nrm: Vec = [Math.sin(FIN.cant * D), 0, Math.cos(FIN.cant * D)];
+  const at = (sp: number, y: number): Vec => [r(FIN.x + sp * dir[0]), y, r(FIN.z + sp * dir[2])];
+  const out = await batch(chain([
+    step("plasticity_create_polyline", { pointsMm: [at(-150, FIN.rootLe), at(FIN.span, FIN.tipLe), at(FIN.span, FIN.tipTe), at(-150, FIN.rootTe)], closed: true }),
+    step("plasticity_extrude_profile", { id: "$PREV.added[0]", distanceMm: FIN.t / 2, options: { reverseDistanceMm: FIN.t / 2 } }),
+  ]));
+  await rename(out.steps[0].added[0], "rc11_fin_planform");
+  await hide([out.steps[0].added[0]]);
+  const fin = out.steps[1].added[0] as number;
+  await rename(fin, "rc11_fin");
+  const b = await byName("rc11_fin");
+  notes.push(`slab ${fmt(b)}`);
+  // Leading/trailing edges: the long edges of the two side faces (Y-sloped, not the root or tip ends).
+  const span = (e: Edge) => { const dx = e.boundsMm.max[0] - e.boundsMm.min[0]; return dx > 1000; };
+  const le = (await info(fin)).edges.filter((e) => span(e) && e.boundsMm.max[1] > -5100 && e.boundsMm.min[1] < -1100 && e.boundsMm.max[1] - e.boundsMm.min[1] > 3000 && e.boundsMm.max[1] > -1300).map((e) => e.id);
+  const te = (await info(fin)).edges.filter((e) => span(e) && e.boundsMm.min[1] < -6100).map((e) => e.id);
+  notes.push(`LE edges ${le.length}, TE edges ${te.length}`);
+  if (!(await fillet(fin, [...le, ...te], 52, "g2", "fin leading/trailing edges", notes))) await fillet(fin, [...le, ...te], 45, "g2", "fin leading/trailing edges", notes);
+  const tip = (await info(fin)).edges.filter((e) => e.boundsMm.min[0] > FIN.x + FIN.span * dir[0] - 60).map((e) => e.id);
+  await fillet(fin, tip, 30, "g2", "fin tip edge", notes);
+  notes.push(`${fmt(await byName("rc11_fin"))}; instances ${await place(fin, [])}`);
+});
+
+// ---- 5. grille bars arrayed across the upper inlet slot (X 235..2532, Z 2065..2372), leaning with the nose face.
+await stage("grille", async (notes) => {
+  await clear("rc11_grille_bar");
+  const lean = Math.atan(0.2) / D; // the nose face moves 0.2 mm forward per mm up
+  const out = await batch(chain([
+    step("plasticity_create_box", { originMm: [300, 6403, 2072], sizeMm: [30, 42, 293], name: "rc11_grille_bar" }),
+    step("plasticity_rotate", { ids: ["$PREV.addedSolids[0]"], pivotMm: [315, 6424, 2218], axis: [1, 0, 0], degrees: -lean }),
+  ]));
+  const bar = out.steps[0].added[0] as number;
+  await call("plasticity_set_appearance_material", { ids: [bar], name: "Gunmetal", colorHex: "#2b2f33", roughness: 0.35, metalness: 0.8, revision: await rev() });
+  const ts: Vec[] = Array.from({ length: 13 }, (_, k) => [165 * (k + 1), 0, 0]);
+  notes.push(`${fmt(await byName("rc11_grille_bar"))}; instances ${await place(bar, ts)}`);
+});
+
+// ---- 6. pod side louvres: four angled blades stacked in the recess.
+await stage("louvres", async (notes) => {
+  await clear("rc11_louvre");
+  const out = await batch(chain([
+    step("plasticity_create_box", { originMm: [3625, 950, 2350], sizeMm: [16, 3300, 60], name: "rc11_louvre" }),
+    step("plasticity_rotate", { ids: ["$PREV.addedSolids[0]"], pivotMm: [3633, 2600, 2380], axis: [0, 1, 0], degrees: 35 }),
+  ]));
+  const blade = out.steps[0].added[0] as number;
+  await call("plasticity_set_appearance_material", { ids: [blade], name: "Gunmetal", colorHex: "#2b2f33", roughness: 0.35, metalness: 0.8, revision: await rev() });
+  notes.push(`${fmt(await byName("rc11_louvre"))}; instances ${await place(blade, [1, 2, 3].map((k) => [0, 0, 85 * k] as Vec))}`);
+});
+
+// ---- 7. rear deck strakes: thin wedge vanes behind the cabin, arrayed across X.
+await stage("strakes", async (notes) => {
+  await clear("rc11_strake");
+  const x = 488;
+  const out = await batch(chain([
+    step("plasticity_create_polyline", { pointsMm: [[x, -4800, DECK - 5], [x, -3750, DECK + 90], [x, -3650, DECK + 90], [x, -3650, DECK - 5]], closed: true }),
+    step("plasticity_extrude_profile", { id: "$PREV.added[0]", distanceMm: 24 }),
+  ]));
+  await rename(out.steps[0].added[0], "rc11_strake_profile");
+  await hide([out.steps[0].added[0]]);
+  const strake = out.steps[1].added[0] as number;
+  await rename(strake, "rc11_strake");
+  const top = (await info(strake)).edges.filter((e) => e.boundsMm.min[2] > DECK + 10 && e.lengthMm > 50).map((e) => e.id);
+  await fillet(strake, top, 10, "round", "strake top edges", notes);
+  notes.push(`${fmt(await byName("rc11_strake"))}; instances ${await place(strake, [1, 2, 3].map((k) => [400 * k, 0, 0] as Vec))}`);
+});
+
+// ---- 8. hover emitter pads: flat chamfered plates under the pod/body belly, arrayed along Y.
+await stage("pads", async (notes) => {
+  await clear("rc11_hover_pad");
+  const out = await batch(chain([step("plasticity_create_box", { originMm: [2300, -700, 1205], sizeMm: [580, 1400, 40], name: "rc11_hover_pad" })]));
+  const pad = out.steps[0].added[0] as number;
+  const bottom = (await info(pad)).edges.filter((e) => e.boundsMm.max[2] < 1206).map((e) => e.id);
+  await raw("plasticity_chamfer", { id: pad, edgeIds: bottom, distanceMm: 12, revision: await rev() });
+  await call("plasticity_set_appearance_material", { ids: [pad], name: "Emitter", colorHex: "#3fd0ff", roughness: 0.2, metalness: 0.1, revision: await rev() });
+  notes.push(`${fmt(await byName("rc11_hover_pad"))}; instances ${await place(pad, [-5000, -2500, 2500, 4800].map((y) => [0, y, 0] as Vec))}`);
+});
+
+// ---- 9. chrome trim strip along the pod top, just inboard of its outer chamfer.
+await stage("trim", async (notes) => {
+  await clear("rc11_trim");
+  const out = await batch(chain([step("plasticity_create_box", { originMm: [3385, -7100, DECK - 2], sizeMm: [40, 14500, 18], name: "rc11_trim" })]));
+  const trim = out.steps[0].added[0] as number;
+  const top = (await info(trim)).edges.filter((e) => e.boundsMm.min[2] > DECK + 15 && e.lengthMm > 1000).map((e) => e.id);
+  await fillet(trim, top, 8, "round", "trim top edges", notes);
+  await call("plasticity_set_appearance_material", { ids: [trim], name: "Chrome", colorHex: "#d9dde2", roughness: 0.08, metalness: 1, revision: await rev() });
+  notes.push(`${fmt(await byName("rc11_trim"))}; instances ${await place(trim, [])}`);
 });
 
 await s.close();
