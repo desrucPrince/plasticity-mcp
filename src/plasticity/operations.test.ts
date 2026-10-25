@@ -1650,6 +1650,29 @@ test("creates and transforms native instances through their empty transforms", a
   assert.deepEqual(calls[3]?.bindings, ["ProjectingScaleItemAndEmptyFactory"]);
 });
 
+test("creates a mirrored linked instance with a negative scale about the mirror plane", async () => {
+  const calls: Array<{ source: string; bindings: string[]; values: unknown[] }> = [];
+  const body = { id: 7, versionId: 17, type: "Solid", name: "Half", boundsMm: null, faceIds: [], edgeIds: [], faces: [], edges: [] };
+  const state: RuntimeState = { targetId: "window-1", title: "Untitled - Plasticity", documentToken: "document-1", revision: "current-revision", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [body] };
+  const runtime = {
+    async getState() { return state; },
+    async mutate(source: string, bindings: string[], values: unknown[]) { calls.push({ source, bindings, values }); return {}; },
+  } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+
+  await operations.createMirroredInstance(7, "x", 0, state.revision);
+  await operations.createMirroredInstance(7, "y", 250, state.revision);
+
+  assert.deepEqual(calls[0]?.bindings, ["CreateInstanceFactory", "ProjectingScaleItemAndEmptyFactory"]);
+  assert.deepEqual(calls[0]?.values, [{ bodyId: 7, pivot: [0, 0, 0], factors: [-1, 1, 1] }]);
+  assert.deepEqual(calls[1]?.values, [{ bodyId: 7, pivot: [0, 0.25, 0], factors: [1, -1, 1] }]);
+  assert.match(calls[0]?.source ?? "", /scale\.empties = created/);
+  assert.match(calls[0]?.source ?? "", /scale\.scale\.fromArray\(args\.factors\)/);
+  await assert.rejects(operations.createMirroredInstance(99, "x", 0, state.revision), /unknown current body/i);
+  await assert.rejects(operations.createMirroredInstance(7, "x", 0, "old-revision"), /stale reference/i);
+  assert.equal(calls.length, 2);
+});
+
 test("duplicates independent native Solid and Sheet bodies in one grouped operation", async () => {
   const calls: Array<{ source: string; bindings: string[]; values: unknown[] }> = [];
   const solid = { id: 7, versionId: 17, type: "Solid", name: "Solid source", boundsMm: null, faceIds: [], edgeIds: [], faces: [], edges: [] };

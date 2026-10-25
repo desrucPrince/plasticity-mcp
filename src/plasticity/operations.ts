@@ -1531,6 +1531,47 @@ export class PlasticityOperations {
     return await this.state();
   }
 
+  // A linked instance mirrored across a world plane normal to one axis (scale -1 on that axis about the plane).
+  // Source-body edits keep propagating; realize it before booleans or joins.
+  async createMirroredInstance(bodyId: number, axis: "x" | "y" | "z", planeOffsetMm: number, revision: string): Promise<RuntimeState> {
+    const state = await this.assertRevision(revision);
+    if (!state.bodies.some((body) => body.id === bodyId)) throw new Error(`Unknown current body ID: ${bodyId}`);
+    if (!Number.isFinite(planeOffsetMm)) throw new Error("Mirror plane offset must be finite");
+    const index = { x: 0, y: 1, z: 2 }[axis];
+    const pivot: Vector3 = [0, 0, 0];
+    pivot[index] = planeOffsetMm / 1000;
+    const factors: Vector3 = [1, 1, 1];
+    factors[index] = -1;
+    await this.runtime.mutate(`async function (CreateFactory, ScaleFactory, args) {
+      ${findView}
+      if (this.executor.isBusy) throw new Error('Plasticity is busy');
+      const editor = this;
+      let failure;
+      const command = new this.commands.GroupSelectedCommand(this);
+      command.remember = false;
+      command.execute = async function () {
+        try {
+          const create = new CreateFactory(editor).resource(this);
+          create.items = [find(args.bodyId)];
+          const result = await create.commit();
+          const created = Array.isArray(result) ? result : [result].filter(Boolean);
+          if (created.length !== 1 || created[0]?.constructor?.name !== 'InstanceEmpty') {
+            throw new Error('Plasticity did not create exactly one native instance');
+          }
+          const scale = new ScaleFactory(editor).resource(this);
+          scale.empties = created;
+          scale.pivot.fromArray(args.pivot);
+          scale.scale.fromArray(args.factors);
+          await scale.commit();
+          return created;
+        } catch (error) { failure = error; throw error; }
+      };
+      await this.exec(command);
+      if (failure) throw failure;
+    }`, ["CreateInstanceFactory", "ProjectingScaleItemAndEmptyFactory"], [{ bodyId, pivot, factors }]);
+    return await this.state();
+  }
+
   async duplicateBodies(ids: number[], translationMm: Vector3, revision: string): Promise<RuntimeState> {
     const state = await this.assertRevision(revision);
     if (ids.length === 0 || new Set(ids).size !== ids.length) {
