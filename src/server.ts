@@ -3440,8 +3440,8 @@ function createServerWithCatalog(
       : { name: name!, colorHex: colorHex!, roughness: roughness ?? 0.6, metalness: metalness ?? 0, opacity: opacity ?? 1 };
     return await journaled("set-appearance-material", purpose, { bodyIds, material }, () => session.get().setAppearanceMaterial(bodyIds, material, current));
   });
-  tool("plasticity_fillet", "Fillet current edge IDs with a radius in millimeters.", z.object({ id: z.number().int().positive(), edgeIds: z.array(z.string()).min(1), radiusMm: z.number().finite().positive(), intent, revision }), async ({ id, edgeIds, radiusMm, intent: purpose, revision: current }) =>
-    await journaled("fillet", purpose, { id, edgeIds, radiusMm }, () => session.get().fillet(id, edgeIds, radiusMm, current)));
+  tool("plasticity_fillet", "Fillet current edge IDs with a radius in millimeters. shape \"g2\" makes a curvature-continuous (G2) blend instead of the default circular \"round\" (G1).", z.object({ id: z.number().int().positive(), edgeIds: z.array(z.string()).min(1), radiusMm: z.number().finite().positive(), shape: z.enum(["round", "g2"]).default("round"), intent, revision }), async ({ id, edgeIds, radiusMm, shape, intent: purpose, revision: current }) =>
+    await journaled("fillet", purpose, { id, edgeIds, radiusMm, shape }, () => session.get().fillet(id, edgeIds, radiusMm, current, shape)));
   tool("plasticity_chamfer", "Chamfer current edge IDs by an equal distance in millimeters.", z.object({ id: z.number().int().positive(), edgeIds: z.array(z.string()).min(1), distanceMm: z.number().finite().positive(), intent, revision }), async ({ id, edgeIds, distanceMm, intent: purpose, revision: current }) =>
     await journaled("chamfer", purpose, { id, edgeIds, distanceMm }, () => session.get().chamfer(id, edgeIds, distanceMm, current)));
   tool("plasticity_remove_fillets", "Remove every native fillet recognized on one or more current Solid or Sheet bodies.", z.object({ ids, intent, revision }).strict(), async ({ ids: bodyIds, intent: purpose, revision: current }) =>

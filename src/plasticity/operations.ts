@@ -412,6 +412,8 @@ const commandStart = (commandName: string, factoryName = "Factory") => `
     try {
       const factory = new ${factoryName}(editor).resource(this);`;
 
+const FILLET_SHAPE_G2 = 22202;
+
 const commandEnd = `
       return await factory.commit();
     } catch (error) {
@@ -4883,7 +4885,9 @@ export class PlasticityOperations {
     return await this.state();
   }
 
-  async fillet(id: number, edgeIds: string[], radiusMm: number, revision: string): Promise<RuntimeState> {
+  // shape: native Parasolid blend cross-section. "round" (22201) is circular; "g2" (22202) is curvature continuous
+  // (measured live: relative G2 deviation 0 at both tangent edges, versus 1 for round).
+  async fillet(id: number, edgeIds: string[], radiusMm: number, revision: string, shape: "round" | "g2" = "round"): Promise<RuntimeState> {
     await this.assertRevision(revision);
     await this.runtime.mutate(`async function (Factory, args) {
       ${findView}
@@ -4896,9 +4900,10 @@ export class PlasticityOperations {
         if (index < 0) throw new Error('Stale or unknown edge: ' + id);
         return edges.get(index);
       });
+      if (args.shape !== undefined) factory.shape = args.shape;
       factory.distance = args.radius;
       ${commandEnd}
-    }`, ["FilletShellFactory"], [{ id, edgeIds, radius: millimetersToMeters(radiusMm) }]);
+    }`, ["FilletShellFactory"], [{ id, edgeIds, radius: millimetersToMeters(radiusMm), ...(shape === "g2" ? { shape: FILLET_SHAPE_G2 } : {}) }]);
     return await this.state();
   }
 

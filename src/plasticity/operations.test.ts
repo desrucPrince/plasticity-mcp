@@ -1673,6 +1673,23 @@ test("creates a mirrored linked instance with a negative scale about the mirror 
   assert.equal(calls.length, 2);
 });
 
+test("fillet sets the native curvature-continuous blend shape only for shape g2", async () => {
+  const calls: Array<{ source: string; bindings: string[]; values: unknown[] }> = [];
+  const state: RuntimeState = { targetId: "window-1", title: "Untitled - Plasticity", documentToken: "document-1", revision: "current-revision", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [] };
+  const runtime = {
+    async getState() { return state; },
+    async mutate(source: string, bindings: string[], values: unknown[]) { calls.push({ source, bindings, values }); return {}; },
+  } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+
+  await operations.fillet(7, ["e1"], 250, state.revision);
+  await operations.fillet(7, ["e1"], 250, state.revision, "g2");
+
+  assert.deepEqual(calls[0]?.values, [{ id: 7, edgeIds: ["e1"], radius: 0.25 }]);
+  assert.deepEqual(calls[1]?.values, [{ id: 7, edgeIds: ["e1"], radius: 0.25, shape: 22202 }]);
+  assert.match(calls[1]?.source ?? "", /if \(args\.shape !== undefined\) factory\.shape = args\.shape/);
+});
+
 test("duplicates independent native Solid and Sheet bodies in one grouped operation", async () => {
   const calls: Array<{ source: string; bindings: string[]; values: unknown[] }> = [];
   const solid = { id: 7, versionId: 17, type: "Solid", name: "Solid source", boundsMm: null, faceIds: [], edgeIds: [], faces: [], edges: [] };
