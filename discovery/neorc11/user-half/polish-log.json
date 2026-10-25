@@ -1,0 +1,101 @@
+{
+ "fasteners": {
+  "ok": true,
+  "ms": 284248,
+  "notes": [
+   "rc11_p_bolt_side: top round ok",
+   "side bolts: instances 111",
+   "rc11_p_bolt_belly: top round ok",
+   "belly bolts: instances 77",
+   "rc11_p_bolt_rear: top round ok",
+   "exhaust bolts: instances 25",
+   "rc11_p_rivet: top round ok",
+   "rivets: instances 101"
+  ]
+ },
+ "__counts": {
+  "bolts (pod side)": {
+   "sources": 1,
+   "instances": 111
+  },
+  "bolts (belly: drive lip, hover pads)": {
+   "sources": 1,
+   "instances": 77
+  },
+  "bolts (exhaust frame)": {
+   "sources": 1,
+   "instances": 25
+  },
+  "rivets (panel seams)": {
+   "sources": 1,
+   "instances": 101
+  },
+  "conduits": {
+   "sources": 4,
+   "instances": 4
+  },
+  "flanged stubs": {
+   "sources": 2,
+   "instances": 10
+  },
+  "clamp brackets": {
+   "sources": 2,
+   "instances": 50
+  },
+  "hatch latches": {
+   "sources": 2,
+   "instances": 2
+  },
+  "tie-down points": {
+   "sources": 1,
+   "instances": 3
+  },
+  "roof sensor pucks": {
+   "sources": 1,
+   "instances": 3
+  },
+  "marker lights": {
+   "sources": 2,
+   "instances": 2
+  }
+ },
+ "conduits": {
+  "ok": true,
+  "ms": 82911,
+  "notes": [
+   "pod flanges: 7; belly flanges: 3",
+   "clamp chamfer 3: ok",
+   "clamp chamfer 3: ok",
+   "pod clamps: 35; belly clamps: 15"
+  ]
+ },
+ "hatches": {
+  "ok": true,
+  "ms": 11535,
+  "notes": [
+   "pod side hatch seam cut (both sides)",
+   "hood hatch seam cut (both sides)",
+   "latches: 1 + 1"
+  ]
+ },
+ "bits": {
+  "ok": true,
+  "ms": 18009,
+  "notes": [
+   "tie-down round: ok",
+   "tie-downs: 3",
+   "puck round: ok",
+   "pucks: 3",
+   "markers: 1 + 1"
+  ]
+ },
+ "validate": {
+  "ok": true,
+  "ms": 712,
+  "notes": [
+   "solids 119, valid 119",
+   "instances in document: 388",
+   "counts: {\"bolts (pod side)\":{\"sources\":1,\"instances\":111},\"bolts (belly: drive lip, hover pads)\":{\"sources\":1,\"instances\":77},\"bolts (exhaust frame)\":{\"sources\":1,\"instances\":25},\"rivets (panel seams)\":{\"sources\":1,\"instances\":101},\"conduits\":{\"sources\":4,\"instances\":4},\"flanged stubs\":{\"sources\":2,\"instances\":10},\"clamp brackets\":{\"sources\":2,\"instances\":50},\"hatch latches\":{\"sources\":2,\"instances\":2},\"tie-down points\":{\"sources\":1,\"instances\":3},\"roof sensor pucks\":{\"sources\":1,\"instances\":3},\"marker lights\":{\"sources\":2,\"instances\":2}}"
+  ]
+ }
+}

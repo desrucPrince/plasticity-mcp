@@ -1,0 +1,82 @@
+{
+ "saved": "/Users/neocortez/Library/Mobile Documents/com~apple~CloudDocs/ExportsJUN25/plasticity/RC1BaseMeshV4.plasticity",
+ "instancesAtSave": 388,
+ "realized": {
+  "instances": 185,
+  "bodies": 185,
+  "left": 0
+ },
+ "mirror": {
+  "sources": 203,
+  "copies": 83,
+  "sourcesKept": true
+ },
+ "validate": {
+  "solids": 387,
+  "valid": 387,
+  "invalid": [],
+  "hull": {
+   "id": 7,
+   "versionId": 629,
+   "type": "Solid",
+   "name": "rc11_hull",
+   "measurementSource": "native-brep",
+   "faceCount": 370,
+   "edgeCount": 933,
+   "boundaryEdgeIds": [],
+   "closed": true,
+   "nativeCheckCodes": [],
+   "nativeValid": true,
+   "printableSolid": true
+  }
+ },
+ "bodies": {
+  "total": 389,
+  "polish": 286
+ },
+ "boundsAllMm": {
+  "min": [
+   -4925,
+   -7440,
+   1168
+  ],
+  "max": [
+   4925,
+   7911,
+   4870
+  ]
+ },
+ "exports": {
+  "stepAll": 5942678,
+  "stepHull": 3051192,
+  "stl": {
+   "bytes": 12178684,
+   "triangles": 243572
+  },
+  "obj": {
+   "bytes": 27756785,
+   "triangles": 242822,
+   "boundsMm": {
+    "min": [
+     -4904.25146484,
+     -7440,
+     1168
+    ],
+    "max": [
+     4904.25146484,
+     7910.80175781,
+     4490
+    ],
+    "size": [
+     9808.50292968,
+     15350.80175781,
+     3322
+    ]
+   }
+  },
+  "renderObj": {
+   "bytes": 106400509,
+   "triangles": 901878
+  }
+ }
+}
