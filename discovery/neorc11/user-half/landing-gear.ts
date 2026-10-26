@@ -1,13 +1,15 @@
 // Retractable landing gear and a boarding hatch on the neoRC 11 belly, built on the live-mirrored V10+ document.
-// Gear (landed pose): four legs at X ±1600, pivots at Y 4400 (front) and -3200 (rear), Z 1450. Each sits in an
-// 880 x 1940 bay, 400 mm deep, with a dark ceiling liner and a chamfered lip. Parts: a trunnion with a pivot pin, a
-// 200 mm strut, a chrome slider, a fork housing, a knuckle (Z 110), a 640 mm dished footpad 60 mm thick with a bolt ring (bottom at Z 0),
-// a two-link side brace with a knee, a hydraulic actuator, and two bay doors hanging open 90°. One leg is the source;
+// Gear (landed pose): four legs at X ±1600, pivots at Y 4400 (front) and -3200 (rear), Z 2250 (belly at Z 2040). Each
+// sits in an 880 x 1940 bay, 400 mm deep, with a dark ceiling liner and a chamfered lip. Parts: a trunnion with a pivot
+// pin, a 300 mm upper strut, a 260 mm intermediate stage, a chrome slider, a fork housing, a knuckle (Z 110), an 800 mm
+// dished footpad 60 mm thick with a bolt ring (bottom at Z 0), a two-link side brace with a knee and a hydraulic
+// actuator (both on the fixed upper strut), and two bay doors hanging open 90°. One leg is the source;
 // the rear leg is a translated instance, and every +X part has a mirrored instance (EDIT SIDE / MIRROR groups).
-// Stowed: the leg turns -90° about X through its pivot (foot toward -Y) and the foot turns back flat about its knuckle.
-// Boarding lift: a 1.3 x 2.2 m hatch on the centreline under the cabin (Y 1700..3900) deepened into a shaft to Z 3500,
+// Stowed: the telescope closes 800 mm (intermediate 570 mm into the strut, slider 230 mm more into the intermediate),
+// then the leg turns -90° about X through its pivot (foot toward -Y) and the foot turns back flat about its knuckle.
+// Boarding lift: a 1.3 x 2.2 m hatch on the centreline under the cabin (Y 1700..3900) deepened into a shaft to Z 4300,
 // lined dark with a ceiling light panel; a 150 mm platform (whole centreline part) shown down on its feet at Z 0, on
-// four 3-stage telescoping rams that come out of housings in the shaft corners, with a 1.0 m rail on three sides
+// four 3-stage telescoping rams (2040 mm travel) that come out of housings in the shaft corners, with a 1.0 m rail on three sides
 // (open toward the rear). Raised, the platform closes the hatch flush with the belly. Two 1.80 m human figures go in
 // "SCALE REF (hide before export)".
 // Contact faces are embedded 0.5 mm; doors and the ramp keep 4 mm shadow gaps; no new face is coplanar with another.
@@ -39,12 +41,15 @@ const done: Record<string, boolean> = existsSync(logPath) ? (JSON.parse(await re
 const D = Math.PI / 180;
 const r1 = (v: number) => Math.round(v * 10) / 10;
 
-const BELLY = 1240;
-const G = { x: 1600, bayX0: 1160, bayX1: 2040, depth: 400, pivotZ: 1450, front: 4400, rear: -3200, ahead: 150, behind: 1790, gap: 4 };
+const BELLY = 2040;
+const G = { x: 1600, bayX0: 1160, bayX1: 2040, depth: 400, pivotZ: 2250, front: 4400, rear: -3200, ahead: 150, behind: 1790, gap: 4 };
 const CEIL = BELLY + G.depth;
 const H = { x1: 650, y0: 1700, y1: 3900, depth: 300, thick: 40, gap: 4 };
 // Boarding lift: shaft up to Z 3500 (>= 98 mm of skin under the windscreen), 150 mm platform, rams in the corners.
-const L = { shaftTop: 3500, thick: 150, ramX: 560, ramInset: 90, housingBottom: 1410, housingTop: 2700, railX: 450 };
+const L = { shaftTop: 4300, thick: 150, ramX: 560, ramInset: 90, housingBottom: 2210, housingTop: 3500, railX: 450 };
+// Telescoping leg, as depths below the pivot (landed): strut 60..690, intermediate 650..1250, slider 1210..pivot-300.
+// Closing: the intermediate rises 570 (ends 10 mm inside the strut mouth), the slider rises 800 in all.
+const T = { strutEnd: 690, midTop: 650, midEnd: 1250, midR: 130, sliderTop: 1210, closeMid: 570, close: 800 };
 
 const material = async (ids: number[], name: string, colorHex: string, roughness: number, metalness: number) =>
   call("plasticity_set_appearance_material", { ids, name, colorHex, roughness, metalness, opacity: 1, revision: await rev() });
@@ -135,8 +140,9 @@ try {
   const trunnion = await box([G.x - 165, yp - 195, G.pivotZ - 90], [330, 390, CEIL + 0.5 - (G.pivotZ - 90)], "rc11_lg_trunnion");
   say(`trunnion edges: ${await soften(trunnion, 10)}`);
   await unite(trunnion, [await rod([G.x - 200, yp, G.pivotZ], [G.x + 200, yp, G.pivotZ], 68, "rc11_lg_pin")]);
-  const strut = await rod([G.x, yp, G.pivotZ - 60], [G.x, yp, 760], 150, "rc11_lg_strut");
-  const slider = await rod([G.x, yp, 800], [G.x, yp, 300], 108, "rc11_lg_slider");
+  const strut = await rod([G.x, yp, G.pivotZ - 60], [G.x, yp, G.pivotZ - T.strutEnd], 150, "rc11_lg_strut");
+  const mid = await rod([G.x, yp, G.pivotZ - T.midTop], [G.x, yp, G.pivotZ - T.midEnd], T.midR, "rc11_lg_stage");
+  const slider = await rod([G.x, yp, G.pivotZ - T.sliderTop], [G.x, yp, 300], 108, "rc11_lg_slider");
   const fork = await rod([G.x, yp, 340], [G.x, yp, 190], 130, "rc11_lg_fork");
   await unite(fork, [await rod([G.x, yp, 200], [G.x, yp, 59.5], 75, "rc11_lg_post")]);
   const knuckle = await rod([G.x - 160, yp, 110], [G.x + 160, yp, 110], 58, "rc11_lg_knuckle"); // low knuckle: the folded pad rides above the closed doors
@@ -153,13 +159,13 @@ try {
   for (let k = 0; k < 8; k++) { const a = (k * 45 + 22.5) * D; const c: Vec = [G.x + 355 * Math.cos(a), yp + 355 * Math.sin(a), 59.5]; boltsOnFoot.push(await rod(c, [c[0], c[1], 69], 14, "rc11_lg_footbolt")); }
   await unite(foot, boltsOnFoot);
   // two-link side brace with a knee joint, from the bay ceiling behind the trunnion to the strut
-  const knee: Vec = [G.x, yp - 420, 1080];
+  const knee: Vec = [G.x, yp - 420, G.pivotZ - 370];
   const upper = await rod([G.x, yp - 760, CEIL + 0.5], knee, 42, "rc11_lg_brace_upper");
-  const lower = await rod(knee, [G.x, yp - 90, 920], 42, "rc11_lg_brace_lower");
+  const lower = await rod(knee, [G.x, yp - 90, G.pivotZ - 530], 42, "rc11_lg_brace_lower");
   await unite(upper, [lower, await rod([G.x - 77, knee[1], knee[2]], [G.x + 77, knee[1], knee[2]], 59, "rc11_lg_knee")]);
   await call("plasticity_rename", { id: upper, name: "rc11_lg_brace", revision: await rev() });
   // hydraulic actuator beside the brace: cylinder body plus chrome rod
-  const aTop: Vec = [G.x + 230, yp - 560, CEIL + 0.5], aBot: Vec = [G.x + 140, yp - 40, 1120];
+  const aTop: Vec = [G.x + 230, yp - 560, CEIL + 0.5], aBot: Vec = [G.x + 140, yp - 40, G.pivotZ - 330];
   const aMid: Vec = [aTop[0] + (aBot[0] - aTop[0]) * 0.58, aTop[1] + (aBot[1] - aTop[1]) * 0.58, aTop[2] + (aBot[2] - aTop[2]) * 0.58];
   const actBody = await rod(aTop, aMid, 63, "rc11_lg_actuator");
   const actRod = await rod([aMid[0] - (aMid[0] - aTop[0]) * 0.05, aMid[1] - (aMid[1] - aTop[1]) * 0.05, aMid[2] - (aMid[2] - aTop[2]) * 0.05], aBot, 31, "rc11_lg_actuator_rod");
@@ -176,18 +182,30 @@ try {
   const liner = await box([G.bayX0 + 5, yp - G.behind + 5, CEIL - 10.5], [G.bayX1 - G.bayX0 - 10, G.behind + G.ahead - 10, 10], "rc11_lg_liner");
   await material([trunnion, strut, fork, knuckle, upper, actBody], "Gunmetal", "#2b2f33", 0.35, 0.8);
   await material([slider, actRod], "Chrome", "#d9dde2", 0.08, 1);
+  await material([mid], "Satin chrome", "#a9b0b8", 0.22, 1);
   await material([foot], "Footpad", "#1a1c1f", 0.7, 0.3);
   await material([dIn, dOut], "Eldorado midnight", "#0b1630", 0.3, 0.7);
   await material([liner], "Bay black", "#08090b", 0.75, 0.1);
-  legParts.push(trunnion, strut, slider, fork, knuckle, foot, upper, actBody, actRod, dIn, dOut, liner);
+  legParts.push(trunnion, strut, mid, slider, fork, knuckle, foot, upper, actBody, actRod, dIn, dOut, liner);
 
   // ---- 4. retract check on temporary copies (deleted afterwards)
   const check: Record<string, unknown> = {};
-  const moving = [strut, slider, fork, knuckle, foot];
+  const moving = [strut, mid, slider, fork, knuckle, foot];
   const before = new Set((await bodies()).map((b) => b.id));
   await call("plasticity_duplicate_bodies", { ids: moving, revision: await rev() });
   const temps = (await bodies()).filter((b) => !before.has(b.id));
   const tFoot = temps.find((b) => (b.name ?? "").startsWith("rc11_lg_foot"))!;
+  const tMid = temps.find((b) => (b.name ?? "").startsWith("rc11_lg_stage"))!;
+  const tLow = temps.filter((b) => /^rc11_lg_(slider|fork|knuckle|foot)/.test(b.name ?? ""));
+  // close the telescope first
+  await raw("plasticity_move", { ids: [tMid.id], deltaMm: [0, 0, T.closeMid], revision: await rev() });
+  await raw("plasticity_move", { ids: tLow.map((b) => b.id), deltaMm: [0, 0, T.close], revision: await rev() });
+  const closed = (await bodies()).filter((b) => temps.some((t) => t.id === b.id));
+  const zr = (re: RegExp) => { const b = closed.find((x) => re.test(x.name ?? ""))!; return [b.boundsMm.min[2], b.boundsMm.max[2]] as [number, number]; };
+  const [sLo, sHi] = zr(/^rc11_lg_strut/), [mLo, mHi] = zr(/^rc11_lg_stage/), [slLo, slHi] = zr(/^rc11_lg_slider/), [fLo] = zr(/^rc11_lg_foot/);
+  check.telescope = { strokeMm: T.close, intermediateStrokeMm: T.closeMid, sliderStrokeInIntermediateMm: T.close - T.closeMid,
+    closedIntermediateInsideStrutMm: { top: r1(sHi - mHi), bottom: r1(mLo - sLo) }, closedSliderTopInsideIntermediateMm: r1(mHi - slHi),
+    closedSliderBelowStrutMm: r1(sLo - slLo), extendedOverlapsMm: { strutStage: T.strutEnd - T.midTop, stageSlider: T.midEnd - T.sliderTop }, closedFootBottomZ: r1(fLo) };
   await rotate(temps.map((b) => b.id), P, [1, 0, 0], -90);
   const kn = (await bodies()).find((b) => b.id === temps.find((t) => (t.name ?? "").startsWith("rc11_lg_knuckle"))!.id);
   const knC: Vec = [0, 1, 2].map((i) => (kn.boundsMm.min[i] + kn.boundsMm.max[i]) / 2) as Vec;
@@ -195,7 +213,7 @@ try {
   const stowed = (await bodies()).filter((b) => temps.some((t) => t.id === b.id));
   const lo = [0, 1, 2].map((i) => Math.min(...stowed.map((b) => b.boundsMm.min[i]))), hi = [0, 1, 2].map((i) => Math.max(...stowed.map((b) => b.boundsMm.max[i])));
   const clear = { xIn: lo[0]! - G.bayX0, xOut: G.bayX1 - hi[0]!, yFront: yp + G.ahead - hi[1]!, yRear: lo[1]! - (yp - G.behind), aboveClosedDoors: lo[2]! - (BELLY + 18), belowCeiling: CEIL - 10.5 - hi[2]! };
-  check.leg = { stowedBoundsMm: [lo.map(Math.round), hi.map(Math.round)], clearanceMm: Object.fromEntries(Object.entries(clear).map(([k, v]) => [k, Math.round(v)])), fits: Object.values(clear).every((v) => v >= 20) };
+  check.leg = { pivotToKnuckleLandedMm: G.pivotZ - 110, pivotToKnuckleClosedMm: G.pivotZ - 110 - T.close, stowedBoundsMm: [lo.map(Math.round), hi.map(Math.round)], clearanceMm: Object.fromEntries(Object.entries(clear).map(([k, v]) => [k, Math.round(v)])), fits: Object.values(clear).every((v) => v >= 20) };
   await raw("plasticity_delete", { ids: temps.map((b) => b.id), revision: await rev() });
   check.doors = { closedOuterFaceZ: BELLY, gapMm: G.gap, flush: true, note: "doors are built closed flush with the belly and swung 90° about their hinge lines" };
   say(`retract check: ${JSON.stringify(check.leg)}`);
@@ -292,17 +310,21 @@ try {
   const ref = await human([0, 2800, pz1 - 0.5]);
   const hb = await body(ref);
   const refCopy = await newest(async () => call("plasticity_create_instance", { bodyId: ref, translationMm: [-1800, 8700 - 2800, -(pz1 - 0.5)], revision: await rev() }));
-  await call("plasticity_create_group", { bodyIds: [ref], instanceIds: [refCopy], name: "SCALE REF (hide before export)", revision: await rev() });
+  // walk-under check: a copy standing on the ground beside the lift, between the platform and the -X front gear
+  const refUnder = await newest(async () => call("plasticity_create_instance", { bodyId: ref, translationMm: [-1000, 2000 - 2800, -(pz1 - 0.5)], revision: await rev() }));
+  await call("plasticity_create_group", { bodyIds: [ref], instanceIds: [refCopy, refUnder], name: "SCALE REF (hide before export)", revision: await rev() });
   check.human = { heightMm: r1(hb.boundsMm.max[2] - hb.boundsMm.min[2]), shoulderWidthMm: r1(hb.boundsMm.max[0] - hb.boundsMm.min[0]) };
   say(`human reference: ${JSON.stringify(check.human)}`);
 
   // ---- 7. pivots
   const legs = [G.front, G.rear].flatMap((y) => [1, -1].map((sx) => ({ part: `leg ${y > 0 ? "front" : "rear"} ${sx > 0 ? "+X" : "-X"}`, pivot: [sx * G.x, y, G.pivotZ], axis: [1, 0, 0], deployedDeg: 0, stowedDeg: -90,
-    foot: { pivot: [sx * G.x, y, 110], axis: [1, 0, 0], deployedDeg: 0, stowedDeg: 90, note: "after the leg turn, about the knuckle" } })));
+    telescope: { axis: "along the leg, toward the pivot", parts: { rc11_lg_stage: { closeMm: T.closeMid }, "rc11_lg_slider + fork + knuckle + foot": { closeMm: T.close } }, note: "step 1: close the telescope (landed axis is -Z)" },
+    foot: { pivot: [sx * G.x, y, 110], pivotClosed: [sx * G.x, y, 110 + T.close], axis: [1, 0, 0], deployedDeg: 0, stowedDeg: 90, note: "step 3: after the leg turn, about the knuckle (pivotClosed is before the leg turn)" },
+    sequence: ["close telescope", "leg -90 about pivot", "foot +90 about knuckle", "close doors"] })));
   const doors = [G.front, G.rear].flatMap((y) => [1, -1].flatMap((sx) => [
     { part: `door inner ${y > 0 ? "front" : "rear"} ${sx > 0 ? "+X" : "-X"}`, hinge: [sx * G.bayX0, y, BELLY], axis: [0, 1, 0], deployedDeg: sx * 90, stowedDeg: 0 },
     { part: `door outer ${y > 0 ? "front" : "rear"} ${sx > 0 ? "+X" : "-X"}`, hinge: [sx * G.bayX1, y, BELLY], axis: [0, 1, 0], deployedDeg: -sx * 90, stowedDeg: 0 }]));
-  await writeFile(resolve("discovery/neorc11/gear_pivots.json"), JSON.stringify({ units: "millimetres, Z up, nose +Y", legs, doors, lift: { part: "rc11_hatch_platform (+ ribs, rail, edge lights)", travelAxis: [0, 0, 1], deployedBottomZ: 0, stowedBottomZ: BELLY, travelMm: BELLY, rams: { stages: 3, stageLengthMm: check.lift && (check.lift as any).stageLengthMm, extendedFromZ: L.housingBottom, note: "stage k slides out of stage k-1; fully retracted they nest inside the housing" } }, retractCheck: check }, null, 1));
+  await writeFile(resolve("discovery/neorc11/gear_pivots.json"), JSON.stringify({ units: "millimetres, Z up, nose +Y", legs, doors, lift: { part: "rc11_hatch_platform (+ ribs, rail, edge lights)", travelAxis: [0, 0, 1], deployedBottomZ: 0, stowedBottomZ: BELLY, travelMm: BELLY, rams: { stages: 3, stageLengthMm: check.lift && (check.lift as any).stageLengthMm, extendedFromZ: L.housingBottom, housingZ: [L.housingBottom, L.housingTop], note: "stage k slides out of stage k-1; fully retracted they nest inside the housing" } }, retractCheck: check }, null, 1));
   // ---- tidy: dissolve empty duplicate groups left by reruns
   const empties = (((await call("plasticity_list_groups")).groups ?? []) as any[]).filter((g) => ["HATCH (centreline)", "SCALE REF (hide before export)"].includes(g.name) && !g.bodyIds.length && !g.instanceIds.length && !g.childGroupIds.length);
   if (empties.length) await call("plasticity_dissolve_groups", { ids: empties.map((g) => g.id), revision: await rev() });

@@ -1,0 +1,33 @@
+{
+ "heights": {
+  "bellyZ": 2040,
+  "hullLowestZ": 2040,
+  "shipLowestZ": 1968,
+  "lowestPart": "rc11_p_clamp_belly",
+  "hullRoofZ": 5293.4,
+  "overallTopZ": 5293.4
+ },
+ "walkUnder": {
+  "figureHeightMm": 1800,
+  "standsAt": [
+   -1000,
+   2000
+  ],
+  "headTopZ": 1800,
+  "bellyZOverHead": 2040,
+  "headClearanceMm": 240
+ },
+ "mirrors": {
+  "mirroredInstances": 302,
+  "notPureReflection": []
+ },
+ "coplanarWithHull": [],
+ "validity": {
+  "valid": 316,
+  "of": 316,
+  "invalid": []
+ },
+ "feet": [
+  0
+ ]
+}

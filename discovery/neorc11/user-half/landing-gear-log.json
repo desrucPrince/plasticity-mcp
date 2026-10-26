@@ -4,14 +4,14 @@
  },
  "notes": [
   "clear zones: gear bays X 1160..2040 at Y 2610..4550 and -4990..-3050; hatch X ±650, Y 1700..3900",
-  "removed 29 earlier gear/hatch bodies",
+  "removed 27 earlier gear/hatch bodies",
   "trunnion edges: fillet",
-  "doors open: inner Z 802..1236, outer Z 802..1236",
-  "retract check: {\"stowedBoundsMm\":[[1200,2660,1300],[2000,4340,1600]],\"clearanceMm\":{\"xIn\":40,\"xOut\":40,\"yFront\":210,\"yRear\":50,\"aboveClosedDoors\":42,\"belowCeiling\":30},\"fits\":true}",
+  "doors open: inner Z 1602..2036, outer Z 1602..2036",
+  "retract check: {\"pivotToKnuckleLandedMm\":2140,\"pivotToKnuckleClosedMm\":1340,\"stowedBoundsMm\":[[1200,2660,2100],[2000,4340,2400]],\"clearanceMm\":{\"xIn\":40,\"xOut\":40,\"yFront\":210,\"yRear\":50,\"aboveClosedDoors\":42,\"belowCeiling\":30},\"fits\":true}",
   "platform edges: fillet",
-  "lift check: {\"travelMm\":1240,\"platformBottomRaisedZ\":1240,\"flushErrorMm\":0,\"railTopRaisedZ\":2410,\"shaftCeilingZ\":3490,\"railClearToCeilingMm\":1080,\"railToHousingMm\":20,\"housingToRaisedPlatformMm\":20,\"stagesNestInHousing\":true,\"stageLengthMm\":433.3,\"headroomAboveRaisedPlatformMm\":2100}",
-  "human reference: {\"heightMm\":1800,\"shoulderWidthMm\":400}",
-  "validate: 30/30 valid; below Z 0: none",
-  "instances: {\"rc11_lg_trunnion\":3,\"rc11_lg_strut\":3,\"rc11_lg_slider\":3,\"rc11_lg_fork\":3,\"rc11_lg_knuckle\":3,\"rc11_lg_foot\":3,\"rc11_lg_brace\":3,\"rc11_lg_actuator\":3,\"rc11_lg_actuator_rod\":3,\"rc11_lg_door_inner\":3,\"rc11_lg_door_outer\":3,\"rc11_lg_liner\":3,\"rc11_hatch_liner_side\":1,\"rc11_hatch_liner_front\":1,\"rc11_hatch_liner_rear\":1,\"rc11_hatch_liner_ceiling\":1,\"rc11_hatch_ceiling_light\":1,\"rc11_hatch_light\":1,\"rc11_hatch_ram_housing\":3,\"rc11_hatch_ram_stage_1\":3,\"rc11_hatch_ram_stage_2\":3,\"rc11_hatch_ram_stage_3\":3,\"rc11_hatch_platform_light\":1,\"rc11_hatch_rail\":1}; platform ribs 1 + 16"
+  "lift check: {\"travelMm\":2040,\"platformBottomRaisedZ\":2040,\"flushErrorMm\":0,\"railTopRaisedZ\":3210,\"shaftCeilingZ\":4290,\"railClearToCeilingMm\":1080,\"railToHousingMm\":20,\"housingToRaisedPlatformMm\":20,\"stagesNestInHousing\":true,\"stageLengthMm\":700,\"headroomAboveRaisedPlatformMm\":2100}",
+  "human reference: {\"heightMm\":1800,\"shoulderWidthMm\":608}",
+  "validate: 29/29 valid; below Z 0: none",
+  "instances: {\"rc11_lg_trunnion\":3,\"rc11_lg_strut\":3,\"rc11_lg_stage\":3,\"rc11_lg_slider\":3,\"rc11_lg_fork\":3,\"rc11_lg_knuckle\":3,\"rc11_lg_foot\":3,\"rc11_lg_brace\":3,\"rc11_lg_actuator\":3,\"rc11_lg_actuator_rod\":3,\"rc11_lg_door_inner\":3,\"rc11_lg_door_outer\":3,\"rc11_lg_liner\":3,\"rc11_hatch_liner_side\":1,\"rc11_hatch_liner_front\":1,\"rc11_hatch_liner_rear\":1,\"rc11_hatch_liner_ceiling\":1,\"rc11_hatch_ceiling_light\":1,\"rc11_hatch_light\":1,\"rc11_hatch_ram_housing\":3,\"rc11_hatch_ram_stage_1\":3,\"rc11_hatch_ram_stage_2\":3,\"rc11_hatch_ram_stage_3\":3,\"rc11_hatch_platform_light\":1,\"rc11_hatch_rail\":1}; platform ribs 1 + 16"
  ]
 }

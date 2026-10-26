@@ -3,14 +3,14 @@
  "centre": [
   0,
   -4250,
-  3280
+  4080
  ],
  "parts": {
   "rc11_Gyro_OuterGimbal": {
    "pivot": [
     0,
     -4250,
-    3280
+    4080
    ],
    "axis": [
     1,
@@ -23,7 +23,7 @@
    "pivot": [
     0,
     -4250,
-    3280
+    4080
    ],
    "axis": [
     0,
@@ -36,7 +36,7 @@
    "pivot": [
     0,
     -4250,
-    3280
+    4080
    ],
    "axis": [
     0.374607,
@@ -62,5 +62,6 @@
   "rotorRps": 2,
   "innerPrecessionDegPerSec": 12,
   "outerPrecessionDegPerSec": 6
- }
+ },
+ "note17": "raised +800 mm Z with the hull (belly at Z 2040), 2026-10-26"
 }
