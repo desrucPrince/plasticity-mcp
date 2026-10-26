@@ -6,7 +6,7 @@
    "pivot": [
     1600,
     4400,
-    1400
+    1450
    ],
    "axis": [
     1,
@@ -36,7 +36,7 @@
    "pivot": [
     -1600,
     4400,
-    1400
+    1450
    ],
    "axis": [
     1,
@@ -66,7 +66,7 @@
    "pivot": [
     1600,
     -3200,
-    1400
+    1450
    ],
    "axis": [
     1,
@@ -96,7 +96,7 @@
    "pivot": [
     -1600,
     -3200,
-    1400
+    1450
    ],
    "axis": [
     1,
@@ -126,7 +126,7 @@
   {
    "part": "door inner front +X",
    "hinge": [
-    1250,
+    1160,
     4400,
     1240
    ],
@@ -141,7 +141,7 @@
   {
    "part": "door outer front +X",
    "hinge": [
-    1950,
+    2040,
     4400,
     1240
    ],
@@ -156,7 +156,7 @@
   {
    "part": "door inner front -X",
    "hinge": [
-    -1250,
+    -1160,
     4400,
     1240
    ],
@@ -171,7 +171,7 @@
   {
    "part": "door outer front -X",
    "hinge": [
-    -1950,
+    -2040,
     4400,
     1240
    ],
@@ -186,7 +186,7 @@
   {
    "part": "door inner rear +X",
    "hinge": [
-    1250,
+    1160,
     -3200,
     1240
    ],
@@ -201,7 +201,7 @@
   {
    "part": "door outer rear +X",
    "hinge": [
-    1950,
+    2040,
     -3200,
     1240
    ],
@@ -216,7 +216,7 @@
   {
    "part": "door inner rear -X",
    "hinge": [
-    -1250,
+    -1160,
     -3200,
     1240
    ],
@@ -231,7 +231,7 @@
   {
    "part": "door outer rear -X",
    "hinge": [
-    -1950,
+    -2040,
     -3200,
     1240
    ],
@@ -244,42 +244,44 @@
    "stowedDeg": 0
   }
  ],
- "ramp": {
-  "part": "rc11_hatch_ramp (+ treads, rails)",
-  "hinge": [
+ "lift": {
+  "part": "rc11_hatch_platform (+ ribs, rail, edge lights)",
+  "travelAxis": [
    0,
-   3896,
-   1240
-  ],
-  "axis": [
-   1,
    0,
-   0
+   1
   ],
-  "deployedDeg": 34.5,
-  "stowedDeg": 0
+  "deployedBottomZ": 0,
+  "stowedBottomZ": 1240,
+  "travelMm": 1240,
+  "rams": {
+   "stages": 3,
+   "stageLengthMm": 433.3,
+   "extendedFromZ": 1410,
+   "note": "stage k slides out of stage k-1; fully retracted they nest inside the housing"
+  }
  },
  "retractCheck": {
   "leg": {
    "stowedBoundsMm": [
     [
-     1280,
-     2790,
-     1290
+     1200,
+     2660,
+     1300
     ],
     [
-     1920,
-     4360,
-     1500
+     2000,
+     4340,
+     1600
     ]
    ],
    "clearanceMm": {
-    "xIn": 30,
-    "xOut": 30,
-    "yFront": 190,
-    "yRear": 130,
-    "aboveClosedDoors": 32,
-    "belowCeiling": 49
+    "xIn": 40,
+    "xOut": 40,
+    "yFront": 210,
+    "yRear": 50,
+    "aboveClosedDoors": 42,
+    "belowCeiling": 30
    },
    "fits": true
   },
@@ -289,24 +291,22 @@
    "flush": true,
    "note": "doors are built closed flush with the belly and swung 90° about their hinge lines"
   },
-  "ramp": {
-   "hinge": [
-    0,
-    3896,
-    1240
-   ],
-   "axis": [
-    1,
-    0,
-    0
-   ],
-   "deployedDeg": 34.5,
-   "stowedDeg": 0,
-   "closedOuterFaceZ": 1240,
-   "freeEndZ": 2.3,
-   "treadsAndRailsTopWhenClosedZ": 1304,
-   "wellCeilingZ": 1529.5,
-   "fits": true
+  "lift": {
+   "travelMm": 1240,
+   "platformBottomRaisedZ": 1240,
+   "flushErrorMm": 0,
+   "railTopRaisedZ": 2410,
+   "shaftCeilingZ": 3490,
+   "railClearToCeilingMm": 1080,
+   "railToHousingMm": 20,
+   "housingToRaisedPlatformMm": 20,
+   "stagesNestInHousing": true,
+   "stageLengthMm": 433.3,
+   "headroomAboveRaisedPlatformMm": 2100
+  },
+  "human": {
+   "heightMm": 1800,
+   "shoulderWidthMm": 400
   }
  }
 }

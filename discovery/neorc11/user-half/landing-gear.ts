@@ -1,14 +1,15 @@
 // Retractable landing gear and a boarding hatch on the neoRC 11 belly, built on the live-mirrored V10+ document.
-// Gear (landed pose): four legs at X ±1600, pivots at Y 4400 (front) and -3200 (rear), Z 1400. Each sits in a
-// 700 x 1890 bay, 320 mm deep, with a dark ceiling liner and a chamfered lip. Parts: a trunnion with a pivot pin, a
+// Gear (landed pose): four legs at X ±1600, pivots at Y 4400 (front) and -3200 (rear), Z 1450. Each sits in an
+// 880 x 1940 bay, 400 mm deep, with a dark ceiling liner and a chamfered lip. Parts: a trunnion with a pivot pin, a
 // 200 mm strut, a chrome slider, a fork housing, a knuckle (Z 110), a 640 mm dished footpad 60 mm thick with a bolt ring (bottom at Z 0),
 // a two-link side brace with a knee, a hydraulic actuator, and two bay doors hanging open 90°. One leg is the source;
 // the rear leg is a translated instance, and every +X part has a mirrored instance (EDIT SIDE / MIRROR groups).
 // Stowed: the leg turns -90° about X through its pivot (foot toward -Y) and the foot turns back flat about its knuckle.
-// Hatch: a 1.3 x 2.2 m opening on the centreline under the cabin (Y 1700..3900), 300 mm deep, cut into the +X hull
-// (the mirror follows), with a dark liner, a lip light strip and two hydraulic struts (+X with mirrors). The ramp,
-// rails and treads are whole centreline parts in "HATCH (centreline)": the ramp is hinged at the front edge and lowered
-// so its free end rests on Z 0 (34.4°), with 6 ribbed treads (a source plus instances) and side rails.
+// Boarding lift: a 1.3 x 2.2 m hatch on the centreline under the cabin (Y 1700..3900) deepened into a shaft to Z 3500,
+// lined dark with a ceiling light panel; a 150 mm platform (whole centreline part) shown down on its feet at Z 0, on
+// four 3-stage telescoping rams that come out of housings in the shaft corners, with a 1.0 m rail on three sides
+// (open toward the rear). Raised, the platform closes the hatch flush with the belly. Two 1.80 m human figures go in
+// "SCALE REF (hide before export)".
 // Contact faces are embedded 0.5 mm; doors and the ramp keep 4 mm shadow gaps; no new face is coplanar with another.
 // Writes discovery/neorc11/gear_pivots.json. A rerun removes rc11_lg_* / rc11_hatch_* (hull cuts are made once).
 // Usage: PLASTICITY_CDP_URL=http://127.0.0.1:9223 node discovery/neorc11/user-half/landing-gear.ts
@@ -39,11 +40,11 @@ const D = Math.PI / 180;
 const r1 = (v: number) => Math.round(v * 10) / 10;
 
 const BELLY = 1240;
-const G = { x: 1600, bayX0: 1250, bayX1: 1950, depth: 320, pivotZ: 1400, front: 4400, rear: -3200, ahead: 150, behind: 1740, gap: 4 };
+const G = { x: 1600, bayX0: 1160, bayX1: 2040, depth: 400, pivotZ: 1450, front: 4400, rear: -3200, ahead: 150, behind: 1790, gap: 4 };
 const CEIL = BELLY + G.depth;
 const H = { x1: 650, y0: 1700, y1: 3900, depth: 300, thick: 40, gap: 4 };
-const rampLen = H.y1 - H.y0 - 2 * H.gap;
-const rampDeg = Math.asin(BELLY / rampLen) / D; // free end's lower edge on Z 0
+// Boarding lift: shaft up to Z 3500 (>= 98 mm of skin under the windscreen), 150 mm platform, rams in the corners.
+const L = { shaftTop: 3500, thick: 150, ramX: 560, ramInset: 90, housingBottom: 1410, housingTop: 2700, railX: 450 };
 
 const material = async (ids: number[], name: string, colorHex: string, roughness: number, metalness: number) =>
   call("plasticity_set_appearance_material", { ids, name, colorHex, roughness, metalness, opacity: 1, revision: await rev() });
@@ -102,9 +103,9 @@ try {
   const zones: Record<string, [Vec, Vec]> = {
     "front gear bay": [[G.bayX0, G.front - G.behind, 900], [G.bayX1, G.front + G.ahead, CEIL]],
     "rear gear bay": [[G.bayX0, G.rear - G.behind, 900], [G.bayX1, G.rear + G.ahead, CEIL]],
-    "hatch": [[0, H.y0, 0], [H.x1, H.y1, BELLY + H.depth]],
+    "hatch shaft": [[0, H.y0, 0], [H.x1, H.y1, L.shaftTop]],
   };
-  const others = (await bodies()).filter((b) => b.visible !== false && b.type !== "Wire" && b.name !== "rc11_hull" && !/^rc11_(lg|hatch)_/.test(b.name ?? ""));
+  const others = (await bodies()).filter((b) => b.visible !== false && b.type !== "Wire" && b.name !== "rc11_hull" && !/^rc11_(lg|hatch|ref)_/.test(b.name ?? ""));
   for (const [name, [lo, hi]] of Object.entries(zones)) {
     const hits = others.filter((b) => [0, 1, 2].every((i) => b.boundsMm.min[i] < hi[i]! && b.boundsMm.max[i] > lo[i]!));
     if (hits.length) throw new Error(`${name} collides with ${hits.map((b) => `${b.name}#${b.id}`).join(", ")}`);
@@ -112,7 +113,7 @@ try {
   say(`clear zones: gear bays X ${G.bayX0}..${G.bayX1} at Y ${G.front - G.behind}..${G.front + G.ahead} and ${G.rear - G.behind}..${G.rear + G.ahead}; hatch X ±${H.x1}, Y ${H.y0}..${H.y1}`);
 
   // ---- 1. reset earlier gear/hatch parts
-  const old = (await bodies()).filter((b) => /^rc11_(lg|hatch)_/.test(b.name ?? ""));
+  const old = (await bodies()).filter((b) => /^rc11_(lg|hatch|ref)_/.test(b.name ?? ""));
   if (old.length) {
     const ids = new Set(old.map((b) => b.id));
     const inst = (await instances()).filter((i) => i.sourceBodyIds.some((x) => ids.has(x))).map((i) => i.id);
@@ -123,7 +124,7 @@ try {
   // ---- 2. hull cuts (once)
   if (!done.cuts) {
     for (const yp of [G.front, G.rear]) await cutHull([G.bayX0, yp - G.behind, BELLY - 20], [G.bayX1 - G.bayX0, G.behind + G.ahead, G.depth + 20], `gear bay at Y ${yp}`);
-    await cutHull([-20, H.y0, BELLY - 20], [H.x1 + 20, H.y1 - H.y0, H.depth + 20], "hatch opening");
+    await cutHull([-20, H.y0, BELLY - 20], [H.x1 + 20, H.y1 - H.y0, L.shaftTop - BELLY + 20], "hatch shaft");
     done.cuts = true;
   }
 
@@ -131,37 +132,37 @@ try {
   const yp = G.front;
   const P: Vec = [G.x, yp, G.pivotZ];
   const legParts: number[] = [];
-  const trunnion = await box([G.x - 110, yp - 130, G.pivotZ - 60], [220, 260, CEIL + 0.5 - (G.pivotZ - 60)], "rc11_lg_trunnion");
+  const trunnion = await box([G.x - 165, yp - 195, G.pivotZ - 90], [330, 390, CEIL + 0.5 - (G.pivotZ - 90)], "rc11_lg_trunnion");
   say(`trunnion edges: ${await soften(trunnion, 10)}`);
-  await unite(trunnion, [await rod([G.x - 135, yp, G.pivotZ], [G.x + 135, yp, G.pivotZ], 45, "rc11_lg_pin")]);
-  const strut = await rod([G.x, yp, G.pivotZ - 40], [G.x, yp, 760], 100, "rc11_lg_strut");
-  const slider = await rod([G.x, yp, 800], [G.x, yp, 300], 72, "rc11_lg_slider");
-  const fork = await rod([G.x, yp, 340], [G.x, yp, 200], 88, "rc11_lg_fork");
-  await unite(fork, [await rod([G.x, yp, 210], [G.x, yp, 59.5], 50, "rc11_lg_post")]);
-  const knuckle = await rod([G.x - 110, yp, 110], [G.x + 110, yp, 110], 40, "rc11_lg_knuckle"); // low knuckle: the folded pad rides above the closed doors
+  await unite(trunnion, [await rod([G.x - 200, yp, G.pivotZ], [G.x + 200, yp, G.pivotZ], 68, "rc11_lg_pin")]);
+  const strut = await rod([G.x, yp, G.pivotZ - 60], [G.x, yp, 760], 150, "rc11_lg_strut");
+  const slider = await rod([G.x, yp, 800], [G.x, yp, 300], 108, "rc11_lg_slider");
+  const fork = await rod([G.x, yp, 340], [G.x, yp, 190], 130, "rc11_lg_fork");
+  await unite(fork, [await rod([G.x, yp, 200], [G.x, yp, 59.5], 75, "rc11_lg_post")]);
+  const knuckle = await rod([G.x - 160, yp, 110], [G.x + 160, yp, 110], 58, "rc11_lg_knuckle"); // low knuckle: the folded pad rides above the closed doors
   // dished footpad with a bolt ring, bottom exactly on Z 0
-  const foot = (await raw("plasticity_batch", { steps: [{ toolName: "plasticity_create_cylinder", arguments: { centerMm: [G.x, yp, 0], radiusMm: 320, heightMm: 60, axis: [0, 0, 1], name: "rc11_lg_foot" } }] })).steps[0].added[0] as number;
+  const foot = (await raw("plasticity_batch", { steps: [{ toolName: "plasticity_create_cylinder", arguments: { centerMm: [G.x, yp, 0], radiusMm: 400, heightMm: 60, axis: [0, 0, 1], name: "rc11_lg_foot" } }] })).steps[0].added[0] as number;
   const fb = await body(foot);
   if (Math.abs(fb.boundsMm.min[2]) > 0.01) await raw("plasticity_move", { ids: [foot], deltaMm: [0, 0, -fb.boundsMm.min[2]], revision: await rev() });
   await call("plasticity_rename", { id: foot, name: "rc11_lg_foot", revision: await rev() });
-  const dish = (await raw("plasticity_batch", { steps: [{ toolName: "plasticity_create_cylinder", arguments: { centerMm: [G.x, yp, 48], radiusMm: 240, heightMm: 20, axis: [0, 0, 1], name: "rc11_lg_dish" } }] })).steps[0].added[0] as number;
+  const dish = (await raw("plasticity_batch", { steps: [{ toolName: "plasticity_create_cylinder", arguments: { centerMm: [G.x, yp, 48], radiusMm: 310, heightMm: 20, axis: [0, 0, 1], name: "rc11_lg_dish" } }] })).steps[0].added[0] as number;
   const db = await body(dish);
   if (Math.abs(db.boundsMm.min[2] - 48) > 0.01) await raw("plasticity_move", { ids: [dish], deltaMm: [0, 0, 48 - db.boundsMm.min[2]], revision: await rev() });
   await raw("plasticity_boolean", { targetIds: [foot], toolIds: [dish], operation: "difference", revision: await rev() });
   const boltsOnFoot: number[] = [];
-  for (let k = 0; k < 8; k++) { const a = (k * 45 + 22.5) * D; const c: Vec = [G.x + 282 * Math.cos(a), yp + 282 * Math.sin(a), 59.5]; boltsOnFoot.push(await rod(c, [c[0], c[1], 68], 11, "rc11_lg_footbolt")); }
+  for (let k = 0; k < 8; k++) { const a = (k * 45 + 22.5) * D; const c: Vec = [G.x + 355 * Math.cos(a), yp + 355 * Math.sin(a), 59.5]; boltsOnFoot.push(await rod(c, [c[0], c[1], 69], 14, "rc11_lg_footbolt")); }
   await unite(foot, boltsOnFoot);
   // two-link side brace with a knee joint, from the bay ceiling behind the trunnion to the strut
   const knee: Vec = [G.x, yp - 420, 1080];
-  const upper = await rod([G.x, yp - 760, CEIL + 0.5], knee, 30, "rc11_lg_brace_upper");
-  const lower = await rod(knee, [G.x, yp - 60, 920], 30, "rc11_lg_brace_lower");
-  await unite(upper, [lower, await rod([G.x - 55, knee[1], knee[2]], [G.x + 55, knee[1], knee[2]], 42, "rc11_lg_knee")]);
+  const upper = await rod([G.x, yp - 760, CEIL + 0.5], knee, 42, "rc11_lg_brace_upper");
+  const lower = await rod(knee, [G.x, yp - 90, 920], 42, "rc11_lg_brace_lower");
+  await unite(upper, [lower, await rod([G.x - 77, knee[1], knee[2]], [G.x + 77, knee[1], knee[2]], 59, "rc11_lg_knee")]);
   await call("plasticity_rename", { id: upper, name: "rc11_lg_brace", revision: await rev() });
   // hydraulic actuator beside the brace: cylinder body plus chrome rod
-  const aTop: Vec = [G.x + 150, yp - 560, CEIL + 0.5], aBot: Vec = [G.x + 95, yp - 40, 1120];
+  const aTop: Vec = [G.x + 230, yp - 560, CEIL + 0.5], aBot: Vec = [G.x + 140, yp - 40, 1120];
   const aMid: Vec = [aTop[0] + (aBot[0] - aTop[0]) * 0.58, aTop[1] + (aBot[1] - aTop[1]) * 0.58, aTop[2] + (aBot[2] - aTop[2]) * 0.58];
-  const actBody = await rod(aTop, aMid, 45, "rc11_lg_actuator");
-  const actRod = await rod([aMid[0] - (aMid[0] - aTop[0]) * 0.05, aMid[1] - (aMid[1] - aTop[1]) * 0.05, aMid[2] - (aMid[2] - aTop[2]) * 0.05], aBot, 22, "rc11_lg_actuator_rod");
+  const actBody = await rod(aTop, aMid, 63, "rc11_lg_actuator");
+  const actRod = await rod([aMid[0] - (aMid[0] - aTop[0]) * 0.05, aMid[1] - (aMid[1] - aTop[1]) * 0.05, aMid[2] - (aMid[2] - aTop[2]) * 0.05], aBot, 31, "rc11_lg_actuator_rod");
   // bay doors: built closed (outer face flush with the belly, 4 mm gaps), then swung open 90° about their hinges
   const half = (G.bayX1 - G.bayX0) / 2;
   const dIn = await box([G.bayX0 + G.gap, yp - G.behind + G.gap, BELLY], [half - 1.5 * G.gap, G.behind + G.ahead - 2 * G.gap, 18], "rc11_lg_door_inner");
@@ -202,47 +203,98 @@ try {
   // ---- 5. place the leg: rear leg as translated instances, mirrors for both
   for (const id of legParts) await place(id, [[0, G.rear - G.front, 0]]);
 
-  // ---- 6. hatch: liner, light strips and struts (+X with mirrors); ramp, treads, rails as centreline parts
-  const hLiner = await box([0.5, H.y0 + 5, BELLY + H.depth - 10.5], [H.x1 - 5.5, H.y1 - H.y0 - 10, 10], "rc11_hatch_liner");
-  await material([hLiner], "Bay black", "#08090b", 0.75, 0.1);
+  // ---- 6. boarding lift in the hatch shaft
+  // Shaft liner (+X with mirrors): side wall, front and rear walls, ceiling plate with an inset light panel. Each
+  // plate is embedded 0.5 mm into its wall, so its visible face stands 9.5 mm proud and is never coplanar.
+  const liners: number[] = [];
+  liners.push(await box([H.x1 - 10, H.y0 + 10, BELLY + 60], [10.5, H.y1 - H.y0 - 20, L.shaftTop - 10 - (BELLY + 60)], "rc11_hatch_liner_side"));
+  liners.push(await box([0.5, H.y1 - 10, BELLY + 60], [H.x1 - 11, 10.5, L.shaftTop - 10 - (BELLY + 60)], "rc11_hatch_liner_front"));
+  liners.push(await box([0.5, H.y0 - 0.5, BELLY + 60], [H.x1 - 11, 10.5, L.shaftTop - 10 - (BELLY + 60)], "rc11_hatch_liner_rear"));
+  liners.push(await box([0.5, H.y0 + 10, L.shaftTop - 10], [H.x1 - 11, H.y1 - H.y0 - 20, 10.5], "rc11_hatch_liner_ceiling"));
+  await material(liners, "Bay black", "#08090b", 0.75, 0.1);
+  const panel = await box([80, 2150, L.shaftTop - 15], [420, 1500, 5.5], "rc11_hatch_ceiling_light");
   const strip = await box([H.x1 - 4, H.y0 + 25, BELLY + 15], [5, H.y1 - H.y0 - 50, 12], "rc11_hatch_light");
-  await material([strip], "Hatch light", "#5fe6ff", 0.1, 0);
-  const hinge: Vec = [0, H.y1 - H.gap, BELLY];
-  const ramp = await box([-(H.x1 - H.gap), H.y0 + H.gap, BELLY], [2 * (H.x1 - H.gap), rampLen, H.thick], "rc11_hatch_ramp");
-  say(`ramp edges: ${await soften(ramp, 6)}`);
-  const tread = await box([-540, H.y0 + H.gap + 220, BELLY + H.thick - 0.5], [1080, 90, 18.5], "rc11_hatch_tread");
-  const ribs: number[] = [];
-  for (const dy of [18, 41, 64]) ribs.push(await box([-540, H.y0 + H.gap + 220 + dy, BELLY + H.thick + 17.5], [1080, 8, 6.5], "rc11_hatch_rib"));
-  await unite(tread, ribs);
-  const rail = await box([590, H.y0 + H.gap + 40, BELLY + H.thick - 0.5], [40, rampLen - 80, 70.5], "rc11_hatch_rail");
-  await soften(rail, 6);
-  await material([ramp], "Eldorado midnight", "#0b1630", 0.3, 0.7);
-  await material([tread], "Gunmetal", "#2b2f33", 0.35, 0.8);
+  await material([panel, strip], "Hatch light", "#5fe6ff", 0.1, 0);
+  // Ram housings recessed in the shaft corners (+X: rear corner source, front corner instance) and 3 chrome stages.
+  const ramYs = [H.y0 + L.ramInset, H.y1 - L.ramInset];
+  const housing = await rod([L.ramX, ramYs[0]!, L.housingBottom], [L.ramX, ramYs[0]!, L.housingTop], 70, "rc11_hatch_ram_housing");
+  await material([housing], "Gunmetal", "#2b2f33", 0.35, 0.8);
+  // Platform (whole centreline part), deployed resting on Z 0 (no feet, so raised it closes flush with the belly).
+  const pz0 = 0, pz1 = pz0 + L.thick;
+  const platform = await box([-(H.x1 - H.gap), H.y0 + H.gap, pz0], [2 * (H.x1 - H.gap), H.y1 - H.y0 - 2 * H.gap, L.thick], "rc11_hatch_platform");
+  say(`platform edges: ${await soften(platform, 6)}`);
+  await material([platform], "Eldorado midnight", "#0b1630", 0.3, 0.7);
+  // Tread-plate ribs on top (one source, instances along Y) and light strips along the long top edges (+X, mirrored).
+  const rib = await box([-560, H.y0 + 120, pz1 - 0.5], [1120, 14, 8.5], "rc11_hatch_rib");
+  await material([rib], "Gunmetal", "#2b2f33", 0.35, 0.8);
+  const ribIds: number[] = [];
+  for (let k = 1; k < 17; k++) ribIds.push(await newest(async () => call("plasticity_create_instance", { bodyId: rib, translationMm: [0, 120 * k, 0], revision: await rev() })));
+  const edgeLight = await box([H.x1 - H.gap - 30, H.y0 + 40, pz1 - 0.5], [18, H.y1 - H.y0 - 80, 4.5], "rc11_hatch_platform_light");
+  await material([edgeLight], "Hatch light", "#5fe6ff", 0.1, 0);
+  // Rams: stages from the housing bottom down to the platform top, overlapping 20 mm, chrome.
+  const span = L.housingBottom - pz1;
+  const stageLen = (span + 2 * 20) / 3;
+  const stages: number[] = [];
+  const radii = [55, 45, 35];
+  for (let k = 0; k < 3; k++) {
+    const top = L.housingBottom + 20 - k * (stageLen - 20), bottom = top - stageLen;
+    stages.push(await rod([L.ramX, ramYs[0]!, top], [L.ramX, ramYs[0]!, k === 2 ? pz1 - 0.5 : bottom], radii[k]!, `rc11_hatch_ram_stage_${k + 1}`));
+  }
+  await material(stages, "Chrome", "#d9dde2", 0.08, 1);
+  // Safety rail on 3 sides (open toward the rear, -Y): +X long rail with posts, front half rail; mirrored.
+  const rx = L.railX, rTop = pz1 + 1000, rMid = pz1 + 500, ry0 = H.y0 + 260, ry1 = H.y1 - 170;
+  const rail = await rod([rx, ry0, rTop], [rx, ry1, rTop], 20, "rc11_hatch_rail");
+  const railParts: number[] = [await rod([rx, ry0, rMid], [rx, ry1, rMid], 14, "rc11_hatch_rail_mid")];
+  for (const y of [ry0, (ry0 + ry1) / 2, ry1]) railParts.push(await rod([rx, y, pz1 - 0.5], [rx, y, rTop + 10], 18, "rc11_hatch_rail_post"));
+  railParts.push(await rod([0.5, ry1, rTop], [rx, ry1, rTop], 20, "rc11_hatch_rail_front"), await rod([0.5, ry1, rMid], [rx, ry1, rMid], 14, "rc11_hatch_rail_front_mid"));
+  await unite(rail, railParts);
   await material([rail], "Chrome", "#d9dde2", 0.08, 1);
-  // lower the ramp group about the hinge so the free end rests on Z 0
-  await rotate([ramp, tread, rail], hinge, [1, 0, 0], rampDeg);
-  if ((await body(ramp)).boundsMm.min[2] > 100) await rotate([ramp, tread, rail], hinge, [1, 0, 0], -2 * rampDeg);
-  const rb = await body(ramp);
-  say(`ramp lowered ${rampDeg.toFixed(1)}°: Z ${r1(rb.boundsMm.min[2])}..${Math.round(rb.boundsMm.max[2])}, Y ${Math.round(rb.boundsMm.min[1])}..${Math.round(rb.boundsMm.max[1])}`);
-  // Up-slope direction (free end toward the hinge) and the upper-face normal, read from the lowered ramp.
-  const upLen = Math.hypot(hinge[1] - rb.boundsMm.min[1], hinge[2] - rb.boundsMm.min[2]);
-  const up: Vec = [0, (hinge[1] - rb.boundsMm.min[1]) / upLen, (hinge[2] - rb.boundsMm.min[2]) / upLen];
-  const nrm: Vec = [0, -up[2], up[1]];
-  const treadIds: number[] = [];
-  for (let k = 1; k < 6; k++) treadIds.push(await newest(async () => call("plasticity_create_instance", { bodyId: tread, translationMm: [0, r1(up[1] * 340 * k), r1(up[2] * 340 * k)], revision: await rev() })));
-  // hydraulic struts (+X): from the well ceiling to the ramp's upper face 900 mm down the slope from the hinge
-  const s0 = 900;
-  const attach: Vec = [560, hinge[1] - s0 * up[1] + H.thick * nrm[1], hinge[2] - s0 * up[2] + H.thick * nrm[2]];
-  const top: Vec = [560, H.y1 - 700, BELLY + H.depth - 10];
-  const sm: Vec = [top[0], top[1] + (attach[1] - top[1]) * 0.55, top[2] + (attach[2] - top[2]) * 0.55];
-  const strutBody = await rod(top, sm, 34, "rc11_hatch_strut");
-  const strutRod = await rod([sm[0], sm[1] - (sm[1] - top[1]) * 0.05, sm[2] - (sm[2] - top[2]) * 0.05], attach, 17, "rc11_hatch_strut_rod");
-  await material([strutBody], "Gunmetal", "#2b2f33", 0.35, 0.8);
-  await material([strutRod], "Chrome", "#d9dde2", 0.08, 1);
-  for (const id of [hLiner, strip, strutBody, strutRod]) await place(id, []);
-  const railMirror = await newest(async () => call("plasticity_create_mirrored_instance", { bodyId: rail, axis: "x", planeOffsetMm: 0, revision: await rev() }));
-  await call("plasticity_create_group", { bodyIds: [ramp, tread, rail], instanceIds: [...treadIds, railMirror], name: "HATCH (centreline)", revision: await rev() });
-  check.ramp = { hinge, axis: [1, 0, 0], deployedDeg: r1(rampDeg), stowedDeg: 0, closedOuterFaceZ: BELLY, freeEndZ: r1(rb.boundsMm.min[2]), treadsAndRailsTopWhenClosedZ: BELLY + H.thick + 24, wellCeilingZ: BELLY + H.depth - 10.5, fits: BELLY + H.thick + 24 <= BELLY + H.depth - 10.5 - 20 };
+
+  // ---- retract check for the lift on temporary copies: raise platform + rail + ribs by the travel; stages nest
+  const travel = BELLY - pz0;
+  const pre2 = new Set((await bodies()).map((b) => b.id));
+  await call("plasticity_duplicate_bodies", { ids: [platform, rail, edgeLight], revision: await rev() });
+  const tLift = (await bodies()).filter((b) => !pre2.has(b.id));
+  await raw("plasticity_move", { ids: tLift.map((b) => b.id), deltaMm: [0, 0, travel], revision: await rev() });
+  const lifted = (await bodies()).filter((b) => tLift.some((t) => t.id === b.id));
+  const tp = lifted.find((b) => (b.name ?? "").startsWith("rc11_hatch_platform") && b.boundsMm.max[0] > 600)!;
+  const tr = lifted.find((b) => (b.name ?? "").startsWith("rc11_hatch_rail"))!;
+  const stowedStageTop = pz1 + travel + stageLen; // innermost stage pushed fully into the housing
+  check.lift = {
+    travelMm: travel, platformBottomRaisedZ: r1(tp.boundsMm.min[2]), flushErrorMm: r1(Math.abs(tp.boundsMm.min[2] - BELLY)),
+    railTopRaisedZ: r1(tr.boundsMm.max[2]), shaftCeilingZ: L.shaftTop - 10, railClearToCeilingMm: r1(L.shaftTop - 10 - tr.boundsMm.max[2]),
+    railToHousingMm: r1((L.ramX - 70) - (rx + 20)), housingToRaisedPlatformMm: r1(L.housingBottom - (pz1 + travel)),
+    stagesNestInHousing: stowedStageTop <= L.housingTop - 20, stageLengthMm: r1(stageLen), headroomAboveRaisedPlatformMm: r1(L.shaftTop - 10 - (pz1 + travel)),
+  };
+  await raw("plasticity_delete", { ids: tLift.map((b) => b.id), revision: await rev() });
+  say(`lift check: ${JSON.stringify(check.lift)}`);
+  for (const id of [...liners, panel, strip, housing, ...stages, edgeLight, rail]) await place(id, id === housing || stages.includes(id) ? [[0, ramYs[1]! - ramYs[0]!, 0]] : []);
+  await call("plasticity_create_group", { bodyIds: [platform, rib], instanceIds: ribIds, name: "HATCH (centreline)", revision: await rev() });
+
+  // ---- human scale references (1.80 m mannequin): one on the lift platform, a linked copy beside the nose
+  const human = async (o: Vec) => {
+    const parts: number[] = [];
+    const foot = async (sx: number) => { const id = await box([o[0] + sx * 105 - 50, o[1] - 70, o[2]], [100, 260, 80], "rc11_ref_human"); await soften(id, 20); return id; };
+    parts.push(await foot(1), await foot(-1));
+    for (const sx of [1, -1]) parts.push(await rod([o[0] + sx * 105, o[1], o[2] + 70], [o[0] + sx * 100, o[1], o[2] + 940], 72, "rc11_ref_human"));
+    const torso = await box([o[0] - 200, o[1] - 115, o[2] + 900], [400, 230, 580], "rc11_ref_human");
+    await soften(torso, 70); parts.push(torso);
+    for (const sx of [1, -1]) parts.push(await rod([o[0] + sx * 239, o[1], o[2] + 1440], [o[0] + sx * 259, o[1], o[2] + 760], 45, "rc11_ref_human")); // overlap the torso so the union joins
+    parts.push(await rod([o[0], o[1], o[2] + 1460], [o[0], o[1], o[2] + 1570], 55, "rc11_ref_human"));
+    const head = (await raw("plasticity_batch", { steps: [{ toolName: "plasticity_create_sphere", arguments: { centerMm: [o[0], o[1], o[2] + 1680], radiusMm: 120, name: "rc11_ref_human" } }] })).steps[0].added[0] as number;
+    parts.push(head);
+    const [first, ...rest] = parts;
+    await unite(first!, rest);
+    await call("plasticity_rename", { id: first!, name: "rc11_ref_human", revision: await rev() });
+    await material([first!], "Scale reference", "#ff8a3d", 0.5, 0);
+    return first!;
+  };
+  const ref = await human([0, 2800, pz1 - 0.5]);
+  const hb = await body(ref);
+  const refCopy = await newest(async () => call("plasticity_create_instance", { bodyId: ref, translationMm: [-1800, 8700 - 2800, -(pz1 - 0.5)], revision: await rev() }));
+  await call("plasticity_create_group", { bodyIds: [ref], instanceIds: [refCopy], name: "SCALE REF (hide before export)", revision: await rev() });
+  check.human = { heightMm: r1(hb.boundsMm.max[2] - hb.boundsMm.min[2]), shoulderWidthMm: r1(hb.boundsMm.max[0] - hb.boundsMm.min[0]) };
+  say(`human reference: ${JSON.stringify(check.human)}`);
 
   // ---- 7. pivots
   const legs = [G.front, G.rear].flatMap((y) => [1, -1].map((sx) => ({ part: `leg ${y > 0 ? "front" : "rear"} ${sx > 0 ? "+X" : "-X"}`, pivot: [sx * G.x, y, G.pivotZ], axis: [1, 0, 0], deployedDeg: 0, stowedDeg: -90,
@@ -250,14 +302,16 @@ try {
   const doors = [G.front, G.rear].flatMap((y) => [1, -1].flatMap((sx) => [
     { part: `door inner ${y > 0 ? "front" : "rear"} ${sx > 0 ? "+X" : "-X"}`, hinge: [sx * G.bayX0, y, BELLY], axis: [0, 1, 0], deployedDeg: sx * 90, stowedDeg: 0 },
     { part: `door outer ${y > 0 ? "front" : "rear"} ${sx > 0 ? "+X" : "-X"}`, hinge: [sx * G.bayX1, y, BELLY], axis: [0, 1, 0], deployedDeg: -sx * 90, stowedDeg: 0 }]));
-  await writeFile(resolve("discovery/neorc11/gear_pivots.json"), JSON.stringify({ units: "millimetres, Z up, nose +Y", legs, doors, ramp: { part: "rc11_hatch_ramp (+ treads, rails)", hinge, axis: [1, 0, 0], deployedDeg: r1(rampDeg), stowedDeg: 0 }, retractCheck: check }, null, 1));
+  await writeFile(resolve("discovery/neorc11/gear_pivots.json"), JSON.stringify({ units: "millimetres, Z up, nose +Y", legs, doors, lift: { part: "rc11_hatch_platform (+ ribs, rail, edge lights)", travelAxis: [0, 0, 1], deployedBottomZ: 0, stowedBottomZ: BELLY, travelMm: BELLY, rams: { stages: 3, stageLengthMm: check.lift && (check.lift as any).stageLengthMm, extendedFromZ: L.housingBottom, note: "stage k slides out of stage k-1; fully retracted they nest inside the housing" } }, retractCheck: check }, null, 1));
+  // ---- tidy: dissolve empty duplicate groups left by reruns
+  const empties = (((await call("plasticity_list_groups")).groups ?? []) as any[]).filter((g) => ["HATCH (centreline)", "SCALE REF (hide before export)"].includes(g.name) && !g.bodyIds.length && !g.instanceIds.length && !g.childGroupIds.length);
+  if (empties.length) await call("plasticity_dissolve_groups", { ids: empties.map((g) => g.id), revision: await rev() });
   // ---- 8. validate
-  const mine = (await bodies()).filter((b) => /^rc11_(lg|hatch)_/.test(b.name ?? "") && b.type === "Solid");
+  const mine = (await bodies()).filter((b) => /^rc11_(lg|hatch|ref)_/.test(b.name ?? "") && b.type === "Solid");
   const hull = (await bodies()).find((b) => b.name === "rc11_hull");
   const v = await call("plasticity_validate_bodies", { ids: [hull.id, ...mine.map((b) => b.id)], revision: await rev() });
   say(`validate: ${(v.bodies ?? []).filter((x: any) => x.closed && x.nativeValid).length}/${(v.bodies ?? []).length} valid; below Z 0: ${mine.filter((b) => b.boundsMm.min[2] < -0.5).map((b) => b.name).join(", ") || "none"}`);
-  say(`instances: ${JSON.stringify(counts)}; treads 1 + ${treadIds.length}; rail 1 + 1`);
-  say(`ramp check: ${JSON.stringify(check.ramp)}`);
+  say(`instances: ${JSON.stringify(counts)}; platform ribs 1 + 16`);
 } finally {
   await writeFile(logPath, JSON.stringify({ done, notes }, null, 1));
   await s.close();
