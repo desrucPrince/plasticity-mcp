@@ -1,0 +1,18 @@
+[
+ "straddling bodies to split: rc11_drive_core#249, rc11_drive_ring_0#253, rc11_drive_ring_1#261, rc11_drive_ring_2#269, rc11_exhaust_glow#280, rc11_exhaust_vane#281, rc11_exhaust_vane.001#314, rc11_exhaust_vane.002#315, rc11_exhaust_vane.003#316, Face sheet.001#855, rc11_hull#7",
+ "  rc11_drive_core#249: face min X 0.00e+0, centre faces on X=0: 1",
+ "  rc11_drive_ring_0#253: face min X 0.00e+0, centre faces on X=0: 2",
+ "  rc11_drive_ring_1#261: face min X 0.00e+0, centre faces on X=0: 2",
+ "  rc11_drive_ring_2#269: face min X 0.00e+0, centre faces on X=0: 2",
+ "  rc11_exhaust_glow#280: face min X 0.00e+0, centre faces on X=0: 1",
+ "  rc11_exhaust_vane#281: face min X 0.00e+0, centre faces on X=0: 1",
+ "  rc11_exhaust_vane.001#314: face min X 0.00e+0, centre faces on X=0: 1",
+ "  rc11_exhaust_vane.002#315: face min X 0.00e+0, centre faces on X=0: 1",
+ "  rc11_exhaust_vane.003#316: face min X 0.00e+0, centre faces on X=0: 1",
+ "  Face sheet.001#855: face min X -5.62e-14, centre faces on X=0: 0 (sheet: boundary edge on X=0)",
+ "  rc11_hull#7: face min X -1.24e-11, centre faces on X=0: 1",
+ "deleted 248 -X twins",
+ "mirrored instances: 257 for 257 sources",
+ "groups: EDIT SIDE (257 bodies), MIRROR (don't edit) (257 instances), GYRO (centreline) (29 bodies)",
+ "validate: 286/286 valid"
+]

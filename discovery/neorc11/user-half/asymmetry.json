@@ -1,0 +1,43 @@
+{
+ "doc": "RC1V2.plasticity - Plasticity",
+ "undo": 2340,
+ "total": 540,
+ "visible": 536,
+ "hidden": 4,
+ "plusX": 260,
+ "minusX": 260,
+ "straddling": [
+  "rc11_drive_core#249 Solid faces 6 [-300,-1900,1388]..[300,900,1400]",
+  "rc11_drive_ring_0#253 Solid faces 10 [-520,-2120,1355]..[520,1120,1369]",
+  "rc11_drive_ring_1#261 Solid faces 10 [-690,-2290,1320]..[690,1290,1334]",
+  "rc11_drive_ring_2#269 Solid faces 10 [-840,-2440,1285]..[840,1440,1299]",
+  "rc11_exhaust_glow#280 Solid faces 6 [-1080,-6686,1360]..[1080,-6680,1660]",
+  "rc11_exhaust_vane#281 Solid faces 6 [-1080,-6880,1400]..[1080,-6700,1422]",
+  "rc11_exhaust_vane.001#314 Solid faces 6 [-1080,-6880,1470]..[1080,-6700,1492]",
+  "rc11_exhaust_vane.002#315 Solid faces 6 [-1080,-6880,1540]..[1080,-6700,1562]",
+  "rc11_exhaust_vane.003#316 Solid faces 6 [-1080,-6880,1610]..[1080,-6700,1632]",
+  "rc11_Gyro_OuterGimbal#804 Solid faces 16 [-700,-4924,3037]..[700,-3576,3523]",
+  "rc11_Gyro_InnerGimbal#808 Solid faces 8 [-555,-4821,2982]..[555,-3679,3578]",
+  "rc11_Gyro_Rotor#810 Solid faces 8 [-427,-4689,3040]..[427,-3811,3520]",
+  "rc11_Gyro_RimLight#812 Solid faces 4 [-426,-4690,3059]..[426,-3810,3501]",
+  "rc11_Gyro_Core#814 Solid faces 5 [-116,-4366,3191]..[116,-4134,3369]",
+  "Face sheet.001#855 Sheet faces 2 [-1815,-1310,3911]..[1815,1294,4556]",
+  "rc11_hull#7 Solid faces 490 [-4925,-7440,1226]..[4925,7903,4845]"
+ ],
+ "pairs": 256,
+ "plusUnpaired": [
+  "rc11_p_tiedown#405 Solid faces 5 [3655,-6238,2182]..[3669,-6162,2258]",
+  "rc11_Gyro_Spoke#815 Solid faces 26 [93,-4260,3118]..[380,-4181,3260]",
+  "rc11_Gyro_Spoke#832 Solid faces 26 [30,-4167,3269]..[207,-3883,3337]",
+  "rc11_Gyro_Spoke#836 Solid faces 26 [30,-4573,3085]..[207,-4317,3248]"
+ ],
+ "minusUnpaired": [
+  "rc11_Gyro_Spoke#833 Solid faces 26 [-207,-4183,3312]..[-30,-3927,3475]",
+  "rc11_Gyro_Spoke#834 Solid faces 26 [-380,-4319,3300]..[-93,-4240,3442]",
+  "rc11_Gyro_Spoke#835 Solid faces 26 [-207,-4617,3223]..[-30,-4333,3291]",
+  "rc11_p_tiedown.001#609 Solid faces 5 [-3669,-6238,2282]..[-3655,-6162,2358]"
+ ],
+ "nonRc11": [
+  "Face sheet.001#855 Sheet faces 2 [-1815,-1310,3911]..[1815,1294,4556]"
+ ]
+}
