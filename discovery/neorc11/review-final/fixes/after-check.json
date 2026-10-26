@@ -1,0 +1,21 @@
+{
+ "doc": "RC1V2.plasticity - Plasticity",
+ "undo": 2974,
+ "bodies": 297,
+ "visibleSolids": 288,
+ "visibleSheets": 0,
+ "wires": 4,
+ "instances": 260,
+ "visibleInstances": 259,
+ "valid": "288/288",
+ "unmirroredPlusX": [],
+ "plainMinusX": [],
+ "stackedDuplicates": 0,
+ "louvres": {
+  "plusX": 8,
+  "mirrors": 8
+ },
+ "podTrim": [
+  "#976 mirrored=true"
+ ]
+}
