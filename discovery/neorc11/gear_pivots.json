@@ -1,0 +1,312 @@
+{
+ "units": "millimetres, Z up, nose +Y",
+ "legs": [
+  {
+   "part": "leg front +X",
+   "pivot": [
+    1600,
+    4400,
+    1400
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "deployedDeg": 0,
+   "stowedDeg": -90,
+   "foot": {
+    "pivot": [
+     1600,
+     4400,
+     110
+    ],
+    "axis": [
+     1,
+     0,
+     0
+    ],
+    "deployedDeg": 0,
+    "stowedDeg": 90,
+    "note": "after the leg turn, about the knuckle"
+   }
+  },
+  {
+   "part": "leg front -X",
+   "pivot": [
+    -1600,
+    4400,
+    1400
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "deployedDeg": 0,
+   "stowedDeg": -90,
+   "foot": {
+    "pivot": [
+     -1600,
+     4400,
+     110
+    ],
+    "axis": [
+     1,
+     0,
+     0
+    ],
+    "deployedDeg": 0,
+    "stowedDeg": 90,
+    "note": "after the leg turn, about the knuckle"
+   }
+  },
+  {
+   "part": "leg rear +X",
+   "pivot": [
+    1600,
+    -3200,
+    1400
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "deployedDeg": 0,
+   "stowedDeg": -90,
+   "foot": {
+    "pivot": [
+     1600,
+     -3200,
+     110
+    ],
+    "axis": [
+     1,
+     0,
+     0
+    ],
+    "deployedDeg": 0,
+    "stowedDeg": 90,
+    "note": "after the leg turn, about the knuckle"
+   }
+  },
+  {
+   "part": "leg rear -X",
+   "pivot": [
+    -1600,
+    -3200,
+    1400
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "deployedDeg": 0,
+   "stowedDeg": -90,
+   "foot": {
+    "pivot": [
+     -1600,
+     -3200,
+     110
+    ],
+    "axis": [
+     1,
+     0,
+     0
+    ],
+    "deployedDeg": 0,
+    "stowedDeg": 90,
+    "note": "after the leg turn, about the knuckle"
+   }
+  }
+ ],
+ "doors": [
+  {
+   "part": "door inner front +X",
+   "hinge": [
+    1250,
+    4400,
+    1240
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "deployedDeg": 90,
+   "stowedDeg": 0
+  },
+  {
+   "part": "door outer front +X",
+   "hinge": [
+    1950,
+    4400,
+    1240
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "deployedDeg": -90,
+   "stowedDeg": 0
+  },
+  {
+   "part": "door inner front -X",
+   "hinge": [
+    -1250,
+    4400,
+    1240
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "deployedDeg": -90,
+   "stowedDeg": 0
+  },
+  {
+   "part": "door outer front -X",
+   "hinge": [
+    -1950,
+    4400,
+    1240
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "deployedDeg": 90,
+   "stowedDeg": 0
+  },
+  {
+   "part": "door inner rear +X",
+   "hinge": [
+    1250,
+    -3200,
+    1240
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "deployedDeg": 90,
+   "stowedDeg": 0
+  },
+  {
+   "part": "door outer rear +X",
+   "hinge": [
+    1950,
+    -3200,
+    1240
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "deployedDeg": -90,
+   "stowedDeg": 0
+  },
+  {
+   "part": "door inner rear -X",
+   "hinge": [
+    -1250,
+    -3200,
+    1240
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "deployedDeg": -90,
+   "stowedDeg": 0
+  },
+  {
+   "part": "door outer rear -X",
+   "hinge": [
+    -1950,
+    -3200,
+    1240
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "deployedDeg": 90,
+   "stowedDeg": 0
+  }
+ ],
+ "ramp": {
+  "part": "rc11_hatch_ramp (+ treads, rails)",
+  "hinge": [
+   0,
+   3896,
+   1240
+  ],
+  "axis": [
+   1,
+   0,
+   0
+  ],
+  "deployedDeg": 34.5,
+  "stowedDeg": 0
+ },
+ "retractCheck": {
+  "leg": {
+   "stowedBoundsMm": [
+    [
+     1280,
+     2790,
+     1290
+    ],
+    [
+     1920,
+     4360,
+     1500
+    ]
+   ],
+   "clearanceMm": {
+    "xIn": 30,
+    "xOut": 30,
+    "yFront": 190,
+    "yRear": 130,
+    "aboveClosedDoors": 32,
+    "belowCeiling": 49
+   },
+   "fits": true
+  },
+  "doors": {
+   "closedOuterFaceZ": 1240,
+   "gapMm": 4,
+   "flush": true,
+   "note": "doors are built closed flush with the belly and swung 90° about their hinge lines"
+  },
+  "ramp": {
+   "hinge": [
+    0,
+    3896,
+    1240
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "deployedDeg": 34.5,
+   "stowedDeg": 0,
+   "closedOuterFaceZ": 1240,
+   "freeEndZ": 2.3,
+   "treadsAndRailsTopWhenClosedZ": 1304,
+   "wellCeilingZ": 1529.5,
+   "fits": true
+  }
+ }
+}

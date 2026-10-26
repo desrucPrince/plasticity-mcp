@@ -1,0 +1,17 @@
+{
+ "done": {
+  "cuts": true
+ },
+ "notes": [
+  "clear zones: gear bays X 1250..1950 at Y 2660..4550 and -4940..-3050; hatch X ±650, Y 1700..3900",
+  "removed 19 earlier gear/hatch bodies",
+  "trunnion edges: fillet",
+  "doors open: inner Z 892..1236, outer Z 892..1236",
+  "retract check: {\"stowedBoundsMm\":[[1280,2790,1290],[1920,4360,1500]],\"clearanceMm\":{\"xIn\":30,\"xOut\":30,\"yFront\":190,\"yRear\":130,\"aboveClosedDoors\":32,\"belowCeiling\":49},\"fits\":true}",
+  "ramp edges: fillet",
+  "ramp lowered 34.5°: Z 2.3..1271, Y 2068..3894",
+  "validate: 20/20 valid; below Z 0: none",
+  "instances: {\"rc11_lg_trunnion\":3,\"rc11_lg_strut\":3,\"rc11_lg_slider\":3,\"rc11_lg_fork\":3,\"rc11_lg_knuckle\":3,\"rc11_lg_foot\":3,\"rc11_lg_brace\":3,\"rc11_lg_actuator\":3,\"rc11_lg_actuator_rod\":3,\"rc11_lg_door_inner\":3,\"rc11_lg_door_outer\":3,\"rc11_lg_liner\":3,\"rc11_hatch_liner\":1,\"rc11_hatch_light\":1,\"rc11_hatch_strut\":1,\"rc11_hatch_strut_rod\":1}; treads 1 + 5; rail 1 + 1",
+  "ramp check: {\"hinge\":[0,3896,1240],\"axis\":[1,0,0],\"deployedDeg\":34.5,\"stowedDeg\":0,\"closedOuterFaceZ\":1240,\"freeEndZ\":2.3,\"treadsAndRailsTopWhenClosedZ\":1304,\"wellCeilingZ\":1529.5,\"fits\":true}"
+ ]
+}
