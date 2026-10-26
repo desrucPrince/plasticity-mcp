@@ -1,0 +1,333 @@
+{
+ "parts": [
+  {
+   "part": "rc11_lg_trunnion",
+   "id": 1217,
+   "before": 4,
+   "done": [
+    "4 × fillet 5"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_lg_strut",
+   "id": 1219,
+   "before": 2,
+   "done": [
+    "2 × fillet 6"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_lg_stage",
+   "id": 1220,
+   "before": 2,
+   "done": [
+    "2 × chamfer 3"
+   ],
+   "fallbacks": [],
+   "after": 4
+  },
+  {
+   "part": "rc11_lg_slider",
+   "id": 1221,
+   "before": 2,
+   "done": [
+    "2 × fillet 4"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_lg_fork",
+   "id": 1222,
+   "before": 4,
+   "done": [
+    "2 × fillet 5",
+    "2 × fillet 3"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_lg_knuckle",
+   "id": 1224,
+   "before": 2,
+   "done": [
+    "2 × fillet 5"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_lg_foot",
+   "id": 1225,
+   "before": 20,
+   "done": [
+    "2 × fillet 12",
+    "2 × fillet 4",
+    "16 × fillet 1.5"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_lg_brace",
+   "id": 1235,
+   "before": 6,
+   "done": [
+    "6 × fillet 4"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_lg_actuator",
+   "id": 1238,
+   "before": 2,
+   "done": [
+    "2 × fillet 4"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_lg_actuator_rod",
+   "id": 1239,
+   "before": 2,
+   "done": [
+    "2 × fillet 3"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_lg_door_inner",
+   "id": 1240,
+   "before": 0,
+   "done": [],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_lg_door_outer",
+   "id": 1241,
+   "before": 0,
+   "done": [],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_lg_liner",
+   "id": 1242,
+   "before": 12,
+   "done": [
+    "12 × fillet 3"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_hatch_liner_side",
+   "id": 1249,
+   "before": 12,
+   "done": [
+    "12 × fillet 3"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_hatch_liner_front",
+   "id": 1250,
+   "before": 12,
+   "done": [
+    "12 × fillet 3"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_hatch_liner_rear",
+   "id": 1251,
+   "before": 12,
+   "done": [
+    "12 × fillet 3"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_hatch_liner_ceiling",
+   "id": 1252,
+   "before": 12,
+   "done": [
+    "12 × fillet 3"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_hatch_ceiling_light",
+   "id": 1253,
+   "before": 12,
+   "done": [
+    "12 × fillet 1.5"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_hatch_light",
+   "id": 1254,
+   "before": 12,
+   "done": [
+    "12 × fillet 1.5"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_hatch_ram_housing",
+   "id": 1255,
+   "before": 2,
+   "done": [
+    "2 × fillet 8"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_hatch_ram_stage_1",
+   "id": 1259,
+   "before": 2,
+   "done": [
+    "2 × chamfer 2"
+   ],
+   "fallbacks": [],
+   "after": 4
+  },
+  {
+   "part": "rc11_hatch_ram_stage_2",
+   "id": 1260,
+   "before": 2,
+   "done": [
+    "2 × chamfer 2"
+   ],
+   "fallbacks": [],
+   "after": 4
+  },
+  {
+   "part": "rc11_hatch_ram_stage_3",
+   "id": 1261,
+   "before": 2,
+   "done": [
+    "2 × chamfer 2"
+   ],
+   "fallbacks": [],
+   "after": 4
+  },
+  {
+   "part": "rc11_hatch_platform",
+   "id": 1256,
+   "before": 0,
+   "done": [],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_hatch_rib",
+   "id": 1257,
+   "before": 12,
+   "done": [
+    "12 × fillet 2"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_hatch_platform_light",
+   "id": 1258,
+   "before": 12,
+   "done": [
+    "12 × fillet 1.5"
+   ],
+   "fallbacks": [],
+   "after": 0
+  },
+  {
+   "part": "rc11_hatch_rail",
+   "id": 1262,
+   "before": 47,
+   "done": [],
+   "fallbacks": [
+    "460,3730,1167|21: fillet 5",
+    "430,1960,1150|18: fillet 5",
+    "450,1942,1160|66: fillet 5",
+    "432,1960,150|113: fillet 5",
+    "432,2845,1160|10: FAILED",
+    "468,2845,1160|10: FAILED",
+    "432,2845,150|113: fillet 5",
+    "463,3743,1160|38: fillet 5",
+    "432,3730,150|113: fillet 5",
+    "0,3730,1170|126: fillet 5",
+    "0,3730,664|88: fillet 5",
+    "450,1978,1130|51: fillet 3",
+    "467,2845,1160|10: fillet 3",
+    "433,2845,1160|10: fillet 3",
+    "432,2845,1141|123: fillet 3",
+    "455,3713,1131|41: fillet 3",
+    "464,3719,650|80: fillet 3",
+    "436,2834,650|93: fillet 3",
+    "436,2856,650|93: fillet 3",
+    "436,1971,650|93: fillet 3",
+    "450,3748,1148|14: fillet 3"
+   ],
+   "after": 13
+  }
+ ],
+ "hullLips": {
+  "frontBay": {
+   "roundFaces": 4,
+   "radii": [
+    10
+   ]
+  },
+  "rearBay": {
+   "roundFaces": 4,
+   "radii": [
+    10
+   ]
+  },
+  "hatch": {
+   "roundFaces": 5,
+   "radii": [
+    10
+   ]
+  }
+ },
+ "hullSharpLipEdges": 8,
+ "validity": {
+  "valid": 28,
+  "of": 28,
+  "invalid": []
+ },
+ "retract": {
+  "clearanceMm": {
+   "xIn": 40,
+   "xOut": 40,
+   "yFront": 210,
+   "yRear": 50,
+   "aboveClosedDoors": 42,
+   "belowCeiling": 30
+  },
+  "fits": true
+ },
+ "lift": {
+  "flushErrorMm": 0,
+  "railClearToCeilingMm": 1080
+ },
+ "sharpLeft": 29
+}
