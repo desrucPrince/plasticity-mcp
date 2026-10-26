@@ -1,0 +1,66 @@
+{
+ "notInGroups": [
+  "null#975 Wire",
+  "Polyline.001#977 Wire",
+  "Line.001#978 Wire",
+  "Line.002#979 Wire"
+ ],
+ "minusXPlain": [
+  "rc11_louvre.004#981",
+  "rc11_louvre.009#982",
+  "rc11_louvre.010#983",
+  "rc11_louvre.011#984",
+  "rc11_louvre.012#985",
+  "rc11_louvre.013#986",
+  "rc11_louvre.014#987"
+ ],
+ "stackedDuplicates": [
+  "rc11_drive_vane_front#278 = rc11_drive_vane.008#313",
+  "rc11_drive_vane_rear#279 = rc11_drive_vane.001#306"
+ ],
+ "wires": [
+  "null#975 [3377,-7440,3130]..[3439,-7396,3130]",
+  "Polyline.001#977 [2150,-4905,3100]..[2150,-604,3810]",
+  "Line.001#978 [3200,-7413,2910]..[3439,-7396,3100]",
+  "Line.002#979 [3101,-7396,3130]..[3439,-7396,3130]"
+ ],
+ "trims": [
+  "null#976 [3385,-7396,3098]..[3425,7378,3116] mirrored=false"
+ ],
+ "belowGround": [],
+ "hull": {
+  "faces": 422,
+  "edges": 1046,
+  "centreFaces": 1,
+  "faceMinX": 0,
+  "tinyFaces": 5,
+  "mirrored": true
+ },
+ "hullBlendContinuity": {
+  "edgesSampled": 164,
+  "tangent": 110,
+  "g2": 46,
+  "g1Only": 64,
+  "creases": 54,
+  "maxG1degOnTangent": 0.609
+ },
+ "roofSheet": {
+  "name": "Face sheet.001",
+  "id": 855,
+  "faces": 1,
+  "openEdges": 6,
+  "bounds": [
+   [
+    -54,
+    -1310,
+    3911
+   ],
+   [
+    1815,
+    1294,
+    4556
+   ]
+  ],
+  "mirrored": true
+ }
+}
