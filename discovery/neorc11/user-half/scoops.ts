@@ -1,6 +1,6 @@
 // Roof scoops on the user's isolated roof sheet ("Face sheet.001"), a pair at X ±700: raked, forward-facing intakes
 // that rise out of the roof (the side profile follows the sampled roof section, roof-samples.json), each with a
-// recessed mouth, a dark back plate, 4 gunmetal vanes (linked instances), G2-rounded top edges, a chamfered lip and
+// recessed mouth, a dark back plate, 6 gunmetal vanes (linked instances), G2-rounded top edges, a chamfered lip and
 // 3 bolts on the outer side. +X parts get mirrored linked instances for -X. Bodies are named rc11_scoop_*; rerunning
 // deletes them (and their instances) first. Never touches the roof sheet itself or the isolate view.
 // Usage: PLASTICITY_CDP_URL=http://127.0.0.1:9223 node discovery/neorc11/user-half/scoops.ts
@@ -33,7 +33,7 @@ const zr = (y: number) => {
   }
   return samples.at(-1)![2];
 };
-const S = { xc: 700, w: 360, yTail: -500, yMouth: 300, h: 110, embed: 40, wall: 25, pocketDepth: 200, lip: 20 };
+const S = { vanes: 6, xc: 700, w: 600, yTail: -500, yMouth: 300, h: 110, embed: 40, wall: 25, pocketDepth: 200, lip: 20 };
 const xOut = S.xc + S.w / 2, xIn = S.xc - S.w / 2;
 const h = (y: number) => { const t = Math.min(1, Math.max(0, (y - S.yTail) / (S.yMouth - S.yTail))); return S.h * t * t * (3 - 2 * t); };
 
@@ -123,8 +123,8 @@ try {
   const plate = await extrudeYZ([[yBack + 0.5, zr(yBack) + 12], [yBack + 0.5, zr(yBack) + h(yBack) - S.lip - 8], [yBack + 12, zr(yBack + 12) + h(yBack + 12) - S.lip - 8], [yBack + 12, zr(yBack + 12) + 12]], xOut - S.wall, xIn + S.wall, "rc11_scoop_mouth");
   await material([plate], "Intake black", "#06080a", 0.6, 0.2);
 
-  // ---- 4 vanes in the mouth (one source, 3 translated instances), 8 mm thick
-  const inner = S.w - 2 * S.wall, pitch = inner / 5;
+  // ---- vanes in the mouth (one source plus translated instances, evenly spaced), 8 mm thick
+  const inner = S.w - 2 * S.wall, pitch = inner / (S.vanes + 1);
   const v0 = xIn + S.wall + pitch;
   const vane = await extrudeYZ([[yBack + 12, zr(yBack + 12) + 12], [yBack + 12, zr(yBack + 12) + h(yBack + 12) - S.lip - 10], [S.yMouth - 10, zr(S.yMouth) + S.h - S.lip - 4], [S.yMouth - 10, zr(S.yMouth) + 12]], v0 - 4, v0 + 4, "rc11_scoop_vane");
   try { await raw("plasticity_chamfer", { id: vane, edgeIds: (await info(vane)).edges.map((e) => e.id), distanceMm: 1.5, revision: await rev() }); } catch { say("vane chamfer refused"); }
@@ -145,7 +145,7 @@ try {
   const counts: Record<string, number> = {};
   counts.scoop = await place(scoop, []);
   counts.mouth = await place(plate, []);
-  counts.vanes = await place(vane, [1, 2, 3].map((k) => [pitch * k, 0, 0] as Vec));
+  counts.vanes = await place(vane, Array.from({ length: S.vanes - 1 }, (_, k) => [pitch * (k + 1), 0, 0] as Vec));
   counts.bolts = await place(bolt, boltYs.slice(1).map((y) => [0, y - boltYs[0]!, (zr(y) + h(y) / 2) - (zr(boltYs[0]!) + h(boltYs[0]!) / 2)] as Vec));
   say(`instances: ${JSON.stringify(counts)}`);
   const parts = (await bodies()).filter((b) => (b.name ?? "").startsWith("rc11_scoop"));
