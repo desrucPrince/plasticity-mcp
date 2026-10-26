@@ -1960,7 +1960,7 @@ export function strengthDependenciesForSession(
 }
 
 // View-only tools: they change no geometry, so the activity badge ignores them.
-const HUD_UNTRACKED_TOOLS = new Set(["plasticity_screenshot", "plasticity_set_view", "plasticity_set_camera", "plasticity_capture_snapshot", "plasticity_save_copy"]);
+const HUD_UNTRACKED_TOOLS = new Set(["plasticity_connect", "plasticity_list_windows", "plasticity_screenshot", "plasticity_set_view", "plasticity_set_camera", "plasticity_capture_snapshot", "plasticity_save_copy"]);
 
 export function createServer(
   session?: SessionLike,

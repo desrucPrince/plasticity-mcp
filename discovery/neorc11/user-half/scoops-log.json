@@ -1,0 +1,11 @@
+[
+ "scoop shell X 520..880, Y -500..300, mouth 110 mm tall above the roof (roof Z 4209..4362)",
+ "top edges G2 r30 (2)",
+ "mouth lip chamfer 6 (7 edges)",
+ "instances: {\"scoop\":1,\"mouth\":1,\"vanes\":7,\"bolts\":5}",
+ "validate: 4/4 valid",
+ "rc11_scoop#887 [520,-512,4169]..[880,304,4472]",
+ "rc11_scoop_mouth#891 [545,101,4344]..[855,112,4401]",
+ "rc11_scoop_vane#893 [603,112,4346]..[611,290,4448]",
+ "rc11_scoop_bolt#894 [878,-162,4297]..[886,-138,4321]"
+]
