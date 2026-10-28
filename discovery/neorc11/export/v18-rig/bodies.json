@@ -1,0 +1,6638 @@
+[
+ {
+  "id": 247,
+  "name": "rc11_hover_pad",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2300,
+    -700,
+    2005
+   ],
+   "max": [
+    2880,
+    700,
+    2045
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 277,
+  "name": "rc11_drive_vane",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    299.99999999999994,
+    -510,
+    2070.0000000000005
+   ],
+   "max": [
+    879.9999999999998,
+    -490,
+    2200
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 278,
+  "name": "rc11_drive_vane_front",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    299.99999999999994,
+    590,
+    2070.0000000000005
+   ],
+   "max": [
+    879.9999999999998,
+    610,
+    2200
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 279,
+  "name": "rc11_drive_vane_rear",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    299.99999999999994,
+    -1610,
+    2070.0000000000005
+   ],
+   "max": [
+    879.9999999999998,
+    -1590,
+    2200
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 302,
+  "name": "rc11_hover_pad.001",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2300,
+    -5700,
+    2005
+   ],
+   "max": [
+    2880,
+    -4300,
+    2045
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 303,
+  "name": "rc11_hover_pad.002",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2300,
+    -3200,
+    2005
+   ],
+   "max": [
+    2880,
+    -1800,
+    2045
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 304,
+  "name": "rc11_hover_pad.003",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2300,
+    1800,
+    2005
+   ],
+   "max": [
+    2880,
+    3200,
+    2045
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 305,
+  "name": "rc11_hover_pad.004",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2300,
+    4100,
+    2005
+   ],
+   "max": [
+    2880,
+    5500,
+    2045
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 307,
+  "name": "rc11_drive_vane.002",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    299.99999999999994,
+    -1335,
+    2070.0000000000005
+   ],
+   "max": [
+    879.9999999999998,
+    -1315,
+    2200
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 308,
+  "name": "rc11_drive_vane.003",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    299.99999999999994,
+    -1060,
+    2070.0000000000005
+   ],
+   "max": [
+    879.9999999999998,
+    -1040,
+    2200
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 309,
+  "name": "rc11_drive_vane.004",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    299.99999999999994,
+    -785,
+    2070.0000000000005
+   ],
+   "max": [
+    879.9999999999998,
+    -765,
+    2200
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 310,
+  "name": "rc11_drive_vane.005",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    299.99999999999994,
+    -235,
+    2070.0000000000005
+   ],
+   "max": [
+    879.9999999999998,
+    -214.99999999999997,
+    2200
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 311,
+  "name": "rc11_drive_vane.006",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    299.99999999999994,
+    40.000000000000036,
+    2070.0000000000005
+   ],
+   "max": [
+    879.9999999999998,
+    60.00000000000006,
+    2200
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 312,
+  "name": "rc11_drive_vane.007",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    299.99999999999994,
+    314.99999999999994,
+    2070.0000000000005
+   ],
+   "max": [
+    879.9999999999998,
+    334.99999999999994,
+    2200
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 320,
+  "name": "rc11_drive_vane_front.001",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    254.80762113533157,
+    741.3397459621555,
+    2070.0000000000005
+   ],
+   "max": [
+    767.102355330306,
+    1048.660254037844,
+    2200
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 321,
+  "name": "rc11_drive_vane_front.002",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    141.3397459621556,
+    854.8076211353315,
+    2070.0000000000005
+   ],
+   "max": [
+    448.6602540378444,
+    1367.1023553303057,
+    2200
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 322,
+  "name": "rc11_drive_vane_rear.001",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    254.80762113533152,
+    -2048.660254037844,
+    2070.0000000000005
+   ],
+   "max": [
+    767.102355330306,
+    -1741.3397459621556,
+    2200
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 323,
+  "name": "rc11_drive_vane_rear.002",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    141.3397459621555,
+    -2367.1023553303057,
+    2070.0000000000005
+   ],
+   "max": [
+    448.66025403784437,
+    -1854.8076211353316,
+    2200
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 381,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    885,
+    3074.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    915,
+    3105
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 382,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    975,
+    -1615,
+    2033.0000000000005
+   ],
+   "max": [
+    1004.9999999999999,
+    -1585.0000000000002,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 383,
+  "name": "rc11_p_bolt_rear",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    137.99999999999997,
+    -6904.999999999999,
+    2133
+   ],
+   "max": [
+    162,
+    -6898,
+    2157
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 384,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    112.99999999999999,
+    5473.000000000001,
+    3899
+   ],
+   "max": [
+    127,
+    5487,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 386,
+  "name": "rc11_p_conduit_pod_0",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3046.1825790005396,
+    -5906.790997501018,
+    2150.2337912417993
+   ],
+   "max": [
+    3191.215965556696,
+    5306.790997501017,
+    2293.817420999461
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 388,
+  "name": "rc11_p_conduit_pod_1",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3224.91751135727,
+    -5906.790997501018,
+    2348.784034465323
+   ],
+   "max": [
+    3364.8182227715015,
+    5306.790997501016,
+    2493.817420999461
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 390,
+  "name": "rc11_p_conduit_belly_0",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    424.999999994645,
+    -6573.158865365406,
+    1974.996625805038
+   ],
+   "max": [
+    475.00000001600574,
+    -2551.7412393817967,
+    2151.2566286671968
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 392,
+  "name": "rc11_p_conduit_belly_1",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    624.9999999948526,
+    -6573.158865365406,
+    1974.996625805038
+   ],
+   "max": [
+    675.000000022055,
+    -2551.7412393817967,
+    2151.2566286671968
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 396,
+  "name": "rc11_p_clamp_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    400,
+    -3416,
+    1968
+   ],
+   "max": [
+    500,
+    -3384,
+    2044
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 407,
+  "name": "rc11_p_puck",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    730,
+    1730,
+    5276
+   ],
+   "max": [
+    870.0000000000001,
+    1870,
+    5290
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 411,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    897.5,
+    3525
+   ],
+   "max": [
+    3663.9999999999995,
+    927.5,
+    3555
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 412,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    1122.5,
+    3074.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    1152.4999999999998,
+    3105
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 413,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    1122.5,
+    3525
+   ],
+   "max": [
+    3663.9999999999995,
+    1152.4999999999998,
+    3555
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 414,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    1347.5000000000002,
+    3074.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    1377.5,
+    3105
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 415,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    1347.5000000000002,
+    3525
+   ],
+   "max": [
+    3663.9999999999995,
+    1377.5,
+    3555
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 416,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    1572.5,
+    3074.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    1602.4999999999998,
+    3105
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 417,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    1572.5,
+    3525
+   ],
+   "max": [
+    3663.9999999999995,
+    1602.4999999999998,
+    3555
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 418,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    1797.5,
+    3074.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    1827.5,
+    3105
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 419,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    1797.5,
+    3525
+   ],
+   "max": [
+    3663.9999999999995,
+    1827.5,
+    3555
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 420,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    2022.5,
+    3074.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    2052.5,
+    3105
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 421,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    2022.5,
+    3525
+   ],
+   "max": [
+    3663.9999999999995,
+    2052.5,
+    3555
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 422,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    2247.5,
+    3074.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    2277.5000000000005,
+    3105
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 423,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    2247.5,
+    3525
+   ],
+   "max": [
+    3663.9999999999995,
+    2277.5000000000005,
+    3555
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 424,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    2472.4999999999995,
+    3074.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    2502.5,
+    3105
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 425,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    2472.4999999999995,
+    3525
+   ],
+   "max": [
+    3663.9999999999995,
+    2502.5,
+    3555
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 426,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    2697.5,
+    3074.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    2727.5,
+    3105
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 427,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    2697.5,
+    3525
+   ],
+   "max": [
+    3663.9999999999995,
+    2727.5,
+    3555
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 428,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    2922.5,
+    3074.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    2952.5,
+    3105
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 429,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    2922.5,
+    3525
+   ],
+   "max": [
+    3663.9999999999995,
+    2952.5,
+    3555
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 430,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    3147.5,
+    3074.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    3177.5,
+    3105
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 431,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    3147.5,
+    3525
+   ],
+   "max": [
+    3663.9999999999995,
+    3177.5,
+    3555
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 432,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    3372.4999999999995,
+    3074.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    3402.5,
+    3105
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 433,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    3372.4999999999995,
+    3525
+   ],
+   "max": [
+    3663.9999999999995,
+    3402.5,
+    3555
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 434,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    3597.4999999999995,
+    3074.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    3627.5,
+    3105
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 435,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    3597.4999999999995,
+    3525
+   ],
+   "max": [
+    3663.9999999999995,
+    3627.5,
+    3555
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 436,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    3822.5,
+    3074.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    3852.5,
+    3105
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 437,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    3822.5,
+    3525
+   ],
+   "max": [
+    3663.9999999999995,
+    3852.5,
+    3555
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 438,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    4047.5000000000005,
+    3074.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    4077.4999999999995,
+    3105
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 439,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    4047.5000000000005,
+    3525
+   ],
+   "max": [
+    3663.9999999999995,
+    4077.4999999999995,
+    3555
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 440,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    4272.500000000001,
+    3074.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    4302.5,
+    3105
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 441,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    4272.500000000001,
+    3525
+   ],
+   "max": [
+    3663.9999999999995,
+    4302.5,
+    3555
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 442,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    845,
+    3185
+   ],
+   "max": [
+    3663.9999999999995,
+    875,
+    3215.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 443,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    845,
+    3300.0000000000005
+   ],
+   "max": [
+    3663.9999999999995,
+    875,
+    3330.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 444,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    845,
+    3414.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    875,
+    3445
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 445,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    4325,
+    3185
+   ],
+   "max": [
+    3663.9999999999995,
+    4354.999999999999,
+    3215.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 446,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    4325,
+    3300.0000000000005
+   ],
+   "max": [
+    3663.9999999999995,
+    4354.999999999999,
+    3330.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 447,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    4325,
+    3414.9999999999995
+   ],
+   "max": [
+    3663.9999999999995,
+    4354.999999999999,
+    3445
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 448,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -5015,
+    3435
+   ],
+   "max": [
+    3663.9999999999995,
+    -4985,
+    3465.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 449,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -4789.999999999999,
+    3435
+   ],
+   "max": [
+    3663.9999999999995,
+    -4760,
+    3465.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 450,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -4564.999999999999,
+    3435
+   ],
+   "max": [
+    3663.9999999999995,
+    -4535,
+    3465.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 451,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -4339.999999999999,
+    3435
+   ],
+   "max": [
+    3663.9999999999995,
+    -4310,
+    3465.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 452,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -4114.999999999999,
+    3435
+   ],
+   "max": [
+    3663.9999999999995,
+    -4085,
+    3465.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 453,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -3890.0000000000005,
+    3435
+   ],
+   "max": [
+    3663.9999999999995,
+    -3860.0000000000005,
+    3465.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 454,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -3665,
+    3435
+   ],
+   "max": [
+    3663.9999999999995,
+    -3635,
+    3465.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 455,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -3440.0000000000005,
+    3435
+   ],
+   "max": [
+    3663.9999999999995,
+    -3410,
+    3465.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 456,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -3215,
+    3435
+   ],
+   "max": [
+    3663.9999999999995,
+    -3184.9999999999995,
+    3465.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 457,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -2990,
+    3435
+   ],
+   "max": [
+    3663.9999999999995,
+    -2960,
+    3465.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 458,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -2765,
+    3435
+   ],
+   "max": [
+    3663.9999999999995,
+    -2735,
+    3465.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 459,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -2540,
+    3435
+   ],
+   "max": [
+    3663.9999999999995,
+    -2510,
+    3465.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 460,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -2315.0000000000005,
+    3435
+   ],
+   "max": [
+    3663.9999999999995,
+    -2285,
+    3465.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 461,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -2090.0000000000005,
+    3435
+   ],
+   "max": [
+    3663.9999999999995,
+    -2060,
+    3465.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 462,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -1865,
+    3435
+   ],
+   "max": [
+    3663.9999999999995,
+    -1835.0000000000002,
+    3465.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 463,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -1640,
+    3435
+   ],
+   "max": [
+    3663.9999999999995,
+    -1610,
+    3465.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 464,
+  "name": "rc11_p_bolt_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -1414.9999999999998,
+    3435
+   ],
+   "max": [
+    3663.9999999999995,
+    -1385,
+    3465.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 465,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    975,
+    -1527.5,
+    2033.0000000000005
+   ],
+   "max": [
+    1004.9999999999999,
+    -1497.5000000000002,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 466,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    975,
+    -1302.5,
+    2033.0000000000005
+   ],
+   "max": [
+    1004.9999999999999,
+    -1272.5000000000002,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 467,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    975,
+    -1077.5,
+    2033.0000000000005
+   ],
+   "max": [
+    1004.9999999999999,
+    -1047.5,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 468,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    975,
+    -852.5000000000001,
+    2033.0000000000005
+   ],
+   "max": [
+    1004.9999999999999,
+    -822.5000000000001,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 469,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    975,
+    -627.5000000000001,
+    2033.0000000000005
+   ],
+   "max": [
+    1004.9999999999999,
+    -597.5,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 470,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    975,
+    -402.50000000000017,
+    2033.0000000000005
+   ],
+   "max": [
+    1004.9999999999999,
+    -372.50000000000017,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 471,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    975,
+    -177.5000000000001,
+    2033.0000000000005
+   ],
+   "max": [
+    1004.9999999999999,
+    -147.50000000000009,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 472,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    975,
+    47.5,
+    2033.0000000000005
+   ],
+   "max": [
+    1004.9999999999999,
+    77.5,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 473,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    975,
+    272.49999999999983,
+    2033.0000000000005
+   ],
+   "max": [
+    1004.9999999999999,
+    302.4999999999999,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 474,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    975,
+    497.4999999999997,
+    2033.0000000000005
+   ],
+   "max": [
+    1004.9999999999999,
+    527.4999999999998,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 475,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    926.545951132202,
+    890.9268244311979,
+    2033.0000000000005
+   ],
+   "max": [
+    956.545951132202,
+    920.926824431198,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 476,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    785.9268244311979,
+    1166.9073997695484,
+    2033.0000000000005
+   ],
+   "max": [
+    815.9268244311979,
+    1196.9073997695482,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 477,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    566.9073997695484,
+    1385.9268244311977,
+    2033.0000000000005
+   ],
+   "max": [
+    596.9073997695484,
+    1415.9268244311975,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 478,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    290.9268244311979,
+    1526.5459511322022,
+    2033.0000000000005
+   ],
+   "max": [
+    320.92682443119793,
+    1556.545951132202,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 479,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    926.545951132202,
+    -1920.926824431198,
+    2033.0000000000005
+   ],
+   "max": [
+    956.545951132202,
+    -1890.9268244311982,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 480,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    785.9268244311979,
+    -2196.907399769549,
+    2033.0000000000005
+   ],
+   "max": [
+    815.9268244311979,
+    -2166.9073997695486,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 481,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    566.9073997695484,
+    -2415.9268244311984,
+    2033.0000000000005
+   ],
+   "max": [
+    596.9073997695484,
+    -2385.926824431198,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 482,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    290.9268244311979,
+    -2556.5459511322024,
+    2033.0000000000005
+   ],
+   "max": [
+    320.92682443119793,
+    -2526.545951132202,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 483,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2329.9999999999995,
+    -5665,
+    1998.0000000000002
+   ],
+   "max": [
+    2360,
+    -5635.000000000001,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 484,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2329.9999999999995,
+    -4364.999999999999,
+    1998.0000000000002
+   ],
+   "max": [
+    2360,
+    -4335,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 485,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2820,
+    -5665,
+    1998.0000000000002
+   ],
+   "max": [
+    2850,
+    -5635.000000000001,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 486,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2820,
+    -4364.999999999999,
+    1998.0000000000002
+   ],
+   "max": [
+    2850,
+    -4335,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 487,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2329.9999999999995,
+    -3165.0000000000005,
+    1998.0000000000002
+   ],
+   "max": [
+    2360,
+    -3135.0000000000005,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 488,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2329.9999999999995,
+    -1865,
+    1998.0000000000002
+   ],
+   "max": [
+    2360,
+    -1835.0000000000002,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 489,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2820,
+    -3165.0000000000005,
+    1998.0000000000002
+   ],
+   "max": [
+    2850,
+    -3135.0000000000005,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 490,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2820,
+    -1865,
+    1998.0000000000002
+   ],
+   "max": [
+    2850,
+    -1835.0000000000002,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 491,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2329.9999999999995,
+    -665.0000000000001,
+    1998.0000000000002
+   ],
+   "max": [
+    2360,
+    -635.0000000000001,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 492,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2329.9999999999995,
+    634.9999999999999,
+    1998.0000000000002
+   ],
+   "max": [
+    2360,
+    664.9999999999999,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 493,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2820,
+    -665.0000000000001,
+    1998.0000000000002
+   ],
+   "max": [
+    2850,
+    -635.0000000000001,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 494,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2820,
+    634.9999999999999,
+    1998.0000000000002
+   ],
+   "max": [
+    2850,
+    664.9999999999999,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 495,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2329.9999999999995,
+    1835.0000000000002,
+    1998.0000000000002
+   ],
+   "max": [
+    2360,
+    1865,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 496,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2329.9999999999995,
+    3135,
+    1998.0000000000002
+   ],
+   "max": [
+    2360,
+    3165,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 497,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2820,
+    1835.0000000000002,
+    1998.0000000000002
+   ],
+   "max": [
+    2850,
+    1865,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 498,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2820,
+    3135,
+    1998.0000000000002
+   ],
+   "max": [
+    2850,
+    3165,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 499,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2329.9999999999995,
+    4135.000000000001,
+    1998.0000000000002
+   ],
+   "max": [
+    2360,
+    4165,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 500,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2329.9999999999995,
+    5435,
+    1998.0000000000002
+   ],
+   "max": [
+    2360,
+    5464.999999999999,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 501,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2820,
+    4135.000000000001,
+    1998.0000000000002
+   ],
+   "max": [
+    2850,
+    4165,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 502,
+  "name": "rc11_p_bolt_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2820,
+    5435,
+    1998.0000000000002
+   ],
+   "max": [
+    2850,
+    5464.999999999999,
+    2007.0000000000002
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 503,
+  "name": "rc11_p_bolt_rear",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    138.99999999999997,
+    -6904.999999999999,
+    2133
+   ],
+   "max": [
+    163,
+    -6898,
+    2157
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 504,
+  "name": "rc11_p_bolt_rear",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    138.99999999999997,
+    -6904.999999999999,
+    2463
+   ],
+   "max": [
+    163,
+    -6898,
+    2487
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 505,
+  "name": "rc11_p_bolt_rear",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    351,
+    -6904.999999999999,
+    2133
+   ],
+   "max": [
+    375,
+    -6898,
+    2157
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 506,
+  "name": "rc11_p_bolt_rear",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    351,
+    -6904.999999999999,
+    2463
+   ],
+   "max": [
+    375,
+    -6898,
+    2487
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 507,
+  "name": "rc11_p_bolt_rear",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    563,
+    -6904.999999999999,
+    2133
+   ],
+   "max": [
+    587,
+    -6898,
+    2157
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 508,
+  "name": "rc11_p_bolt_rear",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    563,
+    -6904.999999999999,
+    2463
+   ],
+   "max": [
+    587,
+    -6898,
+    2487
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 509,
+  "name": "rc11_p_bolt_rear",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    775,
+    -6904.999999999999,
+    2133
+   ],
+   "max": [
+    799,
+    -6898,
+    2157
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 510,
+  "name": "rc11_p_bolt_rear",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    775,
+    -6904.999999999999,
+    2463
+   ],
+   "max": [
+    799,
+    -6898,
+    2487
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 511,
+  "name": "rc11_p_bolt_rear",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    987,
+    -6904.999999999999,
+    2133
+   ],
+   "max": [
+    1010.9999999999999,
+    -6898,
+    2157
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 512,
+  "name": "rc11_p_bolt_rear",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    987,
+    -6904.999999999999,
+    2463
+   ],
+   "max": [
+    1010.9999999999999,
+    -6898,
+    2487
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 513,
+  "name": "rc11_p_bolt_rear",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1087.9999999999998,
+    -6904.999999999999,
+    2228
+   ],
+   "max": [
+    1111.9999999999998,
+    -6898,
+    2252
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 514,
+  "name": "rc11_p_bolt_rear",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1087.9999999999998,
+    -6904.999999999999,
+    2368
+   ],
+   "max": [
+    1111.9999999999998,
+    -6898,
+    2392
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 515,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    132.99999999999997,
+    5473.000000000001,
+    3899
+   ],
+   "max": [
+    147,
+    5487,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 516,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    132.99999999999997,
+    5413.000000000001,
+    3899
+   ],
+   "max": [
+    147,
+    5427.000000000001,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 517,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    332.99999999999994,
+    5473.000000000001,
+    3899
+   ],
+   "max": [
+    347,
+    5487,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 518,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    332.99999999999994,
+    5413.000000000001,
+    3899
+   ],
+   "max": [
+    347,
+    5427.000000000001,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 519,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    533,
+    5473.000000000001,
+    3899
+   ],
+   "max": [
+    547,
+    5487,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 520,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    533,
+    5413.000000000001,
+    3899
+   ],
+   "max": [
+    547,
+    5427.000000000001,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 521,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    733,
+    5473.000000000001,
+    3899
+   ],
+   "max": [
+    747,
+    5487,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 522,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    733,
+    5413.000000000001,
+    3899
+   ],
+   "max": [
+    747,
+    5427.000000000001,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 523,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    932.9999999999999,
+    5473.000000000001,
+    3899
+   ],
+   "max": [
+    947,
+    5487,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 524,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    932.9999999999999,
+    5413.000000000001,
+    3899
+   ],
+   "max": [
+    947,
+    5427.000000000001,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 525,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1133.0000000000002,
+    5473.000000000001,
+    3899
+   ],
+   "max": [
+    1147,
+    5487,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 526,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1133.0000000000002,
+    5413.000000000001,
+    3899
+   ],
+   "max": [
+    1147,
+    5427.000000000001,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 527,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1333,
+    5473.000000000001,
+    3899
+   ],
+   "max": [
+    1346.9999999999998,
+    5487,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 528,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1333,
+    5413.000000000001,
+    3899
+   ],
+   "max": [
+    1346.9999999999998,
+    5427.000000000001,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 529,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1533.0000000000002,
+    5473.000000000001,
+    3899
+   ],
+   "max": [
+    1547,
+    5487,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 530,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1533.0000000000002,
+    5413.000000000001,
+    3899
+   ],
+   "max": [
+    1547,
+    5427.000000000001,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 531,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1733.0000000000002,
+    5473.000000000001,
+    3899
+   ],
+   "max": [
+    1747,
+    5487,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 532,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1733.0000000000002,
+    5413.000000000001,
+    3899
+   ],
+   "max": [
+    1747,
+    5427.000000000001,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 533,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1933,
+    5473.000000000001,
+    3899
+   ],
+   "max": [
+    1946.9999999999998,
+    5487,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 534,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1933,
+    5413.000000000001,
+    3899
+   ],
+   "max": [
+    1946.9999999999998,
+    5427.000000000001,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 535,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2133,
+    5473.000000000001,
+    3899
+   ],
+   "max": [
+    2147.0000000000005,
+    5487,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 536,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2133,
+    5413.000000000001,
+    3899
+   ],
+   "max": [
+    2147.0000000000005,
+    5427.000000000001,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 537,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2333,
+    5473.000000000001,
+    3899
+   ],
+   "max": [
+    2347.0000000000005,
+    5487,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 538,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2333,
+    5413.000000000001,
+    3899
+   ],
+   "max": [
+    2347.0000000000005,
+    5427.000000000001,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 539,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2533,
+    5473.000000000001,
+    3899
+   ],
+   "max": [
+    2547,
+    5487,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 540,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2533,
+    5413.000000000001,
+    3899
+   ],
+   "max": [
+    2547,
+    5427.000000000001,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 545,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    533,
+    -3497.0000000000005,
+    3899
+   ],
+   "max": [
+    547,
+    -3483,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 547,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    733,
+    -3497.0000000000005,
+    3899
+   ],
+   "max": [
+    747,
+    -3483,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 548,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    733,
+    -3556.999999999999,
+    3899
+   ],
+   "max": [
+    747,
+    -3542.9999999999986,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 549,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    932.9999999999999,
+    -3497.0000000000005,
+    3899
+   ],
+   "max": [
+    947,
+    -3483,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 550,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    932.9999999999999,
+    -3556.999999999999,
+    3899
+   ],
+   "max": [
+    947,
+    -3542.9999999999986,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 551,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1133.0000000000002,
+    -3497.0000000000005,
+    3899
+   ],
+   "max": [
+    1147,
+    -3483,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 552,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1133.0000000000002,
+    -3556.999999999999,
+    3899
+   ],
+   "max": [
+    1147,
+    -3542.9999999999986,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 553,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1333,
+    -3497.0000000000005,
+    3899
+   ],
+   "max": [
+    1346.9999999999998,
+    -3483,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 554,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1333,
+    -3556.999999999999,
+    3899
+   ],
+   "max": [
+    1346.9999999999998,
+    -3542.9999999999986,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 555,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1533.0000000000002,
+    -3497.0000000000005,
+    3899
+   ],
+   "max": [
+    1547,
+    -3483,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 556,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1533.0000000000002,
+    -3556.999999999999,
+    3899
+   ],
+   "max": [
+    1547,
+    -3542.9999999999986,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 557,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1733.0000000000002,
+    -3497.0000000000005,
+    3899
+   ],
+   "max": [
+    1747,
+    -3483,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 558,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1733.0000000000002,
+    -3556.999999999999,
+    3899
+   ],
+   "max": [
+    1747,
+    -3542.9999999999986,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 559,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1933,
+    -3497.0000000000005,
+    3899
+   ],
+   "max": [
+    1946.9999999999998,
+    -3483,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 560,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1933,
+    -3556.999999999999,
+    3899
+   ],
+   "max": [
+    1946.9999999999998,
+    -3542.9999999999986,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 561,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2333,
+    -3497.0000000000005,
+    3899
+   ],
+   "max": [
+    2347.0000000000005,
+    -3483,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 562,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2333,
+    -3556.999999999999,
+    3899
+   ],
+   "max": [
+    2347.0000000000005,
+    -3542.9999999999986,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 563,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2533,
+    -3497.0000000000005,
+    3899
+   ],
+   "max": [
+    2547,
+    -3483,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 564,
+  "name": "rc11_p_rivet",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2533,
+    -3556.999999999999,
+    3899
+   ],
+   "max": [
+    2547,
+    -3542.9999999999986,
+    3903.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 586,
+  "name": "rc11_p_clamp_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    400,
+    -5816,
+    1968
+   ],
+   "max": [
+    500,
+    -5784,
+    2044
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 587,
+  "name": "rc11_p_clamp_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    400,
+    -5016,
+    1968
+   ],
+   "max": [
+    500,
+    -4984,
+    2044
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 588,
+  "name": "rc11_p_clamp_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    400,
+    -4216,
+    1968
+   ],
+   "max": [
+    500,
+    -4184,
+    2044
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 589,
+  "name": "rc11_p_clamp_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    600.0000000000001,
+    -5816,
+    1968
+   ],
+   "max": [
+    700,
+    -5784,
+    2044
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 590,
+  "name": "rc11_p_clamp_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    600.0000000000001,
+    -5016,
+    1968
+   ],
+   "max": [
+    700,
+    -4984,
+    2044
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 591,
+  "name": "rc11_p_clamp_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    600.0000000000001,
+    -4216,
+    1968
+   ],
+   "max": [
+    700,
+    -4184,
+    2044
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 592,
+  "name": "rc11_p_clamp_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    600.0000000000001,
+    -3416,
+    1968
+   ],
+   "max": [
+    700,
+    -3384,
+    2044
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 594,
+  "name": "rc11_p_puck",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    730,
+    2230,
+    5276
+   ],
+   "max": [
+    870.0000000000001,
+    2369.9999999999995,
+    5290
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 801,
+  "name": "rc11_Gyro_Trunnion",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    696,
+    -4350,
+    3955
+   ],
+   "max": [
+    870.0000000000001,
+    -4150,
+    4149.999999999999
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 803,
+  "name": "rc11_Gyro_Bolt",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    789.243929930649,
+    -4105.025935946775,
+    3958
+   ],
+   "max": [
+    819.243929930649,
+    -4075.0259359467755,
+    3969.0000000000005
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 804,
+  "name": "rc11_Gyro_OuterGimbal",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -700,
+    -4923.526789664856,
+    3836.6396900216814
+   ],
+   "max": [
+    700,
+    -3576.4732103351434,
+    4323.360309978318
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 808,
+  "name": "rc11_Gyro_InnerGimbal",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -554.5928963419061,
+    -4820.9599382656415,
+    3781.822211168348
+   ],
+   "max": [
+    554.5928963419063,
+    -3679.040061734356,
+    4378.177788831651
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 810,
+  "name": "rc11_Gyro_Rotor",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -427.3260608447841,
+    -4688.7161472277785,
+    3840.4440315320744
+   ],
+   "max": [
+    427.32606084478454,
+    -3811.2838527722206,
+    4319.555968467926
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 812,
+  "name": "rc11_Gyro_RimLight",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -425.97066109751717,
+    -4689.559636405609,
+    3859.180847084828
+   ],
+   "max": [
+    425.9706610975174,
+    -3810.44036359439,
+    4300.819152915172
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 814,
+  "name": "rc11_Gyro_Core",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -116.43319712220085,
+    -4366.324785830631,
+    3991.2684520664234
+   ],
+   "max": [
+    116.43319712220107,
+    -4133.675214169368,
+    4168.731547933577
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 815,
+  "name": "rc11_Gyro_Spoke",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    92.94236762020502,
+    -4259.750756919229,
+    3918.490792648569
+   ],
+   "max": [
+    379.9213982088567,
+    -4181.211743259855,
+    4059.81046607661
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 816,
+  "name": "rc11_Gyro_Trunnion.001",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -870.0000000000016,
+    -4350,
+    3954.999999999999
+   ],
+   "max": [
+    -696.0000000000014,
+    -4150,
+    4149.999999999999
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 817,
+  "name": "rc11_Gyro_Bolt",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    666.8050820880871,
+    -3809.4324089239267,
+    3958
+   ],
+   "max": [
+    696.8050820880873,
+    -3779.4324089239267,
+    3969.0000000000005
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 818,
+  "name": "rc11_Gyro_Bolt",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    440.5675910760737,
+    -3583.194917911913,
+    3958
+   ],
+   "max": [
+    470.5675910760737,
+    -3553.194917911913,
+    3969.0000000000005
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 819,
+  "name": "rc11_Gyro_Bolt",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    144.97406405322587,
+    -3460.756070069352,
+    3958.000000000001
+   ],
+   "max": [
+    174.9740640532259,
+    -3430.7560700693516,
+    3969.0000000000014
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 820,
+  "name": "rc11_Gyro_Bolt",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -174.97406405322502,
+    -3460.756070069351,
+    3958
+   ],
+   "max": [
+    -144.974064053225,
+    -3430.7560700693507,
+    3969.0000000000005
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 821,
+  "name": "rc11_Gyro_Bolt",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -470.56759107607326,
+    -3583.1949179119124,
+    3958
+   ],
+   "max": [
+    -440.56759107607326,
+    -3553.1949179119124,
+    3969.0000000000005
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 822,
+  "name": "rc11_Gyro_Bolt",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -696.8050820880873,
+    -3809.432408923926,
+    3958
+   ],
+   "max": [
+    -666.8050820880871,
+    -3779.432408923926,
+    3969.0000000000005
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 823,
+  "name": "rc11_Gyro_Bolt",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -819.2439299306488,
+    -4105.025935946773,
+    3958
+   ],
+   "max": [
+    -789.2439299306488,
+    -4075.0259359467736,
+    3969.0000000000005
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 824,
+  "name": "rc11_Gyro_Bolt",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -819.243929930649,
+    -4424.9740640532245,
+    3958
+   ],
+   "max": [
+    -789.243929930649,
+    -4394.974064053225,
+    3969.0000000000005
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 825,
+  "name": "rc11_Gyro_Bolt",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -696.8050820880875,
+    -4720.567591076073,
+    3957.999999999999
+   ],
+   "max": [
+    -666.8050820880874,
+    -4690.567591076073,
+    3968.9999999999995
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 826,
+  "name": "rc11_Gyro_Bolt",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -470.5675910760737,
+    -4946.805082088087,
+    3958.000000000001
+   ],
+   "max": [
+    -440.5675910760737,
+    -4916.805082088087,
+    3969.0000000000014
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 827,
+  "name": "rc11_Gyro_Bolt",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -174.97406405322548,
+    -5069.243929930649,
+    3958.000000000001
+   ],
+   "max": [
+    -144.97406405322545,
+    -5039.24392993065,
+    3969.0000000000014
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 828,
+  "name": "rc11_Gyro_Bolt",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    144.974064053225,
+    -5069.243929930649,
+    3958
+   ],
+   "max": [
+    174.97406405322502,
+    -5039.24392993065,
+    3969.0000000000005
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 829,
+  "name": "rc11_Gyro_Bolt",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    440.56759107607326,
+    -4946.805082088087,
+    3958
+   ],
+   "max": [
+    470.56759107607326,
+    -4916.805082088087,
+    3969.0000000000005
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 830,
+  "name": "rc11_Gyro_Bolt",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    666.8050820880871,
+    -4720.567591076074,
+    3958
+   ],
+   "max": [
+    696.8050820880873,
+    -4690.567591076074,
+    3969.0000000000005
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 831,
+  "name": "rc11_Gyro_Bolt",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    789.243929930649,
+    -4424.9740640532245,
+    3958
+   ],
+   "max": [
+    819.243929930649,
+    -4394.974064053225,
+    3969.0000000000005
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 832,
+  "name": "rc11_Gyro_Spoke",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    29.563411193777704,
+    -4167.070536906841,
+    4068.644746676344
+   ],
+   "max": [
+    206.86847172075406,
+    -3883.3547703740724,
+    4136.990332024453
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 833,
+  "name": "rc11_Gyro_Spoke",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -206.8684717207545,
+    -4182.896385276146,
+    4112.422671133314
+   ],
+   "max": [
+    -29.563411193777704,
+    -3926.56642182568,
+    4274.911148842301
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 834,
+  "name": "rc11_Gyro_Spoke",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -379.92139820885694,
+    -4318.788256740145,
+    4100.18953392339
+   ],
+   "max": [
+    -92.94236762020525,
+    -4240.249243080771,
+    4241.50920735143
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 835,
+  "name": "rc11_Gyro_Spoke",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -206.86847172075363,
+    -4616.645229625929,
+    4023.009667975547
+   ],
+   "max": [
+    -29.563411193777704,
+    -4332.92946309316,
+    4091.355253323656
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 836,
+  "name": "rc11_Gyro_Spoke",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    29.56341119377748,
+    -4573.433578174318,
+    3885.0888511576973
+   ],
+   "max": [
+    206.86847172075406,
+    -4317.103614723854,
+    4047.5773288666855
+   ]
+  },
+  "groups": [
+   "GYRO (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 394,
+  "name": "rc11_p_flange_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    408.00000000000006,
+    -2762,
+    1984
+   ],
+   "max": [
+    492,
+    -2678.0000000000005,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 568,
+  "name": "rc11_p_flange_belly",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    608,
+    -2762,
+    1984
+   ],
+   "max": [
+    692.0000000000001,
+    -2678.0000000000005,
+    2041.9999999999998
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 937,
+  "name": "rc11_grille_bar.036",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    177.73908685545513,
+    6371.356849502265,
+    2855.5330281247243
+   ],
+   "max": [
+    292.0564944761081,
+    6476.839266632871,
+    3181.7894451060242
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 936,
+  "name": "rc11_grille_bar.035",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    283.69633491898935,
+    6371.356849502265,
+    2855.5248878257944
+   ],
+   "max": [
+    398.0137425396424,
+    6476.839266632871,
+    3181.7813048070943
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 935,
+  "name": "rc11_grille_bar.034",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    389.65358298252363,
+    6371.356849502265,
+    2855.516747526864
+   ],
+   "max": [
+    503.97099060317663,
+    6476.839266632871,
+    3181.773164508164
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 934,
+  "name": "rc11_grille_bar.033",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    495.61083104605785,
+    6371.356849502265,
+    2855.508607227935
+   ],
+   "max": [
+    609.9282386667109,
+    6476.839266632871,
+    3181.765024209235
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 933,
+  "name": "rc11_grille_bar.032",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    601.5680791095921,
+    6371.356849502265,
+    2855.500466929005
+   ],
+   "max": [
+    715.8854867302451,
+    6476.839266632871,
+    3181.756883910305
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 932,
+  "name": "rc11_grille_bar.031",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    707.5253271731264,
+    6371.356849502265,
+    2855.492326630075
+   ],
+   "max": [
+    821.8427347937793,
+    6476.839266632871,
+    3181.7487436113747
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 931,
+  "name": "rc11_grille_bar.030",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    813.4825752366605,
+    6371.356849502265,
+    2855.484186331145
+   ],
+   "max": [
+    927.7999828573136,
+    6476.839266632871,
+    3181.740603312445
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 930,
+  "name": "rc11_grille_bar.029",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    919.4398233001948,
+    6371.356849502265,
+    2855.476046032215
+   ],
+   "max": [
+    1033.7572309208479,
+    6476.839266632871,
+    3181.732463013515
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 929,
+  "name": "rc11_grille_bar.028",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1025.397071363729,
+    6371.356849502265,
+    2855.4679057332846
+   ],
+   "max": [
+    1139.7144789843821,
+    6476.839266632871,
+    3181.724322714585
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 928,
+  "name": "rc11_grille_bar.012",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1131.3543194272634,
+    6371.356849502265,
+    2855.4597654343547
+   ],
+   "max": [
+    1245.6717270479162,
+    6476.839266632871,
+    3181.7161824156547
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 927,
+  "name": "rc11_grille_bar.011",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1237.3115674907974,
+    6371.356849502265,
+    2855.451625135425
+   ],
+   "max": [
+    1351.6289751114505,
+    6476.839266632871,
+    3181.7080421167248
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 926,
+  "name": "rc11_grille_bar.010",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1343.2688155543317,
+    6371.356849502265,
+    2855.4434848364954
+   ],
+   "max": [
+    1457.5862231749848,
+    6476.839266632871,
+    3181.6999018177958
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 925,
+  "name": "rc11_grille_bar.009",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1449.226063617866,
+    6371.356849502265,
+    2855.4353445375655
+   ],
+   "max": [
+    1563.543471238519,
+    6476.839266632871,
+    3181.6917615188654
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 924,
+  "name": "rc11_grille_bar.008",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1555.1833116814003,
+    6371.356849502265,
+    2855.4272042386356
+   ],
+   "max": [
+    1669.5007193020533,
+    6476.839266632871,
+    3181.6836212199355
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 923,
+  "name": "rc11_grille_bar.007",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1661.1405597449343,
+    6371.356849502265,
+    2855.4190639397057
+   ],
+   "max": [
+    1775.4579673655874,
+    6476.839266632871,
+    3181.6754809210056
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 922,
+  "name": "rc11_grille_bar.006",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1767.0978078084684,
+    6371.356849502265,
+    2855.4109236407753
+   ],
+   "max": [
+    1881.4152154291212,
+    6476.839266632871,
+    3181.6673406220752
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 921,
+  "name": "rc11_grille_bar.005",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1873.0550558720024,
+    6371.356849502265,
+    2855.4027833418454
+   ],
+   "max": [
+    1987.3724634926555,
+    6476.839266632871,
+    3181.6592003231453
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 920,
+  "name": "rc11_grille_bar.004",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1979.0123039355367,
+    6371.356849502265,
+    2855.3946430429155
+   ],
+   "max": [
+    2093.3297115561895,
+    6476.839266632871,
+    3181.6510600242154
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 919,
+  "name": "rc11_grille_bar.003",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2084.9695519990705,
+    6371.356849502265,
+    2855.386502743985
+   ],
+   "max": [
+    2199.286959619724,
+    6476.839266632871,
+    3181.6429197252855
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 918,
+  "name": "rc11_grille_bar.002",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2190.926800062605,
+    6371.356849502265,
+    2855.378362445056
+   ],
+   "max": [
+    2305.2442076832576,
+    6476.839266632871,
+    3181.634779426356
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 917,
+  "name": "rc11_grille_bar.001",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2296.884048126139,
+    6371.356849502265,
+    2855.3702221461263
+   ],
+   "max": [
+    2411.201455746792,
+    6476.839266632871,
+    3181.626639127426
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 298,
+  "name": "rc11_grille_bar.013",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2402.8412961896734,
+    6371.356849502265,
+    2855.362081847196
+   ],
+   "max": [
+    2517.158703810326,
+    6476.839266632871,
+    3181.6184988284963
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 404,
+  "name": "rc11_p_latch_top",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1165,
+    6010,
+    3899
+   ],
+   "max": [
+    1235.0000000000002,
+    6032,
+    3901.5000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 249,
+  "name": "rc11_drive_core",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    0,
+    -1900.0000000000002,
+    2187.9999999999995
+   ],
+   "max": [
+    300,
+    899.9999999999999,
+    2200
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 253,
+  "name": "rc11_drive_ring_0",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    0,
+    -2120,
+    2155
+   ],
+   "max": [
+    520,
+    1120,
+    2169
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 261,
+  "name": "rc11_drive_ring_1",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    0,
+    -2290,
+    2120
+   ],
+   "max": [
+    690,
+    1290,
+    2134.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 269,
+  "name": "rc11_drive_ring_2",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    0,
+    -2440.0000000000005,
+    2084.9999999999995
+   ],
+   "max": [
+    840,
+    1440,
+    2099
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 280,
+  "name": "rc11_exhaust_glow",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    0,
+    -6686,
+    2160
+   ],
+   "max": [
+    1080,
+    -6680,
+    2460
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 281,
+  "name": "rc11_exhaust_vane",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    0,
+    -6880,
+    2200
+   ],
+   "max": [
+    1080,
+    -6700,
+    2222
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 314,
+  "name": "rc11_exhaust_vane.001",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    0,
+    -6880,
+    2270
+   ],
+   "max": [
+    1080,
+    -6700,
+    2292
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 315,
+  "name": "rc11_exhaust_vane.002",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    0,
+    -6880,
+    2340
+   ],
+   "max": [
+    1080,
+    -6700,
+    2362
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 316,
+  "name": "rc11_exhaust_vane.003",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    0,
+    -6880,
+    2410
+   ],
+   "max": [
+    1080,
+    -6700,
+    2432
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 284,
+  "name": "rc11_sill",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3649.9999999999995,
+    -6900,
+    2960
+   ],
+   "max": [
+    3671.9999999999995,
+    6199.999999999999,
+    2990
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 593,
+  "name": "rc11_p_tiedown",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    6361.999999999999,
+    3051.999999999999
+   ],
+   "max": [
+    3668.9999999999995,
+    6438,
+    3127.9999999999986
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 405,
+  "name": "rc11_p_tiedown",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3655,
+    -6238,
+    3051.9999999999964
+   ],
+   "max": [
+    3668.9999999999995,
+    -6162,
+    3127.999999999996
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 409,
+  "name": "rc11_p_marker_rear",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3653,
+    -7240,
+    3559.9999999999995
+   ],
+   "max": [
+    3663,
+    -7119.999999999999,
+    3609.9999999999995
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 393,
+  "name": "rc11_p_flange_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3061.8162338159264,
+    -5646,
+    2161.977205745411
+   ],
+   "max": [
+    3178.022794254589,
+    -5553.999999999999,
+    2278.1837661840736
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 566,
+  "name": "rc11_p_flange_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3261.816233815927,
+    -5646,
+    2361.9772057454106
+   ],
+   "max": [
+    3378.0227942545894,
+    -5553.999999999999,
+    2478.1837661840736
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 567,
+  "name": "rc11_p_flange_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3261.816233815927,
+    4954,
+    2364.8056328701578
+   ],
+   "max": [
+    3375.1943671298427,
+    5046,
+    2478.1837661840736
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 565,
+  "name": "rc11_p_flange_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3061.8162338159264,
+    4954,
+    2164.8056328701573
+   ],
+   "max": [
+    3175.1943671298422,
+    5046,
+    2278.1837661840736
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 403,
+  "name": "rc11_p_latch_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3656.0000000000005,
+    5300,
+    3290
+   ],
+   "max": [
+    3658.5,
+    5370,
+    3312.0000000000005
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 974,
+  "name": "rc11_louvre.008",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3609.239490555156,
+    900.0000000000003,
+    3470.8368271805225
+   ],
+   "max": [
+    3652.171897954035,
+    4300,
+    3529.1631728194784
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 408,
+  "name": "rc11_p_marker_front",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3653,
+    6699.999999999999,
+    3559.9999999999995
+   ],
+   "max": [
+    3663,
+    6820,
+    3609.9999999999995
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 577,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3254.9866419252476,
+    -5590.659567483691,
+    2339.0119857426375
+   ],
+   "max": [
+    3399.2364252873035,
+    -5554.659567483691,
+    2483.2617691046935
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 578,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3254.9866419252476,
+    -4565.659567483691,
+    2339.0119857426375
+   ],
+   "max": [
+    3399.2364252873035,
+    -4529.659567483691,
+    2483.2617691046935
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 579,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3254.9866419252476,
+    -3540.659567483691,
+    2339.0119857426375
+   ],
+   "max": [
+    3399.2364252873035,
+    -3504.6595674836913,
+    2483.2617691046935
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 580,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3254.9866419252476,
+    -2515.6595674836904,
+    2339.0119857426375
+   ],
+   "max": [
+    3399.2364252873035,
+    -2479.659567483691,
+    2483.2617691046935
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 581,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3254.9866419252476,
+    -1490.659567483691,
+    2339.0119857426375
+   ],
+   "max": [
+    3399.2364252873035,
+    -1454.6595674836915,
+    2483.2617691046935
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 582,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3254.9866419252476,
+    -465.65956748369075,
+    2339.0119857426375
+   ],
+   "max": [
+    3399.2364252873035,
+    -429.65956748369115,
+    2483.2617691046935
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 583,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3254.9866419252476,
+    559.3404325163096,
+    2339.0119857426375
+   ],
+   "max": [
+    3399.2364252873035,
+    595.3404325163092,
+    2483.2617691046935
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 584,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3254.9866419252476,
+    1584.340432516309,
+    2339.0119857426375
+   ],
+   "max": [
+    3399.2364252873035,
+    1620.3404325163087,
+    2483.2617691046935
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 585,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3254.9866419252476,
+    2609.3404325163087,
+    2339.0119857426375
+   ],
+   "max": [
+    3399.2364252873035,
+    2645.3404325163083,
+    2483.2617691046935
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 576,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3055.1015777552466,
+    3572.3286109208566,
+    2139.8722079628224
+   ],
+   "max": [
+    3199.3513611173025,
+    3608.328610920856,
+    2284.121991324878
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 575,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3055.1015777552466,
+    2547.3286109208575,
+    2139.8722079628224
+   ],
+   "max": [
+    3199.3513611173025,
+    2583.328610920857,
+    2284.121991324878
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 574,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3055.1015777552466,
+    1522.3286109208577,
+    2139.8722079628224
+   ],
+   "max": [
+    3199.3513611173025,
+    1558.3286109208575,
+    2284.121991324878
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 573,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3055.1015777552466,
+    497.32861092085756,
+    2139.8722079628224
+   ],
+   "max": [
+    3199.3513611173025,
+    533.3286109208572,
+    2284.121991324878
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 572,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3055.1015777552466,
+    -527.6713890791428,
+    2139.8722079628224
+   ],
+   "max": [
+    3199.3513611173025,
+    -491.6713890791432,
+    2284.121991324878
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 571,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3055.1015777552466,
+    -1552.6713890791423,
+    2139.8722079628224
+   ],
+   "max": [
+    3199.3513611173025,
+    -1516.6713890791427,
+    2284.121991324878
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 569,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3055.1015777552466,
+    -3602.6713890791425,
+    2139.8722079628224
+   ],
+   "max": [
+    3199.3513611173025,
+    -3566.671389079143,
+    2284.121991324878
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 570,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3055.1015777552466,
+    -2577.6713890791425,
+    2139.8722079628224
+   ],
+   "max": [
+    3199.3513611173025,
+    -2541.671389079143,
+    2284.121991324878
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 395,
+  "name": "rc11_p_clamp_pod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3055.1015777552466,
+    -4627.6713890791425,
+    2139.8722079628224
+   ],
+   "max": [
+    3199.3513611173025,
+    -4591.671389079143,
+    2284.121991324878
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 976,
+  "name": "rc11_pod_trim",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3385,
+    -7395.553288039713,
+    3897.9999999999995
+   ],
+   "max": [
+    3425,
+    7378.456383678469,
+    3915.9999999999995
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 246,
+  "name": "rc11_louvre",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3609.239490555156,
+    900.0000000000003,
+    3112.161225485706
+   ],
+   "max": [
+    3652.171897954035,
+    4300,
+    3170.487571124662
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 968,
+  "name": "rc11_louvre.001",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3609.239490555156,
+    900.0000000000003,
+    3163.400597156394
+   ],
+   "max": [
+    3652.171897954035,
+    4300,
+    3221.7269427953497
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 969,
+  "name": "rc11_louvre.002",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3609.239490555156,
+    900.0000000000003,
+    3214.6399688270817
+   ],
+   "max": [
+    3652.171897954035,
+    4300,
+    3272.9663144660376
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 970,
+  "name": "rc11_louvre.003",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3609.239490555156,
+    900.0000000000003,
+    3265.8793404977705
+   ],
+   "max": [
+    3652.171897954035,
+    4300,
+    3324.2056861367264
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 971,
+  "name": "rc11_louvre.005",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3609.239490555156,
+    900.0000000000003,
+    3317.1187121684584
+   ],
+   "max": [
+    3652.171897954035,
+    4300,
+    3375.445057807414
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 972,
+  "name": "rc11_louvre.006",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3609.239490555156,
+    900.0000000000003,
+    3368.358083839146
+   ],
+   "max": [
+    3652.171897954035,
+    4300,
+    3426.6844294781017
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 973,
+  "name": "rc11_louvre.007",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    3609.239490555156,
+    900.0000000000003,
+    3419.5974555098337
+   ],
+   "max": [
+    3652.171897954035,
+    4300,
+    3477.9238011487896
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 317,
+  "name": "rc11_headlight.001",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2790.066213830036,
+    7763.552414185688,
+    3301.066710938338
+   ],
+   "max": [
+    2840.066213830036,
+    7875.15583189897,
+    3738.933289061662
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 282,
+  "name": "rc11_headlight",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2720.0662138300354,
+    7763.552414185688,
+    3301.066710938338
+   ],
+   "max": [
+    2770.0662138300354,
+    7875.15583189897,
+    3738.933289061662
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1240,
+  "name": "rc11_lg_door_inner",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1160,
+    2614,
+    1601.9999999999998
+   ],
+   "max": [
+    1177.9999999999998,
+    4545.999999999999,
+    2036
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1241,
+  "name": "rc11_lg_door_outer",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    2022.0000000000007,
+    2614,
+    1601.9999999999998
+   ],
+   "max": [
+    2040.0000000000005,
+    4545.999999999999,
+    2036
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1256,
+  "name": "rc11_hatch_platform",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -646,
+    1703.9999999999998,
+    0
+   ],
+   "max": [
+    646,
+    3896,
+    150
+   ]
+  },
+  "groups": [
+   "HATCH (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 1272,
+  "name": "rc11_ref_human",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -303.98054895089047,
+    2679.9999999999995,
+    149.5
+   ],
+   "max": [
+    303.98054895089047,
+    2990,
+    1949.5
+   ]
+  },
+  "groups": [
+   "SCALE REF (hide before export)"
+  ],
+  "material": null
+ },
+ {
+  "id": 1217,
+  "name": "rc11_lg_trunnion",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1400,
+    4205,
+    2160
+   ],
+   "max": [
+    1799.9999999999998,
+    4595.000000000001,
+    2440.5
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1219,
+  "name": "rc11_lg_strut",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1450.0000000000002,
+    4250,
+    1560
+   ],
+   "max": [
+    1750,
+    4550.000000000001,
+    2190
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1220,
+  "name": "rc11_lg_stage",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1470.0000000000002,
+    4270.000000000001,
+    1000
+   ],
+   "max": [
+    1730,
+    4530,
+    1600
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1221,
+  "name": "rc11_lg_slider",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1492,
+    4292.000000000001,
+    300.00000000000006
+   ],
+   "max": [
+    1708.0000000000002,
+    4508,
+    1040
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1222,
+  "name": "rc11_lg_fork",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1470.0000000000002,
+    4270.000000000001,
+    59.5
+   ],
+   "max": [
+    1730,
+    4530,
+    340
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1224,
+  "name": "rc11_lg_knuckle",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1440,
+    4342.000000000001,
+    52
+   ],
+   "max": [
+    1759.9999999999998,
+    4458,
+    168.00000000000006
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1225,
+  "name": "rc11_lg_foot",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1200.0000000000002,
+    4000,
+    0
+   ],
+   "max": [
+    2000,
+    4800.000000000001,
+    68.99999999999999
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1235,
+  "name": "rc11_lg_brace",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1523,
+    3605.5848297662883,
+    1683.5521579526219
+   ],
+   "max": [
+    1676.9999999999998,
+    4326.979136818951,
+    2460.7883388211835
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1238,
+  "name": "rc11_lg_actuator",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1715.7222078134266,
+    3796.7608423918805,
+    2095.412756902912
+   ],
+   "max": [
+    1892.0777921865736,
+    4184.83915760812,
+    2483.697243097088
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1239,
+  "name": "rc11_lg_actuator_rod",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1709.571425726506,
+    4105.670907411159,
+    1899.1715421978522
+   ],
+   "max": [
+    1810.8385742734938,
+    4380.849092588841,
+    2174.532957802148
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1242,
+  "name": "rc11_lg_liner",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    1165,
+    2615,
+    2429.5
+   ],
+   "max": [
+    2035.0000000000002,
+    4545,
+    2439.5
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1249,
+  "name": "rc11_hatch_liner_side",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    640,
+    1709.9999999999998,
+    2100
+   ],
+   "max": [
+    650.5,
+    3889.9999999999995,
+    4290
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1250,
+  "name": "rc11_hatch_liner_front",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    0.5000000000000004,
+    3889.9999999999995,
+    2100
+   ],
+   "max": [
+    639.5,
+    3900.5,
+    4290
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1251,
+  "name": "rc11_hatch_liner_rear",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    0.5000000000000004,
+    1699.5,
+    2100
+   ],
+   "max": [
+    639.5,
+    1710,
+    4290
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1252,
+  "name": "rc11_hatch_liner_ceiling",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    0.5000000000000004,
+    1709.9999999999998,
+    4290
+   ],
+   "max": [
+    639.5,
+    3889.9999999999995,
+    4300.5
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1253,
+  "name": "rc11_hatch_ceiling_light",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    79.99999999999999,
+    2150,
+    4285
+   ],
+   "max": [
+    500,
+    3650,
+    4290.5
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1254,
+  "name": "rc11_hatch_light",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    646.0000000000001,
+    1724.9999999999998,
+    2055
+   ],
+   "max": [
+    651,
+    3875,
+    2067
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1255,
+  "name": "rc11_hatch_ram_housing",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    490.00000000000006,
+    1720,
+    2210
+   ],
+   "max": [
+    630.0000000000001,
+    1860,
+    3500
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1259,
+  "name": "rc11_hatch_ram_stage_1",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    505,
+    1735,
+    1530
+   ],
+   "max": [
+    615.0000000000001,
+    1845,
+    2230
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1260,
+  "name": "rc11_hatch_ram_stage_2",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    515,
+    1745,
+    850.0000000000001
+   ],
+   "max": [
+    605.0000000000001,
+    1835,
+    1550
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1261,
+  "name": "rc11_hatch_ram_stage_3",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    525,
+    1755.0000000000002,
+    149.49999999999997
+   ],
+   "max": [
+    595.0000000000001,
+    1825,
+    870
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1257,
+  "name": "rc11_hatch_rib",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -560,
+    1819.9999999999998,
+    149.5
+   ],
+   "max": [
+    560,
+    1834,
+    158
+   ]
+  },
+  "groups": [
+   "HATCH (centreline)"
+  ],
+  "material": null
+ },
+ {
+  "id": 1258,
+  "name": "rc11_hatch_platform_light",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    616,
+    1739.9999999999998,
+    149.5
+   ],
+   "max": [
+    634,
+    3860,
+    154
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 1262,
+  "name": "rc11_hatch_rail",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    0.49999999999999706,
+    1942,
+    149.5
+   ],
+   "max": [
+    470.00000000000006,
+    3750,
+    1170.3233120268985
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ },
+ {
+  "id": 7,
+  "name": "rc11_hull",
+  "type": "Solid",
+  "boundsMm": {
+   "min": [
+    -54.071013339470646,
+    -7435.409709377729,
+    2026.0711613672954
+   ],
+   "max": [
+    4925.312570974182,
+    7902.6391454417,
+    5644.624243512808
+   ]
+  },
+  "groups": [
+   "EDIT SIDE"
+  ],
+  "material": null
+ }
+]

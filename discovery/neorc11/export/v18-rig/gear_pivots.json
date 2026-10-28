@@ -1,0 +1,426 @@
+{
+ "units": "millimetres, Z up, nose +Y",
+ "legs": [
+  {
+   "part": "leg front +X",
+   "pivot": [
+    1600,
+    4400,
+    2250
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "deployedDeg": 0,
+   "stowedDeg": -90,
+   "telescope": {
+    "axis": "along the leg, toward the pivot",
+    "parts": {
+     "rc11_lg_stage": {
+      "closeMm": 570
+     },
+     "rc11_lg_slider + fork + knuckle + foot": {
+      "closeMm": 800
+     }
+    },
+    "note": "step 1: close the telescope (landed axis is -Z)"
+   },
+   "foot": {
+    "pivot": [
+     1600,
+     4400,
+     110
+    ],
+    "pivotClosed": [
+     1600,
+     4400,
+     910
+    ],
+    "axis": [
+     1,
+     0,
+     0
+    ],
+    "deployedDeg": 0,
+    "stowedDeg": 90,
+    "note": "step 3: after the leg turn, about the knuckle (pivotClosed is before the leg turn)"
+   },
+   "sequence": [
+    "close telescope",
+    "leg -90 about pivot",
+    "foot +90 about knuckle",
+    "close doors"
+   ]
+  },
+  {
+   "part": "leg front -X",
+   "pivot": [
+    -1600,
+    4400,
+    2250
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "deployedDeg": 0,
+   "stowedDeg": -90,
+   "telescope": {
+    "axis": "along the leg, toward the pivot",
+    "parts": {
+     "rc11_lg_stage": {
+      "closeMm": 570
+     },
+     "rc11_lg_slider + fork + knuckle + foot": {
+      "closeMm": 800
+     }
+    },
+    "note": "step 1: close the telescope (landed axis is -Z)"
+   },
+   "foot": {
+    "pivot": [
+     -1600,
+     4400,
+     110
+    ],
+    "pivotClosed": [
+     -1600,
+     4400,
+     910
+    ],
+    "axis": [
+     1,
+     0,
+     0
+    ],
+    "deployedDeg": 0,
+    "stowedDeg": 90,
+    "note": "step 3: after the leg turn, about the knuckle (pivotClosed is before the leg turn)"
+   },
+   "sequence": [
+    "close telescope",
+    "leg -90 about pivot",
+    "foot +90 about knuckle",
+    "close doors"
+   ]
+  },
+  {
+   "part": "leg rear +X",
+   "pivot": [
+    1600,
+    -3200,
+    2250
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "deployedDeg": 0,
+   "stowedDeg": -90,
+   "telescope": {
+    "axis": "along the leg, toward the pivot",
+    "parts": {
+     "rc11_lg_stage": {
+      "closeMm": 570
+     },
+     "rc11_lg_slider + fork + knuckle + foot": {
+      "closeMm": 800
+     }
+    },
+    "note": "step 1: close the telescope (landed axis is -Z)"
+   },
+   "foot": {
+    "pivot": [
+     1600,
+     -3200,
+     110
+    ],
+    "pivotClosed": [
+     1600,
+     -3200,
+     910
+    ],
+    "axis": [
+     1,
+     0,
+     0
+    ],
+    "deployedDeg": 0,
+    "stowedDeg": 90,
+    "note": "step 3: after the leg turn, about the knuckle (pivotClosed is before the leg turn)"
+   },
+   "sequence": [
+    "close telescope",
+    "leg -90 about pivot",
+    "foot +90 about knuckle",
+    "close doors"
+   ]
+  },
+  {
+   "part": "leg rear -X",
+   "pivot": [
+    -1600,
+    -3200,
+    2250
+   ],
+   "axis": [
+    1,
+    0,
+    0
+   ],
+   "deployedDeg": 0,
+   "stowedDeg": -90,
+   "telescope": {
+    "axis": "along the leg, toward the pivot",
+    "parts": {
+     "rc11_lg_stage": {
+      "closeMm": 570
+     },
+     "rc11_lg_slider + fork + knuckle + foot": {
+      "closeMm": 800
+     }
+    },
+    "note": "step 1: close the telescope (landed axis is -Z)"
+   },
+   "foot": {
+    "pivot": [
+     -1600,
+     -3200,
+     110
+    ],
+    "pivotClosed": [
+     -1600,
+     -3200,
+     910
+    ],
+    "axis": [
+     1,
+     0,
+     0
+    ],
+    "deployedDeg": 0,
+    "stowedDeg": 90,
+    "note": "step 3: after the leg turn, about the knuckle (pivotClosed is before the leg turn)"
+   },
+   "sequence": [
+    "close telescope",
+    "leg -90 about pivot",
+    "foot +90 about knuckle",
+    "close doors"
+   ]
+  }
+ ],
+ "doors": [
+  {
+   "part": "door inner front +X",
+   "hinge": [
+    1160,
+    4400,
+    2040
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "deployedDeg": 90,
+   "stowedDeg": 0
+  },
+  {
+   "part": "door outer front +X",
+   "hinge": [
+    2040,
+    4400,
+    2040
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "deployedDeg": -90,
+   "stowedDeg": 0
+  },
+  {
+   "part": "door inner front -X",
+   "hinge": [
+    -1160,
+    4400,
+    2040
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "deployedDeg": -90,
+   "stowedDeg": 0
+  },
+  {
+   "part": "door outer front -X",
+   "hinge": [
+    -2040,
+    4400,
+    2040
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "deployedDeg": 90,
+   "stowedDeg": 0
+  },
+  {
+   "part": "door inner rear +X",
+   "hinge": [
+    1160,
+    -3200,
+    2040
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "deployedDeg": 90,
+   "stowedDeg": 0
+  },
+  {
+   "part": "door outer rear +X",
+   "hinge": [
+    2040,
+    -3200,
+    2040
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "deployedDeg": -90,
+   "stowedDeg": 0
+  },
+  {
+   "part": "door inner rear -X",
+   "hinge": [
+    -1160,
+    -3200,
+    2040
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "deployedDeg": -90,
+   "stowedDeg": 0
+  },
+  {
+   "part": "door outer rear -X",
+   "hinge": [
+    -2040,
+    -3200,
+    2040
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "deployedDeg": 90,
+   "stowedDeg": 0
+  }
+ ],
+ "lift": {
+  "part": "rc11_hatch_platform (+ ribs, rail, edge lights)",
+  "travelAxis": [
+   0,
+   0,
+   1
+  ],
+  "deployedBottomZ": 0,
+  "stowedBottomZ": 2040,
+  "travelMm": 2040,
+  "rams": {
+   "stages": 3,
+   "stageLengthMm": 700,
+   "extendedFromZ": 2210,
+   "housingZ": [
+    2210,
+    3500
+   ],
+   "note": "stage k slides out of stage k-1; fully retracted they nest inside the housing"
+  }
+ },
+ "retractCheck": {
+  "telescope": {
+   "strokeMm": 800,
+   "intermediateStrokeMm": 570,
+   "sliderStrokeInIntermediateMm": 230,
+   "closedIntermediateInsideStrutMm": {
+    "top": 20,
+    "bottom": 10
+   },
+   "closedSliderTopInsideIntermediateMm": 330,
+   "closedSliderBelowStrutMm": 460,
+   "extendedOverlapsMm": {
+    "strutStage": 40,
+    "stageSlider": 40
+   },
+   "closedFootBottomZ": 800
+  },
+  "leg": {
+   "pivotToKnuckleLandedMm": 2140,
+   "pivotToKnuckleClosedMm": 1340,
+   "stowedBoundsMm": [
+    [
+     1200,
+     2660,
+     2100
+    ],
+    [
+     2000,
+     4340,
+     2400
+    ]
+   ],
+   "clearanceMm": {
+    "xIn": 40,
+    "xOut": 40,
+    "yFront": 210,
+    "yRear": 50,
+    "aboveClosedDoors": 42,
+    "belowCeiling": 30
+   },
+   "fits": true
+  },
+  "doors": {
+   "closedOuterFaceZ": 2040,
+   "gapMm": 4,
+   "flush": true,
+   "note": "doors are built closed flush with the belly and swung 90° about their hinge lines"
+  },
+  "lift": {
+   "travelMm": 2040,
+   "platformBottomRaisedZ": 2040,
+   "flushErrorMm": 0,
+   "railTopRaisedZ": 3210,
+   "shaftCeilingZ": 4290,
+   "railClearToCeilingMm": 1080,
+   "railToHousingMm": 20,
+   "housingToRaisedPlatformMm": 20,
+   "stagesNestInHousing": true,
+   "stageLengthMm": 700,
+   "headroomAboveRaisedPlatformMm": 2100
+  },
+  "human": {
+   "heightMm": 1800,
+   "shoulderWidthMm": 608
+  }
+ }
+}

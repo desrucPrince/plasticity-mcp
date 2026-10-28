@@ -1,0 +1,10421 @@
+{
+ "note": "matrixWorldMm is column-major (three.js); it maps the source body's world geometry to the copy's world geometry",
+ "instances": [
+  {
+   "id": 0,
+   "source": 247,
+   "name": "rc11_hover_pad",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 1,
+   "source": 277,
+   "name": "rc11_drive_vane",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 2,
+   "source": 278,
+   "name": "rc11_drive_vane_front",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 3,
+   "source": 279,
+   "name": "rc11_drive_vane_rear",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 4,
+   "source": 284,
+   "name": "rc11_sill",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 5,
+   "source": 302,
+   "name": "rc11_hover_pad.001",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 6,
+   "source": 303,
+   "name": "rc11_hover_pad.002",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 7,
+   "source": 304,
+   "name": "rc11_hover_pad.003",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 8,
+   "source": 305,
+   "name": "rc11_hover_pad.004",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 9,
+   "source": 307,
+   "name": "rc11_drive_vane.002",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 10,
+   "source": 308,
+   "name": "rc11_drive_vane.003",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 11,
+   "source": 309,
+   "name": "rc11_drive_vane.004",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 12,
+   "source": 310,
+   "name": "rc11_drive_vane.005",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 13,
+   "source": 311,
+   "name": "rc11_drive_vane.006",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 14,
+   "source": 312,
+   "name": "rc11_drive_vane.007",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 15,
+   "source": 320,
+   "name": "rc11_drive_vane_front.001",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 16,
+   "source": 321,
+   "name": "rc11_drive_vane_front.002",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 17,
+   "source": 322,
+   "name": "rc11_drive_vane_rear.001",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 18,
+   "source": 323,
+   "name": "rc11_drive_vane_rear.002",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 19,
+   "source": 381,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 20,
+   "source": 382,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 21,
+   "source": 383,
+   "name": "rc11_p_bolt_rear",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 22,
+   "source": 384,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 23,
+   "source": 386,
+   "name": "rc11_p_conduit_pod_0",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 24,
+   "source": 388,
+   "name": "rc11_p_conduit_pod_1",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 25,
+   "source": 390,
+   "name": "rc11_p_conduit_belly_0",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 26,
+   "source": 392,
+   "name": "rc11_p_conduit_belly_1",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 27,
+   "source": 393,
+   "name": "rc11_p_flange_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 28,
+   "source": 395,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 29,
+   "source": 396,
+   "name": "rc11_p_clamp_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 30,
+   "source": 403,
+   "name": "rc11_p_latch_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 31,
+   "source": 405,
+   "name": "rc11_p_tiedown",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 32,
+   "source": 407,
+   "name": "rc11_p_puck",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 33,
+   "source": 408,
+   "name": "rc11_p_marker_front",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 34,
+   "source": 409,
+   "name": "rc11_p_marker_rear",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 35,
+   "source": 411,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 36,
+   "source": 412,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 37,
+   "source": 413,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 38,
+   "source": 414,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 39,
+   "source": 415,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 40,
+   "source": 416,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 41,
+   "source": 417,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 42,
+   "source": 418,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 43,
+   "source": 419,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 44,
+   "source": 420,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 45,
+   "source": 421,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 46,
+   "source": 422,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 47,
+   "source": 423,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 48,
+   "source": 424,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 49,
+   "source": 425,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 50,
+   "source": 426,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 51,
+   "source": 427,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 52,
+   "source": 428,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 53,
+   "source": 429,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 54,
+   "source": 430,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 55,
+   "source": 431,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 56,
+   "source": 432,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 57,
+   "source": 433,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 58,
+   "source": 434,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 59,
+   "source": 435,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 60,
+   "source": 436,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 61,
+   "source": 437,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 62,
+   "source": 438,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 63,
+   "source": 439,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 64,
+   "source": 440,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 65,
+   "source": 441,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 66,
+   "source": 442,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 67,
+   "source": 443,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 68,
+   "source": 444,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 69,
+   "source": 445,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 70,
+   "source": 446,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 71,
+   "source": 447,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 72,
+   "source": 448,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 73,
+   "source": 449,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 74,
+   "source": 450,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 75,
+   "source": 451,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 76,
+   "source": 452,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 77,
+   "source": 453,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 78,
+   "source": 454,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 79,
+   "source": 455,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 80,
+   "source": 456,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 81,
+   "source": 457,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 82,
+   "source": 458,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 83,
+   "source": 459,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 84,
+   "source": 460,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 85,
+   "source": 461,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 86,
+   "source": 462,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 87,
+   "source": 463,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 88,
+   "source": 464,
+   "name": "rc11_p_bolt_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 89,
+   "source": 465,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 90,
+   "source": 466,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 91,
+   "source": 467,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 92,
+   "source": 468,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 93,
+   "source": 469,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 94,
+   "source": 470,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 95,
+   "source": 471,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 96,
+   "source": 472,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 97,
+   "source": 473,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 98,
+   "source": 474,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 99,
+   "source": 475,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 100,
+   "source": 476,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 101,
+   "source": 477,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 102,
+   "source": 478,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 103,
+   "source": 479,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 104,
+   "source": 480,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 105,
+   "source": 481,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 106,
+   "source": 482,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 107,
+   "source": 483,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 108,
+   "source": 484,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 109,
+   "source": 485,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 110,
+   "source": 486,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 111,
+   "source": 487,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 112,
+   "source": 488,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 113,
+   "source": 489,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 114,
+   "source": 490,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 115,
+   "source": 491,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 116,
+   "source": 492,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 117,
+   "source": 493,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 118,
+   "source": 494,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 119,
+   "source": 495,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 120,
+   "source": 496,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 121,
+   "source": 497,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 122,
+   "source": 498,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 123,
+   "source": 499,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 124,
+   "source": 500,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 125,
+   "source": 501,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 126,
+   "source": 502,
+   "name": "rc11_p_bolt_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 127,
+   "source": 503,
+   "name": "rc11_p_bolt_rear",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 128,
+   "source": 504,
+   "name": "rc11_p_bolt_rear",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 129,
+   "source": 505,
+   "name": "rc11_p_bolt_rear",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 130,
+   "source": 506,
+   "name": "rc11_p_bolt_rear",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 131,
+   "source": 507,
+   "name": "rc11_p_bolt_rear",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 132,
+   "source": 508,
+   "name": "rc11_p_bolt_rear",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 133,
+   "source": 509,
+   "name": "rc11_p_bolt_rear",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 134,
+   "source": 510,
+   "name": "rc11_p_bolt_rear",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 135,
+   "source": 511,
+   "name": "rc11_p_bolt_rear",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 136,
+   "source": 512,
+   "name": "rc11_p_bolt_rear",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 137,
+   "source": 513,
+   "name": "rc11_p_bolt_rear",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 138,
+   "source": 514,
+   "name": "rc11_p_bolt_rear",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 139,
+   "source": 515,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 140,
+   "source": 516,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 141,
+   "source": 517,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 142,
+   "source": 518,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 143,
+   "source": 519,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 144,
+   "source": 520,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 145,
+   "source": 521,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 146,
+   "source": 522,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 147,
+   "source": 523,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 148,
+   "source": 524,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 149,
+   "source": 525,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 150,
+   "source": 526,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 151,
+   "source": 527,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 152,
+   "source": 528,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 153,
+   "source": 529,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 154,
+   "source": 530,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 155,
+   "source": 531,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 156,
+   "source": 532,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 157,
+   "source": 533,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 158,
+   "source": 534,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 159,
+   "source": 535,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 160,
+   "source": 536,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 161,
+   "source": 537,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 162,
+   "source": 538,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 163,
+   "source": 539,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 164,
+   "source": 540,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 165,
+   "source": 545,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 166,
+   "source": 547,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 167,
+   "source": 548,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 168,
+   "source": 549,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 169,
+   "source": 550,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 170,
+   "source": 551,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 171,
+   "source": 552,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 172,
+   "source": 553,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 173,
+   "source": 554,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 174,
+   "source": 555,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 175,
+   "source": 556,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 176,
+   "source": 557,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 177,
+   "source": 558,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 178,
+   "source": 559,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 179,
+   "source": 560,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 180,
+   "source": 561,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 181,
+   "source": 562,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 182,
+   "source": 563,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 183,
+   "source": 564,
+   "name": "rc11_p_rivet",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 184,
+   "source": 565,
+   "name": "rc11_p_flange_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 185,
+   "source": 566,
+   "name": "rc11_p_flange_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 186,
+   "source": 567,
+   "name": "rc11_p_flange_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 187,
+   "source": 569,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 188,
+   "source": 570,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 189,
+   "source": 571,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 190,
+   "source": 572,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 191,
+   "source": 573,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 192,
+   "source": 574,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 193,
+   "source": 575,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 194,
+   "source": 576,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 195,
+   "source": 577,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 196,
+   "source": 578,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 197,
+   "source": 579,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 198,
+   "source": 580,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 199,
+   "source": 581,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 200,
+   "source": 582,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 201,
+   "source": 583,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 202,
+   "source": 584,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 203,
+   "source": 585,
+   "name": "rc11_p_clamp_pod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 204,
+   "source": 586,
+   "name": "rc11_p_clamp_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 205,
+   "source": 587,
+   "name": "rc11_p_clamp_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 206,
+   "source": 588,
+   "name": "rc11_p_clamp_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 207,
+   "source": 589,
+   "name": "rc11_p_clamp_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 208,
+   "source": 590,
+   "name": "rc11_p_clamp_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 209,
+   "source": 591,
+   "name": "rc11_p_clamp_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 210,
+   "source": 592,
+   "name": "rc11_p_clamp_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 211,
+   "source": 593,
+   "name": "rc11_p_tiedown",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 212,
+   "source": 594,
+   "name": "rc11_p_puck",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 213,
+   "source": 394,
+   "name": "rc11_p_flange_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 214,
+   "source": 568,
+   "name": "rc11_p_flange_belly",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 215,
+   "source": 937,
+   "name": "rc11_grille_bar.036",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 216,
+   "source": 936,
+   "name": "rc11_grille_bar.035",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 217,
+   "source": 935,
+   "name": "rc11_grille_bar.034",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 218,
+   "source": 934,
+   "name": "rc11_grille_bar.033",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 219,
+   "source": 933,
+   "name": "rc11_grille_bar.032",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 220,
+   "source": 932,
+   "name": "rc11_grille_bar.031",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 221,
+   "source": 931,
+   "name": "rc11_grille_bar.030",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 222,
+   "source": 930,
+   "name": "rc11_grille_bar.029",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 223,
+   "source": 929,
+   "name": "rc11_grille_bar.028",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 224,
+   "source": 928,
+   "name": "rc11_grille_bar.012",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 225,
+   "source": 927,
+   "name": "rc11_grille_bar.011",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 226,
+   "source": 926,
+   "name": "rc11_grille_bar.010",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 227,
+   "source": 925,
+   "name": "rc11_grille_bar.009",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 228,
+   "source": 924,
+   "name": "rc11_grille_bar.008",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 229,
+   "source": 923,
+   "name": "rc11_grille_bar.007",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 230,
+   "source": 922,
+   "name": "rc11_grille_bar.006",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 231,
+   "source": 921,
+   "name": "rc11_grille_bar.005",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 232,
+   "source": 920,
+   "name": "rc11_grille_bar.004",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 233,
+   "source": 919,
+   "name": "rc11_grille_bar.003",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 234,
+   "source": 918,
+   "name": "rc11_grille_bar.002",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 235,
+   "source": 917,
+   "name": "rc11_grille_bar.001",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 236,
+   "source": 298,
+   "name": "rc11_grille_bar.013",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 237,
+   "source": 317,
+   "name": "rc11_headlight.001",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 238,
+   "source": 282,
+   "name": "rc11_headlight",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 239,
+   "source": 404,
+   "name": "rc11_p_latch_top",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 240,
+   "source": 249,
+   "name": "rc11_drive_core",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 241,
+   "source": 253,
+   "name": "rc11_drive_ring_0",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 242,
+   "source": 261,
+   "name": "rc11_drive_ring_1",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 243,
+   "source": 269,
+   "name": "rc11_drive_ring_2",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 244,
+   "source": 280,
+   "name": "rc11_exhaust_glow",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 245,
+   "source": 281,
+   "name": "rc11_exhaust_vane",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 246,
+   "source": 314,
+   "name": "rc11_exhaust_vane.001",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 247,
+   "source": 315,
+   "name": "rc11_exhaust_vane.002",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 248,
+   "source": 316,
+   "name": "rc11_exhaust_vane.003",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 249,
+   "source": 7,
+   "name": "rc11_hull",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 251,
+   "source": 974,
+   "name": "rc11_louvre.008",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 252,
+   "source": 246,
+   "name": "rc11_louvre",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 253,
+   "source": 968,
+   "name": "rc11_louvre.001",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 254,
+   "source": 969,
+   "name": "rc11_louvre.002",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 255,
+   "source": 970,
+   "name": "rc11_louvre.003",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 256,
+   "source": 971,
+   "name": "rc11_louvre.005",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 257,
+   "source": 972,
+   "name": "rc11_louvre.006",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 258,
+   "source": 973,
+   "name": "rc11_louvre.007",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 259,
+   "source": 976,
+   "name": "rc11_pod_trim",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 260,
+   "source": 1217,
+   "name": "rc11_lg_trunnion",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 261,
+   "source": 1217,
+   "name": "rc11_lg_trunnion",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 262,
+   "source": 1217,
+   "name": "rc11_lg_trunnion",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 263,
+   "source": 1219,
+   "name": "rc11_lg_strut",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 264,
+   "source": 1219,
+   "name": "rc11_lg_strut",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 265,
+   "source": 1219,
+   "name": "rc11_lg_strut",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 266,
+   "source": 1220,
+   "name": "rc11_lg_stage",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 267,
+   "source": 1220,
+   "name": "rc11_lg_stage",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 268,
+   "source": 1220,
+   "name": "rc11_lg_stage",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 269,
+   "source": 1221,
+   "name": "rc11_lg_slider",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 270,
+   "source": 1221,
+   "name": "rc11_lg_slider",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 271,
+   "source": 1221,
+   "name": "rc11_lg_slider",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 272,
+   "source": 1222,
+   "name": "rc11_lg_fork",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 273,
+   "source": 1222,
+   "name": "rc11_lg_fork",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 274,
+   "source": 1222,
+   "name": "rc11_lg_fork",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 275,
+   "source": 1224,
+   "name": "rc11_lg_knuckle",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 276,
+   "source": 1224,
+   "name": "rc11_lg_knuckle",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 277,
+   "source": 1224,
+   "name": "rc11_lg_knuckle",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 278,
+   "source": 1225,
+   "name": "rc11_lg_foot",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 279,
+   "source": 1225,
+   "name": "rc11_lg_foot",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 280,
+   "source": 1225,
+   "name": "rc11_lg_foot",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 281,
+   "source": 1235,
+   "name": "rc11_lg_brace",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 282,
+   "source": 1235,
+   "name": "rc11_lg_brace",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 283,
+   "source": 1235,
+   "name": "rc11_lg_brace",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 284,
+   "source": 1238,
+   "name": "rc11_lg_actuator",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 285,
+   "source": 1238,
+   "name": "rc11_lg_actuator",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 286,
+   "source": 1238,
+   "name": "rc11_lg_actuator",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 287,
+   "source": 1239,
+   "name": "rc11_lg_actuator_rod",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 288,
+   "source": 1239,
+   "name": "rc11_lg_actuator_rod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 289,
+   "source": 1239,
+   "name": "rc11_lg_actuator_rod",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 290,
+   "source": 1240,
+   "name": "rc11_lg_door_inner",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 291,
+   "source": 1240,
+   "name": "rc11_lg_door_inner",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 292,
+   "source": 1240,
+   "name": "rc11_lg_door_inner",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 293,
+   "source": 1241,
+   "name": "rc11_lg_door_outer",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 294,
+   "source": 1241,
+   "name": "rc11_lg_door_outer",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 295,
+   "source": 1241,
+   "name": "rc11_lg_door_outer",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 296,
+   "source": 1242,
+   "name": "rc11_lg_liner",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 297,
+   "source": 1242,
+   "name": "rc11_lg_liner",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 298,
+   "source": 1242,
+   "name": "rc11_lg_liner",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    -7600,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 299,
+   "source": 1257,
+   "name": "rc11_hatch_rib",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    120,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "HATCH (centreline)"
+   ]
+  },
+  {
+   "id": 300,
+   "source": 1257,
+   "name": "rc11_hatch_rib",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    240,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "HATCH (centreline)"
+   ]
+  },
+  {
+   "id": 301,
+   "source": 1257,
+   "name": "rc11_hatch_rib",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    360,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "HATCH (centreline)"
+   ]
+  },
+  {
+   "id": 302,
+   "source": 1257,
+   "name": "rc11_hatch_rib",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    480,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "HATCH (centreline)"
+   ]
+  },
+  {
+   "id": 303,
+   "source": 1257,
+   "name": "rc11_hatch_rib",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    600,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "HATCH (centreline)"
+   ]
+  },
+  {
+   "id": 304,
+   "source": 1257,
+   "name": "rc11_hatch_rib",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    720,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "HATCH (centreline)"
+   ]
+  },
+  {
+   "id": 305,
+   "source": 1257,
+   "name": "rc11_hatch_rib",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    840,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "HATCH (centreline)"
+   ]
+  },
+  {
+   "id": 306,
+   "source": 1257,
+   "name": "rc11_hatch_rib",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    960,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "HATCH (centreline)"
+   ]
+  },
+  {
+   "id": 307,
+   "source": 1257,
+   "name": "rc11_hatch_rib",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1080,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "HATCH (centreline)"
+   ]
+  },
+  {
+   "id": 308,
+   "source": 1257,
+   "name": "rc11_hatch_rib",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1200,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "HATCH (centreline)"
+   ]
+  },
+  {
+   "id": 309,
+   "source": 1257,
+   "name": "rc11_hatch_rib",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1320,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "HATCH (centreline)"
+   ]
+  },
+  {
+   "id": 310,
+   "source": 1257,
+   "name": "rc11_hatch_rib",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1440,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "HATCH (centreline)"
+   ]
+  },
+  {
+   "id": 311,
+   "source": 1257,
+   "name": "rc11_hatch_rib",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1560,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "HATCH (centreline)"
+   ]
+  },
+  {
+   "id": 312,
+   "source": 1257,
+   "name": "rc11_hatch_rib",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1680,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "HATCH (centreline)"
+   ]
+  },
+  {
+   "id": 313,
+   "source": 1257,
+   "name": "rc11_hatch_rib",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1800,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "HATCH (centreline)"
+   ]
+  },
+  {
+   "id": 314,
+   "source": 1257,
+   "name": "rc11_hatch_rib",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    1920,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "HATCH (centreline)"
+   ]
+  },
+  {
+   "id": 315,
+   "source": 1249,
+   "name": "rc11_hatch_liner_side",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 316,
+   "source": 1250,
+   "name": "rc11_hatch_liner_front",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 317,
+   "source": 1251,
+   "name": "rc11_hatch_liner_rear",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 318,
+   "source": 1252,
+   "name": "rc11_hatch_liner_ceiling",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 319,
+   "source": 1253,
+   "name": "rc11_hatch_ceiling_light",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 320,
+   "source": 1254,
+   "name": "rc11_hatch_light",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 321,
+   "source": 1255,
+   "name": "rc11_hatch_ram_housing",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    2020,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 322,
+   "source": 1255,
+   "name": "rc11_hatch_ram_housing",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 323,
+   "source": 1255,
+   "name": "rc11_hatch_ram_housing",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    2020,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 324,
+   "source": 1259,
+   "name": "rc11_hatch_ram_stage_1",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    2020,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 325,
+   "source": 1259,
+   "name": "rc11_hatch_ram_stage_1",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 326,
+   "source": 1259,
+   "name": "rc11_hatch_ram_stage_1",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    2020,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 327,
+   "source": 1260,
+   "name": "rc11_hatch_ram_stage_2",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    2020,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 328,
+   "source": 1260,
+   "name": "rc11_hatch_ram_stage_2",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 329,
+   "source": 1260,
+   "name": "rc11_hatch_ram_stage_2",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    2020,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 330,
+   "source": 1261,
+   "name": "rc11_hatch_ram_stage_3",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    2020,
+    0,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 331,
+   "source": 1261,
+   "name": "rc11_hatch_ram_stage_3",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 332,
+   "source": 1261,
+   "name": "rc11_hatch_ram_stage_3",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    2020,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 333,
+   "source": 1258,
+   "name": "rc11_hatch_platform_light",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 334,
+   "source": 1262,
+   "name": "rc11_hatch_rail",
+   "matrixWorldMm": [
+    -1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "scale": [
+    -1,
+    1,
+    1
+   ],
+   "groups": [
+    "MIRROR (don't edit)"
+   ]
+  },
+  {
+   "id": 335,
+   "source": 1272,
+   "name": "rc11_ref_human",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    -1800,
+    5900,
+    -149.5,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "SCALE REF (hide before export)"
+   ]
+  },
+  {
+   "id": 336,
+   "source": 1272,
+   "name": "rc11_ref_human",
+   "matrixWorldMm": [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    -1000,
+    -800,
+    -149.5,
+    1
+   ],
+   "scale": [
+    1,
+    1,
+    1
+   ],
+   "groups": [
+    "SCALE REF (hide before export)"
+   ]
+  }
+ ]
+}
