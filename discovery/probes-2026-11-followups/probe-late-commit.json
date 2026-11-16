@@ -1,0 +1,438 @@
+{
+ "start": {
+  "undo": 7,
+  "bodies": 4
+ },
+ "trials": [
+  {
+   "waitMs": "sync",
+   "finishAt": 7.8,
+   "cancel": {
+    "at": 7.8,
+    "settledBefore": false,
+    "undoBefore": 0,
+    "ourActiveBefore": true,
+    "activeBefore": "DimensionDistanceCommand",
+    "threw": null,
+    "called": true
+   },
+   "events": [
+    [
+     "finish-called",
+     7.8
+    ],
+    [
+     "cancel-returned",
+     7.9
+    ],
+    [
+     "exec-resolved",
+     13.8
+    ],
+    [
+     "active",
+     25.8,
+     null
+    ]
+   ],
+   "execError": "invalid state: cancelled",
+   "execErrorName": "Error",
+   "settled": true,
+   "undoDelta": 0,
+   "ourActive": false,
+   "activeAtEnd": null,
+   "dialogStillInScene": false,
+   "node": {
+    "undoDelta2sLater": 0,
+    "maxXMm": 2420,
+    "landed": false
+   }
+  },
+  {
+   "waitMs": "microtask",
+   "finishAt": 0.7,
+   "cancel": {
+    "at": 1,
+    "settledBefore": false,
+    "undoBefore": 0,
+    "ourActiveBefore": true,
+    "activeBefore": "DimensionDistanceCommand",
+    "threw": null,
+    "called": true
+   },
+   "events": [
+    [
+     "finish-called",
+     0.7
+    ],
+    [
+     "cancel-returned",
+     1
+    ],
+    [
+     "exec-resolved",
+     3.8
+    ],
+    [
+     "active",
+     4.2,
+     null
+    ]
+   ],
+   "execError": "invalid state: cancelled",
+   "execErrorName": "Error",
+   "settled": true,
+   "undoDelta": 0,
+   "ourActive": false,
+   "activeAtEnd": null,
+   "dialogStillInScene": false,
+   "node": {
+    "undoDelta2sLater": 0,
+    "maxXMm": 2420,
+    "landed": false
+   }
+  },
+  {
+   "waitMs": 0,
+   "finishAt": 1,
+   "cancel": {
+    "at": 1.5,
+    "settledBefore": false,
+    "undoBefore": 0,
+    "ourActiveBefore": true,
+    "activeBefore": "DimensionDistanceCommand",
+    "threw": null,
+    "called": true
+   },
+   "events": [
+    [
+     "finish-called",
+     1
+    ],
+    [
+     "cancel-returned",
+     3.3
+    ],
+    [
+     "exec-resolved",
+     11.3
+    ],
+    [
+     "active",
+     11.5,
+     null
+    ]
+   ],
+   "execError": "Invalid state transition",
+   "execErrorName": "Error",
+   "settled": true,
+   "undoDelta": 0,
+   "ourActive": false,
+   "activeAtEnd": null,
+   "dialogStillInScene": false,
+   "node": {
+    "undoDelta2sLater": 0,
+    "maxXMm": 2420,
+    "landed": false
+   }
+  },
+  {
+   "waitMs": 1,
+   "finishAt": 1.1,
+   "cancel": {
+    "at": 2.6,
+    "settledBefore": false,
+    "undoBefore": 0,
+    "ourActiveBefore": true,
+    "activeBefore": "DimensionDistanceCommand",
+    "threw": null,
+    "called": true
+   },
+   "events": [
+    [
+     "finish-called",
+     1.1
+    ],
+    [
+     "cancel-returned",
+     6.3
+    ],
+    [
+     "exec-resolved",
+     10.9
+    ],
+    [
+     "active",
+     15.6,
+     null
+    ]
+   ],
+   "execError": "Invalid state transition",
+   "execErrorName": "Error",
+   "settled": true,
+   "undoDelta": 0,
+   "ourActive": false,
+   "activeAtEnd": null,
+   "dialogStillInScene": false,
+   "node": {
+    "undoDelta2sLater": 0,
+    "maxXMm": 2420,
+    "landed": false
+   }
+  },
+  {
+   "waitMs": 2,
+   "finishAt": 1.3,
+   "cancel": {
+    "at": 7.4,
+    "settledBefore": false,
+    "undoBefore": 0,
+    "ourActiveBefore": true,
+    "activeBefore": "DimensionDistanceCommand",
+    "threw": null,
+    "called": true
+   },
+   "events": [
+    [
+     "finish-called",
+     1.3
+    ],
+    [
+     "cancel-returned",
+     7.6
+    ],
+    [
+     "exec-resolved",
+     14.1
+    ],
+    [
+     "active",
+     18.2,
+     null
+    ]
+   ],
+   "execError": "Operation failed at PK_TOPOL_facet_2 with error `PK_ERROR_aborted` (945) ",
+   "execErrorName": "Error",
+   "settled": true,
+   "undoDelta": 0,
+   "ourActive": false,
+   "activeAtEnd": null,
+   "dialogStillInScene": false,
+   "node": {
+    "undoDelta2sLater": 0,
+    "maxXMm": 2420,
+    "landed": false
+   }
+  },
+  {
+   "waitMs": 5,
+   "finishAt": 1.3,
+   "cancel": {
+    "at": 6.7,
+    "settledBefore": false,
+    "undoBefore": 0,
+    "ourActiveBefore": true,
+    "activeBefore": "DimensionDistanceCommand",
+    "threw": null,
+    "called": true
+   },
+   "events": [
+    [
+     "finish-called",
+     1.3
+    ],
+    [
+     "cancel-returned",
+     7.3
+    ],
+    [
+     "exec-resolved",
+     12.9
+    ],
+    [
+     "active",
+     13,
+     null
+    ]
+   ],
+   "execError": "Invalid state transition",
+   "execErrorName": "Error",
+   "settled": true,
+   "undoDelta": 0,
+   "ourActive": false,
+   "activeAtEnd": null,
+   "dialogStillInScene": false,
+   "node": {
+    "undoDelta2sLater": 0,
+    "maxXMm": 2420,
+    "landed": false
+   }
+  },
+  {
+   "waitMs": 10,
+   "finishAt": 2,
+   "cancel": {
+    "at": 15.4,
+    "settledBefore": false,
+    "undoBefore": 0,
+    "ourActiveBefore": true,
+    "activeBefore": "DimensionDistanceCommand",
+    "threw": null,
+    "called": true
+   },
+   "events": [
+    [
+     "finish-called",
+     2
+    ],
+    [
+     "cancel-returned",
+     16.2
+    ],
+    [
+     "exec-resolved",
+     29.4
+    ],
+    [
+     "active",
+     34.1,
+     null
+    ]
+   ],
+   "execError": "Invalid state transition",
+   "execErrorName": "Error",
+   "settled": true,
+   "undoDelta": 0,
+   "ourActive": false,
+   "activeAtEnd": null,
+   "dialogStillInScene": false,
+   "node": {
+    "undoDelta2sLater": 0,
+    "maxXMm": 2420,
+    "landed": false
+   }
+  },
+  {
+   "waitMs": 20,
+   "finishAt": 1.5,
+   "cancel": {
+    "at": 23.5,
+    "settledBefore": true,
+    "undoBefore": 1,
+    "ourActiveBefore": false,
+    "activeBefore": null,
+    "threw": null,
+    "called": false
+   },
+   "events": [
+    [
+     "finish-called",
+     1.5
+    ],
+    [
+     "exec-resolved",
+     8.7
+    ],
+    [
+     "cancel-returned",
+     23.5
+    ]
+   ],
+   "execError": null,
+   "execErrorName": null,
+   "settled": true,
+   "undoDelta": 1,
+   "ourActive": false,
+   "activeAtEnd": null,
+   "dialogStillInScene": false,
+   "node": {
+    "undoDelta2sLater": 1,
+    "maxXMm": 2430,
+    "landed": true
+   }
+  },
+  {
+   "waitMs": 50,
+   "finishAt": 0.8,
+   "cancel": {
+    "at": 53,
+    "settledBefore": true,
+    "undoBefore": 1,
+    "ourActiveBefore": false,
+    "activeBefore": null,
+    "threw": null,
+    "called": false
+   },
+   "events": [
+    [
+     "finish-called",
+     0.8
+    ],
+    [
+     "exec-resolved",
+     9.6
+    ],
+    [
+     "cancel-returned",
+     53
+    ]
+   ],
+   "execError": null,
+   "execErrorName": null,
+   "settled": true,
+   "undoDelta": 1,
+   "ourActive": false,
+   "activeAtEnd": null,
+   "dialogStillInScene": false,
+   "node": {
+    "undoDelta2sLater": 1,
+    "maxXMm": 2430,
+    "landed": true
+   }
+  },
+  {
+   "waitMs": 200,
+   "finishAt": 0.8,
+   "cancel": {
+    "at": 202.3,
+    "settledBefore": true,
+    "undoBefore": 1,
+    "ourActiveBefore": false,
+    "activeBefore": null,
+    "threw": null,
+    "called": false
+   },
+   "events": [
+    [
+     "finish-called",
+     0.8
+    ],
+    [
+     "exec-resolved",
+     9.7
+    ],
+    [
+     "cancel-returned",
+     202.4
+    ]
+   ],
+   "execError": null,
+   "execErrorName": null,
+   "settled": true,
+   "undoDelta": 1,
+   "ourActive": false,
+   "activeAtEnd": null,
+   "dialogStillInScene": false,
+   "node": {
+    "undoDelta2sLater": 1,
+    "maxXMm": 2430,
+    "landed": true
+   }
+  }
+ ],
+ "boxDepth": 8,
+ "end": {
+  "undo": 7,
+  "bodies": 4
+ }
+}

@@ -61,6 +61,10 @@ Live mode takes a baseline, then builds disposable geometry at x >= 2400 mm and 
   - an equal distance is a no-op with no Undo entry, in pair mode and in single-face mode;
   - a washer plate (centred through hole, so the top face midpoint lies in the hole): single-face and pair mode;
   - a stepped block: two +z faces that face the same way, the upper one set 8 mm above the lower one;
+  - the same stepped block reversed: the UPPER face is the reference and the lower face moves (5 -> 8 mm below it);
+  - slot walls that face each other: the slot width 10 -> 14 mm (one wall fixed) and single-face mode on a wall;
+  - single-face mode on the flat face of a half cylinder (a cylinder, not a parallel plane, lies behind it):
+    Plasticity rejects it, no Undo entry;
   - every commit is read back: movedFaceId and planeOffsetMm must match the moved plane;
   - a non-parallel pair is rejected with no Undo entry;
   - one plasticity_batch that creates a box and sets a driving distance in one call.
@@ -276,6 +280,87 @@ async function main(): Promise<void> {
       requireCondition(undone.undoDepth === before.undoDepth, "stepped: undo did not return to the checkpoint");
       checks.stepped_same_direction = { previousDistanceMm: result.previousDistanceMm, planeOffsetMm: result.planeOffsetMm, movedFaceId: result.movedFaceId, topZ: zs, undoDepth: [before.undoDepth, after.undoDepth, undone.undoDepth], clean };
       console.error(`stepped_same_direction: ok ${JSON.stringify({ zs, previous: result.previousDistanceMm })}`);
+    }
+
+    // ---- shared check for pair layouts the box cases do not cover: one Undo step, the reference plane fixed, the
+    // moving plane at distanceMm from it (on the side it started), movedFaceId and planeOffsetMm, a clean editor,
+    // and undo restores the moving plane.
+    const layout = async (label: string, bodyId: number, spec: { moving: any; reference?: any; fixedMm: number; axis: number; distanceMm: number; previousMm: number; expectedMm: number }) => {
+      const before = await status(client);
+      const result = await call(client, "plasticity_set_driving_distance", {
+        bodyId, movingFaceId: spec.moving.id, ...(spec.reference ? { referenceFaceId: spec.reference.id } : {}), distanceMm: spec.distanceMm, revision: before.revision, intent: `Acceptance: ${label}`,
+      });
+      const after = await status(client);
+      requireCondition(after.undoDepth === before.undoDepth + 1 && result.changed === true && result.undoSteps === 1, `${label}: expected one Undo step`);
+      requireNear(result.previousDistanceMm, spec.previousMm, `${label}: previousDistanceMm`, 1e-6);
+      const faces = (await call(client, "plasticity_body_info", { id: bodyId })).body.faces as any[];
+      const normal = spec.moving.normal as Vector;
+      const parallel = faces.filter((face) => face.planar && Math.abs(Math.abs(face.normal[spec.axis]) - 1) < 1e-9);
+      requireCondition(parallel.some((face) => Math.abs(face.centerMm[spec.axis] - spec.fixedMm) < 1e-6), `${label}: the fixed plane at ${spec.fixedMm} moved`);
+      const moved = faces.find((face) => face.id === result.movedFaceId);
+      requireCondition(moved && Math.abs(moved.normal[spec.axis] - normal[spec.axis]!) < 1e-9, `${label}: movedFaceId ${String(result.movedFaceId)} is not a face with the moving normal`);
+      requireNear(moved.centerMm[spec.axis], spec.expectedMm, `${label}: moved plane`, 1e-6);
+      requireNear(Math.abs(moved.centerMm[spec.axis] - spec.fixedMm), spec.distanceMm, `${label}: distance between the planes`, 1e-6);
+      requireNear(result.planeOffsetMm, spec.expectedMm * normal[spec.axis]!, `${label}: planeOffsetMm`, 1e-6);
+      const clean = await requireClean(label);
+      await call(client, "plasticity_undo", { revision: after.revision, intent: `Undo acceptance: ${label}` });
+      const undone = await status(client);
+      requireCondition(undone.undoDepth === before.undoDepth, `${label}: undo did not return to the checkpoint`);
+      const restoredFaces = (await call(client, "plasticity_body_info", { id: bodyId })).body.faces as any[];
+      requireCondition(restoredFaces.some((face) => face.planar && Math.abs(face.normal[spec.axis] - normal[spec.axis]!) < 1e-9 && Math.abs(face.centerMm[spec.axis] - spec.moving.centerMm[spec.axis]) < 1e-6), `${label}: undo did not restore the moving plane`);
+      checks[label] = { previousDistanceMm: result.previousDistanceMm, movedFaceId: result.movedFaceId, planeOffsetMm: result.planeOffsetMm, movedPlaneMm: moved.centerMm[spec.axis], fixedPlaneMm: spec.fixedMm, undoDepth: [before.undoDepth, after.undoDepth, undone.undoDepth], clean };
+      console.error(`${label}: ok ${JSON.stringify({ previous: result.previousDistanceMm, moved: moved.centerMm[spec.axis], fixed: spec.fixedMm })}`);
+    };
+    const facesOf = async (bodyId: number) => (await call(client, "plasticity_body_info", { id: bodyId })).body.faces as any[];
+    const only = (faces: any[], predicate: (face: any) => boolean, label: string) => {
+      const matches = faces.filter(predicate);
+      requireCondition(matches.length === 1, `${label}: expected one face, found ${matches.length}`);
+      return matches[0];
+    };
+
+    // ---- reversed stepped pair: the UPPER +z face (z 10) is the reference, the lower +z face (z 5) moves. Live,
+    // Plasticity keeps the lower face below the upper one: 5 -> 8 mm puts it at z 2.
+    {
+      const high = await create("plasticity_create_box", { originMm: [3000, 0, 0], sizeMm: [20, 10, 10] });
+      const low = await create("plasticity_create_box", { originMm: [3020, 0, 0], sizeMm: [20, 10, 5] });
+      await call(client, "plasticity_boolean", { targetIds: [high.id], toolIds: [low.id], operation: "union", revision: (await status(client)).revision });
+      const faces = await facesOf(high.id);
+      const upper = only(faces, (face) => face.planar && face.normal[2] > 0.999 && face.centerMm[2] > 9, "reversed stepped: upper +z");
+      const lower = only(faces, (face) => face.planar && face.normal[2] > 0.999 && face.centerMm[2] < 6, "reversed stepped: lower +z");
+      await layout("stepped_reversed_upper_reference", high.id, { moving: lower, reference: upper, fixedMm: 10, axis: 2, distanceMm: 8, previousMm: 5, expectedMm: 2 });
+    }
+
+    // ---- slot walls that face each other: a 40 x 20 x 10 block with a 10 mm slot (x 3115..3125) 5 mm deep. The
+    // -x wall at x 3125 moves, the +x wall at x 3115 stays: width 10 -> 14 mm puts the moving wall at x 3129.
+    {
+      const block = await create("plasticity_create_box", { originMm: [3100, 0, 0], sizeMm: [40, 20, 10] });
+      const cutter = await create("plasticity_create_box", { originMm: [3115, -1, 5], sizeMm: [10, 22, 6] });
+      await call(client, "plasticity_boolean", { targetIds: [block.id], toolIds: [cutter.id], operation: "difference", revision: (await status(client)).revision });
+      const faces = await facesOf(block.id);
+      const left = only(faces, (face) => face.planar && face.normal[0] > 0.999 && Math.abs(face.centerMm[0] - 3115) < 1e-6, "slot: +x wall");
+      const right = only(faces, (face) => face.planar && face.normal[0] < -0.999 && Math.abs(face.centerMm[0] - 3125) < 1e-6, "slot: -x wall");
+      await layout("slot_walls_width", block.id, { moving: right, reference: left, fixedMm: 3115, axis: 0, distanceMm: 14, previousMm: 10, expectedMm: 3129 });
+      // Single-face mode on a slot wall: Plasticity finds the facing wall itself.
+      await layout("slot_wall_single_face", block.id, { moving: right, fixedMm: 3115, axis: 0, distanceMm: 12, previousMm: 10, expectedMm: 3127 });
+    }
+
+    // ---- single-face mode where the surface behind the face is not a parallel plane: the flat face of a half
+    // cylinder (r 10) has the cylinder behind it. Plasticity rejects it cleanly: no effect, no Undo entry.
+    {
+      const cylinder = await create("plasticity_create_cylinder", { centerMm: [3200, 0, 0], radiusMm: 10, heightMm: 10 });
+      const cutter = await create("plasticity_create_box", { originMm: [3185, -15, -1], sizeMm: [15, 30, 12] });
+      await call(client, "plasticity_boolean", { targetIds: [cylinder.id], toolIds: [cutter.id], operation: "difference", revision: (await status(client)).revision });
+      const flat = only(await facesOf(cylinder.id), (face) => face.planar && face.normal[0] < -0.999, "half cylinder: flat face");
+      const before = await status(client);
+      let message = "";
+      try {
+        await call(client, "plasticity_set_driving_distance", { bodyId: cylinder.id, movingFaceId: flat.id, distanceMm: 6, revision: before.revision, intent: "Acceptance: non-parallel single face" });
+      } catch (error) { message = error instanceof Error ? error.message : String(error); }
+      requireCondition(/Plasticity could not dimension these faces \(no effect\)/.test(message), `half cylinder: expected a clean rejection, got "${message.slice(0, 200)}"`);
+      const after = await status(client);
+      requireCondition(after.undoDepth === before.undoDepth && after.revision === before.revision, "half cylinder: the rejection changed the document");
+      checks.non_parallel_single_face_rejected = { message: message.slice(0, 300), undoDepth: [before.undoDepth, after.undoDepth], clean: await requireClean("half cylinder") };
+      console.error("non_parallel_single_face_rejected: ok");
     }
 
     // ---- non-parallel pair: rejected before any native call, no Undo entry, clean editor

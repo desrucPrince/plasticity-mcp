@@ -1,5 +1,5 @@
 // Driving-distance follow-up probes (review of aff5fb3): equal distance, which input decides the moving face,
-// a washer face midpoint, and a same-direction (stepped) face pair. Isolated instance 127.0.0.1:58932 only.
+// a washer face midpoint, and a same-direction (stepped) face pair. Isolated instance only (see env.sh; 127.0.0.1).
 // Every case is undone; the script ends at the starting Undo depth and body count.
 import { readFileSync } from "node:fs";
 import { connect, HERE, nativeFunction, save } from "./harness.ts";

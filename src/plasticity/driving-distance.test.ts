@@ -225,14 +225,14 @@ test("a command that rejects before its dialog appears reports no effect and cle
   assert.equal(f.isUncertain(), false);
 });
 
-test("a dialog that never finishes is cancelled in the same call: no commit, cleanup done, runtime stays certain", async () => {
+test("a dialog that never settles after finish() is cancelled in the same call: cleanup done, runtime uncertain (a commit may still land)", async () => {
   const f = fixture("hang");
   const started = Date.now();
   await assert.rejects(
     f.operations.setDrivingDistance({ bodyId: 5, movingFaceId: "fxp", referenceFaceId: "fxn", distanceMm: 30 }, "r1", FAST),
     (error: Error) => {
-      assert.match(error.message, /did not finish within 80 ms \(finish phase\); Plasticity cancelled it and the document is unchanged/);
-      assert.doesNotMatch(error.message, /timed?\s*out|uncertain/i, "the journal must not classify a certain cancel as unknown");
+      assert.match(error.message, /did not finish within 80 ms after its dialog was finished \(finish phase\); Plasticity cancelled it, but a commit that finish\(\) started may still land; the result is uncertain\. Call plasticity_reconcile/);
+      assert.doesNotMatch(error.message, /document is unchanged/, "a cancel after finish() cannot prove the document is unchanged");
       return true;
     },
   );
@@ -241,7 +241,7 @@ test("a dialog that never finishes is cancelled in the same call: no commit, cle
   assert.equal(f.seen.cancelled, 1, "cancelActiveCommand called once");
   assert.equal(f.undoStack.length, 0, "no commit");
   assertCleanEnd(f);
-  assert.equal(f.isUncertain(), false);
+  assert.equal(f.isUncertain(), true);
 });
 
 test("a command that never opens its dialog is cancelled after the dialog wait", async () => {

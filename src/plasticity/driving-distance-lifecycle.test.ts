@@ -288,9 +288,9 @@ test("swallowing executor: a commit that fails after finish() reports that failu
 
 test("swallowing executor: a hang is cancelled and the Cancel error is not read as a failure", async () => {
   const f = fixture("hang", { executor: "swallowing" });
-  await assert.rejects(f.operations.setDrivingDistance(PAIR, "r1", FAST), /did not finish within 80 ms \(finish phase\); Plasticity cancelled it and the document is unchanged/);
+  await assert.rejects(f.operations.setDrivingDistance(PAIR, "r1", FAST), /did not finish within 80 ms after its dialog was finished \(finish phase\); Plasticity cancelled it, but a commit that finish\(\) started may still land; the result is uncertain/);
   assertCleanEnd(f);
-  assert.equal(f.isUncertain(), false);
+  assert.equal(f.isUncertain(), true, "finish() was called, so the cancel cannot prove the document is unchanged");
 });
 
 test("swallowing executor: a normal commit still succeeds and is read back", async () => {
@@ -469,7 +469,7 @@ test("a same-direction pair (stepped faces) is allowed and moves the last select
 
 test("the selection and hits are always clear and no command of ours is active after a certain outcome", async () => {
   const certain: Array<[Scenario, Options]> = [
-    ["commit", {}], ["reject", { executor: "swallowing" }], ["hang", {}], ["commit-fails", { executor: "swallowing" }],
+    ["commit", {}], ["reject", { executor: "swallowing" }], ["commit-fails", { executor: "swallowing" }],
     ["drive-throws", {}], ["commit-noop", {}], ["finish-no-effect", { executor: "swallowing", refDistanceM: 0.03 }],
   ];
   for (const [scenario, options] of certain) {
@@ -478,6 +478,11 @@ test("the selection and hits are always clear and no command of ours is active a
     assert.equal(f.isUncertain(), false, scenario);
     assertCleanEnd(f);
   }
+  // A hang after finish() is cancelled and cleaned up, but it is uncertain: a commit finish() started may still land.
+  const hang = fixture("hang");
+  await hang.operations.setDrivingDistance(PAIR, "r1", FAST).catch(() => undefined);
+  assert.equal(hang.isUncertain(), true, "hang after finish()");
+  assertCleanEnd(hang);
 });
 
 // ---- item 5: the 26.2 store route binds the dialog class

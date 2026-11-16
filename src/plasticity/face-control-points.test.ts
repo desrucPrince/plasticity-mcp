@@ -246,7 +246,8 @@ test("points that match no face grid, or two grids at once, are an error rather 
     { entity: A, surfaceType: "BSurf", vertices: grid(2.9, 0.01) },
     { entity: B, surfaceType: "BSurf", vertices: grid(2.9, 0.01) },
   ] });
-  await assert.rejects(twins.operations.showFaceControlPoints(9, [twins.faceId(A)], "r1"), /^Error: Showing face control points took one Undo step, but the points could not be read back \(Face control points of body 9 are ambiguous from index 0: faces 67f3210, 67f3307 match\); inspect the body or undo$/);
+  await assert.rejects(twins.operations.showFaceControlPoints(9, [twins.faceId(A)], "r1"), /^Error: These faces share one control grid \(faces split on one B-Surface\): 9:66f3210 = 9:66f3307\. Plasticity's shown points could not be told apart, so the show is refused; nothing was changed$/);
+  assert.equal(twins.undoStack.length, 0, "refused before the edit: no Undo step");
   const drifting = fixture();
   await drifting.operations.showFaceControlPoints(9, [drifting.faceId(A)], "r1");
   drifting.kernel[0]!.vertices[2] = 0.5; // the kernel grid no longer matches the shown points
