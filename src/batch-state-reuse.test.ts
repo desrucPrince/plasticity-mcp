@@ -225,11 +225,12 @@ test("constraint 1+3 (read counts): an edit, a boolean and a read step each take
   const steps = perStep(on.runtime);
   assert.equal(steps.length, FIXTURE_STEPS.length + 2, "start, one segment per step, end");
   assert.deepEqual(steps[0], { state: 1, probe: 0 }, "batch start: one full read");
-  assert.deepEqual(steps[1], { state: 1, probe: 1 }, "create_box: one full read after the mutation, one probe before reusing");
-  assert.deepEqual(steps[2], { state: 1, probe: 1 }, "create_box");
-  assert.deepEqual(steps[3], { state: 1, probe: 1 }, "boolean (created-edge detection reuses both reads)");
+  // Every cached answer is probed (journal before, revision check, journal after, the batch's after-read).
+  assert.deepEqual(steps[1], { state: 1, probe: 4 }, "create_box: one full read after the mutation, one probe per reuse");
+  assert.deepEqual(steps[2], { state: 1, probe: 4 }, "create_box");
+  assert.deepEqual(steps[3], { state: 1, probe: 6 }, "boolean (created-edge detection reuses both reads)");
   assert.deepEqual(steps[4], { state: 0, probe: 1 }, "find_edges read step: no full read");
-  assert.deepEqual(steps[5], { state: 1, probe: 1 }, "fillet");
+  assert.deepEqual(steps[5], { state: 1, probe: 4 }, "fillet");
   assert.deepEqual(steps[6], { state: 0, probe: 1 }, "batch end: probed, not re-read");
   await on.close();
 
@@ -439,7 +440,7 @@ test("read counts: an undo step in a batch also takes one full read, and a later
     { toolName: "plasticity_find_faces", arguments: { query: {} }, return: ["count"] },
   ] });
   assert.equal(reply.isError, false, reply.text);
-  assert.deepEqual(perStep(h.runtime).slice(1), [{ state: 1, probe: 1 }, { state: 1, probe: 1 }, { state: 0, probe: 1 }, { state: 0, probe: 1 }]);
+  assert.deepEqual(perStep(h.runtime).slice(1), [{ state: 1, probe: 4 }, { state: 1, probe: 4 }, { state: 0, probe: 1 }, { state: 0, probe: 1 }]);
   assert.deepEqual(reply.json.steps[2].result, { count: 1 }, "the read after the undo sees the undone document");
   await h.close();
 });

@@ -951,22 +951,25 @@ export class PlasticityOperations {
   }
 
   // Batch state reuse. plasticity_batch holds the server lock for all its steps, so nothing in this process can
-  // change the document between a state read and the next mutate(). While reuse is on, state() hands back the last
-  // state it read when no mutate() has started since (runtime.mutationCount() unchanged) and the runtime is not
-  // uncertain. The first reuse in each batch step (beginStateReuseStep) first runs readRevisionProbe(): the exact
-  // revision plus the fields the revision does not hash must equal the cached state's, or the cache is dropped and a
-  // full read follows, so an edit made in the Plasticity UI between steps still fails the step as a stale revision.
-  // Off (the default, and for every direct tool call) state() behaves exactly as before.
-  private stateReuse: { cached: { state: RuntimeState; mutations: number } | undefined; probeDue: boolean } | undefined;
+  // change the document between a state read and the next mutate(). The Plasticity UI can, at any time, and a tool
+  // may await something slow (a download, a solver, a native read) between two state() calls. So while reuse is on,
+  // EVERY state() that would answer from the cache first runs readRevisionProbe(): the exact revision plus the fields
+  // the revision does not hash must equal the cached state's, no mutate() may have started since the cached read
+  // (runtime.mutationCount()), and the runtime must not be uncertain. Otherwise the cache is dropped and a full read
+  // follows. A probe serialises no topology (a few ms), so a cached answer is never older than its own probe and every
+  // "document changed while ..." guard still sees a UI edit. A full read is cached only when no mutate() started while
+  // it was pending: the counter is stamped before the read. Off (the default, and for every direct tool call) state()
+  // behaves exactly as before: no cache and no probe.
+  private stateReuse: { cached: { state: RuntimeState; mutations: number } | undefined } | undefined;
 
   beginStateReuse(): void {
     if (typeof this.runtime.mutationCount !== "function" || typeof this.runtime.readRevisionProbe !== "function") return;
-    this.stateReuse = { cached: undefined, probeDue: true };
+    this.stateReuse = { cached: undefined };
   }
 
-  beginStateReuseStep(): void {
-    if (this.stateReuse) this.stateReuse.probeDue = true;
-  }
+  // Marks the start of a batch step. Every cached answer is probed anyway, so this needs to do nothing; the server
+  // calls it per step and per end read, and test harnesses use it as a step marker.
+  beginStateReuseStep(): void {}
 
   endStateReuse(): void {
     this.stateReuse = undefined;
@@ -975,27 +978,39 @@ export class PlasticityOperations {
   async state(timeoutMs = NATIVE_STATE_READ_TIMEOUT_MS): Promise<RuntimeState> {
     const reuse = this.stateReuse;
     if (!reuse) return await this.readState(timeoutMs);
+    const usable = (entry: { state: RuntimeState; mutations: number }) => this.stateReuse === reuse
+      && reuse.cached === entry
+      && entry.mutations === this.runtime.mutationCount()
+      && this.runtime.isUncertain?.() !== true;
     const cached = reuse.cached;
-    if (cached && cached.mutations === this.runtime.mutationCount() && this.runtime.isUncertain?.() !== true) {
-      if (!reuse.probeDue) return cached.state;
+    if (cached && usable(cached)) {
       const probe = await this.runtime.readRevisionProbe(timeoutMs);
-      if (probeMatches(probe, cached.state)) {
-        reuse.probeDue = false;
-        return cached.state;
-      }
+      // Checked again after the probe: a mutate() that started while it was pending makes the cache unusable.
+      if (usable(cached) && probeMatches(probe, cached.state)) return cached.state;
     }
     reuse.cached = undefined;
-    const state = await this.readState(timeoutMs);
-    // Recorded after readState, whose measurement-overlay refresh is itself a mutate() that leaves the document as read.
-    if (this.stateReuse === reuse && this.runtime.isUncertain?.() !== true) {
+    // Stamp before the read. readState's own measurement-overlay refresh is one mutate() that leaves the document as
+    // read; any other mutate() that starts while the read is pending means the result must not be cached.
+    const stamp = this.runtime.mutationCount();
+    let readClean = false;
+    let ownOverlayMutations = 0;
+    const state = await this.readState(timeoutMs, (phase) => {
+      if (phase === "read") readClean = this.runtime.mutationCount() === stamp;
+      else ownOverlayMutations += 1;
+    });
+    if (readClean
+      && this.stateReuse === reuse
+      && this.runtime.isUncertain?.() !== true
+      && this.runtime.mutationCount() === stamp + ownOverlayMutations) {
       reuse.cached = { state, mutations: this.runtime.mutationCount() };
-      reuse.probeDue = false;
     }
     return state;
   }
 
-  private async readState(timeoutMs: number): Promise<RuntimeState> {
+  // observe("read") runs right after the native read returns; observe("overlay") right before the overlay mutate().
+  private async readState(timeoutMs: number, observe?: (phase: "read" | "overlay") => void): Promise<RuntimeState> {
     const state = await this.runtime.getState(timeoutMs);
+    observe?.("read");
     const measurements = (state.measurements ?? []).filter((measurement) =>
       measurement.type === "DistanceMeasurement"
       && measurement.first?.positionMm
@@ -1022,6 +1037,7 @@ export class PlasticityOperations {
       && (measurements.length > 0 || this.measurementOverlaySignature !== undefined)
       && this.runtime.isUncertain?.() !== true
       && typeof this.runtime.mutate === "function") {
+      observe?.("overlay");
       await this.runtime.mutate(`function (LineSegmentHelper, Vector3, Vector2, makeAxisAlignedMeasurementPath, args) {
         const nativeLabels = this.measurements.distanceLabels;
         for (const label of nativeLabels.labels.slice()) {
@@ -2694,7 +2710,8 @@ export class PlasticityOperations {
   }
 
   async measureFaceProperties(faces: FaceReference[], revision: string): Promise<FacePropertiesEvidence> {
-    return await measureFaceProperties(this.runtime, faces, revision, this.datumRegistry.sessionId);
+    // In a batch, the probed state() replaces two full reads; direct calls read exactly as before.
+    return await measureFaceProperties(this.runtime, faces, revision, this.datumRegistry.sessionId, this.stateReuse ? () => this.state() : undefined);
   }
 
   async inspectSingleFastenerPlate(request: FastenerPlateRequest): Promise<FastenerPlateEvidence> {

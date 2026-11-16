@@ -94,8 +94,14 @@ and `$<step>.removed` references.
 - Step `return: string[]`: result paths in the `$n.result` syntax (`.key`,
   `[i]`, `[*]`; the leading dot is optional), for example
   `["matches[*].id", "matches[*].axisOriginMm", "count"]`. The step's reply
-  `result` is an object with exactly those paths as keys. A path that does not
-  resolve fails the batch and names the step and the path.
+  `result` is an object with exactly those paths as keys. A key must be an own
+  property of the result: `__proto__`, `constructor`, `prototype` and other
+  inherited keys (such as an array's `length`) never resolve. On a read step a
+  path that does not resolve fails the batch; the error names the step, the
+  path and the result's top-level keys. On a step that changed the document the
+  edit is already applied and journaled, so the step stays completed: it keeps
+  its normal reply and adds `returnError: "<the same message>"`, and the batch
+  goes on. Do not retry such a step; that would duplicate the geometry.
 - Without `return`, a read step's reply is its full result when it is 1,500
   bytes or less. A larger result comes back as `{ truncated: true, bytes,
   count, ids, hint: "add return: [...] to this step" }`. Nothing is cut
@@ -103,8 +109,11 @@ and `$<step>.removed` references.
   `path` and `bytes`, `controlPoints`, `previousDistanceMm`, recipe journals)
   under `result`, with the same 1,500-byte rule; `createdEdges` keeps its own
   key.
-- `detail: "standard" | "lean"` (default `standard`, the reply this server has
-  always sent). `lean` leaves out the `createdEdges` echo (`createdEdgeCount`
+- `detail: "standard" | "lean"` (default `standard`). `standard` is the reply
+  this server sent before tier 1 plus two additive fields: `hint` on a read
+  result cut to ids (`truncated: true`), and `result` on a mutating step whose
+  tool returns its own data (see above). `returnError` appears only where a bad
+  `return` path used to fail an applied step. `lean` leaves out the `createdEdges` echo (`createdEdgeCount`
   stays), `addedBodies` entries for bodies a later step consumed, and every
   empty list. Its reply is `{ steps, summary }`. `summary` holds `revision`,
   `undoSteps`, `bodyCount` and the bodies that survive (`added`, `modified`:
@@ -115,9 +124,17 @@ and `$<step>.removed` references.
   `return` whose result a later step references (`$n.result...`) replies
   `{ count }`, plus `ids` when it returned 8 matches or fewer. A read no later
   step references keeps the 1,500-byte rule. `return` still projects from the
-  full stored result in both cases. `standard` is unchanged.
-- `roundMm: 0-6`: rounds every number in the reply to that many decimals. Stored
-  results are not rounded. Off by default.
+  full stored result in both cases. Both lean shapes add `omitted: [keys]`, the
+  top-level result keys they left out (for example `["documentToken",
+  "revision", "measurementSource", "matches"]`), so a `return` list can fetch
+  any of them. `standard` drops nothing and has no `omitted`.
+- `roundMm: 0-6`: rounds length values in the reply to that many decimals: the
+  numbers under a key that ends in `Mm` or `Mm2` (`lengthMm`, `radiusMm`,
+  `areaMm2`, `positionMm`, `boundsMm.min`, a return key like
+  `"matches[*].lengthMm"`), including everything nested under that key.
+  Normals, tangents, axes, angles, quaternions, counts and ids keep full
+  precision. The rule applies to the whole reply, including the `verbose` top
+  level. Stored results are not rounded. Off by default.
 
 `plasticity_find_faces` and `plasticity_find_edges` take optional `sortBy`
 (`x`, `y`, `z` of the centre; edges also `length`), `order` (`asc` or `desc`;
@@ -181,12 +198,18 @@ three flags was passed, it still carries everything and adds a top-level
 
 Inside a batch the server reads the document once per edit step instead of
 5-7 times. The state read after step k stands in for step k+1's
-journal-before, revision check and before-state. Before reusing it, each step
-runs one small native probe (the exact revision plus the active workplane,
-body names and regions, with no topology). If anything changed, for example an
-edit in the Plasticity UI, the step reads the document again and fails as a
-stale revision, as before. A mutation, an uncertain outcome or a failed step
-ends the reuse. Direct tool calls read as before. Journal entries and replies
+journal-before, revision check and before-state. Every state read that would
+be answered from that cache first runs one small native probe (the exact
+revision plus the active workplane, body names and regions, with no topology),
+also the second and later reads inside one step. So a tool that waits for
+something slow (a download, a native read, a solver run) and then checks the
+document again sees an edit made in the Plasticity UI meanwhile, and its
+"document changed while ..." guard fails the step as before. If the probe
+differs, the server reads the document again; a stale step fails as a stale
+revision. A read is cached only when no mutation started while it was pending.
+A mutation, an uncertain outcome or a failed step ends the reuse. Inside a
+batch, `sortBy: "area"` measures against the same probed state instead of two
+extra full reads. Direct tool calls read as before. Journal entries and replies
 are the same as without reuse. Each journal entry is still written and
 flushed when its step completes.
 

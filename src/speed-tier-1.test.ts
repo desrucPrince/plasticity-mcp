@@ -522,10 +522,10 @@ test("lean hides a recipe's step journal and keeps its status and what it create
   const leanRun = tier1bFixture();
   const lean = await connect(leanRun.fake);
   const output = await runBatch(lean.client, { detail: "lean", steps: [RIB_STEP] });
-  assert.deepEqual(output.steps[0].result, { status: "completed" });
+  assert.deepEqual(output.steps[0].result, { status: "completed", omitted: ["recipe", "beforeRevision", "afterRevision", "profileBodyId", "resultBodyIds", "consumedToolIds", "undoSteps", "steps"] });
   assert.deepEqual(output.steps[0].added, [20], "the editable profile Wire it created");
   assert.deepEqual(output.steps[0].addedBodies.map((body: { id: number; boundsMm: unknown }) => [body.id, body.boundsMm]), [[20, box([0, 0, 0], [1.123456, 1, 1])]]);
-  assert.equal(JSON.stringify(output.steps[0]).includes("beforeRevision"), false);
+  assert.equal(JSON.stringify(output.steps[0]).includes("\"beforeRevision\":"), false, "the journal's values stay out; omitted only names the key");
   await lean.close();
 
   const standardRun = tier1bFixture();
@@ -552,8 +552,8 @@ test("lean answers a read that a later step references with its count, plus ids 
     { toolName: "plasticity_find_edges", arguments: { query: { bodyIds: [1], lengthMm: { value: 10 } } } },
     { toolName: "plasticity_find_faces", arguments: { query: { bodyIds: [1] } } },
   ] });
-  assert.deepEqual(output.steps[0].result, { count: 12, ids: ["e12", "e11", "e10"] }, "count before limit, ids of what the reference reads");
-  assert.deepEqual(output.steps[1].result, { count: 12 }, "more than 8 matches: count only");
+  assert.deepEqual(output.steps[0].result, { count: 12, ids: ["e12", "e11", "e10"], omitted: ["documentToken", "revision", "measurementSource", "matches"] }, "count before limit, ids of what the reference reads");
+  assert.deepEqual(output.steps[1].result, { count: 12, omitted: ["documentToken", "revision", "measurementSource", "matches"] }, "more than 8 matches: count only");
   assert.deepEqual(run.calls.filter((call) => call.op === "fillet").map((call) => call.args[1]), [["e12", "e11", "e10"], ["e1"]], "the later steps still read the whole stored result");
   assert.equal(output.steps[4].result.count, 1, "an unreferenced read keeps its full small result");
   assert.equal(output.steps[4].result.matches.length, 1);
@@ -618,5 +618,126 @@ test("in a batch, sortBy area with limit 1 picks the largest face for a later st
   ] });
   assert.deepEqual(output.steps[0].result, { "matches[0].id": "f6", "matches[0].areaMm2": 160 });
   assert.equal(calls.filter((entry) => entry.op === "measureFaceProperties").length, 1);
+  await close();
+});
+
+// ---------- review follow-ups: returnError, omitted, length-only roundMm, own-key return paths ----------
+
+test("a bad return path on a step that changed the document keeps the step completed, adds returnError and the batch goes on", async () => {
+  for (const detail of ["standard", "lean"]) {
+    const { fake, calls } = fixture();
+    const { client, close } = await connect(fake);
+    const output = await runBatch(client, { detail, steps: [
+      { toolName: "plasticity_create_box", arguments: { originMm: [0, 0, 0], sizeMm: [2, 2, 2], name: "keep" }, return: ["noSuchKey"] },
+      { toolName: "plasticity_set_driving_distance", arguments: { bodyId: 1, movingFaceId: "f1", distanceMm: 30 }, return: ["previousDistanceMm", "nope.deeper"] },
+      { toolName: "plasticity_create_box", arguments: { originMm: [5, 0, 0], sizeMm: [2, 2, 2] } },
+    ] });
+    assert.equal(calls.filter((call) => call.op === "createBox").length, 2, `${detail}: the batch went on after the bad path`);
+    assert.equal(output.steps.length, 3, detail);
+    assert.deepEqual(output.steps[0].added, [10], `${detail}: the applied edit is reported as completed`);
+    assert.match(output.steps[0].returnError, /^return path "noSuchKey" does not resolve: missing \.noSuchKey; available top-level keys: .*\brevision\b/, detail);
+    assert.equal("result" in output.steps[0], false, `${detail}: create_box has no tool fields, so no result`);
+    assert.match(output.steps[1].returnError, /^return path "nope\.deeper" does not resolve: missing \.nope; available top-level keys: .*previousDistanceMm/, detail);
+    assert.equal(output.steps[1].result.previousDistanceMm, 20.123456789, `${detail}: the step's normal reply stays`);
+    assert.equal(output.steps[2].returnError, undefined);
+    assert.equal((detail === "lean" ? output.summary : output).undoSteps, 3);
+    await close();
+  }
+});
+
+test("a bad return path on a read step still fails it, naming the path and the available top-level keys", async () => {
+  const { fake } = fixture();
+  const { client, close } = await connect(fake);
+  const failed = await client.callTool({ name: "plasticity_batch", arguments: { steps: [
+    { toolName: "plasticity_find_faces", arguments: { query: {} }, return: ["matches[*].noSuchField"] },
+  ] } });
+  assert.equal(failed.isError, true);
+  const body = JSON.parse((failed.content as Array<{ text: string }>)[0]!.text);
+  assert.equal(body.failedStep, 0);
+  assert.deepEqual(body.completedSteps, []);
+  assert.equal(body.error, "step 0 (plasticity_find_faces): return path \"matches[*].noSuchField\" does not resolve: missing .noSuchField; available top-level keys: documentToken, revision, measurementSource, count, matches");
+  await close();
+});
+
+test("lean omissions are listed in omitted, and return can fetch them", async () => {
+  const run = tier1bFixture(12);
+  const { client, close } = await connect(run.fake);
+  const output = await runBatch(client, { detail: "lean", steps: [
+    { toolName: "plasticity_find_edges", arguments: { query: { bodyIds: [1] }, limit: 2 } },
+    { toolName: "plasticity_fillet", arguments: { id: 1, edgeIds: "$0.result.matches[*].id", radiusMm: 1 } },
+    { ...RIB_STEP },
+  ] });
+  assert.deepEqual(output.steps[0].result.omitted, ["documentToken", "revision", "measurementSource", "matches"]);
+  assert.ok(output.steps[2].result.omitted.includes("steps"), "the recipe's dropped journal is named");
+  await close();
+  const second = await connect(tier1bFixture(12).fake);
+  const fetched = await runBatch(second.client, { detail: "lean", steps: [
+    { toolName: "plasticity_find_edges", arguments: { query: { bodyIds: [1] }, limit: 2 }, return: ["matches[*].id"] },
+    { toolName: "plasticity_fillet", arguments: { id: 1, edgeIds: "$0.result.matches[*].id", radiusMm: 1 } },
+  ] });
+  assert.deepEqual(fetched.steps[0].result, { "matches[*].id": ["e1", "e2"] }, "a return list fetches what lean omitted");
+  await second.close();
+  const third = await connect(tier1bFixture(12).fake);
+  const standard = await runBatch(third.client, { steps: [{ ...RIB_STEP }] });
+  assert.equal("omitted" in standard.steps[0].result, false, "standard drops nothing, so it lists nothing");
+  await third.close();
+});
+
+test("roundMm rounds only length values (keys ending in Mm or Mm2), in steps and in the verbose top level", async () => {
+  const { fake } = fixture();
+  const operations = fake.get() as unknown as Record<string, unknown>;
+  operations.exportStep = async (...args: unknown[]) => ({
+    path: args[1], bytes: 4321, lengthMm: 1.23456789, areaMm2: 2.3456789, boundsMm: { min: [0.123456, 0, 0], max: [1.987654, 1, 1] },
+    normal: [0.267261, 0.534522, 0.801784], tangent: [0.6, 0.8, 0], axis: [0.123456789, 0, 0.99], angleDeg: 12.3456789,
+    quaternion: [0.1234567, 0, 0, 0.9923], ratio: 0.333333, edgeIds: ["e1"], faceCount: 6,
+  });
+  const { client, close } = await connect(fake);
+  const output = await runBatch(client, { roundMm: 2, verbose: true, steps: [
+    { toolName: "plasticity_export_step", arguments: { ids: [1], path: "/tmp/plate.step" } },
+    { toolName: "plasticity_create_box", arguments: { originMm: [0, 0, 0], sizeMm: [2, 2, 2] } },
+  ] });
+  const result = output.steps[0].result;
+  assert.equal(result.lengthMm, 1.23);
+  assert.equal(result.areaMm2, 2.35);
+  assert.deepEqual(result.boundsMm, { min: [0.12, 0, 0], max: [1.99, 1, 1] });
+  assert.deepEqual(result.normal, [0.267261, 0.534522, 0.801784], "normals keep full precision");
+  assert.deepEqual(result.tangent, [0.6, 0.8, 0]);
+  assert.deepEqual(result.axis, [0.123456789, 0, 0.99]);
+  assert.equal(result.angleDeg, 12.3456789, "angles keep full precision");
+  assert.deepEqual(result.quaternion, [0.1234567, 0, 0, 0.9923]);
+  assert.equal(result.ratio, 0.333333);
+  assert.equal(result.faceCount, 6);
+  assert.doesNotMatch(JSON.stringify(output), /1\.123456/, "the verbose top level is rounded too (the box bounds)");
+  await close();
+});
+
+test("return paths read only own result keys: prototype keys and an array's length are refused with a clear error", async () => {
+  for (const path of ["constructor", "__proto__", "prototype", "toString", "matches.length", "count.constructor", "matches[0].hasOwnProperty"]) {
+    const { fake } = fixture();
+    const { client, close } = await connect(fake);
+    const failed = await client.callTool({ name: "plasticity_batch", arguments: { steps: [
+      { toolName: "plasticity_find_faces", arguments: { query: {} }, return: [path] },
+    ] } });
+    assert.equal(failed.isError, true, path);
+    const body = JSON.parse((failed.content as Array<{ text: string }>)[0]!.text);
+    assert.match(body.error, new RegExp(`return path "${path.replace(/[.[\]]/g, "\\$&")}"`), path);
+    assert.match(body.error, /is not a result key|does not resolve/, path);
+    assert.match(body.error, /available top-level keys: documentToken, revision, measurementSource, count, matches/, path);
+    await close();
+  }
+  const { fake, calls } = fixture();
+  const { client, close } = await connect(fake);
+  const reference = await client.callTool({ name: "plasticity_batch", arguments: { steps: [
+    { toolName: "plasticity_find_edges", arguments: { query: { bodyIds: [1] } }, return: ["count"] },
+    { toolName: "plasticity_fillet", arguments: { id: 1, edgeIds: "$0.result.constructor", radiusMm: 1 } },
+  ] } });
+  assert.equal(reference.isError, true);
+  assert.match(JSON.parse((reference.content as Array<{ text: string }>)[0]!.text).error, /\$0\.result\.constructor: "constructor" is not a result key/);
+  assert.equal(calls.filter((call) => call.op === "fillet").length, 0, "the fillet never ran with a prototype value");
+  const applied = await runBatch(client, { steps: [
+    { toolName: "plasticity_create_box", arguments: { originMm: [0, 0, 0], sizeMm: [2, 2, 2] }, return: ["__proto__"] },
+  ] });
+  assert.match(applied.steps[0].returnError, /"__proto__" is not a result key/);
+  assert.equal("result" in applied.steps[0], false, "never an empty {} result");
   await close();
 });
