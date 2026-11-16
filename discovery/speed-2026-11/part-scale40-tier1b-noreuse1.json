@@ -1,0 +1,4262 @@
+{
+ "scenario": "scale40",
+ "suffix": "noreuse1",
+ "endpoint": "http://127.0.0.1:58932",
+ "stateReuse": false,
+ "measuredAt": "2026-11-16T18:05:34.236Z",
+ "scenarioMs": 6480,
+ "totals": {
+  "turns": 2,
+  "calls": 2,
+  "reqBytes": 3247,
+  "respBytes": 18445,
+  "outTokens": 812,
+  "inTokens": 4611,
+  "serverMs": 3048,
+  "forcedExtra": [
+   {
+    "turn": 2,
+    "label": "verify pilot hole axes (batch read was truncated)",
+    "cause": "batch truncates read results >1500 B to ids; hole positions need a direct read"
+   }
+  ]
+ },
+ "detail": {
+  "baseId": 442,
+  "revision": "r59.0e125e6dfa9ea38d",
+  "out": {
+   "revision": "r59.0e125e6dfa9ea38d",
+   "undoSteps": 19,
+   "bodyCount": 45,
+   "change": {
+    "added": [
+     {
+      "id": 442,
+      "versionId": 742,
+      "type": "Solid",
+      "name": "enclosure-base",
+      "boundsMm": {
+       "min": [
+        2000,
+        -8.673617379884035e-16,
+        0
+       ],
+       "max": [
+        2080,
+        50,
+        25
+       ]
+      },
+      "boundsMethod": "native-box",
+      "faceCount": 59,
+      "edgeCount": 144,
+      "vertexCount": 88
+     }
+    ],
+    "removed": [],
+    "modified": [],
+    "regionsAdded": []
+   },
+   "steps": [
+    {
+     "step": 0,
+     "toolName": "plasticity_create_box",
+     "added": [
+      442
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 442,
+       "versionId": 724,
+       "type": "Solid",
+       "name": "enclosure-base",
+       "boundsMm": {
+        "min": [
+         2000,
+         0,
+         0
+        ],
+        "max": [
+         2080,
+         50,
+         25
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 6,
+       "edgeCount": 12,
+       "vertexCount": 8
+      }
+     ]
+    },
+    {
+     "step": 1,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "documentToken": "01a1e50b-82f6-7c36-a2c6-9e2e7e4ff8b3",
+      "revision": "r41.4e7117980d594b02",
+      "measurementSource": "native-brep",
+      "count": 4,
+      "matches": [
+       {
+        "bodyId": 442,
+        "id": "724e59151",
+        "curveType": "Line",
+        "line": true,
+        "circle": false,
+        "lengthMm": 25,
+        "centerMm": [
+         2000,
+         0,
+         12.5
+        ],
+        "tangent": [
+         0,
+         0,
+         1
+        ],
+        "boundsMm": {
+         "min": [
+          2000,
+          0,
+          0
+         ],
+         "max": [
+          2000,
+          0,
+          25.00000037252903
+         ]
+        },
+        "faceIds": [
+         "724f59163",
+         "724f59168"
+        ],
+        "vertexIds": [
+         59126,
+         59150
+        ]
+       },
+       {
+        "bodyId": 442,
+        "id": "724e59147",
+        "curveType": "Line",
+        "line": true,
+        "circle": false,
+        "lengthMm": 25,
+        "centerMm": [
+         2000,
+         50,
+         12.5
+        ],
+        "tangent": [
+         0,
+         0,
+         1
+        ],
+        "boundsMm": {
+         "min": [
+          2000,
+          50.00000074505806,
+          0
+         ],
+         "max": [
+          2000,
+          50.00000074505806,
+          25.00000037252903
+         ]
+        },
+        "faceIds": [
+         "724f59158",
+         "724f59163"
+        ],
+        "vertexIds": [
+         59130,
+         59146
+        ]
+       },
+       {
+        "bodyId": 442,
+        "id": "724e59143",
+        "curveType": "Line",
+        "line": true,
+        "circle": false,
+        "lengthMm": 25,
+        "centerMm": [
+         2080,
+         50,
+         12.5
+        ],
+        "tangent": [
+         0,
+         0,
+         1
+        ],
+        "boundsMm": {
+         "min": [
+          2079.9999237060547,
+          50.00000074505806,
+          0
+         ],
+         "max": [
+          2079.9999237060547,
+          50.00000074505806,
+          25.00000037252903
+         ]
+        },
+        "faceIds": [
+         "724f59118",
+         "724f59158"
+        ],
+        "vertexIds": [
+         59134,
+         59142
+        ]
+       },
+       {
+        "bodyId": 442,
+        "id": "724e59139",
+        "curveType": "Line",
+        "line": true,
+        "circle": false,
+        "lengthMm": 25,
+        "centerMm": [
+         2080,
+         0,
+         12.5
+        ],
+        "tangent": [
+         0,
+         0,
+         1
+        ],
+        "boundsMm": {
+         "min": [
+          2079.9999237060547,
+          0,
+          0
+         ],
+         "max": [
+          2079.9999237060547,
+          0,
+          25.00000037252903
+         ]
+        },
+        "faceIds": [
+         "724f59168",
+         "724f59118"
+        ],
+        "vertexIds": [
+         59125,
+         59138
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "step": 2,
+     "toolName": "plasticity_fillet",
+     "added": [],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": []
+    },
+    {
+     "step": 3,
+     "toolName": "plasticity_find_faces",
+     "result": {
+      "documentToken": "01a1e50b-82f6-7c36-a2c6-9e2e7e4ff8b3",
+      "revision": "r42.dc4f97efcd8ed4d4",
+      "measurementSource": "native-brep",
+      "count": 1,
+      "matches": [
+       {
+        "bodyId": 442,
+        "id": "725f59173",
+        "surfaceType": "Plane",
+        "planar": true,
+        "centerMm": [
+         2039.9999999999995,
+         24.999999999999993,
+         25
+        ],
+        "normal": [
+         0,
+         0,
+         1
+        ],
+        "radiusMm": null,
+        "blendRadiusMm": null,
+        "axisOriginMm": null,
+        "axisDirection": null,
+        "boundsMm": {
+         "min": [
+          2000,
+          0,
+          25.00000037252903
+         ],
+         "max": [
+          2079.9999237060547,
+          50.00000074505806,
+          25.00000037252903
+         ]
+        },
+        "edgeIds": [
+         "725e59332",
+         "725e59410",
+         "725e59364",
+         "725e59392",
+         "725e59374",
+         "725e59398",
+         "725e59384",
+         "725e59404"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "step": 4,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "truncated": true,
+      "bytes": 3892,
+      "count": 8,
+      "ids": [
+       "725e59410",
+       "725e59404",
+       "725e59398",
+       "725e59392",
+       "725e59364",
+       "725e59332",
+       "725e59384",
+       "725e59374"
+      ],
+      "hint": "add return: [...] to this step"
+     }
+    },
+    {
+     "step": 5,
+     "toolName": "plasticity_chamfer",
+     "added": [],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": []
+    },
+    {
+     "step": 6,
+     "toolName": "plasticity_create_box",
+     "added": [
+      443
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 443,
+       "versionId": 727,
+       "type": "Solid",
+       "name": null,
+       "boundsMm": {
+        "min": [
+         2001.9999999999998,
+         2.0000000000000018,
+         2
+        ],
+        "max": [
+         2078.0000000000005,
+         48,
+         27.000000000000004
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 6,
+       "edgeCount": 12,
+       "vertexCount": 8
+      }
+     ]
+    },
+    {
+     "step": 7,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "truncated": true,
+      "bytes": 1586,
+      "count": 4,
+      "ids": [
+       "727e59899",
+       "727e59895",
+       "727e59891",
+       "727e59887"
+      ],
+      "hint": "add return: [...] to this step"
+     }
+    },
+    {
+     "step": 8,
+     "toolName": "plasticity_fillet",
+     "added": [],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": []
+    },
+    {
+     "step": 9,
+     "toolName": "plasticity_boolean",
+     "added": [],
+     "removed": [
+      443
+     ],
+     "regionsAdded": [],
+     "addedBodies": [],
+     "createdEdges": [
+      {
+       "bodyId": 442,
+       "edgeId": "729e60335",
+       "curveType": "Circle",
+       "lengthMm": 1.5707963267948966
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60330",
+       "curveType": "Line",
+       "lengthMm": 44
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60324",
+       "curveType": "Line",
+       "lengthMm": 74.00000000000074
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60318",
+       "curveType": "Circle",
+       "lengthMm": 1.5707963267948966
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60312",
+       "curveType": "Circle",
+       "lengthMm": 1.5707963267948966
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60306",
+       "curveType": "Line",
+       "lengthMm": 74.00000000000074
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60300",
+       "curveType": "Line",
+       "lengthMm": 44
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60295",
+       "curveType": "Circle",
+       "lengthMm": 1.5707963267948966
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60248",
+       "curveType": "Line",
+       "lengthMm": 23
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60242",
+       "curveType": "Line",
+       "lengthMm": 23
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60236",
+       "curveType": "Line",
+       "lengthMm": 23
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60230",
+       "curveType": "Line",
+       "lengthMm": 23
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60180",
+       "curveType": "Line",
+       "lengthMm": 23
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60174",
+       "curveType": "Line",
+       "lengthMm": 23
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60104",
+       "curveType": "Line",
+       "lengthMm": 23
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60098",
+       "curveType": "Line",
+       "lengthMm": 23
+      }
+     ]
+    },
+    {
+     "step": 10,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      444
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 444,
+       "versionId": 730,
+       "type": "Solid",
+       "name": "Cylinder.001",
+       "boundsMm": {
+        "min": [
+         2001.5,
+         1.4999999999999996,
+         1.5
+        ],
+        "max": [
+         2007.5000000000002,
+         7.5,
+         23
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 3,
+       "edgeCount": 2,
+       "vertexCount": 0
+      }
+     ]
+    },
+    {
+     "step": 11,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      445
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 445,
+       "versionId": 731,
+       "type": "Solid",
+       "name": "Cylinder.002",
+       "boundsMm": {
+        "min": [
+         2072.5,
+         1.4999999999999996,
+         1.5
+        ],
+        "max": [
+         2078.5,
+         7.5,
+         23
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 3,
+       "edgeCount": 2,
+       "vertexCount": 0
+      }
+     ]
+    },
+    {
+     "step": 12,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      446
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 446,
+       "versionId": 732,
+       "type": "Solid",
+       "name": "Cylinder.003",
+       "boundsMm": {
+        "min": [
+         2001.5,
+         42.49999999999999,
+         1.5
+        ],
+        "max": [
+         2007.5000000000002,
+         48.5,
+         23
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 3,
+       "edgeCount": 2,
+       "vertexCount": 0
+      }
+     ]
+    },
+    {
+     "step": 13,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      447
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 447,
+       "versionId": 733,
+       "type": "Solid",
+       "name": "Cylinder.004",
+       "boundsMm": {
+        "min": [
+         2072.5,
+         42.49999999999999,
+         1.5
+        ],
+        "max": [
+         2078.5,
+         48.5,
+         23
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 3,
+       "edgeCount": 2,
+       "vertexCount": 0
+      }
+     ]
+    },
+    {
+     "step": 14,
+     "toolName": "plasticity_boolean",
+     "added": [],
+     "removed": [
+      444,
+      445,
+      446,
+      447
+     ],
+     "regionsAdded": [],
+     "addedBodies": [],
+     "createdEdges": [
+      {
+       "bodyId": 442,
+       "edgeId": "734e61041",
+       "curveType": "Circle",
+       "lengthMm": 0.18472956494899506
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61036",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61029",
+       "curveType": "Circle",
+       "lengthMm": 0.18472956494947912
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61024",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60925",
+       "curveType": "Circle",
+       "lengthMm": 0.18472956494948
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60920",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60913",
+       "curveType": "Circle",
+       "lengthMm": 0.18472956494899018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60908",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60810",
+       "curveType": "Circle",
+       "lengthMm": 0.18472956494899018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60805",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60798",
+       "curveType": "Circle",
+       "lengthMm": 0.18472956494947979
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60793",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60695",
+       "curveType": "Circle",
+       "lengthMm": 0.18472956494947912
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60690",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60683",
+       "curveType": "Circle",
+       "lengthMm": 0.18472956494899506
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60678",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60248",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60242",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60236",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60230",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60224",
+       "curveType": "Circle",
+       "lengthMm": 1.2013371968965423
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60218",
+       "curveType": "Circle",
+       "lengthMm": 1.201337196896455
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60212",
+       "curveType": "Circle",
+       "lengthMm": 1.2013371968965494
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60206",
+       "curveType": "Circle",
+       "lengthMm": 1.201337196896449
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60180",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60174",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60104",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60098",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60188",
+       "curveType": "Line",
+       "lengthMm": 37.68337520964578
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60198",
+       "curveType": "Line",
+       "lengthMm": 67.6833752096444
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60090",
+       "curveType": "Line",
+       "lengthMm": 37.68337520964578
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60166",
+       "curveType": "Line",
+       "lengthMm": 67.6833752096444
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61113",
+       "curveType": "Line",
+       "lengthMm": 3.1583123951771097
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61102",
+       "curveType": "Line",
+       "lengthMm": 3.1583123951781644
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61091",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61087",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61084",
+       "curveType": "Circle",
+       "lengthMm": 10.6230536804119
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61069",
+       "curveType": "Circle",
+       "lengthMm": 1.1371844167524117
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60997",
+       "curveType": "Line",
+       "lengthMm": 3.1583123951781644
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60986",
+       "curveType": "Line",
+       "lengthMm": 3.1583123951771097
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60975",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60971",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60968",
+       "curveType": "Circle",
+       "lengthMm": 10.623053680411905
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60953",
+       "curveType": "Circle",
+       "lengthMm": 1.1371844167523397
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60881",
+       "curveType": "Line",
+       "lengthMm": 3.1583123951771097
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60870",
+       "curveType": "Line",
+       "lengthMm": 3.1583123951781644
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60859",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60855",
+       "curveType": "Circle",
+       "lengthMm": 10.623053680411905
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60849",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60838",
+       "curveType": "Circle",
+       "lengthMm": 1.137184416752417
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60766",
+       "curveType": "Line",
+       "lengthMm": 3.1583123951781644
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60755",
+       "curveType": "Line",
+       "lengthMm": 3.1583123951771097
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60744",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60740",
+       "curveType": "Circle",
+       "lengthMm": 10.623053680411902
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60734",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60723",
+       "curveType": "Circle",
+       "lengthMm": 1.1371844167523344
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60522",
+       "curveType": "Circle",
+       "lengthMm": 1.1371844167522678
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61060",
+       "curveType": "Circle",
+       "lengthMm": 10.623053680411909
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60552",
+       "curveType": "Circle",
+       "lengthMm": 1.1371844167522671
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60709",
+       "curveType": "Circle",
+       "lengthMm": 10.623053680411909
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60582",
+       "curveType": "Circle",
+       "lengthMm": 1.1371844167522664
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60944",
+       "curveType": "Circle",
+       "lengthMm": 10.62305368041191
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60612",
+       "curveType": "Circle",
+       "lengthMm": 10.62305368041191
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60824",
+       "curveType": "Circle",
+       "lengthMm": 1.1371844167522678
+      }
+     ]
+    },
+    {
+     "step": 15,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      448
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 448,
+       "versionId": 735,
+       "type": "Solid",
+       "name": "Cylinder.001",
+       "boundsMm": {
+        "min": [
+         2003.25,
+         3.2499999999999996,
+         15
+        ],
+        "max": [
+         2005.7500000000005,
+         5.75,
+         23.5
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 3,
+       "edgeCount": 2,
+       "vertexCount": 0
+      }
+     ]
+    },
+    {
+     "step": 16,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      449
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 449,
+       "versionId": 736,
+       "type": "Solid",
+       "name": "Cylinder.002",
+       "boundsMm": {
+        "min": [
+         2074.2499999999995,
+         3.2499999999999996,
+         15
+        ],
+        "max": [
+         2076.75,
+         5.75,
+         23.5
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 3,
+       "edgeCount": 2,
+       "vertexCount": 0
+      }
+     ]
+    },
+    {
+     "step": 17,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      450
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 450,
+       "versionId": 737,
+       "type": "Solid",
+       "name": "Cylinder.003",
+       "boundsMm": {
+        "min": [
+         2003.25,
+         44.25,
+         15
+        ],
+        "max": [
+         2005.7500000000005,
+         46.75,
+         23.5
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 3,
+       "edgeCount": 2,
+       "vertexCount": 0
+      }
+     ]
+    },
+    {
+     "step": 18,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      451
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 451,
+       "versionId": 738,
+       "type": "Solid",
+       "name": "Cylinder.004",
+       "boundsMm": {
+        "min": [
+         2074.2499999999995,
+         44.25,
+         15
+        ],
+        "max": [
+         2076.75,
+         46.75,
+         23.5
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 3,
+       "edgeCount": 2,
+       "vertexCount": 0
+      }
+     ]
+    },
+    {
+     "step": 19,
+     "toolName": "plasticity_boolean",
+     "added": [],
+     "removed": [
+      448,
+      449,
+      450,
+      451
+     ],
+     "regionsAdded": [],
+     "addedBodies": [],
+     "createdEdges": [
+      {
+       "bodyId": 442,
+       "edgeId": "739e61497",
+       "curveType": "Circle",
+       "lengthMm": 7.853981633974484
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "739e61484",
+       "curveType": "Circle",
+       "lengthMm": 7.853981633974484
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "739e61471",
+       "curveType": "Circle",
+       "lengthMm": 7.853981633974484
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "739e61458",
+       "curveType": "Circle",
+       "lengthMm": 7.853981633974484
+      }
+     ]
+    },
+    {
+     "step": 20,
+     "toolName": "plasticity_create_box",
+     "added": [
+      452
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 452,
+       "versionId": 740,
+       "type": "Solid",
+       "name": null,
+       "boundsMm": {
+        "min": [
+         2033.9999999999998,
+         -0.5,
+         9.5
+        ],
+        "max": [
+         2046.0000000000002,
+         2.5,
+         15.5
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 6,
+       "edgeCount": 12,
+       "vertexCount": 8
+      }
+     ]
+    },
+    {
+     "step": 21,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "truncated": true,
+      "bytes": 1554,
+      "count": 4,
+      "ids": [
+       "740e61565",
+       "740e61555",
+       "740e61520",
+       "740e61532"
+      ],
+      "hint": "add return: [...] to this step"
+     }
+    },
+    {
+     "step": 22,
+     "toolName": "plasticity_fillet",
+     "added": [],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": []
+    },
+    {
+     "step": 23,
+     "toolName": "plasticity_boolean",
+     "added": [],
+     "removed": [
+      452
+     ],
+     "regionsAdded": [],
+     "addedBodies": [],
+     "createdEdges": [
+      {
+       "bodyId": 442,
+       "edgeId": "742e61988",
+       "curveType": "Circle",
+       "lengthMm": 3.141592653589793
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61983",
+       "curveType": "Line",
+       "lengthMm": 8.000000000000895
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61977",
+       "curveType": "Line",
+       "lengthMm": 2
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61971",
+       "curveType": "Circle",
+       "lengthMm": 3.141592653589793
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61965",
+       "curveType": "Circle",
+       "lengthMm": 3.141592653589793
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61959",
+       "curveType": "Line",
+       "lengthMm": 2
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61953",
+       "curveType": "Line",
+       "lengthMm": 8.000000000000895
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61948",
+       "curveType": "Circle",
+       "lengthMm": 3.141592653589793
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e62156",
+       "curveType": "Line",
+       "lengthMm": 8.000000000000895
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e62145",
+       "curveType": "Line",
+       "lengthMm": 2
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e62134",
+       "curveType": "Line",
+       "lengthMm": 8.000000000000895
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e62123",
+       "curveType": "Line",
+       "lengthMm": 2
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e62112",
+       "curveType": "Circle",
+       "lengthMm": 3.141592653589793
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e62081",
+       "curveType": "Circle",
+       "lengthMm": 3.141592653589793
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e62050",
+       "curveType": "Circle",
+       "lengthMm": 3.141592653589793
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e62019",
+       "curveType": "Circle",
+       "lengthMm": 3.141592653589793
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61901",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61895",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61889",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61883",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61833",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61827",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61757",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61751",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      }
+     ]
+    },
+    {
+     "step": 24,
+     "toolName": "plasticity_find_faces",
+     "result": {
+      "truncated": true,
+      "bytes": 1740,
+      "count": 4,
+      "ids": [
+       "742f61307",
+       "742f61367",
+       "742f61397",
+       "742f61337"
+      ],
+      "hint": "add return: [...] to this step"
+     }
+    }
+   ]
+  },
+  "checks": [
+   {
+    "check": "base bounds",
+    "expected": {
+     "min": [
+      2000,
+      0,
+      0
+     ],
+     "max": [
+      2080,
+      50,
+      25
+     ]
+    },
+    "actual": {
+     "min": [
+      2000,
+      -8.673617379884035e-16,
+      0
+     ],
+     "max": [
+      2080,
+      50,
+      25
+     ]
+    },
+    "ok": true
+   },
+   {
+    "check": "pilot hole axes",
+    "expected": [
+     [
+      2004.5,
+      4.5
+     ],
+     [
+      2075.5,
+      4.5
+     ],
+     [
+      2004.5,
+      45.5
+     ],
+     [
+      2075.5,
+      45.5
+     ]
+    ],
+    "actual": [
+     [
+      2004.5,
+      4.5
+     ],
+     [
+      2004.5,
+      45.5
+     ],
+     [
+      2075.5,
+      45.5
+     ],
+     [
+      2075.5,
+      4.5
+     ]
+    ],
+    "count": 4,
+    "ok": true
+   },
+   {
+    "check": "body count added",
+    "expected": 1,
+    "actual": 1,
+    "note": "cutters and bosses consumed",
+    "ok": true
+   },
+   {
+    "check": "face/edge counts",
+    "actual": {
+     "faces": 59,
+     "edges": 144
+    },
+    "ok": true
+   }
+  ],
+  "steps": 25,
+  "batchReplyBytes": 16705,
+  "documentBodies": 44,
+  "fillCall": {
+   "turn": 0,
+   "label": "add 40 filler bodies",
+   "tool": "plasticity_batch",
+   "reqBytes": 3811,
+   "respBytes": 19811,
+   "wallMs": 3411.5,
+   "isError": false,
+   "ops": {
+    "stateReads": 202,
+    "stateMs": 2564.7,
+    "stateBytesMax": 332369,
+    "probes": 0,
+    "probeMs": 0,
+    "mutates": 40,
+    "mutateMs": 286.4,
+    "reads": 0,
+    "readMs": 0,
+    "journalWrites": 40,
+    "journalMs": 272.8
+   },
+   "stepOps": [
+    {
+     "step": 0,
+     "stateReads": 5,
+     "stateMs": 21.4,
+     "stateBytesMax": 28369,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 10.1,
+     "wallMs": 41,
+     "residualMs": 2.5
+    },
+    {
+     "step": 1,
+     "stateReads": 5,
+     "stateMs": 27.9,
+     "stateBytesMax": 36197,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.8,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7.8,
+     "wallMs": 44.1,
+     "residualMs": 1.6
+    },
+    {
+     "step": 2,
+     "stateReads": 5,
+     "stateMs": 24.8,
+     "stateBytesMax": 44025,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.4,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.7,
+     "wallMs": 39.6,
+     "residualMs": 1.7
+    },
+    {
+     "step": 3,
+     "stateReads": 5,
+     "stateMs": 31.4,
+     "stateBytesMax": 51909,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.5,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7.4,
+     "wallMs": 46.9,
+     "residualMs": 1.6
+    },
+    {
+     "step": 4,
+     "stateReads": 5,
+     "stateMs": 28.6,
+     "stateBytesMax": 59663,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 5.4,
+     "wallMs": 42,
+     "residualMs": 2
+    },
+    {
+     "step": 5,
+     "stateReads": 5,
+     "stateMs": 34.1,
+     "stateBytesMax": 67453,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 5.9,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.1,
+     "wallMs": 48.4,
+     "residualMs": 2.3
+    },
+    {
+     "step": 6,
+     "stateReads": 5,
+     "stateMs": 40.7,
+     "stateBytesMax": 75291,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.3,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7.2,
+     "wallMs": 59.5,
+     "residualMs": 4.3
+    },
+    {
+     "step": 7,
+     "stateReads": 5,
+     "stateMs": 40.7,
+     "stateBytesMax": 83191,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.9,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 8.4,
+     "wallMs": 64.4,
+     "residualMs": 7.4
+    },
+    {
+     "step": 8,
+     "stateReads": 5,
+     "stateMs": 41,
+     "stateBytesMax": 90833,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.2,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 8.9,
+     "wallMs": 61.9,
+     "residualMs": 4.8
+    },
+    {
+     "step": 9,
+     "stateReads": 5,
+     "stateMs": 48,
+     "stateBytesMax": 98709,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 9.3,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.8,
+     "wallMs": 71.9,
+     "residualMs": 7.8
+    },
+    {
+     "step": 10,
+     "stateReads": 5,
+     "stateMs": 46,
+     "stateBytesMax": 106482,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 8.2,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 5.9,
+     "wallMs": 67.8,
+     "residualMs": 7.7
+    },
+    {
+     "step": 11,
+     "stateReads": 5,
+     "stateMs": 50.6,
+     "stateBytesMax": 114310,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.8,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.6,
+     "wallMs": 70.6,
+     "residualMs": 6.6
+    },
+    {
+     "step": 12,
+     "stateReads": 5,
+     "stateMs": 50.1,
+     "stateBytesMax": 122138,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.1,
+     "wallMs": 70.8,
+     "residualMs": 7.6
+    },
+    {
+     "step": 13,
+     "stateReads": 5,
+     "stateMs": 51.7,
+     "stateBytesMax": 130022,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.6,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.2,
+     "wallMs": 71.3,
+     "residualMs": 6.8
+    },
+    {
+     "step": 14,
+     "stateReads": 5,
+     "stateMs": 58.9,
+     "stateBytesMax": 137776,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.2,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 5.8,
+     "wallMs": 78,
+     "residualMs": 6.1
+    },
+    {
+     "step": 15,
+     "stateReads": 5,
+     "stateMs": 49.3,
+     "stateBytesMax": 145566,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.3,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7.1,
+     "wallMs": 66.8,
+     "residualMs": 4.1
+    },
+    {
+     "step": 16,
+     "stateReads": 5,
+     "stateMs": 56.2,
+     "stateBytesMax": 153404,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.4,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 5.7,
+     "wallMs": 78.1,
+     "residualMs": 9.8
+    },
+    {
+     "step": 17,
+     "stateReads": 5,
+     "stateMs": 61.3,
+     "stateBytesMax": 161304,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.7,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.4,
+     "wallMs": 82.9,
+     "residualMs": 8.5
+    },
+    {
+     "step": 18,
+     "stateReads": 5,
+     "stateMs": 58.2,
+     "stateBytesMax": 168946,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.5,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.6,
+     "wallMs": 76.7,
+     "residualMs": 5.4
+    },
+    {
+     "step": 19,
+     "stateReads": 5,
+     "stateMs": 57.9,
+     "stateBytesMax": 176820,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.8,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7,
+     "wallMs": 78.5,
+     "residualMs": 5.8
+    },
+    {
+     "step": 20,
+     "stateReads": 5,
+     "stateMs": 82.1,
+     "stateBytesMax": 184594,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 9.8,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.1,
+     "wallMs": 103.1,
+     "residualMs": 5.1
+    },
+    {
+     "step": 21,
+     "stateReads": 5,
+     "stateMs": 69.4,
+     "stateBytesMax": 192362,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.8,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 5.6,
+     "wallMs": 91.6,
+     "residualMs": 8.8
+    },
+    {
+     "step": 22,
+     "stateReads": 5,
+     "stateMs": 67.8,
+     "stateBytesMax": 200130,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.1,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7.1,
+     "wallMs": 90.8,
+     "residualMs": 8.8
+    },
+    {
+     "step": 23,
+     "stateReads": 5,
+     "stateMs": 71,
+     "stateBytesMax": 207954,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.7,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6,
+     "wallMs": 93.7,
+     "residualMs": 10
+    },
+    {
+     "step": 24,
+     "stateReads": 5,
+     "stateMs": 70,
+     "stateBytesMax": 215648,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.4,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.1,
+     "wallMs": 91.3,
+     "residualMs": 7.8
+    },
+    {
+     "step": 25,
+     "stateReads": 5,
+     "stateMs": 94.9,
+     "stateBytesMax": 223378,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.1,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.3,
+     "wallMs": 118.3,
+     "residualMs": 10
+    },
+    {
+     "step": 26,
+     "stateReads": 5,
+     "stateMs": 79.7,
+     "stateBytesMax": 231156,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.2,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 9.2,
+     "wallMs": 104.9,
+     "residualMs": 8.8
+    },
+    {
+     "step": 27,
+     "stateReads": 5,
+     "stateMs": 76.1,
+     "stateBytesMax": 238996,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 9.8,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 8.9,
+     "wallMs": 104.2,
+     "residualMs": 9.4
+    },
+    {
+     "step": 28,
+     "stateReads": 5,
+     "stateMs": 75.9,
+     "stateBytesMax": 246578,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.9,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 8.4,
+     "wallMs": 101.1,
+     "residualMs": 9.9
+    },
+    {
+     "step": 29,
+     "stateReads": 5,
+     "stateMs": 81.9,
+     "stateBytesMax": 254392,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.7,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.4,
+     "wallMs": 104.3,
+     "residualMs": 9.3
+    },
+    {
+     "step": 30,
+     "stateReads": 5,
+     "stateMs": 85.6,
+     "stateBytesMax": 262166,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.6,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.1,
+     "wallMs": 105.7,
+     "residualMs": 7.4
+    },
+    {
+     "step": 31,
+     "stateReads": 5,
+     "stateMs": 86.2,
+     "stateBytesMax": 269979,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.5,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.6,
+     "wallMs": 111,
+     "residualMs": 10.7
+    },
+    {
+     "step": 32,
+     "stateReads": 5,
+     "stateMs": 77.9,
+     "stateBytesMax": 277792,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.8,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.9,
+     "wallMs": 99,
+     "residualMs": 7.4
+    },
+    {
+     "step": 33,
+     "stateReads": 5,
+     "stateMs": 93,
+     "stateBytesMax": 285661,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.8,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6,
+     "wallMs": 117.7,
+     "residualMs": 11.9
+    },
+    {
+     "step": 34,
+     "stateReads": 5,
+     "stateMs": 90.2,
+     "stateBytesMax": 293400,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.2,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 5.9,
+     "wallMs": 112.9,
+     "residualMs": 9.6
+    },
+    {
+     "step": 35,
+     "stateReads": 5,
+     "stateMs": 92,
+     "stateBytesMax": 301175,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.7,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.6,
+     "wallMs": 113.4,
+     "residualMs": 8.1
+    },
+    {
+     "step": 36,
+     "stateReads": 5,
+     "stateMs": 85.9,
+     "stateBytesMax": 308998,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.6,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7,
+     "wallMs": 107.9,
+     "residualMs": 8.4
+    },
+    {
+     "step": 37,
+     "stateReads": 5,
+     "stateMs": 90.8,
+     "stateBytesMax": 316883,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.2,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.2,
+     "wallMs": 114,
+     "residualMs": 9.8
+    },
+    {
+     "step": 38,
+     "stateReads": 5,
+     "stateMs": 100,
+     "stateBytesMax": 324510,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.6,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.2,
+     "wallMs": 123.7,
+     "residualMs": 9.9
+    },
+    {
+     "step": 39,
+     "stateReads": 6,
+     "stateMs": 112.6,
+     "stateBytesMax": 332369,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.7,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.8,
+     "wallMs": 135,
+     "residualMs": 8.9
+    }
+   ]
+  }
+ },
+ "calls": [
+  {
+   "turn": 1,
+   "label": "build enclosure (compact) + verify read",
+   "tool": "plasticity_batch",
+   "reqBytes": 3115,
+   "respBytes": 16705,
+   "wallMs": 3024.4,
+   "isError": false,
+   "ops": {
+    "stateReads": 111,
+    "stateMs": 2429.9,
+    "stateBytesMax": 443239,
+    "probes": 0,
+    "probeMs": 0,
+    "mutates": 19,
+    "mutateMs": 186.9,
+    "reads": 0,
+    "readMs": 0,
+    "journalWrites": 19,
+    "journalMs": 144.3
+   },
+   "stepOps": [
+    {
+     "step": 0,
+     "stateReads": 5,
+     "stateMs": 102,
+     "stateBytesMax": 339402,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.3,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.7,
+     "wallMs": 126.7,
+     "residualMs": 10.7
+    },
+    {
+     "step": 1,
+     "stateReads": 1,
+     "stateMs": 16.7,
+     "stateBytesMax": 339402,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 20.9,
+     "residualMs": 4.2
+    },
+    {
+     "step": 2,
+     "stateReads": 5,
+     "stateMs": 87.1,
+     "stateBytesMax": 348592,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.6,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7.5,
+     "wallMs": 111.9,
+     "residualMs": 9.7
+    },
+    {
+     "step": 3,
+     "stateReads": 1,
+     "stateMs": 16.5,
+     "stateBytesMax": 348592,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 20.5,
+     "residualMs": 4
+    },
+    {
+     "step": 4,
+     "stateReads": 1,
+     "stateMs": 17.1,
+     "stateBytesMax": 348592,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 20.3,
+     "residualMs": 3.2
+    },
+    {
+     "step": 5,
+     "stateReads": 5,
+     "stateMs": 99.9,
+     "stateBytesMax": 361091,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 23.3,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 5.8,
+     "wallMs": 140.5,
+     "residualMs": 11.5
+    },
+    {
+     "step": 6,
+     "stateReads": 5,
+     "stateMs": 107.6,
+     "stateBytesMax": 369566,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.5,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 5.7,
+     "wallMs": 132.5,
+     "residualMs": 11.7
+    },
+    {
+     "step": 7,
+     "stateReads": 1,
+     "stateMs": 18.9,
+     "stateBytesMax": 369566,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 22.3,
+     "residualMs": 3.4
+    },
+    {
+     "step": 8,
+     "stateReads": 5,
+     "stateMs": 94.4,
+     "stateBytesMax": 380009,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 8,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.4,
+     "wallMs": 118.9,
+     "residualMs": 10.1
+    },
+    {
+     "step": 9,
+     "stateReads": 7,
+     "stateMs": 151,
+     "stateBytesMax": 380009,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 11.5,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.5,
+     "wallMs": 183.4,
+     "residualMs": 14.4
+    },
+    {
+     "step": 10,
+     "stateReads": 5,
+     "stateMs": 102.7,
+     "stateBytesMax": 381337,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.9,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7.2,
+     "wallMs": 127.6,
+     "residualMs": 10.8
+    },
+    {
+     "step": 11,
+     "stateReads": 5,
+     "stateMs": 109.5,
+     "stateBytesMax": 383775,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.1,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.2,
+     "wallMs": 133.6,
+     "residualMs": 10.8
+    },
+    {
+     "step": 12,
+     "stateReads": 5,
+     "stateMs": 114.4,
+     "stateBytesMax": 386352,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 6.9,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7.1,
+     "wallMs": 139.9,
+     "residualMs": 11.5
+    },
+    {
+     "step": 13,
+     "stateReads": 5,
+     "stateMs": 113.4,
+     "stateBytesMax": 388809,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.6,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 5.9,
+     "wallMs": 138.5,
+     "residualMs": 11.6
+    },
+    {
+     "step": 14,
+     "stateReads": 7,
+     "stateMs": 164.8,
+     "stateBytesMax": 417486,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 16.7,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7,
+     "wallMs": 203.3,
+     "residualMs": 14.8
+    },
+    {
+     "step": 15,
+     "stateReads": 5,
+     "stateMs": 118,
+     "stateBytesMax": 420063,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.2,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 5.6,
+     "wallMs": 144.8,
+     "residualMs": 14
+    },
+    {
+     "step": 16,
+     "stateReads": 5,
+     "stateMs": 121.1,
+     "stateBytesMax": 422591,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.9,
+     "wallMs": 146.4,
+     "residualMs": 11.4
+    },
+    {
+     "step": 17,
+     "stateReads": 5,
+     "stateMs": 108.1,
+     "stateBytesMax": 425165,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.1,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.4,
+     "wallMs": 132.8,
+     "residualMs": 11.2
+    },
+    {
+     "step": 18,
+     "stateReads": 5,
+     "stateMs": 121.1,
+     "stateBytesMax": 427690,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.8,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 16.9,
+     "wallMs": 158.6,
+     "residualMs": 12.8
+    },
+    {
+     "step": 19,
+     "stateReads": 7,
+     "stateMs": 166,
+     "stateBytesMax": 427690,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 15,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 8,
+     "wallMs": 203,
+     "residualMs": 14
+    },
+    {
+     "step": 20,
+     "stateReads": 5,
+     "stateMs": 122.3,
+     "stateBytesMax": 433278,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.1,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 10.4,
+     "wallMs": 154.4,
+     "residualMs": 14.6
+    },
+    {
+     "step": 21,
+     "stateReads": 1,
+     "stateMs": 22.1,
+     "stateBytesMax": 433278,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 26.4,
+     "residualMs": 4.3
+    },
+    {
+     "step": 22,
+     "stateReads": 5,
+     "stateMs": 109.9,
+     "stateBytesMax": 443239,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 7.8,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 8.5,
+     "wallMs": 137.9,
+     "residualMs": 11.7
+    },
+    {
+     "step": 23,
+     "stateReads": 7,
+     "stateMs": 164.9,
+     "stateBytesMax": 443239,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 1,
+     "mutateMs": 17.5,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 9.7,
+     "wallMs": 208.5,
+     "residualMs": 16.4
+    },
+    {
+     "step": 24,
+     "stateReads": 2,
+     "stateMs": 42.1,
+     "stateBytesMax": 442501,
+     "probes": 0,
+     "probeMs": 0,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 47,
+     "residualMs": 4.9
+    }
+   ]
+  },
+  {
+   "turn": 2,
+   "label": "verify pilot hole axes (batch read was truncated)",
+   "tool": "plasticity_find_faces",
+   "reqBytes": 132,
+   "respBytes": 1740,
+   "wallMs": 23.5,
+   "isError": false,
+   "forced": "batch truncates read results >1500 B to ids; hole positions need a direct read",
+   "ops": {
+    "stateReads": 1,
+    "stateMs": 21,
+    "stateBytesMax": 442501,
+    "probes": 0,
+    "probeMs": 0,
+    "mutates": 0,
+    "mutateMs": 0,
+    "reads": 0,
+    "readMs": 0,
+    "journalWrites": 0,
+    "journalMs": 0
+   }
+  }
+ ],
+ "responses": [
+  {
+   "revision": "r59.0e125e6dfa9ea38d",
+   "undoSteps": 19,
+   "bodyCount": 45,
+   "change": {
+    "added": [
+     {
+      "id": 442,
+      "versionId": 742,
+      "type": "Solid",
+      "name": "enclosure-base",
+      "boundsMm": {
+       "min": [
+        2000,
+        -8.673617379884035e-16,
+        0
+       ],
+       "max": [
+        2080,
+        50,
+        25
+       ]
+      },
+      "boundsMethod": "native-box",
+      "faceCount": 59,
+      "edgeCount": 144,
+      "vertexCount": 88
+     }
+    ],
+    "removed": [],
+    "modified": [],
+    "regionsAdded": []
+   },
+   "steps": [
+    {
+     "step": 0,
+     "toolName": "plasticity_create_box",
+     "added": [
+      442
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 442,
+       "versionId": 724,
+       "type": "Solid",
+       "name": "enclosure-base",
+       "boundsMm": {
+        "min": [
+         2000,
+         0,
+         0
+        ],
+        "max": [
+         2080,
+         50,
+         25
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 6,
+       "edgeCount": 12,
+       "vertexCount": 8
+      }
+     ]
+    },
+    {
+     "step": 1,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "documentToken": "01a1e50b-82f6-7c36-a2c6-9e2e7e4ff8b3",
+      "revision": "r41.4e7117980d594b02",
+      "measurementSource": "native-brep",
+      "count": 4,
+      "matches": [
+       {
+        "bodyId": 442,
+        "id": "724e59151",
+        "curveType": "Line",
+        "line": true,
+        "circle": false,
+        "lengthMm": 25,
+        "centerMm": [
+         2000,
+         0,
+         12.5
+        ],
+        "tangent": [
+         0,
+         0,
+         1
+        ],
+        "boundsMm": {
+         "min": [
+          2000,
+          0,
+          0
+         ],
+         "max": [
+          2000,
+          0,
+          25.00000037252903
+         ]
+        },
+        "faceIds": [
+         "724f59163",
+         "724f59168"
+        ],
+        "vertexIds": [
+         59126,
+         59150
+        ]
+       },
+       {
+        "bodyId": 442,
+        "id": "724e59147",
+        "curveType": "Line",
+        "line": true,
+        "circle": false,
+        "lengthMm": 25,
+        "centerMm": [
+         2000,
+         50,
+         12.5
+        ],
+        "tangent": [
+         0,
+         0,
+         1
+        ],
+        "boundsMm": {
+         "min": [
+          2000,
+          50.00000074505806,
+          0
+         ],
+         "max": [
+          2000,
+          50.00000074505806,
+          25.00000037252903
+         ]
+        },
+        "faceIds": [
+         "724f59158",
+         "724f59163"
+        ],
+        "vertexIds": [
+         59130,
+         59146
+        ]
+       },
+       {
+        "bodyId": 442,
+        "id": "724e59143",
+        "curveType": "Line",
+        "line": true,
+        "circle": false,
+        "lengthMm": 25,
+        "centerMm": [
+         2080,
+         50,
+         12.5
+        ],
+        "tangent": [
+         0,
+         0,
+         1
+        ],
+        "boundsMm": {
+         "min": [
+          2079.9999237060547,
+          50.00000074505806,
+          0
+         ],
+         "max": [
+          2079.9999237060547,
+          50.00000074505806,
+          25.00000037252903
+         ]
+        },
+        "faceIds": [
+         "724f59118",
+         "724f59158"
+        ],
+        "vertexIds": [
+         59134,
+         59142
+        ]
+       },
+       {
+        "bodyId": 442,
+        "id": "724e59139",
+        "curveType": "Line",
+        "line": true,
+        "circle": false,
+        "lengthMm": 25,
+        "centerMm": [
+         2080,
+         0,
+         12.5
+        ],
+        "tangent": [
+         0,
+         0,
+         1
+        ],
+        "boundsMm": {
+         "min": [
+          2079.9999237060547,
+          0,
+          0
+         ],
+         "max": [
+          2079.9999237060547,
+          0,
+          25.00000037252903
+         ]
+        },
+        "faceIds": [
+         "724f59168",
+         "724f59118"
+        ],
+        "vertexIds": [
+         59125,
+         59138
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "step": 2,
+     "toolName": "plasticity_fillet",
+     "added": [],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": []
+    },
+    {
+     "step": 3,
+     "toolName": "plasticity_find_faces",
+     "result": {
+      "documentToken": "01a1e50b-82f6-7c36-a2c6-9e2e7e4ff8b3",
+      "revision": "r42.dc4f97efcd8ed4d4",
+      "measurementSource": "native-brep",
+      "count": 1,
+      "matches": [
+       {
+        "bodyId": 442,
+        "id": "725f59173",
+        "surfaceType": "Plane",
+        "planar": true,
+        "centerMm": [
+         2039.9999999999995,
+         24.999999999999993,
+         25
+        ],
+        "normal": [
+         0,
+         0,
+         1
+        ],
+        "radiusMm": null,
+        "blendRadiusMm": null,
+        "axisOriginMm": null,
+        "axisDirection": null,
+        "boundsMm": {
+         "min": [
+          2000,
+          0,
+          25.00000037252903
+         ],
+         "max": [
+          2079.9999237060547,
+          50.00000074505806,
+          25.00000037252903
+         ]
+        },
+        "edgeIds": [
+         "725e59332",
+         "725e59410",
+         "725e59364",
+         "725e59392",
+         "725e59374",
+         "725e59398",
+         "725e59384",
+         "725e59404"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "step": 4,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "truncated": true,
+      "bytes": 3892,
+      "count": 8,
+      "ids": [
+       "725e59410",
+       "725e59404",
+       "725e59398",
+       "725e59392",
+       "725e59364",
+       "725e59332",
+       "725e59384",
+       "725e59374"
+      ],
+      "hint": "add return: [...] to this step"
+     }
+    },
+    {
+     "step": 5,
+     "toolName": "plasticity_chamfer",
+     "added": [],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": []
+    },
+    {
+     "step": 6,
+     "toolName": "plasticity_create_box",
+     "added": [
+      443
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 443,
+       "versionId": 727,
+       "type": "Solid",
+       "name": null,
+       "boundsMm": {
+        "min": [
+         2001.9999999999998,
+         2.0000000000000018,
+         2
+        ],
+        "max": [
+         2078.0000000000005,
+         48,
+         27.000000000000004
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 6,
+       "edgeCount": 12,
+       "vertexCount": 8
+      }
+     ]
+    },
+    {
+     "step": 7,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "truncated": true,
+      "bytes": 1586,
+      "count": 4,
+      "ids": [
+       "727e59899",
+       "727e59895",
+       "727e59891",
+       "727e59887"
+      ],
+      "hint": "add return: [...] to this step"
+     }
+    },
+    {
+     "step": 8,
+     "toolName": "plasticity_fillet",
+     "added": [],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": []
+    },
+    {
+     "step": 9,
+     "toolName": "plasticity_boolean",
+     "added": [],
+     "removed": [
+      443
+     ],
+     "regionsAdded": [],
+     "addedBodies": [],
+     "createdEdges": [
+      {
+       "bodyId": 442,
+       "edgeId": "729e60335",
+       "curveType": "Circle",
+       "lengthMm": 1.5707963267948966
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60330",
+       "curveType": "Line",
+       "lengthMm": 44
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60324",
+       "curveType": "Line",
+       "lengthMm": 74.00000000000074
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60318",
+       "curveType": "Circle",
+       "lengthMm": 1.5707963267948966
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60312",
+       "curveType": "Circle",
+       "lengthMm": 1.5707963267948966
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60306",
+       "curveType": "Line",
+       "lengthMm": 74.00000000000074
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60300",
+       "curveType": "Line",
+       "lengthMm": 44
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60295",
+       "curveType": "Circle",
+       "lengthMm": 1.5707963267948966
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60248",
+       "curveType": "Line",
+       "lengthMm": 23
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60242",
+       "curveType": "Line",
+       "lengthMm": 23
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60236",
+       "curveType": "Line",
+       "lengthMm": 23
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60230",
+       "curveType": "Line",
+       "lengthMm": 23
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60180",
+       "curveType": "Line",
+       "lengthMm": 23
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60174",
+       "curveType": "Line",
+       "lengthMm": 23
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60104",
+       "curveType": "Line",
+       "lengthMm": 23
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "729e60098",
+       "curveType": "Line",
+       "lengthMm": 23
+      }
+     ]
+    },
+    {
+     "step": 10,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      444
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 444,
+       "versionId": 730,
+       "type": "Solid",
+       "name": "Cylinder.001",
+       "boundsMm": {
+        "min": [
+         2001.5,
+         1.4999999999999996,
+         1.5
+        ],
+        "max": [
+         2007.5000000000002,
+         7.5,
+         23
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 3,
+       "edgeCount": 2,
+       "vertexCount": 0
+      }
+     ]
+    },
+    {
+     "step": 11,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      445
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 445,
+       "versionId": 731,
+       "type": "Solid",
+       "name": "Cylinder.002",
+       "boundsMm": {
+        "min": [
+         2072.5,
+         1.4999999999999996,
+         1.5
+        ],
+        "max": [
+         2078.5,
+         7.5,
+         23
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 3,
+       "edgeCount": 2,
+       "vertexCount": 0
+      }
+     ]
+    },
+    {
+     "step": 12,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      446
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 446,
+       "versionId": 732,
+       "type": "Solid",
+       "name": "Cylinder.003",
+       "boundsMm": {
+        "min": [
+         2001.5,
+         42.49999999999999,
+         1.5
+        ],
+        "max": [
+         2007.5000000000002,
+         48.5,
+         23
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 3,
+       "edgeCount": 2,
+       "vertexCount": 0
+      }
+     ]
+    },
+    {
+     "step": 13,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      447
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 447,
+       "versionId": 733,
+       "type": "Solid",
+       "name": "Cylinder.004",
+       "boundsMm": {
+        "min": [
+         2072.5,
+         42.49999999999999,
+         1.5
+        ],
+        "max": [
+         2078.5,
+         48.5,
+         23
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 3,
+       "edgeCount": 2,
+       "vertexCount": 0
+      }
+     ]
+    },
+    {
+     "step": 14,
+     "toolName": "plasticity_boolean",
+     "added": [],
+     "removed": [
+      444,
+      445,
+      446,
+      447
+     ],
+     "regionsAdded": [],
+     "addedBodies": [],
+     "createdEdges": [
+      {
+       "bodyId": 442,
+       "edgeId": "734e61041",
+       "curveType": "Circle",
+       "lengthMm": 0.18472956494899506
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61036",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61029",
+       "curveType": "Circle",
+       "lengthMm": 0.18472956494947912
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61024",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60925",
+       "curveType": "Circle",
+       "lengthMm": 0.18472956494948
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60920",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60913",
+       "curveType": "Circle",
+       "lengthMm": 0.18472956494899018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60908",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60810",
+       "curveType": "Circle",
+       "lengthMm": 0.18472956494899018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60805",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60798",
+       "curveType": "Circle",
+       "lengthMm": 0.18472956494947979
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60793",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60695",
+       "curveType": "Circle",
+       "lengthMm": 0.18472956494947912
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60690",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60683",
+       "curveType": "Circle",
+       "lengthMm": 0.18472956494899506
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60678",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60248",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60242",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60236",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60230",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60224",
+       "curveType": "Circle",
+       "lengthMm": 1.2013371968965423
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60218",
+       "curveType": "Circle",
+       "lengthMm": 1.201337196896455
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60212",
+       "curveType": "Circle",
+       "lengthMm": 1.2013371968965494
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60206",
+       "curveType": "Circle",
+       "lengthMm": 1.201337196896449
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60180",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60174",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60104",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60098",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60188",
+       "curveType": "Line",
+       "lengthMm": 37.68337520964578
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60198",
+       "curveType": "Line",
+       "lengthMm": 67.6833752096444
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60090",
+       "curveType": "Line",
+       "lengthMm": 37.68337520964578
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60166",
+       "curveType": "Line",
+       "lengthMm": 67.6833752096444
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61113",
+       "curveType": "Line",
+       "lengthMm": 3.1583123951771097
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61102",
+       "curveType": "Line",
+       "lengthMm": 3.1583123951781644
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61091",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61087",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61084",
+       "curveType": "Circle",
+       "lengthMm": 10.6230536804119
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61069",
+       "curveType": "Circle",
+       "lengthMm": 1.1371844167524117
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60997",
+       "curveType": "Line",
+       "lengthMm": 3.1583123951781644
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60986",
+       "curveType": "Line",
+       "lengthMm": 3.1583123951771097
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60975",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60971",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60968",
+       "curveType": "Circle",
+       "lengthMm": 10.623053680411905
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60953",
+       "curveType": "Circle",
+       "lengthMm": 1.1371844167523397
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60881",
+       "curveType": "Line",
+       "lengthMm": 3.1583123951771097
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60870",
+       "curveType": "Line",
+       "lengthMm": 3.1583123951781644
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60859",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60855",
+       "curveType": "Circle",
+       "lengthMm": 10.623053680411905
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60849",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60838",
+       "curveType": "Circle",
+       "lengthMm": 1.137184416752417
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60766",
+       "curveType": "Line",
+       "lengthMm": 3.1583123951781644
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60755",
+       "curveType": "Line",
+       "lengthMm": 3.1583123951771097
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60744",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60740",
+       "curveType": "Circle",
+       "lengthMm": 10.623053680411902
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60734",
+       "curveType": "Line",
+       "lengthMm": 20.999999999999996
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60723",
+       "curveType": "Circle",
+       "lengthMm": 1.1371844167523344
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60522",
+       "curveType": "Circle",
+       "lengthMm": 1.1371844167522678
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e61060",
+       "curveType": "Circle",
+       "lengthMm": 10.623053680411909
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60552",
+       "curveType": "Circle",
+       "lengthMm": 1.1371844167522671
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60709",
+       "curveType": "Circle",
+       "lengthMm": 10.623053680411909
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60582",
+       "curveType": "Circle",
+       "lengthMm": 1.1371844167522664
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60944",
+       "curveType": "Circle",
+       "lengthMm": 10.62305368041191
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60612",
+       "curveType": "Circle",
+       "lengthMm": 10.62305368041191
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "734e60824",
+       "curveType": "Circle",
+       "lengthMm": 1.1371844167522678
+      }
+     ]
+    },
+    {
+     "step": 15,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      448
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 448,
+       "versionId": 735,
+       "type": "Solid",
+       "name": "Cylinder.001",
+       "boundsMm": {
+        "min": [
+         2003.25,
+         3.2499999999999996,
+         15
+        ],
+        "max": [
+         2005.7500000000005,
+         5.75,
+         23.5
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 3,
+       "edgeCount": 2,
+       "vertexCount": 0
+      }
+     ]
+    },
+    {
+     "step": 16,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      449
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 449,
+       "versionId": 736,
+       "type": "Solid",
+       "name": "Cylinder.002",
+       "boundsMm": {
+        "min": [
+         2074.2499999999995,
+         3.2499999999999996,
+         15
+        ],
+        "max": [
+         2076.75,
+         5.75,
+         23.5
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 3,
+       "edgeCount": 2,
+       "vertexCount": 0
+      }
+     ]
+    },
+    {
+     "step": 17,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      450
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 450,
+       "versionId": 737,
+       "type": "Solid",
+       "name": "Cylinder.003",
+       "boundsMm": {
+        "min": [
+         2003.25,
+         44.25,
+         15
+        ],
+        "max": [
+         2005.7500000000005,
+         46.75,
+         23.5
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 3,
+       "edgeCount": 2,
+       "vertexCount": 0
+      }
+     ]
+    },
+    {
+     "step": 18,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      451
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 451,
+       "versionId": 738,
+       "type": "Solid",
+       "name": "Cylinder.004",
+       "boundsMm": {
+        "min": [
+         2074.2499999999995,
+         44.25,
+         15
+        ],
+        "max": [
+         2076.75,
+         46.75,
+         23.5
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 3,
+       "edgeCount": 2,
+       "vertexCount": 0
+      }
+     ]
+    },
+    {
+     "step": 19,
+     "toolName": "plasticity_boolean",
+     "added": [],
+     "removed": [
+      448,
+      449,
+      450,
+      451
+     ],
+     "regionsAdded": [],
+     "addedBodies": [],
+     "createdEdges": [
+      {
+       "bodyId": 442,
+       "edgeId": "739e61497",
+       "curveType": "Circle",
+       "lengthMm": 7.853981633974484
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "739e61484",
+       "curveType": "Circle",
+       "lengthMm": 7.853981633974484
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "739e61471",
+       "curveType": "Circle",
+       "lengthMm": 7.853981633974484
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "739e61458",
+       "curveType": "Circle",
+       "lengthMm": 7.853981633974484
+      }
+     ]
+    },
+    {
+     "step": 20,
+     "toolName": "plasticity_create_box",
+     "added": [
+      452
+     ],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": [
+      {
+       "id": 452,
+       "versionId": 740,
+       "type": "Solid",
+       "name": null,
+       "boundsMm": {
+        "min": [
+         2033.9999999999998,
+         -0.5,
+         9.5
+        ],
+        "max": [
+         2046.0000000000002,
+         2.5,
+         15.5
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 6,
+       "edgeCount": 12,
+       "vertexCount": 8
+      }
+     ]
+    },
+    {
+     "step": 21,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "truncated": true,
+      "bytes": 1554,
+      "count": 4,
+      "ids": [
+       "740e61565",
+       "740e61555",
+       "740e61520",
+       "740e61532"
+      ],
+      "hint": "add return: [...] to this step"
+     }
+    },
+    {
+     "step": 22,
+     "toolName": "plasticity_fillet",
+     "added": [],
+     "removed": [],
+     "regionsAdded": [],
+     "addedBodies": []
+    },
+    {
+     "step": 23,
+     "toolName": "plasticity_boolean",
+     "added": [],
+     "removed": [
+      452
+     ],
+     "regionsAdded": [],
+     "addedBodies": [],
+     "createdEdges": [
+      {
+       "bodyId": 442,
+       "edgeId": "742e61988",
+       "curveType": "Circle",
+       "lengthMm": 3.141592653589793
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61983",
+       "curveType": "Line",
+       "lengthMm": 8.000000000000895
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61977",
+       "curveType": "Line",
+       "lengthMm": 2
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61971",
+       "curveType": "Circle",
+       "lengthMm": 3.141592653589793
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61965",
+       "curveType": "Circle",
+       "lengthMm": 3.141592653589793
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61959",
+       "curveType": "Line",
+       "lengthMm": 2
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61953",
+       "curveType": "Line",
+       "lengthMm": 8.000000000000895
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61948",
+       "curveType": "Circle",
+       "lengthMm": 3.141592653589793
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e62156",
+       "curveType": "Line",
+       "lengthMm": 8.000000000000895
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e62145",
+       "curveType": "Line",
+       "lengthMm": 2
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e62134",
+       "curveType": "Line",
+       "lengthMm": 8.000000000000895
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e62123",
+       "curveType": "Line",
+       "lengthMm": 2
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e62112",
+       "curveType": "Circle",
+       "lengthMm": 3.141592653589793
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e62081",
+       "curveType": "Circle",
+       "lengthMm": 3.141592653589793
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e62050",
+       "curveType": "Circle",
+       "lengthMm": 3.141592653589793
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e62019",
+       "curveType": "Circle",
+       "lengthMm": 3.141592653589793
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61901",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61895",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61889",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61883",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61833",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61827",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61757",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      },
+      {
+       "bodyId": 442,
+       "edgeId": "742e61751",
+       "curveType": "Line",
+       "lengthMm": 2.0000000000000018
+      }
+     ]
+    },
+    {
+     "step": 24,
+     "toolName": "plasticity_find_faces",
+     "result": {
+      "truncated": true,
+      "bytes": 1740,
+      "count": 4,
+      "ids": [
+       "742f61307",
+       "742f61367",
+       "742f61397",
+       "742f61337"
+      ],
+      "hint": "add return: [...] to this step"
+     }
+    }
+   ]
+  },
+  {
+   "documentToken": "01a1e50b-82f6-7c36-a2c6-9e2e7e4ff8b3",
+   "revision": "r59.0e125e6dfa9ea38d",
+   "measurementSource": "native-brep",
+   "count": 4,
+   "matches": [
+    {
+     "bodyId": 442,
+     "id": "742f61307",
+     "surfaceType": "Cylinder",
+     "planar": false,
+     "centerMm": [
+      2003.25,
+      4.5,
+      19
+     ],
+     "normal": [
+      1,
+      0,
+      0
+     ],
+     "radiusMm": 1.25,
+     "blendRadiusMm": null,
+     "axisOriginMm": [
+      2004.5000000000002,
+      4.5,
+      15
+     ],
+     "axisDirection": [
+      0,
+      0,
+      1
+     ],
+     "boundsMm": {
+      "min": [
+       2003.2498836517334,
+       3.2500000670552254,
+       14.999999664723873
+      ],
+      "max": [
+       2005.7499408721924,
+       5.750000011175871,
+       23.000000044703484
+      ]
+     },
+     "edgeIds": [
+      "742e61458",
+      "742e61308"
+     ]
+    },
+    {
+     "bodyId": 442,
+     "id": "742f61367",
+     "surfaceType": "Cylinder",
+     "planar": false,
+     "centerMm": [
+      2003.25,
+      45.5,
+      19
+     ],
+     "normal": [
+      1,
+      0,
+      0
+     ],
+     "radiusMm": 1.25,
+     "blendRadiusMm": null,
+     "axisOriginMm": [
+      2004.5000000000002,
+      45.5,
+      15
+     ],
+     "axisDirection": [
+      0,
+      0,
+      1
+     ],
+     "boundsMm": {
+      "min": [
+       2003.2498836517334,
+       44.2500002682209,
+       14.999999664723873
+      ],
+      "max": [
+       2005.7499408721924,
+       46.75000160932541,
+       23.000000044703484
+      ]
+     },
+     "edgeIds": [
+      "742e61471",
+      "742e61368"
+     ]
+    },
+    {
+     "bodyId": 442,
+     "id": "742f61397",
+     "surfaceType": "Cylinder",
+     "planar": false,
+     "centerMm": [
+      2074.2499999999995,
+      45.5,
+      19
+     ],
+     "normal": [
+      1,
+      0,
+      0
+     ],
+     "radiusMm": 1.25,
+     "blendRadiusMm": null,
+     "axisOriginMm": [
+      2075.5,
+      45.5,
+      15
+     ],
+     "axisDirection": [
+      0,
+      0,
+      1
+     ],
+     "boundsMm": {
+      "min": [
+       2074.2499828338623,
+       44.2500002682209,
+       14.999999664723873
+      ],
+      "max": [
+       2076.7500400543213,
+       46.75000160932541,
+       23.000000044703484
+      ]
+     },
+     "edgeIds": [
+      "742e61484",
+      "742e61398"
+     ]
+    },
+    {
+     "bodyId": 442,
+     "id": "742f61337",
+     "surfaceType": "Cylinder",
+     "planar": false,
+     "centerMm": [
+      2074.2499999999995,
+      4.5,
+      19
+     ],
+     "normal": [
+      1,
+      0,
+      0
+     ],
+     "radiusMm": 1.25,
+     "blendRadiusMm": null,
+     "axisOriginMm": [
+      2075.5,
+      4.5,
+      15
+     ],
+     "axisDirection": [
+      0,
+      0,
+      1
+     ],
+     "boundsMm": {
+      "min": [
+       2074.2499828338623,
+       3.2500000670552254,
+       14.999999664723873
+      ],
+      "max": [
+       2076.7500400543213,
+       5.750000011175871,
+       23.000000044703484
+      ]
+     },
+     "edgeIds": [
+      "742e61497",
+      "742e61338"
+     ]
+    }
+   ]
+  }
+ ],
+ "restored": {
+  "ok": true,
+  "undoDepth": 0,
+  "bodyCount": 4,
+  "redoDepth": 59
+ },
+ "startUndoDepth": 0,
+ "startBodyCount": 4
+}

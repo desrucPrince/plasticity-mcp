@@ -8,10 +8,12 @@
 // --tier1b runs the same tier-1 parts with the workarounds tier 1b makes unnecessary taken out (no return: ["count"]
 // on reads a later step references, no return: ["status"] on recipes, sortBy "area" for the lid's floor face) and
 // writes part-<name>-tier1b.json. --tag=<t> writes part-<name>-<t>-tier1b.json instead (same-session before/after runs).
+// --suffix=<s> writes part-<name>-tier1b-<s>.json (e.g. --suffix=fix1 for the state-reuse review fix runs); it works
+// with --tier1b a1 and with the plain scale40 scenario. Endpoint and target: see lib.ts (SPEED_CDP_URL, SPEED_TARGET).
 // --describe (with --tier1b) also reads the built body with plasticity_describe_body and plasticity_body_info after the
 // scenario and writes describe-check-<name>.json (reply bytes and the describe reply itself).
 // Each scenario restores the document to the starting undo depth and body ids and asserts it.
-import { bytes, openInProcess, Recorder, restore, save, status } from "./lib.ts";
+import { bytes, ENDPOINT, openInProcess, Recorder, restore, save, status } from "./lib.ts";
 
 type V3 = [number, number, number];
 type Step = { toolName: string; arguments: Record<string, unknown> };
@@ -452,7 +454,9 @@ const T1 = process.argv.includes("--tier1") || T1B;
 const TAG = process.argv.find((arg) => arg.startsWith("--tag="))?.slice("--tag=".length);
 // A tagged run is tier-1b evidence (e.g. --tag=before1 from a pre-change tree): part-<name>-<tag>-tier1b.json.
 const DESCRIBE = process.argv.includes("--describe");
-const outName = (base: string, name: string) => (DESCRIBE ? `describe-check-${name}.json` : TAG ? `part-${name}-${TAG}-tier1b.json` : `${base}.json`);
+const SUFFIX = process.argv.find((arg) => arg.startsWith("--suffix="))?.slice("--suffix=".length);
+if (SUFFIX !== undefined && !/^[\w-]+$/.test(SUFFIX)) throw new Error("--suffix takes letters, digits, _ and -");
+const outName = (base: string, name: string) => (DESCRIBE ? `describe-check-${name}.json` : SUFFIX ? `part-${name}-tier1b-${SUFFIX}.json` : TAG ? `part-${name}-${TAG}-tier1b.json` : `${base}.json`);
 const names = process.argv.slice(2).filter((n) => !n.startsWith("--"));
 if (names[0] === "dump-steps") {
   save("steps-a1.json", enclosureCompact(A).steps);
@@ -496,7 +500,7 @@ try {
       console.error(name, "describe", JSON.stringify({ describeBytes: describeReply.bytes, bodyInfoBytes: infoReply.bytes, slim: slim.bytes }));
     }
     const restored = await restore(h, start);
-    const record = { scenario: name, ...(T1 ? { tier: T1B ? "1b" : 1 } : {}), ...(TAG ? { tag: TAG } : {}), measuredAt: new Date().toISOString(), scenarioMs, totals: rec.totals(), detail, error, calls: rec.calls, responses: rec.results, ...(described ? { described } : {}), restored, startUndoDepth: start.undoDepth, startBodyCount: start.bodies.length };
+    const record = { scenario: name, ...(T1 ? { tier: T1B ? "1b" : 1 } : {}), ...(TAG ? { tag: TAG } : {}), ...(SUFFIX ? { suffix: SUFFIX, endpoint: ENDPOINT, stateReuse: process.env.SPEED_NO_REUSE !== "1" } : {}), measuredAt: new Date().toISOString(), scenarioMs, totals: rec.totals(), detail, error, calls: rec.calls, responses: rec.results, ...(described ? { described } : {}), restored, startUndoDepth: start.undoDepth, startBodyCount: start.bodies.length };
     save(outName(T1B ? `part-${name}-tier1b` : T1 ? `part-${name}-tier1` : `part-${name}`, name), record);
     summary[name] = { totals: record.totals, error, restored, checks: (detail as { checks?: unknown })?.checks };
     console.error(name, JSON.stringify(summary[name]));

@@ -1,5 +1,8 @@
 // Shared harness for the 2026-11 speed audit. Measurement only: never edits src/.
-// Every run is pinned to the isolated Plasticity on 127.0.0.1:57147 (target EDEF123A...).
+// Every run is pinned to one isolated Plasticity: 127.0.0.1:57147 (target EDEF123A...) by default, or the instance
+// named by SPEED_CDP_URL and SPEED_TARGET (both required together), e.g.
+//   SPEED_CDP_URL=http://127.0.0.1:58932 SPEED_TARGET=5F15375426D6021495B912B6ABDAE45F node discovery/speed-2026-11/parts.ts ...
+// SPEED_NO_REUSE=1 turns batch state reuse off in this process (a same-instance no-reuse baseline); src/ is untouched.
 // Two ways in:
 //  - openInProcess(): the real compact server in this process over an in-memory MCP transport,
 //    with a session subclass that logs every native state read / mutation / read and the
@@ -9,8 +12,15 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 
-export const ENDPOINT = "http://127.0.0.1:57147";
-export const TARGET = "EDEF123AC89B15D2277092367F48F3AC";
+if ((process.env.SPEED_CDP_URL === undefined) !== (process.env.SPEED_TARGET === undefined)) {
+  throw new Error("refusing: set SPEED_CDP_URL and SPEED_TARGET together");
+}
+if (process.env.SPEED_CDP_URL !== undefined && !/^http:\/\/127\.0\.0\.1:\d+$/.test(process.env.SPEED_CDP_URL)) {
+  throw new Error("refusing: SPEED_CDP_URL must be http://127.0.0.1:<port>");
+}
+export const ENDPOINT = process.env.SPEED_CDP_URL ?? "http://127.0.0.1:57147";
+export const TARGET = process.env.SPEED_TARGET ?? "EDEF123AC89B15D2277092367F48F3AC";
+const NO_REUSE = process.env.SPEED_NO_REUSE === "1";
 export const OUT_DIR = new URL(".", import.meta.url).pathname;
 // Journal writes go to scratch, never into the repo (the default root is <cwd>/.plasticity-mcp).
 export const HISTORY_ROOT = process.env.SPEED_HISTORY_ROOT
@@ -80,6 +90,7 @@ export async function openInProcess() {
     override get() {
       const ops = super.get();
       patchRuntime((ops as unknown as { runtime: Record<string, unknown> }).runtime);
+      if (NO_REUSE) (ops as unknown as { beginStateReuse(): void }).beginStateReuse = () => {};
       return ops;
     }
     override async ensureConnected() {

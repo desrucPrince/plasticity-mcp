@@ -52,6 +52,8 @@ export async function measureFaceProperties(
   faces: FaceReference[],
   revision: string,
   sessionId: string,
+  // Inside plasticity_batch the operations layer passes its validated (probed) state read instead of two full reads.
+  readState: () => Promise<RuntimeState> = () => runtime.getState(),
 ): Promise<FacePropertiesEvidence> {
   if (!sessionId) throw new Error("MCP session ID is required");
   if (faces.length === 0) throw new Error("At least one face is required");
@@ -59,11 +61,11 @@ export async function measureFaceProperties(
   const keys = faces.map(({ bodyId, faceId }) => `${bodyId}:${faceId}`);
   if (new Set(keys).size !== keys.length) throw new Error("Face references must be unique");
 
-  const before = await runtime.getState();
-  if (before.revision !== revision) throw new Error(`Stale revision: expected ${before.revision}, received ${revision}`);
+  const before = await readState();
+  if (before.revision !== revision) throw new Error(`Stale reference: expected revision ${revision}, current revision is ${before.revision}`);
   const current = validateCurrentFaces(before, faces);
   const native = await collectNativeProperties(runtime, faces);
-  const after = await runtime.getState();
+  const after = await readState();
   if (!samePersistentState(before, after)) throw new Error("Plasticity document changed during exact face-property measurement");
   if (native.length !== faces.length) throw new Error("Native face-property result count does not match the request");
 

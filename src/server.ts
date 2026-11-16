@@ -1991,7 +1991,10 @@ const BATCH_RESULT_REFERENCE = /^\$(\d+)\.result((?:\.[A-Za-z_$][\w$]*|\[\d+\]|\
 type BatchListKey = "added" | "addedSolids" | "addedSheets" | "addedWires" | "removed" | "regionsAdded";
 type BatchStepRecord = Record<BatchListKey, ReadonlyArray<number | string>> & { result?: unknown };
 
-// Walks ".key", "[i]" and "[*]" (map over an array) through a read-only step's result.
+// Walks ".key", "[i]" and "[*]" (map over an array) through a read-only step's result. A key must be an own
+// enumerable property of the result: prototype keys (__proto__, constructor, prototype, toString, an array's length)
+// never resolve, so a path can only read data the tool returned.
+const BLOCKED_RESULT_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 function readResultPath(value: unknown, path: string, reference: string): unknown {
   const token = /^(?:\.([A-Za-z_$][\w$]*)|\[(\d+)\]|\[(\*)\])/.exec(path);
   if (!token) return value;
@@ -2000,9 +2003,11 @@ function readResultPath(value: unknown, path: string, reference: string): unknow
     if (!Array.isArray(value)) throw new Error(`${reference}: [*] needs an array`);
     return value.map((item) => readResultPath(item, rest, reference));
   }
+  if (token[1] !== undefined && BLOCKED_RESULT_KEYS.has(token[1])) throw new Error(`${reference}: "${token[1]}" is not a result key`);
+  const own = (container: unknown, key: string) => container !== null && typeof container === "object" && Object.prototype.propertyIsEnumerable.call(container, key);
   const next = token[1] !== undefined
-    ? (value && typeof value === "object" ? (value as Record<string, unknown>)[token[1]] : undefined)
-    : (Array.isArray(value) ? value[Number(token[2])] : undefined);
+    ? (own(value, token[1]) ? (value as Record<string, unknown>)[token[1]] : undefined)
+    : (Array.isArray(value) && own(value, token[2]!) ? value[Number(token[2])] : undefined);
   if (next === undefined) throw new Error(`${reference} does not resolve: missing ${token[0]}`);
   return readResultPath(next, rest, reference);
 }
@@ -2058,7 +2063,13 @@ function projectBatchResult(result: unknown, paths: ReadonlyArray<string>): Reco
   const projection: Record<string, unknown> = {};
   for (const path of paths) {
     const normalized = /^[A-Za-z_$]/.test(path) ? `.${path}` : path;
-    projection[path] = readResultPath(result, normalized, `return path "${path}"`);
+    try {
+      projection[path] = readResultPath(result, normalized, `return path "${path}"`);
+    } catch (error) {
+      const keys = result && typeof result === "object" && !Array.isArray(result) ? Object.keys(result) : [];
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${message}; available top-level keys: ${keys.length > 0 ? keys.join(", ") : "(none)"}`);
+    }
   }
   return projection;
 }
@@ -2082,6 +2093,8 @@ type BatchReplyStep = {
   addedBodies: Array<ReturnType<typeof compactChangedBody>>;
   createdEdges?: unknown;
   result?: unknown;
+  // A return path that did not resolve on a step that changed the document: the step stays completed.
+  returnError?: string;
 };
 
 // "standard" is the full per-step reply. "lean" drops what the caller never reads: the createdEdges echo
@@ -2106,6 +2119,7 @@ function renderBatchSteps(steps: ReadonlyArray<BatchReplyStep>, detail: "lean" |
           addedBodies: entry.addedBodies,
           ...(entry.createdEdges !== undefined ? { createdEdges: entry.createdEdges } : {}),
           ...(entry.result !== undefined ? { result: entry.result } : {}),
+          ...(entry.returnError !== undefined ? { returnError: entry.returnError } : {}),
         };
     }
     if (entry.readOnly) return { step: entry.step, toolName: entry.toolName, result: entry.result };
@@ -2119,6 +2133,7 @@ function renderBatchSteps(steps: ReadonlyArray<BatchReplyStep>, detail: "lean" |
       ...(kept.length > 0 ? { addedBodies: kept } : {}),
       ...(Array.isArray(entry.createdEdges) ? { createdEdgeCount: entry.createdEdges.length } : {}),
       ...(entry.result !== undefined ? { result: entry.result } : {}),
+      ...(entry.returnError !== undefined ? { returnError: entry.returnError } : {}),
     };
   });
 }
@@ -2135,15 +2150,21 @@ function leanBody(body: RuntimeState["bodies"][number]) {
   };
 }
 
-// Rounds every number in a reply to the given decimals. It copies, so stored results keep full precision.
-function roundReplyNumbers(value: unknown, decimals: number): unknown {
+// Rounds length values in a reply to the given decimals: numbers under a key ending in Mm or Mm2 (lengthMm,
+// radiusMm, areaMm2, a return key like "matches[*].lengthMm"), including everything nested under it (boundsMm.min,
+// positionMm[0]). Normals, tangents, axes, angles, quaternions, counts and ids keep full precision. It copies, so
+// stored results keep full precision.
+const LENGTH_KEY = /Mm2?$/;
+function roundReplyNumbers(value: unknown, decimals: number, lengthLike = false): unknown {
   if (typeof value === "number") {
-    if (!Number.isFinite(value)) return value;
+    if (!lengthLike || !Number.isFinite(value)) return value;
     const factor = 10 ** decimals;
     return Math.round(value * factor) / factor + 0;
   }
-  if (Array.isArray(value)) return value.map((item) => roundReplyNumbers(item, decimals));
-  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, roundReplyNumbers(item, decimals)]));
+  if (Array.isArray(value)) return value.map((item) => roundReplyNumbers(item, decimals, lengthLike));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, roundReplyNumbers(item, decimals, lengthLike || LENGTH_KEY.test(key))]));
+  }
   return value;
 }
 
@@ -2172,7 +2193,13 @@ function referencedReadSummary(value: unknown): unknown {
   const ids = matches && matches.length <= LEAN_REFERENCED_READ_IDS && matches.every((match) => match?.id !== undefined)
     ? matches.map((match) => match.id)
     : undefined;
-  return { count, ...(ids ? { ids } : {}) };
+  return { count, ...(ids ? { ids } : {}), ...leanOmitted(record!, ["count"]) };
+}
+
+// The top-level keys a lean reply left out, so an agent knows a step's return list can fetch them.
+function leanOmitted(record: Record<string, unknown>, kept: ReadonlyArray<string>): { omitted?: string[] } {
+  const omitted = Object.keys(record).filter((key) => !kept.includes(key));
+  return omitted.length > 0 ? { omitted } : {};
 }
 
 // A recipe's reply carries its own history journal (each native step with revisions, 1-2 KB). Lean mode keeps only
@@ -2180,6 +2207,9 @@ function referencedReadSummary(value: unknown): unknown {
 function isRecipeResult(value: unknown): value is { recipe: string; status: unknown } {
   return Boolean(value && typeof value === "object" && !Array.isArray(value)
     && typeof (value as { recipe?: unknown }).recipe === "string" && "status" in value);
+}
+function leanRecipeSummary(value: { recipe: string; status: unknown } & Record<string, unknown>) {
+  return { status: value.status, ...leanOmitted(value, ["status"]) };
 }
 
 // Sorting and limiting for plasticity_find_faces / plasticity_find_edges. Ties keep the original order.
@@ -2719,7 +2749,7 @@ function createServerWithCatalog(
   }).strict();
   rawRegisterTool("plasticity_batch", {
     title: "Run several Plasticity operations in one call",
-    description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all); addedSolids, addedSheets and addedWires filter by type (create_cone adds a Solid and its profile Wire); likewise removed and regionsAdded. Read any step's output with \"$<step>.result.path\" using .key, [i] and [*], e.g. \"$3.result.matches[*].id\" after plasticity_find_edges or \"$2.result.createdEdges[*].edgeId\" after plasticity_boolean. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many. The reply lists what changed (new bodies with bounds); verbose=true adds the full scene summary. A step may carry return: [paths] (e.g. [\"matches[*].id\", \"matches[*].axisOriginMm\"]) to get exactly those values back; without it a read result over 1,500 bytes is cut to ids with truncated: true. detail: \"lean\" leaves out the createdEdges echo (createdEdgeCount stays), bodies a later step consumed and empty lists, a recipe's step journal (its status stays), and the matches of a read a later step references (count, plus ids up to 8, stay), and ends with one summary of what survives. roundMm rounds numbers in the reply only.",
+    description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all); addedSolids, addedSheets and addedWires filter by type (create_cone adds a Solid and its profile Wire); likewise removed and regionsAdded. Read any step's output with \"$<step>.result.path\" using .key, [i] and [*], e.g. \"$3.result.matches[*].id\" after plasticity_find_edges or \"$2.result.createdEdges[*].edgeId\" after plasticity_boolean. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many. The reply lists what changed (new bodies with bounds); verbose=true adds the full scene summary. A step may carry return: [paths] (e.g. [\"matches[*].id\", \"matches[*].axisOriginMm\"]) to get exactly those values back; without it a read result over 1,500 bytes is cut to ids with truncated: true. detail: \"lean\" leaves out the createdEdges echo (createdEdgeCount stays), bodies a later step consumed and empty lists, a recipe's step journal (its status stays), and the matches of a read a later step references (count, plus ids up to 8, stay); omitted lists the keys it left out, which return can fetch. It ends with one summary of what survives. A return path that does not resolve fails a read step, but a step that changed the document stays completed and carries returnError. roundMm rounds length values (keys ending in Mm or Mm2) in the reply only.",
     inputSchema: batchSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, async (rawInput, extra) => result(await exclusive(async () => await batchRunning.run(true, async () => {
@@ -2785,13 +2815,25 @@ function createServerWithCatalog(
           result: stepResult,
         });
         // What the caller sees: the asked-for projection, else the read result (or the tool's own fields), never cut silently.
+        const unprojected = () => {
+          if (readOnly) return lean && referencedLater.has(index) ? referencedReadSummary(stepResult) : summarizeBatchResult(stepResult);
+          const own = toolSpecificFields(stepResult, after);
+          return own === undefined ? undefined : lean && isRecipeResult(own) ? leanRecipeSummary(own) : summarizeBatchResult(own);
+        };
         let shown: unknown;
+        let returnError: string | undefined;
         try {
-          if (step.return) shown = projectBatchResult(stepResult, step.return);
-          else if (readOnly) shown = lean && referencedLater.has(index) ? referencedReadSummary(stepResult) : summarizeBatchResult(stepResult);
+          if (!step.return) shown = unprojected();
           else {
-            const own = toolSpecificFields(stepResult, after);
-            shown = own === undefined ? undefined : lean && isRecipeResult(own) ? { status: own.status } : summarizeBatchResult(own);
+            try {
+              shown = projectBatchResult(stepResult, step.return);
+            } catch (error) {
+              // A read step applied nothing, so a bad path may fail it. A step that changed the document is done and
+              // journaled: failing it now would invite a retry that duplicates the geometry. It stays completed.
+              if (readOnly) throw error;
+              returnError = error instanceof Error ? error.message : String(error);
+              shown = unprojected();
+            }
           }
         } catch (error) {
           throw new Error(`step ${index} (${step.toolName}): ${error instanceof Error ? error.message : String(error)}`);
@@ -2806,6 +2848,7 @@ function createServerWithCatalog(
           addedBodies: change.added.map(compactChangedBody),
           ...(stepResult && typeof stepResult === "object" && "createdEdges" in stepResult ? { createdEdges: (stepResult as { createdEdges: unknown }).createdEdges } : {}),
           ...(shown !== undefined || readOnly ? { result: shown } : {}),
+          ...(returnError !== undefined ? { returnError } : {}),
         });
         current = after;
       } catch (error) {
@@ -2826,7 +2869,7 @@ function createServerWithCatalog(
     reuse.beginStateReuseStep?.(); // the end state is probed like a step's first read
     const end = await session.get().state();
     const undoSteps = end.undoDepth - start.undoDepth;
-    if (input.verbose) return { ...compactMutationResult<Record<string, unknown>>(end, diffScenes(start, end)), steps: renderSteps(), undoSteps };
+    if (input.verbose) return render({ ...compactMutationResult<Record<string, unknown>>(end, diffScenes(start, end)), steps: renderBatchSteps(completed, input.detail), undoSteps });
     // Default reply: what changed, not the whole scene. Use plasticity_status for the rest.
     const change = diffScenes(start, end);
     if (input.detail === "lean") {
