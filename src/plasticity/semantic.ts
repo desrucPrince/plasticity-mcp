@@ -303,7 +303,11 @@ function distance(left: Vector3, right: Vector3): number {
 // blend radii are, without per-face topology. Pure: no native call.
 type DescribedBody = RuntimeState["bodies"][number];
 const DESCRIBE_DECIMALS = 4;
-const DESCRIBE_MAX_BYTES = 4_096;
+export const DESCRIBE_MAX_BYTES = 4_096; // one body
+export const DESCRIBE_MULTI_BYTES = 12_000; // ids, or no id with at most 8 bodies: every body gets an equal share
+export const DESCRIBE_LIST_BYTES = 6_000; // the list of more than 8 bodies
+export const DESCRIBE_LIST_ENTRIES = 40;
+export const DESCRIBE_LIST_NAME = 40;
 const DESCRIBE_MAX_OFFSETS = 12;
 const DESCRIBE_MAX_AXES = 16;
 const AXIS_NAMES = ["x", "y", "z"] as const;
@@ -339,8 +343,8 @@ type CylinderGroup = {
   radiusMm: number; rep: number; axis: string | number[]; kind?: "hole" | "boss" | "arc"; sweepDeg?: number; faces: number;
   // Distinct axes (within 0.001 mm across the axis). For an axis-aligned one, lo and hi are the faces' extent along it.
   points: AxisPoint[]; grid: Map<string, number[]>; across: number[][];
-  // Full-turn faces only (two circle edges): their axial extent, and for holes whether a floor closes one end.
-  closed: number; extents: Array<[number, number] | undefined>; floored: boolean[];
+  // Full-turn faces only: their axial extent, and for holes what the read model proves about the ends (see holeVerdict).
+  closed: number; extents: Array<[number, number] | undefined>; verdicts: Array<"through" | "blind" | undefined>;
 };
 type DescribedEdge = DescribedBody["edges"][number];
 
@@ -365,17 +369,16 @@ export interface BodyDescription {
   vertexCount: number;
   // xPos, xNeg, yPos, yNeg, zPos, zNeg and slanted each hold a list of plane entries; `more` maps a direction to the number of offsets left out.
   planes: { [direction: string]: PlaneEntry[] | Record<string, number> | undefined; more?: Record<string, number> };
-  // count is the number of distinct axes; faces appears only when it differs. kind is hole or boss for full-turn faces (two circle edges)
-  // and arc for a part turn, with sweepDeg when the circle edges give it. through and extentMm appear only when every face of the group
-  // is a full-turn face and they agree.
+  // count is the number of distinct axes; faces appears only when it differs. kind is hole or boss for full-turn faces (the circle edges of
+  // one end sweep 360 degrees) and arc for a part turn, with sweepDeg when the circle edges give it. extentMm appears only when every face
+  // of the group is a full-turn face and they agree. through appears only for holes whose faces all agree and the read model proves it:
+  // true when the bore reaches the body bounds at both ends, false when a flat disc face closes it at one end; otherwise it is left out.
   cylinders: Array<{ radiusMm: number; axis: string | number[]; kind?: "hole" | "boss" | "arc"; sweepDeg?: number; count: number; faces?: number; axisPointsMm: number[][]; more?: number; through?: boolean; extentMm?: number[] }>;
   cylindersMore?: number; // groups left out (the groups with the fewest faces go first)
   otherSurfaces: Record<string, { count: number; halfAngleDeg?: number[]; more?: number }>;
   otherSurfacesMore?: number;
   blendRadii: Record<string, number>; // radius mm -> face count
   blendRadiiMore?: number;
-  // An open-top pocket read from the planes: the widest inward-facing wall pair on x and on y, and the floor z. Left out when not clear.
-  cavity?: { xMm: number[]; yMm: number[]; floorZMm: number };
   planesMore?: number; // every plane offset, when the planes section itself was left out
   truncated?: true;
 }
@@ -400,7 +403,50 @@ function circleSweepDeg(edge: DescribedEdge): number | undefined {
   return Math.round((onShortSide || short > 179.95 ? short : 360 - short) * 10) / 10;
 }
 
-export function describeBody(body: DescribedBody, revision: string): BodyDescription {
+const FULL_TURN_DEG = 359.9;
+
+// The sweep of the circle edges at each end of a cylinder face, about its axis: edges whose centres sit at the same position along the axis
+// (within 0.001 mm) are one end, and their sweeps add up. Undefined when any circle edge has no geometry to measure.
+function circleEndSweeps(edges: DescribedEdge[], direction: readonly number[]): number[] | undefined {
+  if (edges.length === 0) return undefined;
+  const ends = new Map<number, number>();
+  for (const edge of edges) {
+    const sweep = circleSweepDeg(edge);
+    if (sweep === undefined || !edge.circleGeometry) return undefined;
+    const end = Math.round(dot3(edge.circleGeometry.centerMm, direction) / AXIS_POINT_TOLERANCE);
+    ends.set(end, (ends.get(end) ?? 0) + sweep);
+  }
+  return [...ends.values()];
+}
+
+// What the read model proves about a full-turn hole face on an axis-aligned axis. "through": the face spans the body bounds along the
+// axis, within 0.001 mm at both ends. "blind": a flat face closes the bore at one end: a plane normal to the axis, at that end of the
+// face, whose edges all belong to this face (no inner loop, so no vent), and whose bounds hold the axis point and stay within the bore
+// radius. Anything else (filleted, chamfered or stepped floor, a bore that opens into a cavity) proves neither: undefined.
+function holeVerdict(body: DescribedBody, face: DescribedBody["faces"][number], circleEdges: DescribedEdge[], point: readonly number[], axisIndex: number, faceById: Map<string, DescribedBody["faces"][number]>): "through" | "blind" | undefined {
+  const bounds = body.boundsMm;
+  if (!bounds || face.radiusMm === null) return undefined;
+  const lo = face.boundsMm.min[axisIndex]!;
+  const hi = face.boundsMm.max[axisIndex]!;
+  if (lo <= bounds.min[axisIndex]! + AXIS_POINT_TOLERANCE && hi >= bounds.max[axisIndex]! - AXIS_POINT_TOLERANCE) return "through";
+  const own = new Set(face.edgeIds);
+  const across = [0, 1, 2].filter((index) => index !== axisIndex);
+  for (const edge of circleEdges) {
+    for (const otherId of edge.faceIds) {
+      const other = otherId === face.id ? undefined : faceById.get(otherId);
+      if (!other || !(other.planar || other.surfaceType === "Plane") || Math.abs(other.normal[axisIndex]!) < AXIS_ALIGNED) continue;
+      const level = other.centerMm[axisIndex]!;
+      if (Math.abs(level - lo) > AXIS_POINT_TOLERANCE && Math.abs(level - hi) > AXIS_POINT_TOLERANCE) continue;
+      if (!other.edgeIds.every((edgeId) => own.has(edgeId))) continue;
+      const holds = across.every((index) => other.boundsMm.min[index]! <= point[index]! + AXIS_POINT_TOLERANCE && other.boundsMm.max[index]! >= point[index]! - AXIS_POINT_TOLERANCE);
+      const within = across.every((index) => other.boundsMm.min[index]! >= point[index]! - face.radiusMm! - AXIS_POINT_TOLERANCE && other.boundsMm.max[index]! <= point[index]! + face.radiusMm! + AXIS_POINT_TOLERANCE);
+      if (holds && within) return "blind";
+    }
+  }
+  return undefined;
+}
+
+export function describeBody(body: DescribedBody, revision: string, maxBytes: number = DESCRIBE_MAX_BYTES): BodyDescription {
   const planes = new Map<string, { slanted?: number[]; offsets: Map<number, PlaneOffset> }>();
   const cylinderGroups: CylinderGroup[] = [];
   // Groups of one axis, kind and sweep, found by their first radius: radii within 0.0001 mm of it join, whatever bucket they fall in.
@@ -444,14 +490,15 @@ export function describeBody(body: DescribedBody, revision: string): BodyDescrip
       const radial = [0, 1, 2].map((index) => face.centerMm[index]! - point[index]!);
       const radialLength = Math.hypot(radial[0]!, radial[1]!, radial[2]!);
       const facing = radialLength > 1e-9 ? dot3(face.normal, radial) / radialLength : 0;
-      // A full turn has two circle edges (or one closed circle). One circle edge and no more is a part turn: an arc, never a hole or boss.
-      // With no circle edge at all the faces cannot say, so the facing decides, as before.
+      // A face is a full turn when the circle edges at one end sweep 360 degrees: one closed circle, or seam-split circles that sum to 360.
+      // Any other circle edges make it a part turn (an arc, never a hole or boss). With no circle edge at all the faces cannot say, so the
+      // facing decides. Where a circle edge carries no geometry its sweep is unknown: then two circle edges count as a full turn, as before.
       const circleEdges = face.edgeIds.map((edgeId) => edgeById.get(edgeId)).filter((edge): edge is DescribedEdge => edge?.circle === true);
-      const fullTurn = circleEdges.length >= 2 || circleEdges.some((edge) => (circleSweepDeg(edge) ?? 0) >= 360);
+      const ends = circleEndSweeps(circleEdges, direction);
+      const fullTurn = ends ? ends.some((sweep) => sweep >= FULL_TURN_DEG) : circleEdges.length >= 2 || circleEdges.some((edge) => (circleSweepDeg(edge) ?? 0) >= 360);
       const partial = circleEdges.length >= 1 && !fullTurn;
       const kind = partial ? "arc" as const : facing > 0.5 ? "boss" as const : facing < -0.5 ? "hole" as const : undefined;
-      const sweeps = partial ? circleEdges.map(circleSweepDeg).filter((value): value is number => value !== undefined) : [];
-      const sweepDeg = sweeps.length > 0 ? Math.max(...sweeps) : undefined;
+      const sweepDeg = partial && ends ? Math.round(Math.max(...ends) * 10) / 10 : undefined;
       const principal = principalKey(direction);
       const axis: string | number[] = principal ? principal.slice(0, 1) : round4Vector(direction);
       const subKey = `${Array.isArray(axis) ? axis.join(",") : axis}|${kind ?? ""}|${kind === "arc" ? (sweepDeg === undefined ? "?" : Math.round(sweepDeg)) : ""}`;
@@ -463,24 +510,16 @@ export function describeBody(body: DescribedBody, revision: string): BodyDescrip
         group = buckets.get(neighbour)?.find((candidate) => Math.abs(candidate.rep - face.radiusMm!) <= RADIUS_TOLERANCE + 1e-9);
       }
       if (!group) {
-        group = { radiusMm: round4(face.radiusMm), rep: face.radiusMm, axis, ...(kind ? { kind } : {}), ...(kind === "arc" && sweepDeg !== undefined ? { sweepDeg } : {}), faces: 0, points: [], grid: new Map(), across: [], closed: 0, extents: [], floored: [] };
+        group = { radiusMm: round4(face.radiusMm), rep: face.radiusMm, axis, ...(kind ? { kind } : {}), ...(kind === "arc" && sweepDeg !== undefined ? { sweepDeg } : {}), faces: 0, points: [], grid: new Map(), across: [], closed: 0, extents: [], verdicts: [] };
         buckets.set(bucket, [...(buckets.get(bucket) ?? []), group]);
         cylinderGroups.push(group);
       }
       group.faces += 1;
-      if (circleEdges.length >= 2) {
+      if (fullTurn && circleEdges.length >= 1) {
         group.closed += 1;
         const axisIndex = [0, 1, 2].find((candidate) => Math.abs(direction[candidate]!) >= AXIS_ALIGNED);
         group.extents.push(axisIndex === undefined ? undefined : [round4(face.boundsMm.min[axisIndex]!), round4(face.boundsMm.max[axisIndex]!)]);
-        if (kind === "hole") {
-          // A flat floor (one edge) or an apex closes a blind hole; anything else at both ends leaves it through.
-          group.floored.push(circleEdges.some((edge) => edge.faceIds.some((otherId) => {
-            const other = otherId === face.id ? undefined : faceById.get(otherId);
-            if (!other) return false;
-            if (other.planar) return other.edgeIds.length === 1;
-            return (other.surfaceType === "Cone" || other.surfaceType === "Sphere") && other.edgeIds.filter((edgeId) => edgeById.get(edgeId)?.circle === true).length === 1;
-          })));
-        }
+        if (kind === "hole") group.verdicts.push(axisIndex === undefined ? undefined : holeVerdict(body, face, circleEdges, point, axisIndex, faceById));
       }
       // Distinct axes by their position across the axis (within 0.001 mm, found through a grid so the cost stays linear), not along it.
       const alongPoint = dot3(point, direction);
@@ -548,7 +587,8 @@ export function describeBody(body: DescribedBody, revision: string): BodyDescrip
       } as BodyDescription["cylinders"][number];
       // Reported only when every face of the group is a full-turn face and they all agree.
       if (group.closed === group.faces) {
-        if (group.kind === "hole" && group.floored.length === group.closed && group.floored.every((value) => value === group.floored[0])) described.through = !group.floored[0];
+        const verdict = group.verdicts[0];
+        if (group.kind === "hole" && verdict !== undefined && group.verdicts.length === group.closed && group.verdicts.every((value) => value === verdict)) described.through = verdict === "through";
         const firstExtent = group.extents[0];
         if (firstExtent && group.extents.length === group.closed && group.extents.every((extent) => extent && Math.abs(extent[0] - firstExtent[0]) < 1e-3 && Math.abs(extent[1] - firstExtent[1]) < 1e-3)) described.extentMm = [...firstExtent];
       }
@@ -578,8 +618,7 @@ export function describeBody(body: DescribedBody, revision: string): BodyDescrip
   const blendEntries = (allBlends.length > DESCRIBE_MAX_BLENDS ? [...allBlends].sort((left, right) => right[1] - left[1] || left[0] - right[0]).slice(0, DESCRIBE_MAX_BLENDS) : allBlends)
     .sort((left, right) => left[0] - right[0]);
   const blendMoreAtStart = allBlends.length - blendEntries.length;
-  const cavity = body.boundsMm ? cavityFromPlanes(planes, body.boundsMm) : undefined;
-
+  
   // Caps: at most 12 offsets per direction and 16 axis points per group, each with a `more` count.
   const planeMore = new Map<string, number>();
   const cutOffsets = (direction: string, keep: number): number => {
@@ -613,7 +652,6 @@ export function describeBody(body: DescribedBody, revision: string): BodyDescrip
       otherSurfaces: otherMore !== undefined ? {} : otherSurfaces,
       blendRadii: leftOut.blendRadii !== undefined ? {} : Object.fromEntries(blendEntries.slice(0, keptBlends).map(([radius, count]) => [String(radius), count])),
       ...(blendMore > 0 ? { blendRadiiMore: blendMore } : {}),
-      ...(cavity ? { cavity } : {}),
       ...(otherMore !== undefined ? { otherSurfacesMore: otherMore } : {}),
       ...(planesMore !== undefined ? { planesMore } : {}),
     };
@@ -624,11 +662,11 @@ export function describeBody(body: DescribedBody, revision: string): BodyDescrip
   // Hard cap 4 KB. One serialisation tells the size; after that item sizes are subtracted, so the work stays linear.
   // The tail of the longest list goes first (the groups with the fewest faces last of all), keeping every `more` count true.
   let total = sizeOf(assemble());
-  if (total > DESCRIBE_MAX_BYTES) {
+  if (total > maxBytes) {
     let moreKeyCost = (planeMore.size > 0 ? 0 : 10) + (blendMoreAtStart > 0 ? 0 : 24) + (cylindersMore > 0 ? 0 : 24) + 17;
     total += moreKeyCost; // reserved once for the keys and flag that trimming may add
     let guard = 0;
-    while (total > DESCRIBE_MAX_BYTES && guard++ < 100_000) {
+    while (total > maxBytes && guard++ < 100_000) {
       const lists: Array<{ length: number; drop: () => number }> = [];
       for (const [direction, list] of directions) {
         if (list.length > 1) lists.push({ length: list.length, drop: () => cutOffsets(direction, list.length - 1) });
@@ -665,7 +703,7 @@ export function describeBody(body: DescribedBody, revision: string): BodyDescrip
     ];
     let result = assemble();
     for (const [section, count] of sections) {
-      if (sizeOf(result) <= DESCRIBE_MAX_BYTES) break;
+      if (sizeOf(result) <= maxBytes) break;
       leftOut = { ...leftOut, [section]: count() };
       result = assemble();
     }
@@ -674,33 +712,42 @@ export function describeBody(body: DescribedBody, revision: string): BodyDescrip
   return assemble();
 }
 
-// An open-top pocket from the planes alone. The walls are the widest pair of inward-facing planes on x and on y
-// (xPos left of xNeg, both strictly inside the bounds, ranked by the smaller face); the floor is the widest zPos plane
-// strictly inside the bounds, and it must cover at least half of the walls' footprint. Anything less clear is left out.
-function cavityFromPlanes(planes: Map<string, { offsets: Map<number, PlaneOffset> }>, bounds: { min: readonly number[]; max: readonly number[] }): BodyDescription["cavity"] | undefined {
-  const inside = (value: number, axis: number) => value > bounds.min[axis]! + 1e-3 && value < bounds.max[axis]! - 1e-3;
-  const wallPair = (axis: number): { lo: number; hi: number } | undefined => {
-    const low = planes.get(`${AXIS_NAMES[axis]}Pos`)?.offsets;
-    const high = planes.get(`${AXIS_NAMES[axis]}Neg`)?.offsets;
-    if (!low || !high) return undefined;
-    let best: { lo: number; hi: number; score: number } | undefined;
-    for (const lo of low.values()) {
-      for (const hi of high.values()) {
-        if (!(lo.mm < hi.mm) || !inside(lo.mm, axis) || !inside(hi.mm, axis)) continue;
-        const score = Math.min(lo.area, hi.area);
-        if (!best || score > best.score) best = { lo: lo.mm, hi: hi.mm, score };
-      }
-    }
-    return best;
+// ids, or no id with at most 8 bodies: one reply of at most DESCRIBE_MULTI_BYTES. Each body gets an equal share of the budget (and never
+// more than the 4 KB of a single body) and is trimmed to it with the usual `more` counts; no body is dropped.
+export function describeBodies(bodies: DescribedBody[], revision: string): { revision: string; bodies: Array<Omit<BodyDescription, "revision">> } {
+  const count = bodies.length;
+  if (count === 0) return { revision, bodies: [] };
+  const overhead = sizeOf({ revision, bodies: [] }) + (count - 1); // the wrapper and the commas between bodies
+  const share = Math.min(DESCRIBE_MAX_BYTES, Math.floor((DESCRIBE_MULTI_BYTES - overhead) / count));
+  const revisionField = sizeOf(revision) + ',"revision":'.length; // stated once in the wrapper, so each body may spend it on content
+  return {
+    revision,
+    bodies: bodies.map((body) => {
+      const { revision: _revision, ...description } = describeBody(body, revision, share + revisionField);
+      return description;
+    }),
   };
-  const x = wallPair(0);
-  const y = wallPair(1);
-  const floors = planes.get("zPos")?.offsets;
-  if (!x || !y || !floors) return undefined;
-  let floor: PlaneOffset | undefined;
-  for (const candidate of floors.values()) {
-    if (inside(candidate.mm, 2) && (!floor || candidate.area > floor.area)) floor = candidate;
-  }
-  if (!floor || floor.area < 0.5 * (x.hi - x.lo) * (y.hi - y.lo)) return undefined;
-  return { xMm: [x.lo, x.hi], yMm: [y.lo, y.hi], floorZMm: floor.mm };
+}
+
+// More than 8 bodies and no ids: at most DESCRIBE_LIST_ENTRIES entries (id, type, name cut to 40 characters, bounds to 3 decimals) within
+// DESCRIBE_LIST_BYTES. `more` counts the bodies left out; bodyCount is the total.
+export function listBodies(bodies: DescribedBody[], revision: string, describeAllLimit: number): Record<string, unknown> {
+  const round3 = (value: number): number => { const rounded = Math.round(value * 1000) / 1000; return Object.is(rounded, -0) ? 0 : rounded; };
+  const entries = bodies.slice(0, DESCRIBE_LIST_ENTRIES).map((body) => ({
+    id: body.id,
+    type: body.type,
+    name: body.name === null || body.name === undefined || body.name.length <= DESCRIBE_LIST_NAME ? body.name : Array.from(body.name).slice(0, DESCRIBE_LIST_NAME).join(""),
+    boundsMm: body.boundsMm ? { min: body.boundsMm.min.map(round3), max: body.boundsMm.max.map(round3) } : null,
+  }));
+  const hint = `${bodies.length} bodies; pass ids (1-${describeAllLimit}) to describe them`;
+  const build = (kept: number) => ({
+    revision,
+    bodyCount: bodies.length,
+    bodies: entries.slice(0, kept),
+    ...(bodies.length > kept ? { more: bodies.length - kept } : {}),
+    hint,
+  });
+  let kept = entries.length;
+  while (kept > 0 && sizeOf(build(kept)) > DESCRIBE_LIST_BYTES) kept -= 1;
+  return build(kept);
 }

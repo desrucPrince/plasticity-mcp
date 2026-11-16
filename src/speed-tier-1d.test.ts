@@ -332,7 +332,7 @@ function bodyOf(id: number, faces: Face[], edges: Edge[] = [], bounds = box([0, 
   const all = edges.length > 0 ? edges : fallback;
   return { id, versionId: id * 10, type: "Solid", name: "part", boundsMm: bounds, faceIds: faces.map((face) => face.id), edgeIds: all.map((edge) => edge.id), faces, edges: all };
 }
-test("describe_body with one id replies exactly as before (byte for byte), without any wrapper", async () => {
+test("describe_body with one id replies with the bare description, without any wrapper", async () => {
   // The same body the tier 1c tests use; the golden string was taken from the code before tier 1d.
   const planeAt = (id: string, center: Vec, normal: Vec, half = 5) => plane(id, center, normal, half, {});
   const radial: Vec = [1, 0, 0];
@@ -396,32 +396,6 @@ test("describe_body with no ids describes every body up to 8, and lists the bodi
   await third.close();
 });
 
-// An open box: outer walls at 0 and 40 (x), 0 and 30 (y), floor at z 2, rim at z 10; inner walls at 2 and 38 (x), 2 and 28 (y); a small cut-out wall pair inside.
-function openBox(extra: Face[] = [], extraEdges: Edge[] = []) {
-  const faces = [
-    plane("xn", [0, 15, 5], [-1, 0, 0], 15), plane("xp", [40, 15, 5], [1, 0, 0], 15), plane("yn", [20, 0, 5], [0, -1, 0], 20), plane("yp", [20, 30, 5], [0, 1, 0], 20),
-    plane("bottom", [20, 15, 0], [0, 0, -1], 20), plane("rim", [20, 15, 10], [0, 0, 1], 20),
-    plane("ixp", [2, 15, 6], [1, 0, 0], 13), plane("ixn", [38, 15, 6], [-1, 0, 0], 13), plane("iyp", [20, 2, 6], [0, 1, 0], 18), plane("iyn", [20, 28, 6], [0, -1, 0], 18),
-    plane("floor", [20, 15, 2], [0, 0, 1], 18),
-    // A narrow notch in the wall: a wall pair that is closer together but tiny.
-    plane("nxp", [18, 0, 6], [1, 0, 0], 1), plane("nxn", [22, 0, 6], [-1, 0, 0], 1),
-    ...extra,
-  ];
-  return bodyOf(5, faces, extraEdges.length > 0 ? extraEdges : [line("e1", [1, 0, 0], [0, 0, 0], 10, ["f1"])]);
-}
-
-test("describe_body reads an open-top cavity from the planes: the widest inward wall pair on x and y, and the floor", () => {
-  const described = describeBody(openBox() as never, "r1");
-  assert.deepEqual(described.cavity, { xMm: [2, 38], yMm: [2, 28], floorZMm: 2 }, "the notch pair is closer but smaller: not the cavity");
-  // A plate with a rectangular through slot has wall pairs and no floor: no cavity.
-  const slotted = bodyOf(6, [plane("top", [20, 15, 10], [0, 0, 1], 20), plane("bottom", [20, 15, 0], [0, 0, -1], 20),
-    plane("xn", [0, 15, 5], [-1, 0, 0]), plane("xp", [40, 15, 5], [1, 0, 0]), plane("yn", [20, 0, 5], [0, -1, 0]), plane("yp", [20, 30, 5], [0, 1, 0]),
-    plane("sxp", [10, 15, 5], [1, 0, 0], 5), plane("sxn", [30, 15, 5], [-1, 0, 0], 5), plane("syp", [20, 10, 5], [0, 1, 0], 5), plane("syn", [20, 20, 5], [0, -1, 0], 5)]);
-  assert.equal("cavity" in describeBody(slotted as never, "r1"), false);
-  // A solid block has none either.
-  assert.equal("cavity" in describeBody(blockBody() as never, "r1"), false);
-});
-
 test("describe_body tells through from blind holes and gives the axial extent, only when the faces are full-turn", () => {
   const hole = (id: string, at: Vec, edgeIds: string[]) => cylinderFace(id, at, 1.25, false, { edgeIds, boundsMm: box([at[0] + 1.25 - 1.25, at[1] - 1.25, 15], [at[0] + 1.25 + 1.25, at[1] + 1.25, 23]) });
   const faces = [
@@ -442,9 +416,12 @@ test("describe_body tells through from blind holes and gives the axial extent, o
   const blindOnly = describeBody(bodyOf(8, [faces[0]!, faces[1]!, faces[3]!], [edges[0]!, edges[1]!]) as never, "r1");
   assert.equal(blindOnly.cylinders[0]!.through, false);
   assert.deepEqual(blindOnly.cylinders[0]!.extentMm, [15, 23]);
+  // A bore with no flat floor does not say "through" unless it reaches the body bounds at both ends (the old default was true).
   const throughOnly = describeBody(bodyOf(9, [faces[0]!, faces[2]!, faces[4]!], [edges[2]!, edges[3]!]) as never, "r1");
-  assert.equal(throughOnly.cylinders[0]!.through, true);
+  assert.equal("through" in throughOnly.cylinders[0]!, false);
   assert.deepEqual(throughOnly.cylinders[0]!.extentMm, [15, 23]);
+  const throughBounded = describeBody(bodyOf(9, [faces[0]!, faces[2]!, faces[4]!], [edges[2]!, edges[3]!], box([0, 0, 15], [40, 30, 23])) as never, "r1");
+  assert.equal(throughBounded.cylinders[0]!.through, true);
   // A face without circle edges says neither.
   const unknown = describeBody(bodyOf(10, [faces[3]!]) as never, "r1");
   assert.equal("through" in unknown.cylinders[0]!, false);
@@ -473,7 +450,6 @@ test("describe_body stays small: the tier 1c enclosure shape with the new fields
     edges.push(circle(`ba${index}`, [x!, y!, 23], [`b${index}`, `bt${index}`]), circle(`bb${index}`, [x!, y!, 2], [`b${index}`, "floor"]));
   });
   const described = describeBody(bodyOf(1, faces, edges, box([0, 0, 0], [80, 50, 25])) as never, "r26.d828fbe27cef1fe7");
-  assert.deepEqual(described.cavity, { xMm: [2, 78], yMm: [2, 48], floorZMm: 2 });
   const pilots = described.cylinders.find((group) => group.kind === "hole")!;
   assert.equal(pilots.through, false);
   assert.deepEqual(pilots.extentMm, [15, 23]);
@@ -572,7 +548,8 @@ test("the rib tool takes side and keepProfile, forwards them, and lean keeps rib
     { toolName: "plasticity_status", arguments: {}, return: ["undoDepth"] },
   ] });
   assert.equal(output.steps[0].result.status, "completed");
-  assert.equal(JSON.stringify(output.steps[0]).includes("ribBoundsMm"), false);
+  assert.equal(JSON.stringify(output.steps[0]).includes("\"ribBoundsMm\":"), false, "the values stay out");
+  assert.ok(output.steps[0].result.omitted.includes("ribBoundsMm"), "but the key is named in omitted, so return can fetch it");
   assert.equal(fake.calls.some((call) => call.operation === "remove"), true);
   assert.equal(output.summary.added, undefined, "the construction Wire was deleted, so it is not listed as added");
 

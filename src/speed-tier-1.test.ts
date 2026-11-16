@@ -522,7 +522,7 @@ test("lean hides a recipe's step journal and keeps its status and what it create
   const leanRun = tier1bFixture();
   const lean = await connect(leanRun.fake);
   const output = await runBatch(lean.client, { detail: "lean", steps: [RIB_STEP] });
-  assert.deepEqual(output.steps[0].result, { status: "completed", omitted: ["recipe", "beforeRevision", "afterRevision", "profileBodyId", "resultBodyIds", "consumedToolIds", "undoSteps", "steps"] });
+  assert.deepEqual(output.steps[0].result, { status: "completed", omitted: ["recipe", "beforeRevision", "afterRevision", "profileBodyId", "ribBoundsMm", "resultBodyIds", "consumedToolIds", "undoSteps", "steps"] });
   assert.deepEqual(output.steps[0].added, [20], "the editable profile Wire it created");
   assert.deepEqual(output.steps[0].addedBodies.map((body: { id: number; boundsMm: unknown }) => [body.id, body.boundsMm]), [[20, box([0, 0, 0], [1.123456, 1, 1])]]);
   assert.equal(JSON.stringify(output.steps[0]).includes("\"beforeRevision\":"), false, "the journal's values stay out; omitted only names the key");

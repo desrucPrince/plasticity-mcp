@@ -35,6 +35,8 @@ export interface CountersinkRecipeResult {
   profileBodyId: number;
   // Present (true) only when keepProfile was false: profileBodyId names a deleted Wire.
   profileDeleted?: true;
+  // Set when keepProfile was false and deleting the construction Wire failed after the geometry was complete.
+  warning?: string;
   resultBodyIds: number[];
   consumedToolIds: number[];
   undoSteps: number;
@@ -66,6 +68,7 @@ export interface CountersinkPatternRecipeResult {
   countersinkDepthMm: number;
   profileBodyIds: number[];
   profilesDeleted?: true;
+  warning?: string;
   resultBodyIds: number[];
   consumedToolIds: number[];
   undoSteps: number;
@@ -523,6 +526,7 @@ export interface RibRecipeResult {
   targetId: number;
   profileBodyId: number;
   profileDeleted?: true;
+  warning?: string;
   // The extruded rib solid's bounds before it was joined to the target: where the rib landed.
   ribBoundsMm?: { min: Vector3; max: Vector3 };
   resultBodyIds: number[];
@@ -1391,6 +1395,7 @@ export class PlasticityRecipes {
         countersinkDepthMm,
         profileBodyId,
         ...(profileDeleted.deleted ? { profileDeleted: true as const } : {}),
+        ...(profileDeleted.warning ? { warning: profileDeleted.warning } : {}),
         resultBodyIds,
         consumedToolIds: [throughCutterBodyId, countersinkCutterBodyId],
         undoSteps: completedSteps.length,
@@ -1478,6 +1483,7 @@ export class PlasticityRecipes {
         countersinkDepthMm,
         profileBodyIds,
         ...(profilesDeleted.deleted ? { profilesDeleted: true as const } : {}),
+        ...(profilesDeleted.warning ? { warning: profilesDeleted.warning } : {}),
         resultBodyIds,
         consumedToolIds: cutterBodyIds,
         undoSteps: completedSteps.length,
@@ -2472,6 +2478,7 @@ export class PlasticityRecipes {
         targetId: input.targetId,
         profileBodyId,
         ...(profileDeleted.deleted ? { profileDeleted: true as const } : {}),
+        ...(profileDeleted.warning ? { warning: profileDeleted.warning } : {}),
         ...(ribBounds ? { ribBoundsMm: { min: roundVector(ribBounds.min), max: roundVector(ribBounds.max) } } : {}),
         resultBodyIds,
         consumedToolIds: [ribBodyId],
@@ -2488,15 +2495,32 @@ export class PlasticityRecipes {
     if (keepProfile === false && !this.operations.remove) throw new Error("keepProfile: false requires native delete support");
   }
 
-  // keepProfile: false deletes the construction Wire(s) the recipe made, as one more undo step after the last one.
-  private async deleteConstructionProfiles(keepProfile: boolean | undefined, profileBodyIds: number[], current: RuntimeState, completedSteps: RecipeStep[]): Promise<{ deleted: boolean; state: RuntimeState }> {
+  // keepProfile: false deletes the construction Wire(s) the recipe made, as one more undo step after the last one. The geometry is
+  // complete by then, so a failed delete is a warning, not a failed recipe: the state is read again, and an undo step the delete
+  // did take (a revision that moved) is counted.
+  private async deleteConstructionProfiles(keepProfile: boolean | undefined, profileBodyIds: number[], current: RuntimeState, completedSteps: RecipeStep[]): Promise<{ deleted: boolean; state: RuntimeState; warning?: string }> {
     if (keepProfile !== false) return { deleted: false, state: current };
     const before = current;
-    const state = await this.operations.remove!(profileBodyIds, current.revision);
-    const remaining = profileBodyIds.filter((id) => state.bodies.some((body) => body.id === id));
-    if (remaining.length > 0) throw new Error(`Construction profile was not deleted: ${remaining.join(", ")}`);
-    completedSteps.push(step("delete-construction-profile", before, state, profileBodyIds));
-    return { deleted: true, state };
+    try {
+      const state = await this.operations.remove!(profileBodyIds, current.revision);
+      const remaining = profileBodyIds.filter((id) => state.bodies.some((body) => body.id === id));
+      completedSteps.push(step("delete-construction-profile", before, state, profileBodyIds.filter((id) => !remaining.includes(id))));
+      if (remaining.length > 0) return { deleted: false, state, warning: `construction wire not removed: ${remaining.join(", ")} still present` };
+      return { deleted: true, state };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      try {
+        const fresh = await this.operations.state();
+        if (fresh.revision !== before.revision && fresh.documentToken === before.documentToken) {
+          const remaining = profileBodyIds.filter((id) => fresh.bodies.some((body) => body.id === id));
+          completedSteps.push(step("delete-construction-profile", before, fresh, profileBodyIds.filter((id) => !remaining.includes(id))));
+          return { deleted: remaining.length === 0, state: fresh, warning: `construction wire not removed: ${reason}` };
+        }
+      } catch {
+        return { deleted: false, state: before, warning: `construction wire not removed: ${reason}; the state could not be read again, so check it` };
+      }
+      return { deleted: false, state: before, warning: `construction wire not removed: ${reason}` };
+    }
   }
 
   async createRoundVentArray(input: RoundVentArrayRecipeInput): Promise<RoundVentArrayRecipeResult> {

@@ -137,11 +137,13 @@ and `$<step>.removed` references.
   `areaMm2`, `positionMm`, `boundsMm.min`), including everything nested under
   that key. A return key is a path, and the nearest segment that ends in `Mm`
   or `Mm2` decides: `"matches[*].lengthMm"`, `"matches[*].boundsMm.min"` and
-  `"matches[*].centerMm[0]"` are rounded. Keys that end in `Mm` or `Mm2` but
-  are not lengths or areas keep full precision: a name with `Per` before a
-  capital (`curvaturePerMm`, `fractureEnergyNPerMm`, `stiffnessMPaPerMm`,
-  `tractionNPerMm2`), and `matrixWorldMm` except its translation (elements
-  12-14 of the column-major 4x4). Normals, tangents, axes, angles, quaternions,
+  `"matches[*].centerMm[0]"` are rounded. A bare `mm` key is a length too (the
+  plane offsets of `plasticity_describe_body`: `"planes.zPos[0].mm"`). Keys that
+  end in `Mm` or `Mm2` but are rates keep full precision: a rate is a name
+  ending in `PerMm` or `PerMm2` (`curvaturePerMm`, `fractureEnergyNPerMm`,
+  `stiffnessMPaPerMm`, `tractionNPerMm2`). An area such as
+  `shearAreaPerPlaneMm2` is rounded. `matrixWorldMm` keeps full precision
+  except its translation (elements 12-14 of the column-major 4x4). Normals, tangents, axes, angles, quaternions,
   counts and ids keep full precision. The rule applies to the whole reply, including the `verbose` top
   level. Stored results are not rounded. Off by default.
 
@@ -190,11 +192,27 @@ id: `{ planar, normal, ..., sortBy: "x"|"y"|"z", order, limit }` takes the
 the edges of that face match. It must resolve to exactly one face (use `sortBy`
 with `limit: 1`). The top rim of a shell is one step:
 `{"toolName":"plasticity_chamfer","arguments":{"id":"$0.added[0]","edgeQuery":{"adjacentFace":{"planar":true,"normal":{"vector":[0,0,1]},"sortBy":"z","order":"desc","limit":1}},"distanceMm":1}}`
-instead of `find_faces` (top), `find_edges` (`adjacentFaceIds`), `chamfer`.
+instead of `find_faces` (top), `find_edges` (`adjacentFaceIds`), `chamfer`. It
+selects every edge of that face, inner loops included: the rim of each hole or
+pocket on the face as well as its outer edge. The read model does not say which
+loop of a face is the outer one, so there is no `outerLoopOnly` option; pick the
+outer edges with a second criterion (`lengthMm`, `boundsMm`) when needed.
 `plasticity_extrude_faces` takes `faceQuery` (a `plasticity_find_faces` query
 without `bodyIds`, `sortBy` `x`/`y`/`z`, `order`, `limit`) instead of
 `faceIds` the same way and adds `faceCount`. In the tool list `edgeQuery` and
 `faceQuery` are plain objects; the full schema is checked when the call runs.
+
+Guards: an empty query (`{}`, or an `adjacentFace` with no criterion besides
+`sortBy`, `order` and `limit`) is an error (`edgeQuery needs at least one
+criterion`), never "every edge" or "every face". The keys `__proto__`,
+`constructor` and `prototype` are refused by name, at any depth (a raw
+`__proto__` key would otherwise be dropped and leave `{}`). `limit` needs
+`sortBy` (`limit needs sortBy`). Ties are deterministic: after `sortBy`, equal
+values (rounded to 1e-6 mm) are ordered by id, and when `limit` cuts through a
+group of equal values the reply carries `tie: true`. The reply lists `edgeIds`
+(or `faceIds`) when there are 16 or fewer, and `edgeCount` (`faceCount`) always.
+If the native fillet, chamfer or extrusion fails after a query pick, the error
+adds `(edgeQuery picked N edges; first 8: ...)`.
 
 A cut find reply now starts with `next`, a concrete move: a direct find reply
 over 8,000 bytes begins `{"next":"<count> matches; add limit (e.g. 20) with
@@ -204,15 +222,22 @@ begins with `next: "<count> matches; add return: [\"matches[*].id\"] ..."`.
 `truncated` and the older `hint` stay. In a `detail: "lean"` batch,
 `plasticity_status` without `return` whose reply would be cut answers
 `{ revision, undoDepth, bodyCount, bodies: [{ id, type, name, boundsMm }, ...
-up to 20], moreBodies?, hint? }` instead.
+up to 20], moreBodies?, hint?, omitted: [keys] }` instead. `omitted` names the
+keys the step left out (`documentToken`, `regions`, `selection`,
+`construction`, ...); a `return` list fetches them.
 
 ### Describe a body (speed tier 1c)
 
 `plasticity_describe_body` (`{ id }`, strict, read-only, in the compact list)
 returns one body in 1-2 KB instead of the 17-110 KB of
 `plasticity_body_info`. It is built from the read model with no extra native
-call, in millimetres, rounded to 4 decimals. It is never longer than 4,096
-bytes, for any body. `name` is cut to 120 characters; every list is capped
+call, in millimetres, rounded to 4 decimals. Three byte limits hold: one body
+(`{ id }`) is never longer than 4,096 bytes; `ids` and `{}` (up to 8 bodies) are
+never longer than 12,000 bytes in all (each body gets an equal share of it, at
+most 4,096 bytes, and is trimmed to that share with the same `more` counts: no
+body is dropped); the list of more than 8 bodies is never longer than 6,000
+bytes. The limits also hold for a describe step inside a batch (the batch's
+1,500-byte read cut does not apply to it). `name` is cut to 120 characters; every list is capped
 (12 plane positions per group, 16 axis points per cylinder group, 12 blend
 radii, 8 cone half-angles, 50 cylinder groups) with a `more` count; beyond that
 the longest list is shortened first (the cylinder groups with the fewest faces
@@ -232,18 +257,26 @@ cylinder groups take a few milliseconds. `revision` is always in the reply
   axis-aligned group, and the signed offset along the normal for `slanted`;
   `count` is the number of faces on it (left out when 1) and `face` the id of
   the face with the largest bounding box at that offset (not the exact area). A
-  cavity floor reads as a `zPos` entry, the inner side of the walls as `xNeg`
-  and `yNeg` entries at the far side. At most 12 positions per group;
-  `planes.more` maps a group to the number left out.
+  cavity floor reads as a `zPos` entry below the top, and the inner walls as
+  `xPos`/`xNeg`/`yPos`/`yNeg` entries inside the bounds: read inner walls and
+  floors from `planes`. There is no `cavity` field: a derived pocket was wrong
+  for a lid seat, a boss taller than the rim, two pockets, a plate with posts
+  and a bracket with a window, so it was removed. At most 12 positions per
+  group; `planes.more` maps a group to the number left out.
 - `cylinders`: groups by radius, axis direction and kind:
   `{ radiusMm, axis, kind, sweepDeg?, count, faces?, axisPointsMm, more? }`.
   `axis` is `"x"`, `"y"` or `"z"`, else a unit vector. `kind` is `"hole"` or
   `"boss"` from the face normal (toward or away from the axis) for a full-turn
-  face (two circle edges, or one closed circle), and is left out when the
-  normal does not say. A face with exactly one circle edge is a part turn: its
-  `kind` is `"arc"`, with `sweepDeg` when the edge's start, midpoint and end
-  give it; an arc never counts as a hole or boss and stays in its own group
-  (by sweep, to the degree). A cylinder face with no circle edge at all cannot
+  face, and is left out when the normal does not say. A face is a full turn
+  when the circle edges at one end of it sweep 360 degrees (one closed circle,
+  or seam-split circles of that end adding up to 360; a sweep of 359.9 or more
+  counts). Any other face with circle edges is a part turn: its `kind` is
+  `"arc"`, with `sweepDeg` (the largest sum over its ends, from each edge's
+  start, midpoint and end). A slot end reads as an arc of 180 and the corner of
+  an imported rounded rectangle as an arc of 90, never as a hole or boss; an
+  arc stays in its own group (by sweep, to the degree) and has `axisPointsMm`
+  like any group. Where a circle edge carries no geometry its sweep is unknown
+  and two circle edges count as a full turn. A cylinder face with no circle edge at all cannot
   say, so its normal decides as before. `count` is the number of distinct axes
   (features), not faces; `faces` is the number of faces and appears only when
   it differs from `count` (one boss clipped by walls can be two faces).
@@ -255,25 +288,32 @@ cylinder groups take a few milliseconds. `revision` is always in the reply
   first radius. Cylindrical blend faces are not listed here (see `blendRadii`).
 - `otherSurfaces`: face counts by surface type (`Cone` also has `halfAngleDeg`).
 - `blendRadii`: `{ "<radius mm>": faceCount }` for fillet and blend faces.
-- Tier 1d, in each `cylinders` group, only when every face of the group is a
-  full turn (two circle edges) and they agree: `extentMm: [from, to]`, the
-  group's length along its axis (axis-aligned axes), and for holes `through:
-  true|false` (false when a flat floor or an apex closes an end). A group with
-  mixed or unknown faces leaves them out.
-- Tier 1d `cavity: { xMm: [a, b], yMm: [c, d], floorZMm }`: an open-top pocket
-  read from the planes: the widest inward-facing wall pair on x and on y (both
-  strictly inside the bounds; ranked by the smaller of the two faces) and the
-  widest upward plane strictly between bottom and top, which must cover at least half the walls'
-  footprint. Left out when that is not clear (a solid block, a plate with a
-  through slot, a tilted part).
+- In each `cylinders` group, only when every face of the group is a full turn
+  and they agree: `extentMm: [from, to]`, the group's length along its axis
+  (axis-aligned axes). For holes, `through` appears only under a proof from the
+  read model, and is otherwise left out: `through: true` when the hole's own
+  extent reaches the body's bounding extent along the axis at both ends (within
+  0.001 mm), i.e. it leaves the body's outer bounds on both sides;
+  `through: false` when a flat face closes the bore at one end (a plane normal
+  to the axis, at that end, whose only edges are the bore's own circle edges
+  and whose bounds hold the axis point and stay within the bore radius). A
+  filleted, chamfered or stepped floor, a vented floor, a bore that opens into
+  an internal cavity, and a hole in a leg or boss that does not reach the
+  body's overall bounds (the hole of an L-bracket's leg) therefore carry no
+  `through` field, though they may be through holes. Mixed faces in a group
+  leave it out too.
 
 Forms: `{ id }` replies with the description as above (unchanged shape).
 `{ ids: [1-8 ids] }` replies `{ revision, bodies: [description without its own
 revision, ...] }` in the order asked. `{}` describes every body the same way
 when the document has 8 or fewer, else replies `{ revision, bodyCount, bodies:
-[{ id, type, name, boundsMm }, ...up to 50], hint }`. Use `{}` as the first and
-last read of a part. An enclosure base reads in about 1.6 KB, and its hole and
-boss axis positions need no face search.
+[{ id, type, name, boundsMm }, ...up to 40], more?, hint }`: `name` is cut to 40
+characters, `boundsMm` is rounded to 3 decimals, and `more` counts the bodies
+left out (entries are also dropped from the end until the list fits 6,000
+bytes). End a build batch with a describe step to verify; call `{}` first only
+to fit existing bodies or find free space. An enclosure base reads in about
+1.6 KB, and its hole and axis positions need no face search (its screw bosses,
+clipped by the walls, read as arcs, with their axis points).
 
 All of these are plain keys, so `return` in a batch step can name them:
 `return: ["cylinders", "planes.zNeg", "blendRadii", "sizeMm"]`. A face id from
@@ -1313,11 +1353,19 @@ y = 15 with thickness 4 fills y 13..17, whatever the point order), `"positive"`
 runs along the normal, `"negative"` against it. Without `side` the call is as
 before. The reply adds `ribBoundsMm` (`{ min, max }` in mm, 4 decimals): the
 extruded solid's bounds before it is joined, i.e. where the rib landed. A lean
-batch leaves it out of the step reply (ask with `return: ["ribBoundsMm"]`).
+batch leaves it out of the step reply and names it in `omitted` (ask with
+`return: ["ribBoundsMm"]`). Direction and `side` were checked live on three
+profiles (the triangle, the same triangle with reversed point order, and one
+tilted 30 degrees), for `side` positive, negative and centered: every
+`ribBoundsMm` matched the right-hand-normal prediction
+(`discovery/speed-2026-11/rib-direction-check.json`).
 `keepProfile` (default true) keeps the editable profile Wire in the document,
 as before; `false` deletes it in a fourth Undo step (`steps` then ends with
 `delete-construction-profile`, the reply adds `profileDeleted: true`, and the
-batch `added` list no longer names the Wire). `plasticity_create_countersink`
+batch `added` list no longer names the Wire). The delete clears the current
+selection. If it fails after the geometry is complete, the reply is still
+`completed` with `warning: "construction wire not removed: <reason>"`, and
+`undoSteps` counts only the steps that happened. `plasticity_create_countersink`
 and `plasticity_create_countersink_pattern` take the same `keepProfile` (one
 extra delete step for all of their Wires; `profileDeleted` / `profilesDeleted`).
 `plasticity_create_through_hole_pattern` leaves no construction Wire.

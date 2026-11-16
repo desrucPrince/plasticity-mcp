@@ -14,7 +14,7 @@
 // scenario and writes describe-check-<name>.json (reply bytes and the describe reply itself).
 // --tier1d runs the same parts the way an agent builds them once speed tier 1d is in: fillet and chamfer take edgeQuery
 // (no find_edges step; the top rim is one adjacentFace query), the gusset rib uses side "centered", and the lid reads
-// the base once with plasticity_describe_body (cavity and hole axes). Writes part-<name>-tier1d.json.
+// the base once with plasticity_describe_body (inner wall and floor planes, and hole axes). Writes part-<name>-tier1d.json.
 // Each scenario restores the document to the starting undo depth and body ids and asserts it.
 import { bytes, ENDPOINT, openInProcess, Recorder, restore, save, status } from "./lib.ts";
 
@@ -435,11 +435,20 @@ tier1.d = async (h, rec) => {
   let fl: { min: number[]; max: number[] };
   let axes: Array<[number, number]>;
   if (T1D) {
-    // Tier 1d: one describe_body read gives the cavity (walls, floor) and the pilot hole axes; no face search, no batch.
-    const described = await rec.call(1, "describe the base (cavity + hole axes), one read", "plasticity_describe_body", { id: baseId }, { forced: "lid dimensions and hole positions come from (a); the read is one call" });
-    const cav = described.cavity as { xMm: number[]; yMm: number[]; floorZMm: number };
-    if (!cav) throw new Error("describe_body returned no cavity");
-    fl = { min: [cav.xMm[0]!, cav.yMm[0]!, cav.floorZMm], max: [cav.xMm[1]!, cav.yMm[1]!, cav.floorZMm] };
+    // Tier 1d: one describe_body read gives the inner walls and floor (from the planes) and the pilot hole axes; no face search, no batch.
+    // describe_body has no cavity field: a plane facing into the cavity is an xPos/yPos entry just inside the low bound (or an
+    // xNeg/yNeg entry just inside the high bound), and the floor is the lowest zPos entry.
+    const described = await rec.call(1, "describe the base (inner wall and floor planes + hole axes), one read", "plasticity_describe_body", { id: baseId }, { forced: "lid dimensions and hole positions come from (a); the read is one call" });
+    const planes = described.planes as Record<string, Array<{ mm: number }>>;
+    const inside = (list: Array<{ mm: number }> | undefined, above: number, pick: "lowest" | "highest", below = Infinity) => {
+      const values = (list ?? []).map((entry) => entry.mm).filter((mm) => mm > above + 0.01 && mm < below - 0.01);
+      if (values.length === 0) throw new Error("describe_body planes hold no inner wall or floor entry in that range");
+      return pick === "lowest" ? Math.min(...values) : Math.max(...values);
+    };
+    fl = {
+      min: [inside(planes.xPos, bb.min[0]!, "lowest"), inside(planes.yPos, bb.min[1]!, "lowest"), inside(planes.zPos, bb.min[2]!, "lowest")],
+      max: [inside(planes.xNeg, -Infinity, "highest", bb.max[0]!), inside(planes.yNeg, -Infinity, "highest", bb.max[1]!), inside(planes.zPos, bb.min[2]!, "lowest")],
+    };
     const holes = (described.cylinders as Array<{ radiusMm: number; kind?: string; axisPointsMm: number[][] }>).find((group) => group.kind === "hole" && near(group.radiusMm, A.pilotD / 2));
     if (!holes) throw new Error("describe_body returned no pilot hole group");
     axes = holes.axisPointsMm.map((o) => [r3(o[0]!), r3(o[1]!)]) as Array<[number, number]>;

@@ -1,0 +1,479 @@
+{
+ "measuredAt": "2026-11-16T19:34:05.354Z",
+ "claim": "positive thickness extrudes along the right-hand normal of the profile point order (counter-clockwise seen from the normal); negative the opposite way; centered splits it about the plane",
+ "allMatch": true,
+ "cases": [
+  {
+   "profile": "triangle",
+   "pointsMm": [
+    [
+     2010,
+     200,
+     3
+    ],
+    [
+     2030,
+     200,
+     3
+    ],
+    [
+     2010,
+     200,
+     14
+    ]
+   ],
+   "side": "positive",
+   "thicknessMm": 4,
+   "rightHandNormal": [
+    0,
+    -1,
+    0
+   ],
+   "predictedBoundsMm": {
+    "min": [
+     2010,
+     196,
+     3
+    ],
+    "max": [
+     2030,
+     200,
+     14
+    ]
+   },
+   "ribBoundsMm": {
+    "min": [
+     2010,
+     196,
+     3
+    ],
+    "max": [
+     2030,
+     200,
+     14
+    ]
+   },
+   "matches": true
+  },
+  {
+   "profile": "triangle",
+   "pointsMm": [
+    [
+     2010,
+     200,
+     3
+    ],
+    [
+     2030,
+     200,
+     3
+    ],
+    [
+     2010,
+     200,
+     14
+    ]
+   ],
+   "side": "negative",
+   "thicknessMm": 4,
+   "rightHandNormal": [
+    0,
+    -1,
+    0
+   ],
+   "predictedBoundsMm": {
+    "min": [
+     2010,
+     200,
+     3
+    ],
+    "max": [
+     2030,
+     204,
+     14
+    ]
+   },
+   "ribBoundsMm": {
+    "min": [
+     2010,
+     200,
+     3
+    ],
+    "max": [
+     2030,
+     204,
+     14
+    ]
+   },
+   "matches": true
+  },
+  {
+   "profile": "triangle",
+   "pointsMm": [
+    [
+     2010,
+     200,
+     3
+    ],
+    [
+     2030,
+     200,
+     3
+    ],
+    [
+     2010,
+     200,
+     14
+    ]
+   ],
+   "side": "centered",
+   "thicknessMm": 4,
+   "rightHandNormal": [
+    0,
+    -1,
+    0
+   ],
+   "predictedBoundsMm": {
+    "min": [
+     2010,
+     198,
+     3
+    ],
+    "max": [
+     2030,
+     202,
+     14
+    ]
+   },
+   "ribBoundsMm": {
+    "min": [
+     2010,
+     198,
+     3
+    ],
+    "max": [
+     2030,
+     202,
+     14
+    ]
+   },
+   "matches": true
+  },
+  {
+   "profile": "triangleReversed",
+   "pointsMm": [
+    [
+     2010,
+     200,
+     3
+    ],
+    [
+     2010,
+     200,
+     14
+    ],
+    [
+     2030,
+     200,
+     3
+    ]
+   ],
+   "side": "positive",
+   "thicknessMm": 4,
+   "rightHandNormal": [
+    0,
+    1,
+    0
+   ],
+   "predictedBoundsMm": {
+    "min": [
+     2010,
+     200,
+     3
+    ],
+    "max": [
+     2030,
+     204,
+     14
+    ]
+   },
+   "ribBoundsMm": {
+    "min": [
+     2010,
+     200,
+     3
+    ],
+    "max": [
+     2030,
+     204,
+     14
+    ]
+   },
+   "matches": true
+  },
+  {
+   "profile": "triangleReversed",
+   "pointsMm": [
+    [
+     2010,
+     200,
+     3
+    ],
+    [
+     2010,
+     200,
+     14
+    ],
+    [
+     2030,
+     200,
+     3
+    ]
+   ],
+   "side": "negative",
+   "thicknessMm": 4,
+   "rightHandNormal": [
+    0,
+    1,
+    0
+   ],
+   "predictedBoundsMm": {
+    "min": [
+     2010,
+     196,
+     3
+    ],
+    "max": [
+     2030,
+     200,
+     14
+    ]
+   },
+   "ribBoundsMm": {
+    "min": [
+     2010,
+     196,
+     3
+    ],
+    "max": [
+     2030,
+     200,
+     14
+    ]
+   },
+   "matches": true
+  },
+  {
+   "profile": "triangleReversed",
+   "pointsMm": [
+    [
+     2010,
+     200,
+     3
+    ],
+    [
+     2010,
+     200,
+     14
+    ],
+    [
+     2030,
+     200,
+     3
+    ]
+   ],
+   "side": "centered",
+   "thicknessMm": 4,
+   "rightHandNormal": [
+    0,
+    1,
+    0
+   ],
+   "predictedBoundsMm": {
+    "min": [
+     2010,
+     198,
+     3
+    ],
+    "max": [
+     2030,
+     202,
+     14
+    ]
+   },
+   "ribBoundsMm": {
+    "min": [
+     2010,
+     198,
+     3
+    ],
+    "max": [
+     2030,
+     202,
+     14
+    ]
+   },
+   "matches": true
+  },
+  {
+   "profile": "tilted30",
+   "pointsMm": [
+    [
+     2010,
+     200,
+     1.5
+    ],
+    [
+     2030,
+     200,
+     1.5
+    ],
+    [
+     2010,
+     194.5,
+     11.0263
+    ]
+   ],
+   "side": "positive",
+   "thicknessMm": 4,
+   "rightHandNormal": [
+    0,
+    -0.866,
+    -0.5
+   ],
+   "predictedBoundsMm": {
+    "min": [
+     2010,
+     191.0359,
+     -0.5
+    ],
+    "max": [
+     2030,
+     200,
+     11.0263
+    ]
+   },
+   "ribBoundsMm": {
+    "min": [
+     2010,
+     191.0359,
+     -0.5
+    ],
+    "max": [
+     2030,
+     200,
+     11.0263
+    ]
+   },
+   "matches": true
+  },
+  {
+   "profile": "tilted30",
+   "pointsMm": [
+    [
+     2010,
+     200,
+     1.5
+    ],
+    [
+     2030,
+     200,
+     1.5
+    ],
+    [
+     2010,
+     194.5,
+     11.0263
+    ]
+   ],
+   "side": "negative",
+   "thicknessMm": 4,
+   "rightHandNormal": [
+    0,
+    -0.866,
+    -0.5
+   ],
+   "predictedBoundsMm": {
+    "min": [
+     2010,
+     194.5,
+     1.5
+    ],
+    "max": [
+     2030,
+     203.4641,
+     13.0263
+    ]
+   },
+   "ribBoundsMm": {
+    "min": [
+     2010,
+     194.5,
+     1.5
+    ],
+    "max": [
+     2030,
+     203.4641,
+     13.0263
+    ]
+   },
+   "matches": true
+  },
+  {
+   "profile": "tilted30",
+   "pointsMm": [
+    [
+     2010,
+     200,
+     1.5
+    ],
+    [
+     2030,
+     200,
+     1.5
+    ],
+    [
+     2010,
+     194.5,
+     11.0263
+    ]
+   ],
+   "side": "centered",
+   "thicknessMm": 4,
+   "rightHandNormal": [
+    0,
+    -0.866,
+    -0.5
+   ],
+   "predictedBoundsMm": {
+    "min": [
+     2010,
+     192.7679,
+     0.5
+    ],
+    "max": [
+     2030,
+     201.7321,
+     12.0263
+    ]
+   },
+   "ribBoundsMm": {
+    "min": [
+     2010,
+     192.7679,
+     0.5
+    ],
+    "max": [
+     2030,
+     201.7321,
+     12.0263
+    ]
+   },
+   "matches": true
+  }
+ ],
+ "startUndoDepth": 0,
+ "endUndoDepth": 0,
+ "startBodies": 4,
+ "endBodies": 4
+}
