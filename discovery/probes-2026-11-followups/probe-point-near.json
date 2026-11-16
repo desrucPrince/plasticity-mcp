@@ -1,0 +1,116 @@
+[
+ {
+  "mid": {
+   "u": 0.7,
+   "v": 0.5,
+   "exact": {},
+   "exactType": "object",
+   "getPoint": [
+    2.528,
+    0.02,
+    0.005
+   ],
+   "normal": [
+    null,
+    null,
+    null
+   ]
+  },
+  "off": "ERR Invalid argument 'position' for Face::FindPointNear"
+ },
+ {
+  "mid": {
+   "u": 0.5000000000000001,
+   "v": 0.5,
+   "exact": {},
+   "exactType": "object",
+   "getPoint": [
+    2.52,
+    0,
+    0.0024999999999999996
+   ],
+   "normal": [
+    null,
+    null,
+    null
+   ]
+  },
+  "off": "ERR Invalid argument 'position' for Face::FindPointNear"
+ },
+ {
+  "mid": {
+   "u": 0.5000000000000001,
+   "v": 0.5000000000000001,
+   "exact": {},
+   "exactType": "object",
+   "getPoint": [
+    2.5,
+    0.020000000000000004,
+    0.0025000000000000005
+   ],
+   "normal": [
+    null,
+    null,
+    null
+   ]
+  },
+  "off": "ERR Invalid argument 'position' for Face::FindPointNear"
+ },
+ {
+  "mid": {
+   "u": 0.4999999999999999,
+   "v": 0.5,
+   "exact": {},
+   "exactType": "object",
+   "getPoint": [
+    2.52,
+    0.04,
+    0.0024999999999999996
+   ],
+   "normal": [
+    null,
+    null,
+    null
+   ]
+  },
+  "off": "ERR Invalid argument 'position' for Face::FindPointNear"
+ },
+ {
+  "mid": {
+   "u": 0.7,
+   "v": 0.5,
+   "exact": {},
+   "exactType": "object",
+   "getPoint": [
+    2.512,
+    0.02,
+    0
+   ],
+   "normal": [
+    null,
+    null,
+    null
+   ]
+  },
+  "off": "ERR Invalid argument 'position' for Face::FindPointNear"
+ },
+ {
+  "mid": {
+   "u": 0.4999999999999999,
+   "v": 0.5000000000000001,
+   "exact": {},
+   "exactType": "object",
+   "getPoint": [
+    2.54,
+    0.020000000000000004,
+    0.0025000000000000005
+   ],
+   "normal": [
+    null,
+    null,
+    null
+   ]
+  },
+  "off": "ERR Invalid argument 'position' for Face::FindPointNear"
+ }
+]

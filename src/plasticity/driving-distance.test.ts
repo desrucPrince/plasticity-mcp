@@ -49,6 +49,10 @@ function fixture(scenario: Scenario = "commit", options: { busy?: boolean; activ
   const faceViews = new Map(FACE_IDS.map((id) => [id, { face: id, parentBody: 5 }]));
   const view = { constructor: { name: "Solid" }, high: { faces: { versionIds: FACE_IDS, get: (index: number) => faceViews.get(FACE_IDS[index]!) }, edges: { versionIds: [] } } };
   const geometryModel = new Map<number, { view: unknown }>([[105, { view }]]);
+  // Kernel model (added for the on-face hit point): each face view carries its kernel entity id, and the kernel
+  // face's GetAnyPointOn() returns the face centre in meters, like a face whose midpoint lies on it.
+  FACE_IDS.forEach((id, index) => { (faceViews.get(id) as Record<string, unknown>).entityId = 900 + index; });
+  (geometryModel.get(105) as Record<string, unknown>).model = { GetFaces: () => ({ Size: () => FACE_IDS.length, Get: (index: number) => ({ Id: () => 900 + index, GetAnyPointOn: () => ({ position: { x: FACES[index]!.centerMm[0]! / 1000, y: FACES[index]!.centerMm[1]! / 1000, z: FACES[index]!.centerMm[2]! / 1000 } }) }) }) };
 
   // What the fake command saw when it ran, and how the session ended.
   const seen: { selection?: unknown[]; hits?: Array<{ item: unknown; point: number[]; normal: number[] | undefined }>; dialog?: FakeDialog; cancelled: number } = { cancelled: 0 };
@@ -80,6 +84,10 @@ function fixture(scenario: Scenario = "commit", options: { busy?: boolean; activ
           sceneObjects.length = 0;
           if (scenario === "commit-fails") { reject(new Error("Kernel failed")); return; }
           undoStack.push({ distance: dialog.params.distance });
+          // Added for the post-commit read-back: the last selected face moves along its normal by the change.
+          const movedView = seen.selection?.at(-1) as { face: string } | undefined;
+          const movedFace = state.bodies[0]!.faces.find((face) => face.id === movedView?.face);
+          if (movedFace) movedFace.centerMm = movedFace.centerMm.map((value, axis) => value + movedFace.normal[axis]! * ((dialog.params.distance as number) - (dialog.params.refDistance as number)) * 1000) as [number, number, number];
           resolve(undefined);
         };
         sceneObjects.push({ unrelated: true }, dialog);

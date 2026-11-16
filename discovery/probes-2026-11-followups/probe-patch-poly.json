@@ -1,0 +1,418 @@
+{
+ "start": {
+  "undo": 0,
+  "bodies": 4,
+  "meshes": 0
+ },
+ "poly_grid_default": {
+  "options": {},
+  "ok": true,
+  "undo": [
+   1,
+   2
+  ],
+  "added": [
+   {
+    "id": 42,
+    "type": "Sheet",
+    "faces": 9,
+    "edges": 24,
+    "vertices": 16,
+    "boundsMm": {
+     "min": [
+      3199.9999999999995,
+      0,
+      0
+     ],
+     "max": [
+      3230,
+      30,
+      6
+     ]
+    }
+   }
+  ],
+  "meshesAfter": 0,
+  "meshTriangles": 18
+ },
+ "poly_grid_interp_true": {
+  "options": {
+   "interpolateBoundary": true
+  },
+  "ok": true,
+  "undo": [
+   1,
+   2
+  ],
+  "added": [
+   {
+    "id": 43,
+    "type": "Sheet",
+    "faces": 21,
+    "edges": 48,
+    "vertices": 28,
+    "boundsMm": {
+     "min": [
+      3199.9999999999995,
+      -8.673617379884035e-18,
+      -5.204170427930421e-18
+     ],
+     "max": [
+      3230.0000000000005,
+      30.000000000000004,
+      6
+     ]
+    }
+   }
+  ],
+  "meshesAfter": 0,
+  "meshTriangles": 18
+ },
+ "poly_grid_interp_false": {
+  "options": {
+   "interpolateBoundary": false
+  },
+  "ok": true,
+  "undo": [
+   1,
+   2
+  ],
+  "added": [
+   {
+    "id": 44,
+    "type": "Sheet",
+    "faces": 9,
+    "edges": 24,
+    "vertices": 16,
+    "boundsMm": {
+     "min": [
+      3199.9999999999995,
+      0,
+      0
+     ],
+     "max": [
+      3230,
+      30,
+      6
+     ]
+    }
+   }
+  ],
+  "meshesAfter": 0,
+  "meshTriangles": 18
+ },
+ "poly_grid_merge_false": {
+  "options": {
+   "mergePatches": false
+  },
+  "ok": true,
+  "undo": [
+   1,
+   2
+  ],
+  "added": [
+   {
+    "id": 45,
+    "type": "Sheet",
+    "faces": 9,
+    "edges": 24,
+    "vertices": 16,
+    "boundsMm": {
+     "min": [
+      3199.9999999999995,
+      0,
+      0
+     ],
+     "max": [
+      3230,
+      30,
+      6
+     ]
+    }
+   }
+  ],
+  "meshesAfter": 0,
+  "meshTriangles": 18
+ },
+ "poly_grid_merge_false_interp_true": {
+  "options": {
+   "mergePatches": false,
+   "interpolateBoundary": true
+  },
+  "ok": true,
+  "undo": [
+   1,
+   2
+  ],
+  "added": [
+   {
+    "id": 46,
+    "type": "Sheet",
+    "faces": 21,
+    "edges": 48,
+    "vertices": 28,
+    "boundsMm": {
+     "min": [
+      3199.9999999999995,
+      -8.673617379884035e-18,
+      -5.204170427930421e-18
+     ],
+     "max": [
+      3230.0000000000005,
+      30.000000000000004,
+      6
+     ]
+    }
+   }
+  ],
+  "meshesAfter": 0,
+  "meshTriangles": 18
+ },
+ "poly_tri_cube_default": {
+  "options": {},
+  "ok": true,
+  "undo": [
+   1,
+   2
+  ],
+  "added": [
+   {
+    "id": 47,
+    "type": "Solid",
+    "faces": 36,
+    "edges": 72,
+    "vertices": 38,
+    "boundsMm": {
+     "min": [
+      3300.383224201246,
+      0.3486462084190672,
+      0.3832242012459991
+     ],
+     "max": [
+      3309.6555000964504,
+      9.6205025434385,
+      9.655500096450618
+     ]
+    }
+   }
+  ],
+  "meshesAfter": 0,
+  "meshTriangles": 12
+ },
+ "xsided_solid_box_top_loop": {
+  "ok": true,
+  "undo": [
+   1,
+   2
+  ],
+  "added": [
+   {
+    "id": 49,
+    "type": "Sheet",
+    "faces": 1,
+    "edges": 4,
+    "vertices": 4,
+    "boundsMm": {
+     "min": [
+      3396.3064882750527,
+      -3.693567819079648,
+      9.989999997239789
+     ],
+     "max": [
+      3423.6936039436823,
+      23.693547901356297,
+      10.010000004739455
+     ]
+    }
+   }
+  ]
+ },
+ "plate_rims": [
+  {
+   "id": "106e7816",
+   "centerMm": [
+    3509.0000000000005,
+    15,
+    5
+   ],
+   "faceIds": [
+    "106f7770",
+    "106f7733"
+   ]
+  }
+ ],
+ "xsided_solid_hole_rim_default": {
+  "ok": true,
+  "undo": [
+   4,
+   5
+  ],
+  "added": [
+   {
+    "id": 52,
+    "type": "Sheet",
+    "faces": 1,
+    "edges": 1,
+    "vertices": 1,
+    "boundsMm": {
+     "min": [
+      3508.9766566633994,
+      8.981275197828424,
+      4.989999999068164
+     ],
+     "max": [
+      3521.0225218491187,
+      21.018724783153484,
+      5.010000000818524
+     ]
+    }
+   }
+  ]
+ },
+ "xsided_solid_hole_rim_g1": {
+  "ok": true,
+  "undo": [
+   4,
+   5
+  ],
+  "added": [
+   {
+    "id": 53,
+    "type": "Sheet",
+    "faces": 1,
+    "edges": 1,
+    "vertices": 1,
+    "boundsMm": {
+     "min": [
+      3508.9492151623494,
+      8.9393345144555,
+      2.7333342724061853
+     ],
+     "max": [
+      3521.074231353778,
+      21.073692684144593,
+      7.494246483194222
+     ]
+    }
+   }
+  ]
+ },
+ "xsided_open_rim_plain": {
+  "ok": true,
+  "undo": [
+   7,
+   8
+  ],
+  "added": [
+   {
+    "id": 56,
+    "type": "Sheet",
+    "faces": 1,
+    "edges": 1,
+    "vertices": 1,
+    "boundsMm": {
+     "min": [
+      3589.968021697204,
+      -10.024036734014542,
+      19.989999990475486
+     ],
+     "max": [
+      3610.030885477677,
+      10.02403721377435,
+      20.0100000119687
+     ]
+    }
+   }
+  ]
+ },
+ "xsided_open_rim_with_guide": {
+  "ok": true,
+  "undo": [
+   7,
+   8
+  ],
+  "added": [
+   {
+    "id": 57,
+    "type": "Sheet",
+    "faces": 1,
+    "edges": 1,
+    "vertices": 1,
+    "boundsMm": {
+     "min": [
+      3588.965838153445,
+      -13.97709383624207,
+      9.686189726006923
+     ],
+     "max": [
+      3610.813248378719,
+      13.997371027384174,
+      33.19423216603954
+     ]
+    }
+   }
+  ]
+ },
+ "xsided_open_rim_with_guide_g1": {
+  "ok": true,
+  "undo": [
+   7,
+   8
+  ],
+  "added": [
+   {
+    "id": 58,
+    "type": "Sheet",
+    "faces": 1,
+    "edges": 1,
+    "vertices": 1,
+    "boundsMm": {
+     "min": [
+      3589.6988855104764,
+      -10.107566354665309,
+      12.384660302645612
+     ],
+     "max": [
+      3610.2865457602047,
+      10.13894731263567,
+      30.720786157267426
+     ]
+    }
+   }
+  ]
+ },
+ "xsided_solid_box_top_loop_with_guide": {
+  "ok": true,
+  "undo": [
+   9,
+   10
+  ],
+  "added": [
+   {
+    "id": 61,
+    "type": "Sheet",
+    "faces": 1,
+    "edges": 4,
+    "vertices": 4,
+    "boundsMm": {
+     "min": [
+      3698.4500122272975,
+      -1.7139418330657652,
+      9.371568903792125
+     ],
+     "max": [
+      3721.5730420293085,
+      21.54778441492458,
+      19.30638130336899
+     ]
+    }
+   }
+  ]
+ },
+ "licenceNote": "see FINDINGS gap 6: hasXNurbs true, isStudioLicense true on this machine",
+ "end": {
+  "undo": 0,
+  "bodies": 4,
+  "meshes": 0
+ }
+}

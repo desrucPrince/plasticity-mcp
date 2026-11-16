@@ -1,0 +1,65 @@
+{
+ "top": {
+  "id": "32f1812",
+  "centerMm": [
+   2520,
+   19.999999999999996,
+   4.999999999999999
+  ]
+ },
+ "results": {
+  "single_mid": {
+   "point": [
+    2.52,
+    0.019999999999999997,
+    0.004999999999999999
+   ],
+   "dialog": false,
+   "refDistance": null,
+   "execError": "Operation has no effect",
+   "settled": true,
+   "undoDelta": 0,
+   "active": null
+  },
+  "single_any": {
+   "point": [
+    2.505475182190717,
+    0.012762535161404466,
+    0.005
+   ],
+   "dialog": true,
+   "refDistance": 0.005,
+   "execError": null,
+   "settled": true,
+   "undoDelta": 1,
+   "active": null
+  },
+  "pair_mid": {
+   "point": [
+    2.52,
+    0.019999999999999997,
+    0.004999999999999999
+   ],
+   "dialog": true,
+   "refDistance": 0.005,
+   "execError": null,
+   "settled": true,
+   "undoDelta": 1,
+   "active": null
+  },
+  "pair_any": {
+   "point": [
+    2.505475182190717,
+    0.012762535161404466,
+    0.005
+   ],
+   "dialog": true,
+   "refDistance": 0.005,
+   "execError": null,
+   "settled": true,
+   "undoDelta": 1,
+   "active": null
+  }
+ },
+ "undoAfterTrials": 3
+}

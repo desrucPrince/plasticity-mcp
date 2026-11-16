@@ -3551,36 +3551,50 @@ function createServerWithCatalog(
     revision,
   }).strict(), async ({ points, deltaMm, intent: purpose, revision: current }) =>
     await journaled("move-curve-control-points", purpose, { points, deltaMm }, () => session.get().moveCurveControlPoints(points, deltaMm, current)));
-  tool("plasticity_show_face_control_points", "Show the control points (B-Surface CVs) of Sheet or Solid faces and return each as { cvId, positionMm }. This is a Plasticity history step, so it occupies one Undo entry. Use it before plasticity_move_face_control_points, which only accepts the returned cvId values; they stay valid until the body is edited again. Positions are millimeters. Unlike plasticity_list_curve_control_points, this reads face (surface) points, not Wire handles.", z.object({
+  tool("plasticity_show_face_control_points", "Show the control points (B-Surface CVs) of B-Surface faces of a Sheet or Solid and return the requested faces' points as { cvId, faceId, index, positionMm }, plus faces [{ requestedFaceId, faceId, controlPointCount }]. This is a Plasticity history step (undoSteps 1) and an edit of the body: face IDs change (use the returned faceId). A cvId is a string (Plasticity's control point versionId, for example 54c10) that changes with every edit of the body, so it is valid only at the revision this call returns and a stale cvId is rejected, never applied to another point; use it with plasticity_move_face_control_points before any other edit of the body. Plasticity numbers the shown points of all faces of a body together, so showing or hiding one face changes the cvIds of the others. Faces whose points are already shown cost no step (undoSteps 0). The tool supports B-Surface (BSurf) faces only: Plane and Cylinder faces show no points (other types are untested), so non-BSurf faces are rejected before any edit. Positions are millimeters. Hide points with plasticity_hide_face_control_points. Unlike plasticity_list_curve_control_points, this reads face (surface) points, not Wire handles. Verified on Plasticity 26.1.3 only.", z.object({
     bodyId: z.number().int().positive(),
     faceIds: z.array(z.string().min(1)).min(1).max(256).refine((values) => new Set(values).size === values.length, "Face IDs must be unique"),
     intent,
     revision,
   }).strict(), async ({ bodyId, faceIds, intent: purpose, revision: current }) => {
-    let controlPoints: unknown;
+    let shown: Record<string, unknown> | undefined;
     const result = await journaled("show-face-control-points", purpose, { bodyId, faceIds }, async () => {
-      const shown = await session.get().showFaceControlPoints(bodyId, faceIds, current);
-      controlPoints = shown.controlPoints;
-      return shown.state;
+      const { state, ...rest } = await session.get().showFaceControlPoints(bodyId, faceIds, current);
+      shown = rest;
+      return state;
     });
-    return { ...(result as unknown as Record<string, unknown>), controlPoints };
+    return { ...(result as unknown as Record<string, unknown>), ...shown };
   }, false, { destructiveHint: false });
-  tool("plasticity_move_face_control_points", "Move shown face control points by a shared world-space millimeter delta in one Plasticity history step and return their new positions. cvIds must come from plasticity_show_face_control_points on the same body at the current state; unknown IDs are rejected and ask for that call first. Re-read exact B-Rep geometry afterward.", z.object({
+  tool("plasticity_hide_face_control_points", "Hide the shown control points of faces of a Sheet or Solid (Plasticity's Toggle Points with show off). One Plasticity history step (undoSteps 1) that edits the body: face IDs and the cvIds of the body's remaining shown points change, so the result returns those points as controlPoints { cvId, faceId, index, positionMm } at the new revision. Faces with no shown points cost no step (undoSteps 0). Undo also removes a show step.", z.object({
     bodyId: z.number().int().positive(),
-    cvIds: z.array(z.number().int().nonnegative()).min(1).max(4096).refine((values) => new Set(values).size === values.length, "Control point IDs must be unique"),
+    faceIds: z.array(z.string().min(1)).min(1).max(256).refine((values) => new Set(values).size === values.length, "Face IDs must be unique"),
+    intent,
+    revision,
+  }).strict(), async ({ bodyId, faceIds, intent: purpose, revision: current }) => {
+    let hidden: Record<string, unknown> | undefined;
+    const result = await journaled("hide-face-control-points", purpose, { bodyId, faceIds }, async () => {
+      const { state, ...rest } = await session.get().hideFaceControlPoints(bodyId, faceIds, current);
+      hidden = rest;
+      return state;
+    });
+    return { ...(result as unknown as Record<string, unknown>), ...hidden };
+  }, false, { destructiveHint: false });
+  tool("plasticity_move_face_control_points", "Move shown face control points by a shared world-space millimeter delta in one Plasticity history step and return their new positions with their new cvId and faceId (both change with the move). cvIds are strings from plasticity_show_face_control_points or plasticity_hide_face_control_points on the same body at the current revision; unknown or stale IDs are rejected and ask for the show call first. Points of several faces of one body can move together. The result is read back: every point must have moved by deltaMm within 1e-3 mm, otherwise the call reports what happened (the step stays in the Undo history). Re-read exact B-Rep geometry afterward. Verified on Plasticity 26.1.3 only.", z.object({
+    bodyId: z.number().int().positive(),
+    cvIds: z.array(z.string().min(1).max(64)).min(1).max(4096).refine((values) => new Set(values).size === values.length, "Control point IDs must be unique"),
     deltaMm: vector.refine((value) => Math.hypot(...value) > 0, "Face control point move delta must be nonzero"),
     intent,
     revision,
   }).strict(), async ({ bodyId, cvIds, deltaMm, intent: purpose, revision: current }) => {
-    let controlPoints: unknown;
+    let moved: Record<string, unknown> | undefined;
     const result = await journaled("move-face-control-points", purpose, { bodyId, cvIds, deltaMm }, async () => {
-      const moved = await session.get().moveFaceControlPoints(bodyId, cvIds, deltaMm, current);
-      controlPoints = moved.controlPoints;
-      return moved.state;
+      const { state, ...rest } = await session.get().moveFaceControlPoints(bodyId, cvIds, deltaMm, current);
+      moved = rest;
+      return state;
     });
-    return { ...(result as unknown as Record<string, unknown>), controlPoints };
+    return { ...(result as unknown as Record<string, unknown>), ...moved };
   });
-  tool("plasticity_set_driving_distance", "Set the distance between two parallel planar faces of one Solid or Sheet to an exact millimeter value, as Plasticity's Dimension tool does: movingFaceId moves (with the geometry attached to it) and referenceFaceId stays fixed. Without referenceFaceId, Plasticity finds the opposite face itself. Use it to resize a part to an exact overall dimension (a 20 mm box to 30 mm, a cylinder to 16 mm tall) without computing an offset: plasticity_extrude_faces and plasticity_move need the delta, this takes the target distance. One Plasticity history step. Returns previousDistanceMm (what Plasticity measured before) and distanceMm. Rejects non-planar faces, faces of another body, and a non-parallel reference. If Plasticity cannot dimension the pair, nothing changes. Re-read faces afterward: face IDs change with the edit.", z.object({
+  tool("plasticity_set_driving_distance", "Set the distance between two parallel planar faces of one Solid or Sheet to an exact millimeter value, as Plasticity's Dimension tool does: movingFaceId moves (with the geometry attached to it) and referenceFaceId stays fixed. The two faces may face opposite ways (a box's two ends) or the same way (two steps of a stepped block). Without referenceFaceId, Plasticity finds the opposite face itself. Use it to resize a part to an exact overall dimension (a 20 mm box to 30 mm, a cylinder to 16 mm tall) without computing an offset: plasticity_extrude_faces and plasticity_move need the delta, this takes the target distance. One Plasticity history step; it clears the current Plasticity selection. If the distance already equals distanceMm (within 1e-6 mm) nothing runs and the result has changed false and undoSteps 0. Returns previousDistanceMm (what Plasticity measured before), distanceMm, movedFaceId (the moved face's new ID: face IDs change with the edit) and planeOffsetMm (the moved plane's offset along its outward normal); the result is read back and checked. Rejects non-planar faces, faces of another body, and a non-parallel reference. If Plasticity cannot dimension the pair, nothing changes. Verified on Plasticity 26.1.3 only.", z.object({
     bodyId: z.number().int().positive(),
     movingFaceId: z.string().min(1),
     referenceFaceId: z.string().min(1).optional(),
@@ -3592,11 +3606,11 @@ function createServerWithCatalog(
       context.addIssue({ code: "custom", path: ["referenceFaceId"], message: "referenceFaceId must differ from movingFaceId" });
     }
   }), async ({ bodyId, movingFaceId, referenceFaceId, distanceMm, intent: purpose, revision: current }) => {
-    let measured: { previousDistanceMm: number | null; distanceMm: number; undoSteps: 1 } | undefined;
+    let measured: Record<string, unknown> | undefined;
     const result = await journaled("set-driving-distance", purpose, { bodyId, movingFaceId, referenceFaceId, distanceMm }, async () => {
-      const done = await session.get().setDrivingDistance({ bodyId, movingFaceId, referenceFaceId, distanceMm }, current);
-      measured = { previousDistanceMm: done.previousDistanceMm, distanceMm: done.distanceMm, undoSteps: done.undoSteps };
-      return done.state;
+      const { state, ...done } = await session.get().setDrivingDistance({ bodyId, movingFaceId, referenceFaceId, distanceMm }, current);
+      measured = done;
+      return state;
     });
     return { ...(result as unknown as Record<string, unknown>), ...measured };
   });
@@ -3782,7 +3796,7 @@ function createServerWithCatalog(
     await journaled("patch-regions", purpose, { regionIds: selectedRegions }, () => session.get().patchRegions(selectedRegions, current)));
   tool("plasticity_patch_closed_wires", "Create independent native Sheet patches from current closed Wire bodies while preserving every source Wire. Unlike planar Region patching, this accepts nonplanar closed boundaries and can create B-Surfaces. Re-read exact boundaries, surface structure, area, and native validity; the native fill is not a constrained engineering surface unless those properties are separately verified.", z.object({ ids: uniqueBodyIds, intent, revision }).strict(), async ({ ids: wireIds, intent: purpose, revision: current }) =>
     await journaled("patch-closed-wires", purpose, { wireIds }, () => session.get().patchClosedWires(wireIds, current)), false, { destructiveHint: false });
-  tool("plasticity_xsided_patch", "Fill an N-sided boundary with one new native Sheet, from 3 or more boundary Wires (curveIds) or from boundary edges of one Sheet or Solid (edges), optionally pulled toward interior Wire guideIds. Unlike plasticity_patch_closed_wires, which fills each closed Wire alone, this joins several open Wires into one patch and can match the neighbouring surface: continuity g0 (default, flat), g1 or g2 applies to edge boundaries only. Unlike plasticity_create_constrained_surface, the boundary is exact geometry, not points and normals. Source Wires and Sheet stay. Check the result by type and face and edge counts, because reported bounds can overshoot the boundary.", z.object({
+  tool("plasticity_xsided_patch", "Fill an N-sided boundary with one new native Sheet, from 3 or more boundary Wires (curveIds) or from edges of one Sheet or Solid (edges): the open rim of a Sheet, or a closed edge loop of a Solid such as a hole rim or the edge loop of a face (verified live on Plasticity 26.1.3). Optional interior Wire guideIds pull the patch toward them, with curveIds or with edges. Unlike plasticity_patch_closed_wires, which fills each closed Wire alone, this joins several open Wires into one patch and can match the neighbouring surface: continuity g0 (default, flat), g1 or g2 applies to edge boundaries only. Unlike plasticity_create_constrained_surface, the boundary is exact geometry, not points and normals. Source Wires, Sheet and Solid stay. Guides run Plasticity's XNurbs command, which was tested only with a Studio licence. Check the result by type and face and edge counts, because reported bounds can overshoot the boundary.", z.object({
     curveIds: z.array(z.number().int().positive()).min(3).max(64).refine((values) => new Set(values).size === values.length, "Boundary curve IDs must be unique").optional(),
     edges: z.object({
       bodyId: z.number().int().positive(),
@@ -4252,7 +4266,7 @@ function createServerWithCatalog(
     revision,
   }).strict(), async ({ path, sourceUnit, intent: purpose, revision: current }) =>
     await journaled("import-reference-mesh", purpose, { path, sourceUnit }, () => session.get().importReferenceMesh(path, sourceUnit, current)));
-  tool("plasticity_convert_reference_mesh_to_polysplines", "Convert one quad-dominant reference mesh into a native PolySplines Solid or Sheet. The reference mesh is consumed (it disappears from plasticity_list_reference_meshes). The result is the smooth subdivision-limit surface of the mesh, not its exact corners: a 10 mm quad cube becomes about 8.4 mm and rounded. mergePatches (default true) merges patches into fewer faces; interpolateBoundary pins open boundaries to the mesh. Import the mesh with plasticity_import_reference_mesh first.", z.object({
+  tool("plasticity_convert_reference_mesh_to_polysplines", "Convert one reference mesh into a native PolySplines Solid or Sheet. The reference mesh is consumed (it disappears from plasticity_list_reference_meshes). The result is the smooth subdivision-limit surface of the mesh, not its exact corners: a 10 mm quad cube becomes about 8.4 mm and rounded (6 faces). A closed mesh gives a Solid, an open one a Sheet. Quad meshes work best; a triangle mesh also converts, with more faces (a 12-triangle cube gave a 36-face Solid). interpolateBoundary true changed an open 3 x 3 quad grid from 9 to 21 faces with the same bounds; its effect on the boundary shape is not verified. mergePatches (default true) showed no effect on that grid. Import the mesh with plasticity_import_reference_mesh first. Verified on Plasticity 26.1.3 only.", z.object({
     referenceMeshId: z.number().int().nonnegative(),
     mergePatches: z.boolean().default(true),
     interpolateBoundary: z.boolean().optional(),

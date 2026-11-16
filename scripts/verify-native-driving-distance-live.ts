@@ -58,6 +58,10 @@ Live mode takes a baseline, then builds disposable geometry at x >= 2400 mm and 
   - box 20 x 10 x 5: +x face to 30 mm (-x plane fixed), -x face to 30 mm (+x plane fixed), y to 18 mm,
     a single +z face without a reference (Plasticity finds the opposite face), each one Undo step that undo restores;
   - cylinder cap height 10 -> 16 mm with the bottom cap fixed;
+  - an equal distance is a no-op with no Undo entry, in pair mode and in single-face mode;
+  - a washer plate (centred through hole, so the top face midpoint lies in the hole): single-face and pair mode;
+  - a stepped block: two +z faces that face the same way, the upper one set 8 mm above the lower one;
+  - every commit is read back: movedFaceId and planeOffsetMm must match the moved plane;
   - a non-parallel pair is rejected with no Undo entry;
   - one plasticity_batch that creates a box and sets a driving distance in one call.
 After every case it reads the editor directly (read-only, same CDP endpoint): no active command, no selection,
@@ -166,7 +170,7 @@ async function main(): Promise<void> {
       });
       const after = await status(client);
       requireCondition(after.undoDepth === checkpoint.undoDepth + 1, `${label}: expected exactly one Undo step, got ${after.undoDepth - checkpoint.undoDepth}`);
-      requireCondition(result.undoSteps === 1 && result.distanceMm === spec.distanceMm, `${label}: unexpected result fields`);
+      requireCondition(result.undoSteps === 1 && result.changed === true && result.distanceMm === spec.distanceMm, `${label}: unexpected result fields`);
       requireNear(result.previousDistanceMm, spec.previousMm, `${label} previousDistanceMm`, 1e-6);
       requireCondition(after.bodies.some((body: { id: number }) => body.id === bodyId), `${label}: the body lost its stable id`);
       requireCondition(after.bodies.length === checkpoint.bodies.length, `${label}: the body count changed`);
@@ -175,6 +179,11 @@ async function main(): Promise<void> {
       requireNear(fixedAfter, fixedBefore, `${label}: fixed plane`, 1e-6);
       requireNear(Math.abs(movingAfter - fixedAfter), spec.distanceMm, `${label}: distance between the planes`, 1e-6);
       requireCondition(Math.abs(movingAfter - movingBefore) > 1e-3, `${label}: the moving plane did not move`);
+      // Post-commit read-back reported by the tool: movedFaceId is the moved face and planeOffsetMm its plane.
+      const movedFace = await faceWithNormal(bodyId, spec.moving);
+      requireCondition(result.movedFaceId === movedFace.id, `${label}: movedFaceId ${String(result.movedFaceId)} is not the moved face ${movedFace.id}`);
+      const axis = spec.moving.findIndex((value) => value !== 0);
+      requireNear(result.planeOffsetMm, movingAfter * spec.moving[axis]!, `${label}: planeOffsetMm`, 1e-6);
       const clean = await requireClean(label);
       await call(client, "plasticity_undo", { revision: after.revision, intent: `Undo acceptance: ${label}` });
       const undone = await status(client);
@@ -183,6 +192,7 @@ async function main(): Promise<void> {
       requireNear(await planeOf(bodyId, spec.fixed), fixedBefore, `${label}: undo keeps the fixed plane`, 1e-6);
       const record = {
         movingFaceId: moving.id, referenceFaceId: reference?.id ?? null, previousDistanceMm: result.previousDistanceMm, distanceMm: result.distanceMm,
+        movedFaceId: result.movedFaceId, planeOffsetMm: result.planeOffsetMm,
         undoDepth: [checkpoint.undoDepth, after.undoDepth, undone.undoDepth],
         fixedPlaneMm: [fixedBefore, fixedAfter], movingPlaneMm: [movingBefore, movingAfter], boundsAfter: after.bodies.find((body: { id: number }) => body.id === bodyId).boundsMm, clean,
       };
@@ -202,6 +212,71 @@ async function main(): Promise<void> {
     // ---- cylinder cap height 10 -> 16
     const cylinder = await create("plasticity_create_cylinder", { centerMm: [2500, 5, 0], radiusMm: 5, heightMm: 10 });
     await drive("cylinder_cap_height", cylinder.id, { moving: [0, 0, 1], reference: [0, 0, -1], fixed: [0, 0, -1], distanceMm: 16, previousMm: 10 });
+
+    // ---- equal distance: a no-op with no Undo entry, in pair mode (pre-checked, no native call) and in
+    // single-face mode (Plasticity's finish gives "no effect"; the tool reports a no-op).
+    const noOp = async (label: string, bodyId: number, spec: { moving: Vector; reference?: Vector; distanceMm: number }) => {
+      const before = await status(client);
+      const moving = await faceWithNormal(bodyId, spec.moving);
+      const reference = spec.reference ? await faceWithNormal(bodyId, spec.reference) : undefined;
+      const result = await call(client, "plasticity_set_driving_distance", {
+        bodyId, movingFaceId: moving.id, ...(reference ? { referenceFaceId: reference.id } : {}), distanceMm: spec.distanceMm, revision: before.revision, intent: `Acceptance: ${label}`,
+      });
+      const after = await status(client);
+      requireCondition(result.changed === false && result.undoSteps === 0, `${label}: expected a no-op, got ${JSON.stringify({ changed: result.changed, undoSteps: result.undoSteps })}`);
+      requireCondition(/distance already/.test(result.message ?? ""), `${label}: expected a "distance already" message, got ${String(result.message)}`);
+      requireCondition(after.undoDepth === before.undoDepth && after.revision === before.revision, `${label}: a no-op changed the document`);
+      checks[label] = { message: result.message, previousDistanceMm: result.previousDistanceMm, undoDepth: [before.undoDepth, after.undoDepth], clean: await requireClean(label) };
+      console.error(`${label}: ok ${JSON.stringify(result.message)}`);
+    };
+    await noOp("equal_distance_pair_noop", box.id, { moving: [1, 0, 0], reference: [-1, 0, 0], distanceMm: 20 });
+    await noOp("equal_distance_single_face_noop", box.id, { moving: [0, 0, 1], distanceMm: 5 });
+
+    // ---- washer: 40 x 40 x 5 plate with a centred r 8 through hole. The top face midpoint lies in the hole, so
+    // single-face mode needs the kernel's own point on the face as the hit (probe-washer.json).
+    {
+      const plate = await create("plasticity_create_box", { originMm: [2800, 0, 0], sizeMm: [40, 40, 5] });
+      const before = await status(client);
+      await call(client, "plasticity_create_cylinder", { centerMm: [2820, 20, -1], radiusMm: 8, heightMm: 7, revision: before.revision });
+      const withHole = await status(client);
+      const hole = withHole.bodies.find((body: { id: number }) => !before.bodies.some((old: { id: number }) => old.id === body.id));
+      await call(client, "plasticity_boolean", { targetIds: [plate.id], toolIds: [hole.id], operation: "difference", revision: withHole.revision });
+      const top = await faceWithNormal(plate.id, [0, 0, 1]);
+      requireCondition(Math.hypot(top.centerMm[0] - 2820, top.centerMm[1] - 20) < 1e-6, `washer: expected the top face midpoint in the hole, got ${top.centerMm}`);
+      checks.washer_top_midpoint_in_hole = { centerMm: top.centerMm };
+      await drive("washer_single_face_top", plate.id, { moving: [0, 0, 1], fixed: [0, 0, -1], distanceMm: 8, previousMm: 5 });
+      await drive("washer_pair_top_bottom", plate.id, { moving: [0, 0, 1], reference: [0, 0, -1], fixed: [0, 0, -1], distanceMm: 9, previousMm: 5 });
+    }
+
+    // ---- same-direction pair: a stepped block whose two +z faces (z 10 and z 5) face the same way. Plasticity
+    // dimensions them; the upper face moves to 8 mm above the lower one.
+    {
+      const high = await create("plasticity_create_box", { originMm: [2900, 0, 0], sizeMm: [20, 10, 10] });
+      const low = await create("plasticity_create_box", { originMm: [2920, 0, 0], sizeMm: [20, 10, 5] });
+      const merged = await status(client);
+      await call(client, "plasticity_boolean", { targetIds: [high.id], toolIds: [low.id], operation: "union", revision: merged.revision });
+      const before = await status(client);
+      const tops = await call(client, "plasticity_find_faces", { revision: before.revision, query: { bodyIds: [high.id], planar: true, normal: { vector: [0, 0, 1], toleranceDeg: 0.01 } } });
+      requireCondition(tops.count === 2, `stepped: expected two +z faces, found ${tops.count}`);
+      const upper = tops.matches.find((face: any) => face.centerMm[2] > 9);
+      const lower = tops.matches.find((face: any) => face.centerMm[2] < 6);
+      requireCondition(upper && lower, "stepped: upper and lower +z faces not found");
+      const result = await call(client, "plasticity_set_driving_distance", { bodyId: high.id, movingFaceId: upper.id, referenceFaceId: lower.id, distanceMm: 8, revision: before.revision, intent: "Acceptance: stepped same-direction pair" });
+      const after = await status(client);
+      requireCondition(after.undoDepth === before.undoDepth + 1 && result.changed === true, "stepped: expected one Undo step");
+      const topsAfter = await call(client, "plasticity_find_faces", { revision: after.revision, query: { bodyIds: [high.id], planar: true, normal: { vector: [0, 0, 1], toleranceDeg: 0.01 } } });
+      const zs = topsAfter.matches.map((face: any) => face.centerMm[2]).sort((a: number, b: number) => a - b);
+      requireNear(zs[0], 5, "stepped: lower face fixed", 1e-6);
+      requireNear(zs[1], 13, "stepped: upper face at 5 + 8", 1e-6);
+      requireNear(result.planeOffsetMm, 13, "stepped: planeOffsetMm", 1e-6);
+      requireCondition(topsAfter.matches.some((face: any) => face.id === result.movedFaceId && Math.abs(face.centerMm[2] - 13) < 1e-6), "stepped: movedFaceId is not the upper face");
+      const clean = await requireClean("stepped");
+      await call(client, "plasticity_undo", { revision: after.revision, intent: "Undo acceptance: stepped" });
+      const undone = await status(client);
+      requireCondition(undone.undoDepth === before.undoDepth, "stepped: undo did not return to the checkpoint");
+      checks.stepped_same_direction = { previousDistanceMm: result.previousDistanceMm, planeOffsetMm: result.planeOffsetMm, movedFaceId: result.movedFaceId, topZ: zs, undoDepth: [before.undoDepth, after.undoDepth, undone.undoDepth], clean };
+      console.error(`stepped_same_direction: ok ${JSON.stringify({ zs, previous: result.previousDistanceMm })}`);
+    }
 
     // ---- non-parallel pair: rejected before any native call, no Undo entry, clean editor
     {

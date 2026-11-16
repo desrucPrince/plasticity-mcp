@@ -1,0 +1,1062 @@
+{
+ "start": {
+  "undo": 0,
+  "bodies": 4
+ },
+ "sheet": {
+  "id": 27,
+  "faceCount": 2,
+  "types": [
+   [
+    1,
+    "Solid",
+    11
+   ],
+   [
+    5,
+    "Sheet",
+    1
+   ],
+   [
+    3,
+    "Wire",
+    0
+   ],
+   [
+    4,
+    "Wire",
+    0
+   ],
+   [
+    25,
+    "Wire",
+    0
+   ],
+   [
+    26,
+    "Wire",
+    0
+   ],
+   [
+    27,
+    "Sheet",
+    2
+   ]
+  ]
+ },
+ "sheetFaces": [
+  {
+   "id": "52f2754",
+   "surfaceType": "BSurf",
+   "centerMm": [
+    2910,
+    10,
+    8
+   ]
+  },
+  {
+   "id": "52f2851",
+   "surfaceType": "BSurf",
+   "centerMm": [
+    2930,
+    10,
+    8
+   ]
+  }
+ ],
+ "read_initial": {
+  "groupInfo": {
+   "ids": [],
+   "length": 0,
+   "segments": [],
+   "getIds": [],
+   "lookup0": "ERR Invalid index: -1",
+   "segmentSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​",
+   "getIdSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​",
+   "lookupSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​"
+  },
+  "undoDelta": 0,
+  "failure": null,
+  "factorySnapshot": null,
+  "sameView": true,
+  "faceIds": [
+   "52f2851",
+   "52f2754"
+  ],
+  "before": 0,
+  "after": [],
+  "cvsProto": [
+   "ShellCVGroup:layers,get,segment,lookup,updateMatrixWorld,boxcast,raycast",
+   "ControlPointGroup:parentItem,getId,indicesForIds,geometry,updateMatrixWorld,dispose,intersectsBounds"
+  ],
+  "cvProto": null,
+  "cvsKeys": [
+   "ids",
+   "points",
+   "occluded",
+   "visible",
+   "hull",
+   "hullOccluded",
+   "length",
+   "parent"
+  ],
+  "mcpUndo": [
+   5,
+   5
+  ],
+  "bodyStill": true
+ },
+ "show_A": {
+  "groupInfo": {
+   "ids": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+   ],
+   "length": 8,
+   "segments": [
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]"
+   ],
+   "getIds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+   ],
+   "lookup0": "ShellCV",
+   "segmentSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​",
+   "getIdSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​",
+   "lookupSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​"
+  },
+  "undoDelta": 1,
+  "failure": null,
+  "factorySnapshot": {
+   "show": true
+  },
+  "sameView": false,
+  "faceIds": [
+   "53f2851",
+   "53f2754"
+  ],
+  "before": 0,
+  "after": [
+   {
+    "parentItem": "Sheet",
+    "id": 0,
+    "layers": "Layers",
+    "position": "Vector3(2900,0,0)",
+    "versionId": "53c0"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 1,
+    "layers": "Layers",
+    "position": "Vector3(2900,20,0)",
+    "versionId": "53c1"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 2,
+    "layers": "Layers",
+    "position": "Vector3(2906.667,0,10.667)",
+    "versionId": "53c2"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 3,
+    "layers": "Layers",
+    "position": "Vector3(2906.667,20,10.667)",
+    "versionId": "53c3"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 4,
+    "layers": "Layers",
+    "position": "Vector3(2913.333,0,10.667)",
+    "versionId": "53c4"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 5,
+    "layers": "Layers",
+    "position": "Vector3(2913.333,20,10.667)",
+    "versionId": "53c5"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 6,
+    "layers": "Layers",
+    "position": "Vector3(2920,0,0)",
+    "versionId": "53c6"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 7,
+    "layers": "Layers",
+    "position": "Vector3(2920,20,0)",
+    "versionId": "53c7"
+   }
+  ],
+  "cvsProto": [
+   "ShellCVGroup:layers,get,segment,lookup,updateMatrixWorld,boxcast,raycast",
+   "ControlPointGroup:parentItem,getId,indicesForIds,geometry,updateMatrixWorld,dispose,intersectsBounds"
+  ],
+  "cvProto": [
+   "ShellCV:priority,getBoundingBox",
+   "CV:uuid"
+  ],
+  "cvsKeys": [
+   "ids",
+   "points",
+   "occluded",
+   "visible",
+   "hull",
+   "hullOccluded",
+   "length",
+   "parent"
+  ],
+  "mcpUndo": [
+   5,
+   6
+  ],
+  "bodyStill": true
+ },
+ "show_B": {
+  "groupInfo": {
+   "ids": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "length": 16,
+   "segments": [
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]"
+   ],
+   "getIds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "lookup0": "ShellCV",
+   "segmentSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​",
+   "getIdSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​",
+   "lookupSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​"
+  },
+  "undoDelta": 1,
+  "failure": null,
+  "factorySnapshot": {
+   "show": true
+  },
+  "sameView": false,
+  "faceIds": [
+   "54f2851",
+   "54f2754"
+  ],
+  "before": 8,
+  "after": [
+   {
+    "parentItem": "Sheet",
+    "id": 0,
+    "layers": "Layers",
+    "position": "Vector3(2900,0,0)",
+    "versionId": "54c0"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 1,
+    "layers": "Layers",
+    "position": "Vector3(2900,20,0)",
+    "versionId": "54c1"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 2,
+    "layers": "Layers",
+    "position": "Vector3(2906.667,0,10.667)",
+    "versionId": "54c2"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 3,
+    "layers": "Layers",
+    "position": "Vector3(2906.667,20,10.667)",
+    "versionId": "54c3"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 4,
+    "layers": "Layers",
+    "position": "Vector3(2913.333,0,10.667)",
+    "versionId": "54c4"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 5,
+    "layers": "Layers",
+    "position": "Vector3(2913.333,20,10.667)",
+    "versionId": "54c5"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 6,
+    "layers": "Layers",
+    "position": "Vector3(2920,0,0)",
+    "versionId": "54c6"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 7,
+    "layers": "Layers",
+    "position": "Vector3(2920,20,0)",
+    "versionId": "54c7"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 8,
+    "layers": "Layers",
+    "position": "Vector3(2920,0,0)",
+    "versionId": "54c8"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 9,
+    "layers": "Layers",
+    "position": "Vector3(2920,20,0)",
+    "versionId": "54c9"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 10,
+    "layers": "Layers",
+    "position": "Vector3(2926.667,0,10.667)",
+    "versionId": "54c10"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 11,
+    "layers": "Layers",
+    "position": "Vector3(2926.667,20,10.667)",
+    "versionId": "54c11"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 12,
+    "layers": "Layers",
+    "position": "Vector3(2933.333,0,10.667)",
+    "versionId": "54c12"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 13,
+    "layers": "Layers",
+    "position": "Vector3(2933.333,20,10.667)",
+    "versionId": "54c13"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 14,
+    "layers": "Layers",
+    "position": "Vector3(2940,0,0)",
+    "versionId": "54c14"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 15,
+    "layers": "Layers",
+    "position": "Vector3(2940,20,0)",
+    "versionId": "54c15"
+   }
+  ],
+  "cvsProto": [
+   "ShellCVGroup:layers,get,segment,lookup,updateMatrixWorld,boxcast,raycast",
+   "ControlPointGroup:parentItem,getId,indicesForIds,geometry,updateMatrixWorld,dispose,intersectsBounds"
+  ],
+  "cvProto": [
+   "ShellCV:priority,getBoundingBox",
+   "CV:uuid"
+  ],
+  "cvsKeys": [
+   "ids",
+   "points",
+   "occluded",
+   "visible",
+   "hull",
+   "hullOccluded",
+   "length",
+   "parent"
+  ],
+  "mcpUndo": [
+   6,
+   7
+  ],
+  "bodyStill": true
+ },
+ "show_A_again": {
+  "groupInfo": {
+   "ids": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "length": 16,
+   "segments": [
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]"
+   ],
+   "getIds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "lookup0": "ShellCV",
+   "segmentSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​",
+   "getIdSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​",
+   "lookupSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​"
+  },
+  "undoDelta": 1,
+  "failure": null,
+  "factorySnapshot": {
+   "show": true
+  },
+  "sameView": false,
+  "faceIds": [
+   "55f2851",
+   "55f2754"
+  ],
+  "before": 16,
+  "after": [
+   {
+    "parentItem": "Sheet",
+    "id": 0,
+    "layers": "Layers",
+    "position": "Vector3(2900,0,0)",
+    "versionId": "55c0"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 1,
+    "layers": "Layers",
+    "position": "Vector3(2900,20,0)",
+    "versionId": "55c1"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 2,
+    "layers": "Layers",
+    "position": "Vector3(2906.667,0,10.667)",
+    "versionId": "55c2"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 3,
+    "layers": "Layers",
+    "position": "Vector3(2906.667,20,10.667)",
+    "versionId": "55c3"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 4,
+    "layers": "Layers",
+    "position": "Vector3(2913.333,0,10.667)",
+    "versionId": "55c4"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 5,
+    "layers": "Layers",
+    "position": "Vector3(2913.333,20,10.667)",
+    "versionId": "55c5"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 6,
+    "layers": "Layers",
+    "position": "Vector3(2920,0,0)",
+    "versionId": "55c6"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 7,
+    "layers": "Layers",
+    "position": "Vector3(2920,20,0)",
+    "versionId": "55c7"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 8,
+    "layers": "Layers",
+    "position": "Vector3(2920,0,0)",
+    "versionId": "55c8"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 9,
+    "layers": "Layers",
+    "position": "Vector3(2920,20,0)",
+    "versionId": "55c9"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 10,
+    "layers": "Layers",
+    "position": "Vector3(2926.667,0,10.667)",
+    "versionId": "55c10"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 11,
+    "layers": "Layers",
+    "position": "Vector3(2926.667,20,10.667)",
+    "versionId": "55c11"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 12,
+    "layers": "Layers",
+    "position": "Vector3(2933.333,0,10.667)",
+    "versionId": "55c12"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 13,
+    "layers": "Layers",
+    "position": "Vector3(2933.333,20,10.667)",
+    "versionId": "55c13"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 14,
+    "layers": "Layers",
+    "position": "Vector3(2940,0,0)",
+    "versionId": "55c14"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 15,
+    "layers": "Layers",
+    "position": "Vector3(2940,20,0)",
+    "versionId": "55c15"
+   }
+  ],
+  "cvsProto": [
+   "ShellCVGroup:layers,get,segment,lookup,updateMatrixWorld,boxcast,raycast",
+   "ControlPointGroup:parentItem,getId,indicesForIds,geometry,updateMatrixWorld,dispose,intersectsBounds"
+  ],
+  "cvProto": [
+   "ShellCV:priority,getBoundingBox",
+   "CV:uuid"
+  ],
+  "cvsKeys": [
+   "ids",
+   "points",
+   "occluded",
+   "visible",
+   "hull",
+   "hullOccluded",
+   "length",
+   "parent"
+  ],
+  "mcpUndo": [
+   7,
+   8
+  ],
+  "bodyStill": true
+ },
+ "hide_A": {
+  "groupInfo": {
+   "ids": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+   ],
+   "length": 8,
+   "segments": [
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]"
+   ],
+   "getIds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+   ],
+   "lookup0": "ShellCV",
+   "segmentSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​",
+   "getIdSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​",
+   "lookupSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​"
+  },
+  "undoDelta": 1,
+  "failure": null,
+  "factorySnapshot": {
+   "show": false
+  },
+  "sameView": false,
+  "faceIds": [
+   "56f2851",
+   "56f2754"
+  ],
+  "before": 16,
+  "after": [
+   {
+    "parentItem": "Sheet",
+    "id": 0,
+    "layers": "Layers",
+    "position": "Vector3(2920,0,0)",
+    "versionId": "56c0"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 1,
+    "layers": "Layers",
+    "position": "Vector3(2920,20,0)",
+    "versionId": "56c1"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 2,
+    "layers": "Layers",
+    "position": "Vector3(2926.667,0,10.667)",
+    "versionId": "56c2"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 3,
+    "layers": "Layers",
+    "position": "Vector3(2926.667,20,10.667)",
+    "versionId": "56c3"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 4,
+    "layers": "Layers",
+    "position": "Vector3(2933.333,0,10.667)",
+    "versionId": "56c4"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 5,
+    "layers": "Layers",
+    "position": "Vector3(2933.333,20,10.667)",
+    "versionId": "56c5"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 6,
+    "layers": "Layers",
+    "position": "Vector3(2940,0,0)",
+    "versionId": "56c6"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 7,
+    "layers": "Layers",
+    "position": "Vector3(2940,20,0)",
+    "versionId": "56c7"
+   }
+  ],
+  "cvsProto": [
+   "ShellCVGroup:layers,get,segment,lookup,updateMatrixWorld,boxcast,raycast",
+   "ControlPointGroup:parentItem,getId,indicesForIds,geometry,updateMatrixWorld,dispose,intersectsBounds"
+  ],
+  "cvProto": [
+   "ShellCV:priority,getBoundingBox",
+   "CV:uuid"
+  ],
+  "cvsKeys": [
+   "ids",
+   "points",
+   "occluded",
+   "visible",
+   "hull",
+   "hullOccluded",
+   "length",
+   "parent"
+  ],
+  "mcpUndo": [
+   8,
+   9
+  ],
+  "bodyStill": true
+ },
+ "hide_B": {
+  "groupInfo": {
+   "ids": [],
+   "length": 0,
+   "segments": [],
+   "getIds": [],
+   "lookup0": "ERR Invalid index: -1",
+   "segmentSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​",
+   "getIdSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​",
+   "lookupSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​"
+  },
+  "undoDelta": 1,
+  "failure": null,
+  "factorySnapshot": {
+   "show": false
+  },
+  "sameView": false,
+  "faceIds": [
+   "57f2851",
+   "57f2754"
+  ],
+  "before": 8,
+  "after": [],
+  "cvsProto": [
+   "ShellCVGroup:layers,get,segment,lookup,updateMatrixWorld,boxcast,raycast",
+   "ControlPointGroup:parentItem,getId,indicesForIds,geometry,updateMatrixWorld,dispose,intersectsBounds"
+  ],
+  "cvProto": null,
+  "cvsKeys": [
+   "ids",
+   "points",
+   "occluded",
+   "visible",
+   "hull",
+   "hullOccluded",
+   "length",
+   "parent"
+  ],
+  "mcpUndo": [
+   9,
+   10
+  ],
+  "bodyStill": true
+ },
+ "show_AB": {
+  "groupInfo": {
+   "ids": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "length": 16,
+   "segments": [
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]",
+    "ShellHullSegment:[\"parentItem\",\"idx\",\"layers\",\"versionId\"]"
+   ],
+   "getIds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "lookup0": "ShellCV",
+   "segmentSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​",
+   "getIdSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​",
+   "lookupSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​"
+  },
+  "undoDelta": 1,
+  "failure": null,
+  "factorySnapshot": {
+   "show": true
+  },
+  "sameView": false,
+  "faceIds": [
+   "58f2851",
+   "58f2754"
+  ],
+  "before": 0,
+  "after": [
+   {
+    "parentItem": "Sheet",
+    "id": 0,
+    "layers": "Layers",
+    "position": "Vector3(2900,0,0)",
+    "versionId": "58c0"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 1,
+    "layers": "Layers",
+    "position": "Vector3(2900,20,0)",
+    "versionId": "58c1"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 2,
+    "layers": "Layers",
+    "position": "Vector3(2906.667,0,10.667)",
+    "versionId": "58c2"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 3,
+    "layers": "Layers",
+    "position": "Vector3(2906.667,20,10.667)",
+    "versionId": "58c3"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 4,
+    "layers": "Layers",
+    "position": "Vector3(2913.333,0,10.667)",
+    "versionId": "58c4"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 5,
+    "layers": "Layers",
+    "position": "Vector3(2913.333,20,10.667)",
+    "versionId": "58c5"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 6,
+    "layers": "Layers",
+    "position": "Vector3(2920,0,0)",
+    "versionId": "58c6"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 7,
+    "layers": "Layers",
+    "position": "Vector3(2920,20,0)",
+    "versionId": "58c7"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 8,
+    "layers": "Layers",
+    "position": "Vector3(2920,0,0)",
+    "versionId": "58c8"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 9,
+    "layers": "Layers",
+    "position": "Vector3(2920,20,0)",
+    "versionId": "58c9"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 10,
+    "layers": "Layers",
+    "position": "Vector3(2926.667,0,10.667)",
+    "versionId": "58c10"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 11,
+    "layers": "Layers",
+    "position": "Vector3(2926.667,20,10.667)",
+    "versionId": "58c11"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 12,
+    "layers": "Layers",
+    "position": "Vector3(2933.333,0,10.667)",
+    "versionId": "58c12"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 13,
+    "layers": "Layers",
+    "position": "Vector3(2933.333,20,10.667)",
+    "versionId": "58c13"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 14,
+    "layers": "Layers",
+    "position": "Vector3(2940,0,0)",
+    "versionId": "58c14"
+   },
+   {
+    "parentItem": "Sheet",
+    "id": 15,
+    "layers": "Layers",
+    "position": "Vector3(2940,20,0)",
+    "versionId": "58c15"
+   }
+  ],
+  "cvsProto": [
+   "ShellCVGroup:layers,get,segment,lookup,updateMatrixWorld,boxcast,raycast",
+   "ControlPointGroup:parentItem,getId,indicesForIds,geometry,updateMatrixWorld,dispose,intersectsBounds"
+  ],
+  "cvProto": [
+   "ShellCV:priority,getBoundingBox",
+   "CV:uuid"
+  ],
+  "cvsKeys": [
+   "ids",
+   "points",
+   "occluded",
+   "visible",
+   "hull",
+   "hullOccluded",
+   "length",
+   "parent"
+  ],
+  "mcpUndo": [
+   10,
+   11
+  ],
+  "bodyStill": true
+ },
+ "after_all": [
+  [
+   5,
+   1
+  ],
+  [
+   27,
+   2
+  ]
+ ],
+ "end": {
+  "undo": 0,
+  "bodies": 4
+ }
+}

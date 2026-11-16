@@ -262,14 +262,20 @@ groups and controlled through the mixed-node visibility and lock tools. These
 bounds can guide placement and visual comparison, but they cannot prove a
 manufacturing dimension or replace manufacturer CAD, drawings, or
 user-confirmed measurements.
-`plasticity_convert_reference_mesh_to_polysplines` turns one quad-dominant
-reference mesh into a native PolySplines Solid or Sheet. The reference mesh is
-consumed: it disappears from `plasticity_list_reference_meshes`. The result is
+`plasticity_convert_reference_mesh_to_polysplines` turns one reference mesh into
+a native PolySplines Solid (closed mesh) or Sheet (open mesh). The reference mesh
+is consumed: it disappears from `plasticity_list_reference_meshes`. The result is
 the smooth subdivision-limit surface, so a 10 mm quad cube becomes a rounded
-cube about 8.4 mm across (6 faces, 12 edges, 8 vertices). `mergePatches`
-defaults to true; `interpolateBoundary` is optional. `roundedCorners` showed no
-effect and is not exposed, and PolySplines import is not driven. Triangle meshes
-are untested.
+cube about 8.4 mm across (6 faces, 12 edges, 8 vertices). Verified live on
+Plasticity 26.1.3 only:
+- A triangle-only mesh also converts: a 12-triangle 10 mm cube gave a 36-face
+  Solid (72 edges, 38 vertices), shrunk like the quad cube.
+- On an open 3 x 3 quad grid, the default gives a 9-face Sheet.
+  `interpolateBoundary: true` gives 21 faces with the same bounds; its effect on
+  the boundary shape is not verified.
+- `mergePatches` defaults to true; `false` showed no effect on that grid.
+- `roundedCorners` showed no effect and is not exposed, and PolySplines import
+  is not driven.
 
 When a product search yields a directly downloadable public STL or OBJ,
 `plasticity_download_and_import_reference_mesh` can fetch and import only the
@@ -1193,15 +1199,20 @@ continuity or engineering surface: inspect the exact boundary, surface
 structure, face properties, and validity before joining or thickening it.
 `plasticity_xsided_patch` fills an N-sided boundary with one new native Sheet.
 Give exactly one of `curveIds` (three or more current boundary Wires, which need
-not form one closed Wire) or `edges` (`{ bodyId, edgeIds }`, boundary edges of one
-Sheet or Solid). Optional `guideIds` are interior Wire curves that pull the
-surface toward them. Optional `continuity` (`g0` default, `g1`, `g2`) applies to
+not form one closed Wire) or `edges` (`{ bodyId, edgeIds }`, edges of one Sheet or
+Solid). Verified live on Plasticity 26.1.3: the open rim of a Sheet, the rim of a
+through hole in a Solid (default flat, `g1` bulges) and the four-edge loop of a
+Solid's face. Optional `guideIds` are interior Wire curves that pull the surface
+toward them; they work with `curveIds` and with `edges` (verified on an open
+cylinder rim and on a Solid face loop). Guides run Plasticity's XNurbs command,
+which was tested only with a Studio licence (`hasXNurbs()` true); another
+licence may refuse it. Optional `continuity` (`g0` default, `g1`, `g2`) applies to
 all `edges` and is rejected with `curveIds`: g0 stays flat at the rim, g1 and g2
 bulge off it. Use it instead of `plasticity_patch_closed_wires` when several
 open Wires or Sheet edges bound the patch or the patch must match the
 neighbouring surface, and instead of `plasticity_create_constrained_surface`
 when the boundary is exact geometry rather than points and normals. Source Wires
-and Sheet stay. Without guides it runs `PatchCommand`; with guides it runs
+and Sheet or Solid stay. Without guides it runs `PatchCommand`; with guides it runs
 `XNurbsCommand`, both on `XSidedFactory`. Degree, spans, control type, bending,
 stretch, per-edge continuity and the C1-C3, G3 and Free types are not exposed.
 Verify the result by type and face and edge counts: reported bounds can
@@ -1259,24 +1270,54 @@ faces. Read the new cylindrical radius from the returned B-Rep state.
 faces of one Solid or Sheet, as Plasticity's Dimension tool does:
 `{ bodyId, movingFaceId, referenceFaceId?, distanceMm, revision }`.
 `movingFaceId` moves with the geometry attached to it; `referenceFaceId` stays
-fixed. Without `referenceFaceId`, Plasticity finds the opposite face itself.
-Use it to resize a part to an exact overall dimension (a 20 mm box to 30 mm, a
-cylinder to 16 mm tall) without computing an offset; `plasticity_extrude_faces`
-and `plasticity_move` take a delta instead. The edit is one Undo step, and the
-result adds `previousDistanceMm` (what Plasticity measured before),
-`distanceMm` and `undoSteps: 1` to the usual compact change. The tool checks the
-revision, that both faces belong to the body and are planar, and that a given
-reference is a different, parallel, non-coplanar face; it computes the click
-point itself (the moving face center and outward normal). Plasticity's last
-selected face moves, so the tool selects `[reference, moving]` (verified live in
-both directions). A pair Plasticity cannot dimension, such as a chamfer face
-with no parallel opposite, fails with "Plasticity could not dimension these
-faces (no effect)" and changes nothing. If the dialog does not finish in time,
-the command is cancelled inside the same call and the document is unchanged;
-only a cancel that fails marks the session uncertain for `plasticity_reconcile`.
-The tool clears the selection. Face IDs change with the edit, so re-read them.
-Works as a `plasticity_batch` step (for example after `plasticity_create_box`
-and `plasticity_find_faces`). Live check: `npm run accept:native-driving-distance`.
+fixed. The faces may face opposite ways (a box's two ends) or the same way (the
+two top faces of a stepped block; verified live). Without `referenceFaceId`,
+Plasticity finds the opposite face itself. Use it to resize a part to an exact
+overall dimension (a 20 mm box to 30 mm, a cylinder to 16 mm tall) without
+computing an offset; `plasticity_extrude_faces` and `plasticity_move` take a
+delta instead. Verified on Plasticity 26.1.3 only.
+
+- One Undo step. The result adds `changed`, `previousDistanceMm` (what
+  Plasticity measured before), `distanceMm`, `undoSteps`, `movedFaceId` (the
+  moved face's new ID; face IDs change with the edit) and `planeOffsetMm` (the
+  moved plane's offset along its outward normal) to the usual compact change.
+- After a commit the tool reads the body back. The moving plane must sit at
+  `distanceMm` from the reference plane and a given reference plane must not
+  move, within 1e-6 mm. Otherwise the session is marked uncertain and the error
+  says what moved.
+- If the distance already equals `distanceMm` within 1e-6 mm, nothing changes:
+  `changed: false`, `undoSteps: 0` and a "distance already X mm" message. With a
+  reference face the tool checks this before running anything, because
+  Plasticity would still record an Undo step. In single-face mode Plasticity
+  refuses the equal edit ("Operation has no effect"), and the tool reports the
+  same no-op.
+- The tool checks the revision, that both faces belong to the body and are
+  planar, and that a given reference is a different, parallel, non-coplanar
+  face. It does not reject hidden or locked bodies; no sibling edit tool does.
+- It seeds the click point itself: the kernel's own point on the moving face
+  (`Face.GetAnyPointOn`) with the face's outward normal. A face midpoint can lie
+  off the face: the midpoint of a washer face sits in its hole, and single-face
+  mode then fails.
+- Plasticity's last selected face moves; the click point does not decide it
+  (verified live both ways). So the tool selects `[reference, moving]`.
+- A pair Plasticity cannot dimension, such as a chamfer face with no parallel
+  opposite, fails with "Plasticity could not dimension these faces (no effect)"
+  plus Plasticity's reason, and changes nothing.
+- Lifecycle: everything runs in one native call. Plasticity's executor swallows
+  command errors, so the tool reads the error inside the command. If the dialog
+  does not finish in time, the tool cancels its own command (never another
+  command) inside the same call, and the document is unchanged. A cancel that
+  fails or throws, a command that never settles, a cleanup that fails, or a
+  commit of more than one Undo step marks the session uncertain for
+  `plasticity_reconcile`. A different command that is active at the end is left
+  alone and named in `warning`.
+- The tool clears the current Plasticity selection. Works as a
+  `plasticity_batch` step (for example after `plasticity_create_box` and
+  `plasticity_find_faces`). Live check: `npm run accept:native-driving-distance`.
+- Plasticity 26.2.x: the store binding route now binds
+  `DimensionDistanceSpaceDialog`. The tool is not verified there; a missing
+  binding fails with "Plasticity native binding is unavailable" before any
+  change.
 `plasticity_set_rectangle_dimensions` changes the native local width and
 length of one closed planar Wire that Plasticity recognizes as a rectangle.
 The profile stays centered, remains an editable Wire, and its Region is updated
@@ -1684,16 +1725,49 @@ selected handles by one positive distance along each handle's chosen local U
 direction, which lets the agent edit along the control polygon without deriving
 that direction from display geometry.
 `plasticity_show_face_control_points` shows the control points (B-Surface CVs) of
-Sheet or Solid faces and returns `controlPoints: [{ cvId, positionMm }]`
-(millimeters, rounded to a micrometer because Plasticity stores float32). Showing
-the points is a Plasticity history step and takes one Undo entry. The `cvId`
-values stay valid until the body is edited again, and the point count matches
-`plasticity_inspect_surface_structure` (a 4 x 2 Sheet shows 8). Hiding is not
-exposed. `plasticity_move_face_control_points` moves shown points by one shared
-world-space millimeter `deltaMm` in one history step and returns the new
-positions of the moved points. It rejects any `cvId` that is not currently shown
-and asks for `plasticity_show_face_control_points` first. Re-read exact B-Rep
-geometry afterward.
+B-Surface faces of a Sheet or Solid. It returns the requested faces' points as
+`controlPoints: [{ cvId, faceId, index, positionMm }]` (millimeters, rounded to a
+micrometer because Plasticity stores float32) and
+`faces: [{ requestedFaceId, faceId, controlPointCount }]`. Verified on Plasticity
+26.1.3 only:
+- Showing is a history step (`undoSteps: 1`) and an edit of the body: face IDs
+  change, so use the returned `faceId`.
+- `cvId` is a string: Plasticity's control point `versionId` (for example
+  `54c10`, body version plus point index). Plasticity numbers the shown points
+  of all faces together, face by face, so showing or hiding another face
+  renumbers the rest: a face shown alone has indexes 0..7, and after an earlier
+  face is shown it has 8..15. A bare index could therefore name a different
+  point later. The `versionId` changes with every edit of the body (show, hide,
+  move; verified live), so a `cvId` is valid only at the revision the call
+  returns, and a stale `cvId` is rejected as unknown, never applied to another
+  point.
+- The tool attributes each point to its face by matching it against the face's
+  kernel control grid. Points that match no grid, or two grids, are an error.
+- A face whose points are already shown costs no step (`undoSteps: 0`).
+- The tool supports BSurf faces only. Plane and Cylinder faces show no points
+  but would still cost a step (other surface types are untested), so the tool
+  rejects non-BSurf faces before any edit.
+- The point count matches `plasticity_inspect_surface_structure` (a 4 x 2 Sheet
+  shows 8).
+
+`plasticity_hide_face_control_points` `{ bodyId, faceIds, revision }` hides shown
+points (Plasticity's Toggle Points with `show` off). It is one history step that
+edits the body; the `cvId`s of the body's remaining shown points change, so the
+result returns those points as `controlPoints`. Faces with no shown points cost no step. Undo also
+removes a show step.
+
+`plasticity_move_face_control_points` moves shown points by one shared
+world-space millimeter `deltaMm` in one history step and returns the moved points
+with their new `cvId`, `faceId` and grid `index` (the move is an edit, so both IDs
+change). Points of several faces of
+one body can move together. It rejects any `cvId` that is not currently shown and
+asks for `plasticity_show_face_control_points` first. It reads the points back:
+each must have moved by `deltaMm` within 1e-3 mm (compared unrounded), else the
+call reports what happened (the step stays in the Undo history). A show or hide
+whose read-back fails says so too and names the Undo step it took. On 26.1.3 the move writes
+`factory.cvs`; the 26.2 control-point adapter (which writes `controlPoints` for
+Wire handles) is not used for face points because it is not verified there.
+Re-read exact B-Rep geometry afterward.
 `plasticity_rotate_curve_control_points` rotates handles around an explicit
 world pivot and axis, while
 `plasticity_scale_curve_control_points` applies positive XYZ factors around an
