@@ -17,7 +17,8 @@ import { isolatedAcceptanceEnvironment } from "./native-live-environment.ts";
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 type Vec = [number, number, number];
 type Check = { case: string; check: string; ok: boolean; detail?: unknown };
-const CASES = ["1", "2", "3", "4"] as const;
+// 1-4: the original acceptance. d1-d11: one case per defect of the review (d45 covers defects 4 and 5).
+const CASES = ["1", "2", "3", "4", "d1", "d2", "d3", "d45", "d6", "d7", "d8", "d9", "d10", "d11"] as const;
 const HAND_BATCH_BYTES = 2_308; // the audit's hand-written L-bracket batch (discovery/speed-2026-11, part b)
 const X0 = 2000; // every case builds at x >= 2000 mm, away from the document's own bodies
 
@@ -52,8 +53,9 @@ const HELP = `Usage:
   PLASTICITY_CDP_URL=http://127.0.0.1:PORT node scripts/verify-native-bracket-mate-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY [--case 1,2,3,4]
 
 Cases: 1 audit L-bracket in one call; 2 U bracket with a slotted pair and Z bracket with a 2x2 grid; 3 block + bracket
-mate chain (direct calls, then one lean batch); 4 live rejections. Builds at x >= ${X0} mm in an isolated instance,
-restores the Undo depth and body list after every case, and writes evidence.json to the new output directory.`;
+mate chain (direct calls, then one lean batch); 4 live rejections; d1-d11 the review's failing inputs, one case per
+defect (d45 is defects 4 and 5). Builds at x >= ${X0} mm in an isolated instance, restores the Undo depth and body list
+after every case, and writes evidence.json to the new output directory.`;
 
 // ---------- small geometry helpers ----------
 const sub = (a: Vec, b: Vec): Vec => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -133,6 +135,33 @@ class Live {
     const measured = after.undoDepth - before.undoDepth;
     if (typeof result?.undoSteps === "number") this.check(caseName, `${name} undoSteps ${result.undoSteps} equals the measured Undo depth change`, result.undoSteps === measured, { reported: result.undoSteps, measured });
     return { result, ms, bytes: Buffer.byteLength(JSON.stringify(args)) };
+  }
+  /**
+   * A call that must be refused with the document unchanged: the error matches the pattern, and the Undo depth and the
+   * body list are the same before and after (a rollback changes the revision, so it is not compared).
+   */
+  async refusedUnchanged(caseName: string, label: string, name: string, args: Record<string, unknown>, pattern: RegExp): Promise<string> {
+    const before = await this.status();
+    const response = await this.client.callTool({ name, arguments: { ...args, revision: before.revision } });
+    const message = toolText(response);
+    const isError = (response as { isError?: boolean }).isError === true;
+    const after = await this.status();
+    const ids = (status: any) => JSON.stringify(status.bodies.map((body: { id: number }) => body.id).sort((a: number, b: number) => a - b));
+    this.check(caseName, `${label}: refused (${message.slice(0, 200)}...); Undo depth ${before.undoDepth} -> ${after.undoDepth}, bodies ${before.bodies.length} -> ${after.bodies.length}`,
+      isError && pattern.test(message) && after.undoDepth === before.undoDepth && ids(after) === ids(before), { message: message.slice(0, 1200), undoDepth: [before.undoDepth, after.undoDepth], bodies: [before.bodies.length, after.bodies.length] });
+    return message;
+  }
+  /** Bodies added since a status read. */
+  async added(before: any): Promise<number[]> {
+    const known = new Set(before.bodies.map((body: { id: number }) => body.id));
+    return (await this.status()).bodies.map((body: { id: number }) => body.id).filter((id: number) => !known.has(id));
+  }
+  async undoTo(depth: number): Promise<void> {
+    for (let guard = 0; guard < 200; guard += 1) {
+      const status = await this.status();
+      if (status.undoDepth <= depth) return;
+      await this.call("plasticity_undo", { revision: status.revision });
+    }
   }
   async restore(caseName: string): Promise<void> {
     for (let guard = 0; guard < 200; guard += 1) {
@@ -334,6 +363,168 @@ async function case4(live: Live): Promise<void> {
   live.evidence.case4turn = { deltaMm: turn.result.deltaMm, boundsMm: turnedBounds, rotation: turn.result.rotation, undoSteps: turn.result.undoSteps };
 }
 
+// ---------- review cases: the reviewer's failing inputs, one per defect, measured by independent reads ----------
+
+/** Creates a body with a mutating tool and returns the one new body id. */
+async function make(live: Live, caseName: string, name: string, args: Record<string, unknown>): Promise<number> {
+  const before = await live.status();
+  await live.mutate(caseName, name, args);
+  const added = await live.added(before);
+  if (added.length !== 1) throw new Error(`${name} added ${added.length} bodies`);
+  return added[0]!;
+}
+async function union(live: Live, targetId: number, toolId: number, name: string): Promise<number> {
+  await live.call("plasticity_boolean", { targetIds: [targetId], toolIds: [toolId], operation: "union", revision: (await live.status()).revision });
+  return (await live.status()).bodies.find((body: { name: string | null }) => body.name === name)!.id;
+}
+const cylindersOf = async (live: Live, id: number, radiusMm: number) => await live.faces({ bodyIds: [id], surfaceTypes: ["Cylinder"], radiusMm: { value: radiusMm, tolerance: 1e-6 } });
+async function validClosed(live: Live, id: number): Promise<boolean> {
+  const body = (await live.call("plasticity_validate_bodies", { ids: [id], revision: (await live.status()).revision })).bodies[0];
+  return body.type === "Solid" && body.closed && body.nativeValid;
+}
+// A 40 x 40 x 5 flange (z 10..15) on a 12 mm stem (x 0..12, z 0..10): the review's stepped target (p7 C1, C2).
+async function steppedTarget(live: Live, caseName: string): Promise<number> {
+  const flange = await make(live, caseName, "plasticity_create_box", { originMm: [2500, 0, 10], sizeMm: [40, 40, 5], name: "step" });
+  const stem = await make(live, caseName, "plasticity_create_box", { originMm: [2500, 0, 0], sizeMm: [12, 40, 10] });
+  return await union(live, flange, stem, "step");
+}
+
+async function caseD1(live: Live): Promise<void> {
+  // p7 B1: a source with a through hole, a blind hole and a boss, all r 2.5, over a plate.
+  const plate = await make(live, "d1", "plasticity_create_box", { originMm: [2495, -5, 0], sizeMm: [60, 40, 8], name: "d1-plate" });
+  let block = await make(live, "d1", "plasticity_create_box", { originMm: [2500, 0, 8], sizeMm: [40, 30, 6], name: "d1-block" });
+  block = (await live.mutate("d1", "plasticity_transfer_holes", { sourceId: plate, targetId: block, axesMm: [{ pointMm: [2510, 15, 30], axis: [0, 0, -1] }], hole: { diameterMm: 5, through: true } })).result.targetId;
+  const boss = await make(live, "d1", "plasticity_create_cylinder", { centerMm: [2530, 15, 14], radiusMm: 2.5, heightMm: 5, axis: [0, 0, 1] });
+  block = await union(live, block, boss, "d1-block");
+  block = (await live.mutate("d1", "plasticity_transfer_holes", { sourceId: plate, targetId: block, axesMm: [{ pointMm: [2520, 8, 0], axis: [0, 0, 1] }], hole: { diameterMm: 5, depthMm: 3 } })).result.targetId;
+  const fixture = (await live.status()).undoDepth;
+  const transfer = await live.mutate("d1", "plasticity_transfer_holes", { sourceId: block, targetId: plate, select: { radiusMm: 2.5 }, hole: { diameterMm: 5, through: true } });
+  const cut = await cylindersOf(live, transfer.result.targetId, 2.5);
+  const on = (x: number, y: number) => cut.filter((face: any) => coaxial([x, y, 0], [0, 0, 1], face.axisOriginMm, face.axisDirection) <= 1e-6).length;
+  live.check("d1", `select without kind takes holes only: kinds ${JSON.stringify(transfer.result.axesMm.map((axis: any) => axis.kind))}; plate holes under the through hole ${on(2510, 15)}, the blind hole ${on(2520, 8)}, the boss ${on(2530, 15)}`,
+    transfer.result.axesMm.every((axis: any) => axis.kind === "hole") && transfer.result.axisCount === 2 && on(2510, 15) === 1 && on(2520, 8) === 1 && on(2530, 15) === 0, { axesMm: transfer.result.axesMm });
+  await live.undoTo(fixture);
+  const any = await live.mutate("d1", "plasticity_transfer_holes", { sourceId: block, targetId: plate, select: { radiusMm: 2.5, kind: "any" }, hole: { diameterMm: 5, through: true } });
+  const kinds = any.result.axesMm.map((axis: any) => axis.kind).sort();
+  live.check("d1", `kind "any" takes the boss too and says so: kinds ${JSON.stringify(kinds)}`, JSON.stringify(kinds) === JSON.stringify(["boss", "hole", "hole"]));
+}
+
+async function caseD2(live: Live): Promise<void> {
+  const step = await steppedTarget(live, "d2");
+  const source = await make(live, "d2", "plasticity_create_box", { originMm: [2500, 100, 0], sizeMm: [5, 5, 5], name: "d2-source" });
+  // p7 C1: the axis on the stem's side wall; C1b: 2 mm outside it, the rim grazes the stem.
+  for (const [label, x] of [["C1 axis on the stem side wall", 2512], ["C1b rim grazing the stem", 2514]] as const) {
+    await live.refusedUnchanged("d2", `${label}: side breakout`, "plasticity_transfer_holes", { sourceId: source, targetId: step, axesMm: [{ pointMm: [x, 20, 30], axis: [0, 0, -1] }], hole: { diameterMm: 5, through: true } }, /the document is unchanged.*axis 0: the bore breaks out of a side wall of the target/);
+    live.check("d2", `${label}: no Ø5 bore left on the target`, (await cylindersOf(live, step, 2.5)).length === 0);
+  }
+}
+
+async function caseD3(live: Live): Promise<void> {
+  // p9: a rod across a U; the axis meets the rod (curved) before the base (planar).
+  const u = await make(live, "d3", "plasticity_create_bracket", { originMm: [2000, 0, 0], profile: "U", widthMm: 30, thicknessMm: 3, legs: { baseMm: 40, leftMm: 30, rightMm: 30 }, name: "ubody" });
+  const rod = await make(live, "d3", "plasticity_create_cylinder", { centerMm: [2000, 15, 22], radiusMm: 6, heightMm: 40, axis: [1, 0, 0] });
+  const target = await union(live, u, rod, "ubody");
+  const source = await make(live, "d3", "plasticity_create_box", { originMm: [2000, 100, 0], sizeMm: [5, 5, 5], name: "d3-source" });
+  await live.refusedUnchanged("d3", "drill down through the rod and the base", "plasticity_transfer_holes", { sourceId: source, targetId: target, axesMm: [{ pointMm: [2020, 15, 60], axis: [0, 0, -1] }], hole: { diameterMm: 4, through: true } }, /material precedes the first planar face/);
+  live.check("d3", "no Ø4 bore on the target", (await cylindersOf(live, target, 2)).length === 0);
+}
+
+async function caseD45(live: Live): Promise<void> {
+  const L = { originMm: [2000, 0, 0], profile: "L", widthMm: 30, thicknessMm: 4, legs: { baseMm: 40, uprightMm: 40 } };
+  // p3 gmax (defect 4) and gmaxrc (defect 5): refused with the largest size; that size builds clean.
+  for (const [label, extra, refused, largest] of [
+    ["gmax", { gussets: { count: 1, thicknessMm: 4 } }, 36, 35.45],
+    ["gmaxrc", { cornerRadiusMm: 3, gussets: { count: 2, thicknessMm: 4 } }, 33, 32.45],
+  ] as const) {
+    const input = (sizeMm: number) => ({ ...L, ...extra, gussets: { ...extra.gussets, sizeMm }, name: `d45-${label}` });
+    await live.refusedUnchanged("d45", `${label} sizeMm ${refused}`, "plasticity_create_bracket", input(refused), new RegExp(`largest allowed gussets\\.sizeMm here is ${String(largest).replace(".", "\\.")} mm`));
+    const built = await live.mutate("d45", "plasticity_create_bracket", input(largest));
+    const id = built.result.bodyId;
+    const edges = await live.edges({ bodyIds: [id] });
+    const shortest = Math.min(...edges.map((edge: any) => edge.lengthMm));
+    const bounds = await live.bodyBounds(id);
+    live.check("d45", `${label} at the stated largest ${largest}: shortest edge ${shortest} mm >= 0.05, bounds = planned, closed and valid`,
+      shortest >= 0.05 && !!bounds && boundsNear(bounds, { min: [2000, 0, 0], max: [2040, 30, 40] }) && await validClosed(live, id), { shortest, bounds });
+    await live.undoTo(live.baseline.undoDepth);
+  }
+}
+
+async function caseD6(live: Live): Promise<void> {
+  // p3 unarrow: U base 4.3, t 2 (gap 0.3); a hole in the left leg.
+  const built = await live.mutate("d6", "plasticity_create_bracket", { originMm: [2000, 0, 0], profile: "U", widthMm: 20, thicknessMm: 2, legs: { baseMm: 4.3, leftMm: 20, rightMm: 20 }, holes: [{ leg: "left", diameterMm: 4, count: 1, layout: "line-along" }], name: "d6-narrow" });
+  const id = built.result.bodyId;
+  const rightInner = await live.faces({ bodyIds: [id], planar: true, normal: { vector: [-1, 0, 0], toleranceDeg: 0.000001 }, center: { pointMm: [2002.3, 10, 11], toleranceMm: 10 } });
+  const atRight = rightInner.filter((face: any) => Math.abs(face.centerMm[0] - 2002.3) <= 1e-6);
+  const bores = await cylindersOf(live, id, 2);
+  live.check("d6", `the right leg's inner face is untouched (one face, ${atRight[0]?.edgeIds?.length} edges); the bore stays in x 2000..2002 (face bounds within 1e-3, the gap is 0.3: ${JSON.stringify(bores.map((face: any) => [face.boundsMm.min[0], face.boundsMm.max[0]]))})`,
+    atRight.length === 1 && atRight[0].edgeIds.length === 4 && bores.length === 1 && bores[0].boundsMm.max[0] <= 2002 + 1e-3 && await validClosed(live, id), { faces: atRight.map((face: any) => ({ id: face.id, edges: face.edgeIds.length })) });
+}
+
+async function caseD7(live: Live): Promise<void> {
+  const step = await steppedTarget(live, "d7");
+  const source = await make(live, "d7", "plasticity_create_box", { originMm: [2500, 100, 0], sizeMm: [5, 5, 5], name: "d7-source" });
+  // p7 C2: blind 7 deep where the flange is 5 (the bounds are 15).
+  await live.refusedUnchanged("d7", "C2 blind 7 into the 5 mm flange", "plasticity_transfer_holes", { sourceId: source, targetId: step, axesMm: [{ pointMm: [2530, 20, 30], axis: [0, 0, -1] }], hole: { diameterMm: 5, depthMm: 7 } }, /depthMm 7 reaches the far side of the wall: the next target face on the axis is 5\.0000 mm/);
+  const blind = await live.mutate("d7", "plasticity_transfer_holes", { sourceId: source, targetId: step, axesMm: [{ pointMm: [2530, 20, 30], axis: [0, 0, -1] }], hole: { diameterMm: 5, depthMm: 3 } });
+  const floor = await live.faces({ bodyIds: [blind.result.targetId], planar: true, normal: { vector: [0, 0, 1], toleranceDeg: 0.000001 }, center: { pointMm: [2530, 20, 12], toleranceMm: 1e-6 } });
+  live.check("d7", "blind 3 in the 5 mm flange: a flat floor at z 12, closed and valid", floor.length === 1 && await validClosed(live, blind.result.targetId));
+  // p7 C8: blind 10 into a 3 mm wall of a U (the bounds are 40).
+  const u = await make(live, "d7", "plasticity_create_bracket", { originMm: [2600, 0, 0], profile: "U", widthMm: 30, thicknessMm: 3, legs: { baseMm: 40, leftMm: 30, rightMm: 30 }, name: "d7-u" });
+  await live.refusedUnchanged("d7", "C8 blind 10 into the 3 mm U wall", "plasticity_transfer_holes", { sourceId: source, targetId: u, axesMm: [{ pointMm: [2590, 15, 20], axis: [1, 0, 0] }], hole: { diameterMm: 4, depthMm: 10 } }, /depthMm 10 reaches the far side of the wall: the next target face on the axis is 3\.0000 mm/);
+}
+
+async function caseD8(live: Live): Promise<void> {
+  // p5: a plate and a block.
+  const plate = (await live.mutate("d8", "plasticity_create_bracket", { originMm: [2000, 0, 0], profile: "flat", widthMm: 60, thicknessMm: 5, legs: { lengthMm: 100 }, name: "d8-plate" })).result;
+  const block = (await live.mutate("d8", "plasticity_create_bracket", { originMm: [2200, 0, 0], profile: "flat", widthMm: 20, thicknessMm: 10, legs: { lengthMm: 30 }, name: "d8-block" })).result;
+  const pTop = plate.faceIds.flat.innerFaceId, qTop = block.faceIds.flat.innerFaceId, qBottom = block.faceIds.flat.outerFaceId;
+  const fixture = (await live.status()).undoDepth;
+  await live.refusedUnchanged("d8", "p5 #3 same-facing top onto top", "plasticity_place_body", { id: block.bodyId, anchor: { faceId: qTop }, to: { bodyId: plate.bodyId, faceId: pTop } }, /face the same way.*Flip the body.*relation: "aligned"/);
+  await live.refusedUnchanged("d8", "p5 #2b gapMm -1", "plasticity_place_body", { id: block.bodyId, anchor: { faceId: qBottom }, to: { bodyId: plate.bodyId, faceId: pTop }, gapMm: -1 }, /gapMm -1 pushes the faces 1 mm into each other.*allowOverlap: true/);
+  const mate = await live.mutate("d8", "plasticity_place_body", { id: block.bodyId, anchor: { faceId: qBottom }, to: { bodyId: plate.bodyId, faceId: pTop } });
+  const interference = await live.call("plasticity_check_interference", { pairs: [{ firstBodyId: plate.bodyId, secondBodyId: block.bodyId }], revision: (await live.status()).revision });
+  live.check("d8", `a real mate (bottom onto top): relation ${mate.result.relation}, ${interference.pairs[0].status}`, mate.result.relation === "mating" && interference.pairs[0].status === "no-volumetric-interference");
+  await live.undoTo(fixture);
+  // p5 6e: a block turned 1e-5 degrees about x (sine 1.7e-7) now mates.
+  await live.call("plasticity_rotate", { ids: [block.bodyId], pivotMm: [2215, 10, 5], axis: [1, 0, 0], degrees: 0.00001, revision: (await live.status()).revision });
+  const bottom = (await live.faces({ bodyIds: [block.bodyId], planar: true, normal: { vector: [0, 0, -1], toleranceDeg: 0.001 } }))[0];
+  const near = await live.mutate("d8", "plasticity_place_body", { id: block.bodyId, anchor: { faceId: bottom.id }, to: { bodyId: plate.bodyId, faceId: pTop } });
+  live.check("d8", `1e-5 degrees off parallel mates (was refused at sine 1e-9): relation ${near.result.relation}`, near.result.relation === "mating");
+}
+
+async function caseD9(live: Live): Promise<void> {
+  // p6 A8: two holes 14 mm apart, a Ø16 transfer.
+  const source = (await live.mutate("d9", "plasticity_create_bracket", { originMm: [2000, 0, 8], profile: "L", widthMm: 30, thicknessMm: 4, legs: { baseMm: 40, uprightMm: 40 }, innerBendRadiusMm: 2.5, cornerRadiusMm: 2.5, holes: [{ leg: "base", diameterMm: 5, count: 2, layout: "line-across", marginMm: 8 }], name: "d9-source" })).result;
+  const plate = (await live.mutate("d9", "plasticity_create_bracket", { originMm: [1980, -15, 0], profile: "flat", widthMm: 60, thicknessMm: 8, legs: { lengthMm: 100 }, name: "d9-plate" })).result;
+  await live.refusedUnchanged("d9", "A8 Ø16 on axes 14 apart", "plasticity_transfer_holes", { sourceId: source.bodyId, targetId: plate.bodyId, select: { radiusMm: 2.5, axis: "z" }, hole: { diameterMm: 16, through: true } }, /are 14\.0000 mm apart, closer than the Ø16 mm hole: the holes would overlap/);
+  live.check("d9", "no Ø16 bore on the plate", (await cylindersOf(live, plate.bodyId, 8)).length === 0);
+}
+
+async function caseD10(live: Live): Promise<void> {
+  // p7 C6: one axis through both walls of a U.
+  const u = (await live.mutate("d10", "plasticity_create_bracket", { originMm: [2600, 0, 0], profile: "U", widthMm: 30, thicknessMm: 3, legs: { baseMm: 40, leftMm: 30, rightMm: 30 }, name: "d10-u" })).result;
+  const source = await make(live, "d10", "plasticity_create_box", { originMm: [2500, 100, 0], sizeMm: [5, 5, 5], name: "d10-source" });
+  const transfer = await live.mutate("d10", "plasticity_transfer_holes", { sourceId: source, targetId: u.bodyId, axesMm: [{ pointMm: [2590, 15, 20], axis: [1, 0, 0] }], hole: { diameterMm: 4, through: true } });
+  const bores = (await cylindersOf(live, transfer.result.targetId, 2)).filter((face: any) => coaxial([2590, 15, 20], [1, 0, 0], face.axisOriginMm, face.axisDirection) <= 1e-6);
+  live.check("d10", `axisCount ${transfer.result.axisCount}, holeCount ${transfer.result.holeCount}, targetHoleCount ${transfer.result.targetHoleCount}; ${bores.length} coaxial Ø4 faces read independently`,
+    transfer.result.axisCount === 1 && transfer.result.holeCount === 2 && transfer.result.targetHoleCount === 2 && bores.length === 2 && await validClosed(live, transfer.result.targetId));
+}
+
+async function caseD11(live: Live): Promise<void> {
+  const L = { originMm: [2000, 0, 0], profile: "L", widthMm: 30, thicknessMm: 4, legs: { baseMm: 40, uprightMm: 40 } };
+  // p4: the giant leg and the "mid-way" tiny inputs are refused before any native call.
+  await live.refusedUnchanged("d11", "p4 MID giant 2e6 mm leg", "plasticity_create_bracket", { ...L, legs: { baseMm: 2e6, uprightMm: 40 } }, /legs\.baseMm 2000000 mm is above the 10000 mm limit/);
+  await live.refusedUnchanged("d11", "p4 MID gusset thickness 1e-7", "plasticity_create_bracket", { ...L, gussets: { count: 1, thicknessMm: 1e-7, sizeMm: 10 } }, /gussets\.thicknessMm 1e-7 mm is below 0\.05 mm/);
+  await live.refusedUnchanged("d11", "p4 MID hole diameter 1e-7", "plasticity_create_bracket", { ...L, holes: [{ leg: "base", diameterMm: 1e-7, count: 1, layout: "line-along" }] }, /diameterMm 1e-7 mm is below 0\.05 mm/);
+  await live.refusedUnchanged("d11", "p4 MID bend radius 1e-7", "plasticity_create_bracket", { ...L, innerBendRadiusMm: 1e-7 }, /innerBendRadiusMm 1e-7 mm is below 0\.05 mm/);
+  await live.refusedUnchanged("d11", "p4 MID thickness and width 1e-6", "plasticity_create_bracket", { ...L, widthMm: 1e-6, thicknessMm: 1e-6 }, /below 0\.05 mm/);
+  // Every build and transfer passes the native Check before it reports completed; read it independently.
+  const built = await live.mutate("d11", "plasticity_create_bracket", { ...L, innerBendRadiusMm: 3, cornerRadiusMm: 3, holes: [{ leg: "base", diameterMm: 4.5, count: 2, layout: "line-across", marginMm: 8 }], name: "d11-bracket" });
+  const plate = await make(live, "d11", "plasticity_create_box", { originMm: [1990, -10, -6], sizeMm: [60, 50, 6], name: "d11-plate" });
+  const transfer = await live.mutate("d11", "plasticity_transfer_holes", { sourceId: built.result.bodyId, targetId: plate, select: { radiusMm: 2.25, axis: "z" }, hole: { diameterMm: 3.3, through: true } });
+  live.check("d11", "the completed bracket and the transferred plate are closed, natively valid Solids", await validClosed(live, built.result.bodyId) && await validClosed(live, transfer.result.targetId) && transfer.result.holeCount === 2);
+}
+
 async function main(): Promise<void> {
   const options = parseBracketMateArgs(process.argv.slice(2));
   if (options.help) { console.log(HELP); return; }
@@ -361,6 +552,8 @@ async function main(): Promise<void> {
         if (name === "2") await case2(live);
         if (name === "3") await case3(live);
         if (name === "4") await case4(live);
+        const review: Record<string, (live: Live) => Promise<void>> = { d1: caseD1, d2: caseD2, d3: caseD3, d45: caseD45, d6: caseD6, d7: caseD7, d8: caseD8, d9: caseD9, d10: caseD10, d11: caseD11 };
+        if (review[name]) await review[name]!(live);
       } catch (error) {
         live.check(name, "case ran to the end", false, error instanceof Error ? error.message.slice(0, 2000) : String(error));
       } finally {
@@ -369,6 +562,10 @@ async function main(): Promise<void> {
     }
   } finally {
     try { await live.restore("final"); } catch (error) { live.check("final", "final restore", false, String(error)); }
+    try {
+      const end = await live.status();
+      live.evidence.end = { undoDepth: end.undoDepth, bodies: end.bodies.length, bodyIds: end.bodies.map((body: { id: number }) => body.id).sort((a: number, b: number) => a - b) };
+    } catch (error) { live.evidence.end = { error: String(error) }; }
     live.evidence.checks = live.checks;
     live.evidence.finishedAt = new Date().toISOString();
     await writeFile(join(output, "evidence.json"), `${JSON.stringify(live.evidence, null, 2)}\n`, { flag: "wx", mode: 0o600 });
@@ -377,7 +574,10 @@ async function main(): Promise<void> {
   const failed = live.checks.filter((check) => !check.ok);
   for (const check of live.checks) console.log(`${check.ok ? "PASS" : "FAIL"}  [${check.case}] ${check.check}`);
   console.log(`\n${live.checks.length - failed.length}/${live.checks.length} checks passed; evidence: ${join(output, "evidence.json")}`);
-  if (failed.length > 0) process.exitCode = 1;
+  const end = live.evidence.end as { undoDepth?: number; bodies?: number; bodyIds?: number[] } | undefined;
+  const restored = !!end && end.undoDepth === live.baseline?.undoDepth && JSON.stringify(end.bodyIds) === JSON.stringify(live.baseline?.bodyIds);
+  console.log(`baseline ${restored ? "restored" : "NOT restored"}: Undo depth ${end?.undoDepth}, ${end?.bodies} bodies (start: Undo depth ${live.baseline?.undoDepth}, ${live.baseline?.bodyIds.length} bodies)`);
+  if (failed.length > 0 || !restored) process.exitCode = 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main().catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; });

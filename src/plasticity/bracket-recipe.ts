@@ -7,7 +7,9 @@
 // Native steps, in order: one box per leg and one union (L, U, Z); one fillet for the inner bends (innerBendRadiusMm > 0;
 // the outer corner of a bend stays sharp, as in the audit bracket); one fillet for the free outer corners
 // (cornerRadiusMm > 0); one rib recipe per gusset (side "centered"); one hole recipe per hole item; one delete of the
-// construction Wires the rib, slot and countersink recipes leave. A native failure undoes every step taken.
+// construction Wires the rib, slot and countersink recipes leave. A native failure undoes every step taken, and so does a
+// read-back that does not prove the plan (bounds, bends, corners, holes, gussets, no edge under 0.05 mm, a closed and
+// natively valid Solid, and no hole that changed another leg's faces): the error then says the document is unchanged.
 //
 // LEG FRAMES. o = originMm, t = thickness, W = width, r = inner bend radius. "Outer face" is the face on the convex side of
 // the bend(s); planeNormal points out of it. frameOriginMm is the outer face's corner at the bend end (y = o.y); alongAxis
@@ -25,7 +27,7 @@ import type { PlasticityOperations } from "./operations.ts";
 import { PlasticityRecipes, type RecipeOperations } from "./recipes.ts";
 import type { RuntimeState } from "./runtime.ts";
 import {
-  add, boundsNear, clean, coaxialOffset, committedMismatch, COINCIDENT_MM, distance, fullTurnCylinders, parallelSine, PARALLEL_SINE, round6, runGuarded, scale, sub,
+  add, boundsNear, clean, coaxialOffset, COINCIDENT_MM, distance, fullTurnCylinders, MIN_FEATURE_MM, parallelSine, PARALLEL_SINE, readBackError, round6, runGuarded, scale, sliverProblems, sub, validityProblems,
   type Bounds, type MateStep, type UndoCapable, type Vector3,
 } from "./mate.ts";
 
@@ -79,7 +81,9 @@ export interface BracketHoleAxis {
   slot?: { lengthMm: number; directionAxis: Vector3 };
   countersunk?: { headDiameterMm: number; side: "inner" };
 }
-interface PlannedHole extends BracketHoleAxis { item: number; position: number; alongMm: number; acrossMm: number }
+// overshootMm: how far the cutter runs past each face. Less than half the free gap behind the wall when another leg
+// stands behind it (a narrow U), so the cut never reaches that leg.
+interface PlannedHole extends BracketHoleAxis { item: number; position: number; alongMm: number; acrossMm: number; overshootMm: number }
 export interface BracketPlan {
   profile: BracketProfile;
   name: string;
@@ -117,17 +121,27 @@ export interface BracketResult {
   undoSteps: number;
   steps: MateStep[];
 }
-export type BracketOperations = RecipeOperations & UndoCapable & { rename?: PlasticityOperations["rename"] | undefined };
+export type BracketOperations = RecipeOperations & UndoCapable & { rename?: PlasticityOperations["rename"] | undefined; validateBodies: PlasticityOperations["validateBodies"] };
 
 const ACROSS: Vector3 = [0, 1, 0];
 const OVERSHOOT_MM = 0.5;
+const MIN_OVERSHOOT_MM = 0.01;
 const CLEAR_MM = 1e-3; // the least clearance that is not tangency
+/** The largest bracket dimension (and overall extent) accepted, in millimetres. */
+export const MAX_DIMENSION_MM = 10_000;
 const finite = (value: number) => Number.isFinite(value);
 
 function positive(value: number | undefined, label: string): number {
   if (value === undefined || !finite(value) || value <= 0) throw new Error(`${label} must be a positive number of millimetres`);
   return value;
 }
+/** At most MAX_DIMENSION_MM, and (when positive) at least MIN_FEATURE_MM so that no edge of the result is a sliver. */
+function sized(value: number, label: string, minimum = true): number {
+  if (Math.abs(value) > MAX_DIMENSION_MM) throw new Error(`${label} ${value} mm is above the ${MAX_DIMENSION_MM} mm limit for a bracket dimension`);
+  if (minimum && value > 0 && value < MIN_FEATURE_MM) throw new Error(`${label} ${value} mm is below ${MIN_FEATURE_MM} mm: a smaller feature leaves edges shorter than the ${MIN_FEATURE_MM} mm sliver limit`);
+  return value;
+}
+const r6 = (value: number) => Math.round(value * 1e6) / 1e6;
 
 // ---------- 2D helpers in a leg frame: points are [along, across] ----------
 type P2 = [number, number];
@@ -172,11 +186,12 @@ export function planBracket(input: BracketInput): BracketPlan {
   const rc = input.cornerRadiusMm ?? 0;
   if (!finite(r) || r < 0) throw new Error("innerBendRadiusMm must be zero or positive");
   if (!finite(rc) || rc < 0) throw new Error("cornerRadiusMm must be zero or positive");
+  sized(W, "widthMm"); sized(t, "thicknessMm"); sized(r, "innerBendRadiusMm"); sized(rc, "cornerRadiusMm");
   const keys = LEG_INPUT_KEYS[input.profile];
   if (!keys) throw new Error(`Unknown bracket profile: ${String(input.profile)}`);
   const extra = Object.keys(input.legs).filter((key) => !keys.includes(key));
   if (extra.length > 0) throw new Error(`legs for profile ${input.profile} are ${keys.join(", ")}; not ${extra.join(", ")}`);
-  const leg = (key: string) => positive(input.legs[key as keyof BracketInput["legs"]], `legs.${key}`);
+  const leg = (key: string) => sized(positive(input.legs[key as keyof BracketInput["legs"]], `legs.${key}`), `legs.${key}`);
 
   let legs: LegPlan[];
   let boxes: BracketPlan["boxes"];
@@ -230,14 +245,24 @@ export function planBracket(input: BracketInput): BracketPlan {
     size = [Lf, W, t];
   }
   if (r === 0) bends = [];
+  for (const [axis, extent] of size.entries()) {
+    if (extent > MAX_DIMENSION_MM) throw new Error(`the bracket would be ${r6(extent)} mm along ${"XYZ"[axis]}, above the ${MAX_DIMENSION_MM} mm limit for a bracket dimension`);
+  }
+  for (const plan of legs) {
+    const flat = plan.flatSpanMm[1] - plan.flatSpanMm[0];
+    if (flat < MIN_FEATURE_MM) throw new Error(`the flat of leg ${plan.name} would be ${r6(flat)} mm long, shorter than ${MIN_FEATURE_MM} mm (a sliver edge); make the leg longer or innerBendRadiusMm smaller`);
+  }
 
   // Corner rounds of the free ends, in the leg's plane.
   const corners: BracketPlan["corners"] = [];
   if (rc > 0) {
     if (rc >= W / 2) throw new Error(`cornerRadiusMm must be less than half the width (${W / 2} mm)`);
+    if (W - 2 * rc < MIN_FEATURE_MM) throw new Error(`cornerRadiusMm ${rc} leaves a straight free end of ${r6(W - 2 * rc)} mm, shorter than ${MIN_FEATURE_MM} mm (a sliver edge); the largest cornerRadiusMm is ${r6((W - MIN_FEATURE_MM) / 2)} mm`);
     for (const plan of legs) {
       const flat = plan.flatSpanMm[1] - plan.flatSpanMm[0];
       if ((plan.roundedStart || plan.roundedEnd) && rc >= (plan.roundedStart && plan.roundedEnd ? flat / 2 : flat)) throw new Error(`cornerRadiusMm must be less than the flat length of leg ${plan.name} (${plan.roundedStart && plan.roundedEnd ? flat / 2 : flat} mm)`);
+      const straight = plan.roundedStart && plan.roundedEnd ? flat - 2 * rc : flat - rc;
+      if ((plan.roundedStart || plan.roundedEnd) && straight < MIN_FEATURE_MM) throw new Error(`cornerRadiusMm ${rc} leaves a straight side of ${r6(straight)} mm on leg ${plan.name}, shorter than ${MIN_FEATURE_MM} mm (a sliver edge)`);
       for (const [rounded, along, inward] of [[plan.roundedStart, 0, rc], [plan.roundedEnd, plan.lengthMm, plan.lengthMm - rc]] as const) {
         if (!rounded) continue;
         for (const [across, acrossIn] of [[0, rc], [W, W - rc]] as const) {
@@ -256,17 +281,19 @@ export function planBracket(input: BracketInput): BracketPlan {
   if (input.gussets) {
     const g = input.gussets;
     if (input.profile !== "L") throw new Error("gussets are for the L profile only");
-    const tg = positive(g.thicknessMm, "gussets.thicknessMm");
-    const S = positive(g.sizeMm, "gussets.sizeMm");
+    const tg = sized(positive(g.thicknessMm, "gussets.thicknessMm"), "gussets.thicknessMm");
+    const S = sized(positive(g.sizeMm, "gussets.sizeMm"), "gussets.sizeMm");
     if (g.count !== 1 && g.count !== 2) throw new Error("gussets.count must be 1 or 2");
     const positions = g.positions ?? (g.count === 1 ? "centered" : "edges");
     if (g.count === 1 && positions !== "centered") throw new Error("one gusset is always centred on the width: positions must be \"centered\"");
     if (g.count === 1 ? tg >= W : tg >= W / 2) throw new Error(`gussets.thicknessMm ${tg} does not fit ${g.count} gusset(s) on the ${W} mm width`);
     const [B, H] = [legs[0]!.lengthMm, legs[1]!.lengthMm];
     if (S <= r) throw new Error(`gussets.sizeMm must be larger than innerBendRadiusMm (${r} mm)`);
-    if (S + t > Math.min(B, H) - rc) throw new Error(`gussets.sizeMm must be at most the shorter leg minus thickness and cornerRadiusMm (${Math.min(B, H) - rc - t} mm)`);
     const centres = g.count === 1 ? [W / 2] : positions === "edges" ? [tg / 2, W - tg / 2] : [W / 4, (3 * W) / 4];
     const e = Math.min(0.5, t / 4);
+    const limit = gussetSizeLimit({ B, H, W, t, rc, e, spans: centres.map((gy) => [gy - tg / 2, gy + tg / 2] as [number, number]) });
+    if (S + t > Math.min(B, H) - rc) throw new Error(`gussets.sizeMm must be at most the shorter leg minus thickness and cornerRadiusMm (${Math.min(B, H) - rc - t} mm); the largest allowed gussets.sizeMm here is ${r6(limit)} mm`);
+    if (S > limit + 1e-9) throw new Error(`gussets.sizeMm ${S} is too large: the rib (with its ${e} mm overlap into the legs) must end at least ${MIN_FEATURE_MM} mm inside each leg${rc > 0 ? ` and inside its ${rc} mm rounded corner` : ""}; the largest allowed gussets.sizeMm here is ${r6(limit)} mm`);
     for (const gy of centres) {
       const p = (x: number, z: number): Vector3 => [o[0] + x, o[1] + gy, o[2] + z];
       gussets.push({
@@ -281,6 +308,25 @@ export function planBracket(input: BracketInput): BracketPlan {
   const holes = planHoles(input, legs, gussets, W, t);
   const boundsMm: Bounds = { min: [...o], max: add(o, size) };
   return { profile: input.profile, name: input.name ?? "bracket", widthMm: W, thicknessMm: t, innerBendRadiusMm: r, cornerRadiusMm: rc, boundsMm, boxes, legs, bends, corners, gussets, holes };
+}
+
+/**
+ * The largest gusset size of an L. The visible gusset ends sizeMm from the inner corner; the rib profile runs e further
+ * into each leg, so its buried tip lies at t + sizeMm + e along the leg. That tip must end MIN_FEATURE_MM inside the
+ * leg's outline at every across position of the gusset: the leg end, or the rounded corner (radius rc) where the gusset
+ * sits in it. The older rule (the visible end clear of the corner round) holds as well.
+ */
+export function gussetSizeLimit(g: { B: number; H: number; W: number; t: number; rc: number; e: number; spans: Array<[number, number]> }): number {
+  const reach = (legLength: number, y: number): number => {
+    if (g.rc <= 0) return legLength;
+    const into = y < g.rc ? g.rc - y : y > g.W - g.rc ? y - (g.W - g.rc) : 0;
+    return legLength - g.rc + Math.sqrt(Math.max(0, g.rc * g.rc - into * into));
+  };
+  let limit = Math.min(g.B, g.H) - g.rc - g.t;
+  for (const legLength of [g.B, g.H]) for (const [y0, y1] of g.spans) {
+    limit = Math.min(limit, Math.min(reach(legLength, y0), reach(legLength, y1)) - g.t - g.e - MIN_FEATURE_MM);
+  }
+  return limit;
 }
 
 function layoutPositions(hole: BracketHoleInput, plan: LegPlan, W: number, label: string): P2[] {
@@ -350,12 +396,22 @@ function planHoles(input: BracketInput, legs: LegPlan[], gussets: BracketPlan["g
     const label = `holes[${item}] (leg ${hole.leg})`;
     const plan = legs.find((candidate) => candidate.name === hole.leg);
     if (!plan) throw new Error(`${label}: profile ${input.profile} has legs ${PROFILE_LEGS[input.profile].join(", ")}`);
-    positive(hole.diameterMm, `${label} diameterMm`);
+    sized(positive(hole.diameterMm, `${label} diameterMm`), `${label} diameterMm`);
+    if (hole.marginMm !== undefined) sized(hole.marginMm, `${label} marginMm`, false);
+    if (hole.pitchMm !== undefined) sized(hole.pitchMm, `${label} pitchMm`, false);
+    for (const position of hole.positionsMm ?? []) for (const value of position) sized(value, `${label} positionsMm`, false);
     if (hole.slot && hole.countersunk) throw new Error(`${label}: a slot cannot be countersunk`);
     if (hole.slot && !(hole.slot.lengthMm > hole.diameterMm)) throw new Error(`${label}: slot.lengthMm (overall, round ends included) must be larger than diameterMm`);
+    if (hole.slot) {
+      sized(hole.slot.lengthMm, `${label} slot.lengthMm`);
+      if (hole.slot.lengthMm - hole.diameterMm < MIN_FEATURE_MM) throw new Error(`${label}: the slot's straight walls would be ${r6(hole.slot.lengthMm - hole.diameterMm)} mm long, shorter than ${MIN_FEATURE_MM} mm (a sliver edge)`);
+    }
     if (hole.countersunk) {
       if (!(hole.countersunk.headDiameterMm > hole.diameterMm)) throw new Error(`${label}: countersunk.headDiameterMm must be larger than diameterMm`);
+      sized(hole.countersunk.headDiameterMm, `${label} countersunk.headDiameterMm`);
       if ((hole.countersunk.headDiameterMm - hole.diameterMm) / 2 >= t - CLEAR_MM) throw new Error(`${label}: a 90 degree countersink for head ${hole.countersunk.headDiameterMm} mm is ${(hole.countersunk.headDiameterMm - hole.diameterMm) / 2} mm deep, not less than the ${t} mm thickness`);
+      const depth = (hole.countersunk.headDiameterMm - hole.diameterMm) / 2;
+      if (depth < MIN_FEATURE_MM || t - depth < MIN_FEATURE_MM) throw new Error(`${label}: a 90 degree countersink ${r6(depth)} mm deep in the ${t} mm thickness leaves a ${depth < MIN_FEATURE_MM ? "cone" : "straight bore"} shorter than ${MIN_FEATURE_MM} mm (a sliver)`);
     }
     const margin = input.allowEdgeHoles ? CLEAR_MM : hole.diameterMm;
     for (const [position, at] of layoutPositions(hole, plan, W, label).entries()) {
@@ -376,9 +432,18 @@ function planHoles(input: BracketInput, legs: LegPlan[], gussets: BracketPlan["g
         if (other.leg === hole.leg && segmentSegment(shape.a, shape.b, other.a, other.b) <= shape.radius + other.radius + CLEAR_MM) throw new Error(`${where}: the hole overlaps ${other.label}`);
       }
       footprints.push({ label: where, leg: hole.leg, ...shape });
+      // A U side leg has the other side leg behind it, across the inner gap, where the footprint lies below that leg's
+      // top. The cutter may run less than the gap past the inner face (half of it here), never into the other leg.
+      let overshootMm = OVERSHOOT_MM;
+      const behind = input.profile === "U" && (hole.leg === "left" || hole.leg === "right") ? legs.find((other) => other.name === (hole.leg === "left" ? "right" : "left"))! : undefined;
+      if (behind && Math.min(shape.a[0], shape.b[0]) - shape.radius < behind.lengthMm) {
+        const gap = legs[0]!.lengthMm - 2 * t;
+        overshootMm = Math.min(OVERSHOOT_MM, gap / 2);
+        if (overshootMm < MIN_OVERSHOOT_MM) throw new Error(`${where}: the free gap behind leg ${hole.leg} to leg ${behind.name} is ${r6(gap)} mm, too narrow to cut the hole without reaching leg ${behind.name}`);
+      }
       const pointMm = legPoint(plan, at[0], at[1]);
       holes.push({
-        item, position, leg: hole.leg, alongMm: at[0], acrossMm: at[1],
+        item, position, leg: hole.leg, alongMm: at[0], acrossMm: at[1], overshootMm,
         pointMm, axis: clean(scale(plan.planeNormal, -1)), diameterMm: hole.diameterMm,
         ...(hole.slot ? { slot: { lengthMm: hole.slot.lengthMm, directionAxis: hole.slot.direction === "along" ? [...plan.alongAxis] as Vector3 : [...plan.acrossAxis] as Vector3 } } : {}),
         ...(hole.countersunk ? { countersunk: { headDiameterMm: hole.countersunk.headDiameterMm, side: "inner" as const } } : {}),
@@ -494,7 +559,7 @@ export async function createBracket(operations: BracketOperations, input: Bracke
   const W = plan.widthMm;
   const t = plan.thicknessMm;
 
-  const bodyId = await runGuarded(operations, "create_bracket", initial, async () => {
+  const built = await runGuarded(operations, "create_bracket", initial, async () => {
     let current = initial;
     const record = (operation: string, before: RuntimeState | string, after: RuntimeState | string, ids: number[]) => steps.push({
       operation, beforeRevision: typeof before === "string" ? before : before.revision, afterRevision: typeof after === "string" ? after : after.revision, affectedBodyIds: ids,
@@ -541,28 +606,38 @@ export async function createBracket(operations: BracketOperations, input: Bracke
     }
     const items = new Map<number, PlannedHole[]>();
     for (const hole of plan.holes) items.set(hole.item, [...(items.get(hole.item) ?? []), hole]);
+    if (items.size > 0) current = await operations.state();
     for (const group of items.values()) {
       const first = group[0]!;
       const leg = plan.legs.find((candidate) => candidate.name === first.leg)!;
       const outer = group.map((hole) => hole.pointMm);
+      const overshootMm = Math.min(...group.map((hole) => hole.overshootMm));
+      // The faces of every other leg, before this item's cut: a hole must never reach another leg.
+      const others = plan.legs.filter((candidate) => candidate.name !== first.leg);
+      const before = others.map((other) => legPlaneSignature(current, id, other, t));
       let result: { resultBodyIds: number[]; beforeRevision: string; afterRevision: string; recipe: string };
       if (first.slot) {
-        const shared = { targetId: id, axis: first.axis, slotDirection: first.slot.directionAxis, overallLengthMm: first.slot.lengthMm, widthMm: first.diameterMm, throughDepthMm: t, overshootMm: OVERSHOOT_MM, revision };
+        const shared = { targetId: id, axis: first.axis, slotDirection: first.slot.directionAxis, overallLengthMm: first.slot.lengthMm, widthMm: first.diameterMm, throughDepthMm: t, overshootMm, revision };
         if (outer.length === 1) { const slot = await recipes.createSlottedHole({ ...shared, entryCenterMm: outer[0]! }); wires.push(slot.profileBodyId); result = slot; }
         else { const slots = await recipes.createSlottedHolePattern({ ...shared, entryCentersMm: outer }); wires.push(...slots.profileBodyIds); result = slots; }
       } else if (first.countersunk) {
         // The countersink opens on the inner face: entry on the inner face, drilled toward the outer face.
         const inner = outer.map((point) => sub(point, scale(leg.planeNormal, t)));
-        const shared = { targetId: id, axis: leg.planeNormal, radialDirection: ACROSS, throughDiameterMm: first.diameterMm, countersinkMajorDiameterMm: first.countersunk.headDiameterMm, includedAngleDeg: 90, throughDepthMm: t, overshootMm: OVERSHOOT_MM, revision };
+        const shared = { targetId: id, axis: leg.planeNormal, radialDirection: ACROSS, throughDiameterMm: first.diameterMm, countersinkMajorDiameterMm: first.countersunk.headDiameterMm, includedAngleDeg: 90, throughDepthMm: t, overshootMm, revision };
         if (inner.length === 1) { const sink = await recipes.createCountersink({ ...shared, entryCenterMm: inner[0]! }); wires.push(sink.profileBodyId); result = sink; }
         else { const sinks = await recipes.createCountersinkPattern({ ...shared, entryCentersMm: inner }); wires.push(...sinks.profileBodyIds); result = sinks; }
       } else {
-        const shared = { targetId: id, axis: first.axis, holeDiameterMm: first.diameterMm, throughDepthMm: t, overshootMm: OVERSHOOT_MM, revision };
+        const shared = { targetId: id, axis: first.axis, holeDiameterMm: first.diameterMm, throughDepthMm: t, overshootMm, revision };
         result = outer.length === 1 ? await recipes.createThroughHole({ ...shared, entryCenterMm: outer[0]! }) : await recipes.createThroughHolePattern({ ...shared, entryCentersMm: outer });
       }
       id = result.resultBodyIds[0]!;
       record(`holes-${result.recipe}`, result.beforeRevision, result.afterRevision, [id]);
       revision = result.afterRevision;
+      current = await operations.state();
+      const changed = others.map((other, index) => ({ other, before: before[index]!, after: legPlaneSignature(current, id, other, t) })).filter((entry) => entry.after !== entry.before);
+      if (changed.length > 0) {
+        throw readBackError(changed.map((entry) => `holes[${first.item}] on leg ${first.leg} changed the faces of leg ${entry.other.name} (outer/inner planes: faces:edges ${entry.before} before, ${entry.after} after): the cut reached another leg`));
+      }
     }
     if (wires.length > 0) {
       const before = revision;
@@ -573,18 +648,25 @@ export async function createBracket(operations: BracketOperations, input: Bracke
       revision = after.revision;
     }
     current = await operations.state();
-    const body = current.bodies.find((candidate) => candidate.id === id);
-    if (body && body.name !== plan.name && operations.rename) {
+    const named = current.bodies.find((candidate) => candidate.id === id);
+    if (named && named.name !== plan.name && operations.rename) {
       const after = await operations.rename(id, plan.name, current.revision);
       record("rename-bracket", current, after, [id]);
     }
-    return id;
+
+    // Read back from a fresh state; a mismatch undoes every step above.
+    const final = await operations.state();
+    const problems = verifyBracket(plan, final, id, initial, ribBounds);
+    const body = final.bodies.find((candidate) => candidate.id === id);
+    if (body) {
+      problems.push(...sliverProblems(body));
+      problems.push(...await validityProblems(operations, id, final.revision));
+    }
+    if (problems.length > 0) throw readBackError(problems);
+    return { bodyId: id, final, body: body! };
   });
 
-  const final = await operations.state();
-  const problems = verifyBracket(plan, final, bodyId, initial, ribBounds);
-  if (problems.length > 0) throw committedMismatch("create_bracket", problems, final, initial);
-  const body = final.bodies.find((candidate) => candidate.id === bodyId)!;
+  const { bodyId, final, body } = built;
   return {
     recipe: "bracket",
     status: "completed",
@@ -599,4 +681,16 @@ export async function createBracket(operations: BracketOperations, input: Bracke
     undoSteps: final.undoDepth - initial.undoDepth,
     steps,
   };
+}
+
+/** Face and edge counts of one leg's outer and inner planes ("faces:edges|faces:edges"), to see a cut reach that leg. */
+function legPlaneSignature(state: RuntimeState, bodyId: number, leg: LegPlan, t: number): string {
+  const body = state.bodies.find((candidate) => candidate.id === bodyId);
+  if (!body) return "missing";
+  const k = leg.normalIndex;
+  const sign = leg.planeNormal[k]!;
+  return [leg.outerFaceOffsetMm, leg.outerFaceOffsetMm - sign * t].map((offset) => {
+    const faces = body.faces.filter((face) => face.planar && Math.abs(Math.abs(face.normal[k]!) - 1) <= 1e-9 && Math.abs(face.centerMm[k]! - offset) <= COINCIDENT_MM);
+    return `${faces.length}:${faces.reduce((sum, face) => sum + face.edgeIds.length, 0)}`;
+  }).join("|");
 }

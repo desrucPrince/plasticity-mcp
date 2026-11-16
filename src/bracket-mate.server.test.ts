@@ -92,6 +92,10 @@ function boxKernel() {
   };
   const operations = {
     async state() { return state(); },
+    // The native B-Rep Check (read-only, not recorded in calls): every box-kernel body is a closed, valid Solid.
+    async validateBodies(ids: number[], revision: string) {
+      return { documentToken: "doc-1", revision, measurementSource: "native-brep", bodies: ids.map((id) => ({ id, versionId: id, type: find(id).type, name: find(id).name, measurementSource: "native-brep", faceCount: 0, edgeCount: 0, boundaryEdgeIds: [], closed: true, nativeCheckCodes: [], nativeValid: true, printableSolid: true })) };
+    },
     async undo() { calls.push("undo"); ({ bodies, next } = JSON.parse(history.pop()!)); rev += 1; undoDepth -= 1; return state(); },
     async createBox(origin: Vec, size: Vec, name: string | undefined, revision: string) {
       return mutate("createBox", revision, () => { bodies.push({ id: next++, type: "Solid", name: name ?? null, min: [...origin], max: add(origin, size), holes: [] }); });
@@ -250,5 +254,29 @@ test("derived.holeAxesMm items pass as transfer axesMm as they are, and an axis 
   const miss = await client.callTool({ name: "plasticity_transfer_holes", arguments: { sourceId: 1, targetId: plateId, axesMm: [{ pointMm: [500, 0, 0], axis: [0, 0, 1] }], hole: { diameterMm: 3, through: true }, revision: kernel.state().revision } });
   assert.equal(miss.isError, true);
   assert.match(text(miss), new RegExp(`axis 0 \\(point \\[500,0,0\\], direction \\[0,0,1\\]\\) misses the target body ${plateId}`));
+  await close();
+});
+
+test("review fixes through the server: kind, onMiss, relation and allowOverlap are in the schemas; replies carry axisCount, holeCount and kind", async () => {
+  const kernel = boxKernel();
+  const { client, close } = await connect(kernel.fake);
+  const call = async (toolName: string, args: Record<string, unknown>) => {
+    const response = await client.callTool({ name: "plasticity_call", arguments: { toolName, arguments: { ...args, revision: kernel.state().revision } } });
+    return { isError: response.isError === true, text: text(response) };
+  };
+  await call("plasticity_create_box", { originMm: [0, 0, 0], sizeMm: [60, 40, 20], name: "block" });
+  await call("plasticity_create_blind_hole_pattern", { targetId: 1, entryCentersMm: [[22, 12, 0], [38, 28, 0]], axis: [0, 0, 1], holeDiameterMm: 3, holeDepthMm: 8, materialDepthMm: 20, overshootMm: 0.5 });
+  const plate = JSON.parse((await call("plasticity_create_box", { originMm: [10, 5, -4], sizeMm: [40, 30, 4], name: "plate" })).text).change.added[0].id;
+  const refused = await call("plasticity_place_body", { id: plate, anchor: { faceId: `${plate}:pz-` }, to: { bodyId: 1, faceId: "1:pz-" } });
+  assert.equal(refused.isError, true);
+  assert.match(refused.text, /face the same way.*relation: "aligned"/);
+  const overlap = await call("plasticity_place_body", { id: plate, anchor: { faceId: `${plate}:pz+` }, to: { bodyId: 1, faceId: "1:pz-" }, gapMm: -1 });
+  assert.match(overlap.text, /allowOverlap: true/);
+  assert.equal((await call("plasticity_place_body", { id: plate, anchor: { point: "min" }, to: { bodyId: 1, point: "max" }, relation: "parallel" })).isError, true, "relation takes mating or aligned only");
+  const transfer = await call("plasticity_transfer_holes", { sourceId: 1, targetId: plate, select: { radiusMm: 1.5, kind: "any" }, axesMm: undefined, hole: { diameterMm: 3.4, through: true }, onMiss: "skip" });
+  assert.equal(transfer.isError, false, transfer.text);
+  const reply = JSON.parse(transfer.text);
+  assert.deepEqual([reply.axisCount, reply.holeCount, reply.targetHoleCount, reply.axesMm.map((axis: { kind: string }) => axis.kind)], [2, 2, 2, ["hole", "hole"]]);
+  assert.equal(kernel.calls.filter((name) => name === "undo").length, 0);
   await close();
 });

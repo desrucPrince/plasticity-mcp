@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { bracketDerived, createBracket, planBracket, type BracketInput, type BracketOperations } from "./bracket-recipe.ts";
+import { bracketDerived, createBracket, gussetSizeLimit, planBracket, type BracketInput, type BracketOperations } from "./bracket-recipe.ts";
 import { GuardedRunError, type Vector3 } from "./mate.ts";
 import { CommittedChangeError } from "./operations.ts";
 import type { RuntimeState } from "./runtime.ts";
@@ -175,7 +175,7 @@ test("validation rejects gussets that do not fit, or on a profile other than L",
 
 // ---------- composition against a scripted fake ----------
 
-function scriptedFake(options: { failOn?: string; uncertainOn?: string; skewBounds?: boolean } = {}) {
+function scriptedFake(options: { failOn?: string; uncertainOn?: string; skewBounds?: boolean; invalid?: boolean; sliver?: boolean; leakInto?: string } = {}) {
   type FBody = { id: number; type: string; name: string | null; boundsMm: { min: Vec; max: Vec }; faces: Face[]; edges: Edge[]; points?: Vec[]; cutter?: { origin: Vec; axis: Vec; radius: number; cone?: boolean }; ribFaces?: Face[] };
   let bodies: FBody[] = [];
   let regions: RuntimeState["regions"] = [];
@@ -216,6 +216,11 @@ function scriptedFake(options: { failOn?: string; uncertainOn?: string; skewBoun
   const bump = (body: Omit<FBody, "id">) => { const created = { ...body, id: next++ }; bodies.push(created); return created; };
   const operations = {
     async state() { return state(); },
+    // The native B-Rep Check (read-only, not recorded in calls); options.invalid makes it report a defect.
+    async validateBodies(ids: number[], revision: string) {
+      if (revision !== `r${rev}`) throw new Error(`Stale reference: expected revision ${revision}, current revision is r${rev}`);
+      return { documentToken: "doc", revision, measurementSource: "native-brep", bodies: ids.map((id) => ({ id, versionId: id, type: find(id).type, name: find(id).name, measurementSource: "native-brep", faceCount: 0, edgeCount: 0, boundaryEdgeIds: [], closed: !options.invalid, nativeCheckCodes: options.invalid ? [7] : [], nativeValid: !options.invalid, printableSolid: !options.invalid })) };
+    },
     async undo() { calls.push({ op: "undo", args: [] }); ({ bodies, regions, next } = JSON.parse(history.pop()!)); rev += 1; undoDepth -= 1; return state(); },
     async createBox(origin: Vec, size: Vec, name: string | undefined, revision: string) {
       return mutate("createBox", [origin, size, name], revision, () => bump({ type: "Solid", name: name ?? null, boundsMm: { min: origin, max: [origin[0] + size[0], origin[1] + size[1], origin[2] + size[2]] }, faces: [], edges: [] }));
@@ -227,7 +232,7 @@ function scriptedFake(options: { failOn?: string; uncertainOn?: string; skewBoun
           if (kind === "union") {
             target.boundsMm = { min: [0, 1, 2].map((i) => Math.min(target.boundsMm.min[i]!, tool.boundsMm.min[i]!)) as Vec, max: [0, 1, 2].map((i) => Math.max(target.boundsMm.max[i]!, tool.boundsMm.max[i]!)) as Vec };
             if (tool.ribFaces) target.faces.push(...tool.ribFaces);
-            else if (target.edges.length === 0) { target.edges = [...unionEdges]; target.faces = [...unionFaces]; }
+            else if (target.edges.length === 0) { target.edges = [...unionEdges, ...(options.sliver ? [line("e-sliver", [20, 0, 4], [1, 0, 0], 0.04)] : [])]; target.faces = [...unionFaces]; }
           } else if (tool.cutter) {
             const { origin, axis, radius, cone } = tool.cutter;
             const n = target.faces.length;
@@ -236,6 +241,7 @@ function scriptedFake(options: { failOn?: string; uncertainOn?: string; skewBoun
             const circle = (id: string, c: Vec) => ({ id, curveType: "Circle", line: false, circle: true, lengthMm: 1, centerMm: c, tangent: [1, 0, 0], boundsMm: { min: c, max: c }, faceIds: [], vertexIds: [], circleGeometry: { centerMm: c, radiusMm: radius, normal: axis, reference: [0, 1, 0], startMm: [c[0], c[1] + radius, c[2]], midpointMm: [c[0], c[1] - radius, c[2]], endMm: [c[0], c[1] + radius, c[2]] } } as unknown as Edge);
             const edges = [circle(`h${n}a`, origin), circle(`h${n}b`, end)];
             target.edges.push(...edges);
+            if (options.leakInto) target.faces = target.faces.map((face) => (face.id === options.leakInto ? { ...face, edgeIds: [...face.edgeIds, `leak${n}`] } : face));
             target.faces.push({ ...cylinder(`h${n}`, origin, axis, radius, null, edges.map((edge) => edge.id)), centerMm: [origin[0] + (axis[1] ? radius : 0), origin[1] + (axis[1] ? 0 : radius), origin[2] + (axis[2] ? 2 : 0) + (axis[0] ? 0 : 0)] as Vec, normal: (axis[1] ? [-1, 0, 0] : [0, -1, 0]) as Vec } as Face);
           }
         }
@@ -336,11 +342,13 @@ test("a failed native step undoes every step taken; an uncertain one undoes noth
   assert.deepEqual(invalid.calls, []);
 });
 
-test("a read-back that does not match the plan is a certain error that names the undo count", async () => {
+test("a read-back that does not match the plan is rolled back: all 5 steps undone, and the error says the document is unchanged", async () => {
   const fake = scriptedFake({ skewBounds: true });
   await assert.rejects(createBracket(fake.operations, { ...AUDIT, holes: undefined, gussets: undefined }),
-    (error: unknown) => error instanceof CommittedChangeError && error.undoSteps === 5 && /create_bracket completed 5 Undo step\(s\)/.test(error.message) && /bounds/.test(error.message));
-  assert.equal(fake.calls.some((call) => call.op === "undo"), false);
+    (error: unknown) => error instanceof GuardedRunError && !(error instanceof CommittedChangeError) && error.undoneSteps === 5 && error.restored && /create_bracket failed; 5 Undo step\(s\) were undone and the document is unchanged/.test(error.message) && /bounds/.test(error.message));
+  assert.equal(fake.calls.filter((call) => call.op === "undo").length, 5);
+  assert.equal(fake.state().undoDepth, 0);
+  assert.equal(fake.state().bodies.length, 0);
 });
 
 test("slots and countersinks: their construction Wires are deleted in one step at the end; the countersink enters from the inner face", async () => {
@@ -357,4 +365,77 @@ test("slots and countersinks: their construction Wires are deleted in one step a
   assert.equal((remove.args[0] as number[]).length, 2, "the slot and countersink Wires go in one delete");
   assert.equal(result.undoSteps, 15);
   assert.equal(fake.state().bodies.length, 1);
+});
+
+// ---------- review fixes (defects 4-6 and 11 of the bracket-mate review) ----------
+
+const L40 = (extra: Partial<BracketInput>): BracketInput => input({ originMm: [2000, 0, 0], legs: { baseMm: 40, uprightMm: 40 }, innerBendRadiusMm: 0, cornerRadiusMm: 0, ...extra });
+
+test("defect 4: a gusset whose rib (with its overlap) would run past the leg end is refused before any native call, naming the largest size", async () => {
+  // The review's gmax: 40 x 40, t 4, one gusset 36: the old limit allowed it and the rib ran 0.5 mm past both leg ends.
+  assert.throws(() => planBracket(L40({ gussets: { count: 1, thicknessMm: 4, sizeMm: 36 } })), /gussets.sizeMm 36 is too large: the rib \(with its 0.5 mm overlap into the legs\) must end at least 0.05 mm inside each leg; the largest allowed gussets.sizeMm here is 35.45 mm/);
+  assert.doesNotThrow(() => planBracket(L40({ gussets: { count: 1, thicknessMm: 4, sizeMm: 35.45 } })), "the stated largest size is accepted");
+  const fake = scriptedFake();
+  await assert.rejects(createBracket(fake.operations, L40({ originMm: [0, 0, 0], gussets: { count: 1, thicknessMm: 4, sizeMm: 36 } })), /largest allowed gussets.sizeMm here is 35.45 mm/);
+  assert.deepEqual(fake.calls, []);
+});
+
+test("defect 5: gussets at the edges of a bracket with rounded corners are limited by the clip at the rounded corner", () => {
+  // The review's gmaxrc: corner radius 3, two edge gussets 4 thick, size 33 left 0.042 mm edges at the corner rounds.
+  assert.throws(() => planBracket(L40({ cornerRadiusMm: 3, gussets: { count: 2, thicknessMm: 4, sizeMm: 33 } })), /inside its 3 mm rounded corner; the largest allowed gussets.sizeMm here is 32.45 mm/);
+  assert.doesNotThrow(() => planBracket(L40({ cornerRadiusMm: 3, gussets: { count: 2, thicknessMm: 4, sizeMm: 32.45 } })));
+  // Clear of the corner zones (one centred gusset) the older limit, 33 here, still governs.
+  assert.equal(gussetSizeLimit({ B: 40, H: 40, W: 30, t: 4, rc: 3, e: 0.5, spans: [[13, 17]] }), 33);
+  assert.equal(gussetSizeLimit({ B: 40, H: 40, W: 30, t: 4, rc: 3, e: 0.5, spans: [[1, 5]] }), 33, "1 mm in from the side the corner round still leaves room for the tip");
+  assert.equal(Math.round(gussetSizeLimit({ B: 40, H: 40, W: 30, t: 4, rc: 3, e: 0.5, spans: [[0.02, 4.02]] }) * 1e6) / 1e6, 32.795832, "0.02 mm from the side the tip meets the round");
+});
+
+test("defect 5: a built bracket with an edge shorter than 0.05 mm is rolled back by the sliver read-back", async () => {
+  const fake = scriptedFake({ sliver: true });
+  await assert.rejects(createBracket(fake.operations, { ...AUDIT, holes: undefined, gussets: undefined }),
+    (error: unknown) => error instanceof GuardedRunError && error.restored && /1 edge\(s\) shorter than 0.05 mm \(a sliver\), the shortest 0.04 mm/.test(error.message) && /the document is unchanged/.test(error.message));
+  assert.equal(fake.state().undoDepth, 0);
+  assert.equal(fake.state().bodies.length, 0);
+});
+
+test("defect 6: a hole in a narrow U side leg overshoots less than half the free gap, so the cutter never reaches the other leg", async () => {
+  // The review's unarrow: base 4.3, t 2, so the gap between the side legs is 0.3 mm.
+  const narrow = input({ originMm: [0, 0, 0], profile: "U", widthMm: 20, thicknessMm: 2, legs: { baseMm: 4.3, leftMm: 20, rightMm: 20 }, innerBendRadiusMm: 0, cornerRadiusMm: 0, holes: [{ leg: "left", diameterMm: 4, count: 1, layout: "line-along" }] });
+  const fake = scriptedFake();
+  await createBracket(fake.operations, narrow);
+  const cutter = fake.calls.find((call) => call.op === "createCylinder")!;
+  const [start, radius, height, axis] = cutter.args as [Vec, number, number, Vec];
+  assert.ok(Math.abs(start[0] + 0.15) < 1e-12 && start[1] === 10 && start[2] === 11, `starts 0.15 outside the outer face: ${JSON.stringify(start)}`);
+  assert.deepEqual([radius, Math.round(height * 1e9) / 1e9, axis], [2, 2.3, [1, 0, 0]], "and ends 0.15 into the 0.3 mm gap");
+  // A base hole, or a side-leg hole above the other leg's top, keeps the full 0.5 mm overshoot.
+  const tall = planBracket(input({ originMm: [0, 0, 0], profile: "U", widthMm: 20, thicknessMm: 2, legs: { baseMm: 4.3, leftMm: 40, rightMm: 10 }, innerBendRadiusMm: 0, cornerRadiusMm: 0, holes: [{ leg: "left", diameterMm: 4, count: 1, layout: "explicit", positionsMm: [[30, 10]] }] }));
+  assert.equal((tall.holes[0] as unknown as { overshootMm: number }).overshootMm, 0.5);
+});
+
+test("defect 6: a hole cut that changes another leg's faces is rolled back", async () => {
+  const fake = scriptedFake({ leakInto: "up-in" });
+  await assert.rejects(createBracket(fake.operations, { ...AUDIT, gussets: undefined, holes: [AUDIT.holes![0]!] }),
+    (error: unknown) => error instanceof GuardedRunError && error.restored && /holes\[0\] on leg base changed the faces of leg upright \(outer\/inner planes: faces:edges 1:0\|1:0 before, 1:0\|1:2 after\): the cut reached another leg/.test(error.message));
+  assert.equal(fake.state().undoDepth, 0);
+});
+
+test("defect 11: bracket dimensions above 10,000 mm, or below the 0.05 mm sliver limit, are refused before any native call", async () => {
+  assert.throws(() => planBracket(L40({ legs: { baseMm: 2e6, uprightMm: 40 } })), /legs.baseMm 2000000 mm is above the 10000 mm limit for a bracket dimension/);
+  assert.throws(() => planBracket(L40({ widthMm: 10001 })), /widthMm 10001 mm is above the 10000 mm limit/);
+  assert.throws(() => planBracket(input({ profile: "Z", thicknessMm: 3, legs: { lowerMm: 6000, webMm: 30, upperMm: 6000 }, innerBendRadiusMm: 0, cornerRadiusMm: 0 })), /the bracket would be 11997 mm along X, above the 10000 mm limit/);
+  assert.throws(() => planBracket(L40({ gussets: { count: 1, thicknessMm: 1e-7, sizeMm: 10 } })), /gussets.thicknessMm 1e-7 mm is below 0.05 mm/);
+  assert.throws(() => planBracket(L40({ holes: [{ leg: "base", diameterMm: 1e-7, count: 1, layout: "line-along" }] })), /diameterMm 1e-7 mm is below 0.05 mm/);
+  assert.throws(() => planBracket(L40({ innerBendRadiusMm: 1e-7 })), /innerBendRadiusMm 1e-7 mm is below 0.05 mm/);
+  assert.throws(() => planBracket(L40({ widthMm: 1e-6, thicknessMm: 1e-6 })), /widthMm 0.000001 mm is below 0.05 mm/);
+  assert.throws(() => planBracket(L40({ thicknessMm: 3.99, legs: { baseMm: 4.02, uprightMm: 40 } })), /the flat of leg base would be 0.03 mm long, shorter than 0.05 mm/);
+  const fake = scriptedFake();
+  await assert.rejects(createBracket(fake.operations, L40({ originMm: [0, 0, 0], legs: { baseMm: 2e6, uprightMm: 40 } })), /above the 10000 mm limit/);
+  assert.deepEqual(fake.calls, []);
+});
+
+test("defect 11: a built bracket that the native Check finds invalid is rolled back", async () => {
+  const fake = scriptedFake({ invalid: true });
+  await assert.rejects(createBracket(fake.operations, { ...AUDIT, holes: undefined, gussets: undefined }),
+    (error: unknown) => error instanceof GuardedRunError && error.restored && error.undoneSteps === 5 && /body 1 is not a closed, natively valid Solid/.test(error.message));
+  assert.equal(fake.state().bodies.length, 0);
 });
