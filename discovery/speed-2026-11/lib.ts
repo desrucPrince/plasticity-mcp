@@ -24,7 +24,7 @@ const NO_REUSE = process.env.SPEED_NO_REUSE === "1";
 export const OUT_DIR = new URL(".", import.meta.url).pathname;
 // Journal writes go to scratch, never into the repo (the default root is <cwd>/.plasticity-mcp).
 export const HISTORY_ROOT = process.env.SPEED_HISTORY_ROOT
-  ?? "/private/tmp/claude-501/-Users-neocortez-Documents-APP-DEV-neoHQ-v2/d1d90249-76be-49b7-9d4d-ed691ee223fe/scratchpad/history";
+  ?? `${process.env.TMPDIR ?? "/tmp"}/plasticity-speed-history`;
 
 export function guardEnv(extra: Record<string, string> = {}): Record<string, string> {
   const env = {

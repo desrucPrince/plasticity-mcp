@@ -1,7 +1,7 @@
 {
  "label": "tier1e",
  "model": "default",
- "serverTree": "/Users/neocortez/Projects/plasticity-mcp-merge",
+ "serverTree": "~/Projects/plasticity-mcp-merge",
  "endpoint": "http://127.0.0.1:57291",
  "target": "E634FD207384F0F8D6EB10D2D01D46F2",
  "measuredAt": "2026-11-16T18:57:04.711Z",
