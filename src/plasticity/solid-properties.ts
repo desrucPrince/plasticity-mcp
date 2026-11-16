@@ -50,7 +50,7 @@ export async function measureSolidProperties(
   if (new Set(ids).size !== ids.length) throw new Error("Solid body IDs must be unique");
 
   const before = await runtime.getState();
-  if (before.revision !== revision) throw new Error(`Stale revision: expected ${before.revision}, received ${revision}`);
+  if (before.revision !== revision) throw new Error(`Stale reference: expected revision ${revision}, current revision is ${before.revision}`);
   const requested = validateCurrentSolids(before, ids);
   const native = await collectNativeProperties(runtime, ids);
   const after = await runtime.getState();

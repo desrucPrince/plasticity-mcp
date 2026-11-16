@@ -92,7 +92,7 @@ test("describe_body groups planes by outward normal and lists holes with their a
   assert.deepEqual(planeList(description, "zNeg"), [{ mm: 0, face: "bottom" }]);
   assert.deepEqual(planeList(description, "xPos"), [{ mm: 40, face: "right" }]);
   assert.deepEqual(planeList(description, "xNeg"), [{ mm: 0, face: "left" }], "a -x plane is placed by its x coordinate");
-  assert.deepEqual(description.cylinders, [{ radiusMm: 2.25, axis: "z", kind: "hole", count: 3, axisPointsMm: [[7.5, 7.5, 5], [32.5, 7.5, 5]] }]);
+  assert.deepEqual(description.cylinders, [{ radiusMm: 2.25, axis: "z", kind: "hole", count: 2, faces: 3, axisPointsMm: [[7.5, 7.5, 5], [32.5, 7.5, 5]] }]);
   assert.deepEqual(description.otherSurfaces, {});
   assert.deepEqual(description.blendRadii, {});
 });

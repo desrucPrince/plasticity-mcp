@@ -101,14 +101,18 @@ and `$<step>.removed` references.
   path and the result's top-level keys. On a step that changed the document the
   edit is already applied and journaled, so the step stays completed: it keeps
   its normal reply and adds `returnError: "<the same message>"`, and the batch
-  goes on. Do not retry such a step; that would duplicate the geometry.
+  goes on. Do not retry such a step; that would duplicate the geometry. The
+  batch reply also carries a top-level `returnErrors: <n>`, the number of steps
+  that carry `returnError`, so it cannot be missed (absent when none does).
 - Without `return`, a read step's reply is its full result when it is 1,500
   bytes or less. A larger result comes back as `{ truncated: true, bytes,
   count, ids, hint: "add return: [...] to this step" }`. Nothing is cut
   silently. Mutating steps also report the tool's own result fields (an export's
   `path` and `bytes`, `controlPoints`, `previousDistanceMm`, recipe journals)
   under `result`, with the same 1,500-byte rule; `createdEdges` keeps its own
-  key.
+  key. `plasticity_describe_body` is the one exception: it has its own 4 KB
+  hard cap, so a describe step without `return` comes back whole in both
+  detail modes (an enclosure description is 1.5-1.6 KB).
 - `detail: "standard" | "lean"` (default `standard`). `standard` is the reply
   this server sent before tier 1 plus two additive fields: `hint` on a read
   result cut to ids (`truncated: true`), and `result` on a mutating step whose
@@ -130,14 +134,19 @@ and `$<step>.removed` references.
   any of them. `standard` drops nothing and has no `omitted`.
 - `roundMm: 0-6`: rounds length values in the reply to that many decimals: the
   numbers under a key that ends in `Mm` or `Mm2` (`lengthMm`, `radiusMm`,
-  `areaMm2`, `positionMm`, `boundsMm.min`, a return key like
-  `"matches[*].lengthMm"`), including everything nested under that key.
-  Normals, tangents, axes, angles, quaternions, counts and ids keep full
-  precision. The rule applies to the whole reply, including the `verbose` top
+  `areaMm2`, `positionMm`, `boundsMm.min`), including everything nested under
+  that key. A return key is a path, and the nearest segment that ends in `Mm`
+  or `Mm2` decides: `"matches[*].lengthMm"`, `"matches[*].boundsMm.min"` and
+  `"matches[*].centerMm[0]"` are rounded. Keys that end in `Mm` or `Mm2` but
+  are not lengths or areas keep full precision: a name with `Per` before a
+  capital (`curvaturePerMm`, `fractureEnergyNPerMm`, `stiffnessMPaPerMm`,
+  `tractionNPerMm2`), and `matrixWorldMm` except its translation (elements
+  12-14 of the column-major 4x4). Normals, tangents, axes, angles, quaternions,
+  counts and ids keep full precision. The rule applies to the whole reply, including the `verbose` top
   level. Stored results are not rounded. Off by default.
 
 `plasticity_find_faces` and `plasticity_find_edges` take optional `sortBy`
-(`x`, `y`, `z` of the centre; edges also `length`), `order` (`asc` or `desc`;
+(faces: `x`, `y`, `z` of the centre, or `area`; edges: `x`, `y`, `z` or `length`), `order` (`asc` or `desc`;
 `length` defaults to `desc`, the rest to `asc`) and `limit` (1-1000). `count`
 is the number of matches before `limit`. Ties keep the engine's order. With
 none of these inputs the result is unchanged. `boundsMm` in a query matches by
@@ -153,7 +162,9 @@ other query makes that extra read.
 A direct `plasticity_find_faces` or `plasticity_find_edges` call without
 `limit` never returns more than 8,000 bytes. When the full reply would be
 larger, it carries the matches that fit (in the usual order), `count` (the
-total), `truncated: true` and `hint: "add limit/sortBy or narrow the query"`.
+total), `truncated: true` and `hint: "add limit/sortBy or narrow the query"`. Only `limit` lifts the cut;
+`sortBy` without `limit` is still cut (it chooses which matches stay). The
+`next` text says "add limit (e.g. 20) with sortBy".
 A reply of 8,000 bytes or less is unchanged, an explicit `limit` is always
 honoured, and the steps of a `plasticity_batch` are never cut (a later step can
 reference every match).
@@ -200,26 +211,48 @@ up to 20], moreBodies?, hint? }` instead.
 `plasticity_describe_body` (`{ id }`, strict, read-only, in the compact list)
 returns one body in 1-2 KB instead of the 17-110 KB of
 `plasticity_body_info`. It is built from the read model with no extra native
-call, in millimetres, rounded to 4 decimals, and never longer than 4 KB (the
-longest lists are shortened first, with `more` counts).
+call, in millimetres, rounded to 4 decimals. It is never longer than 4,096
+bytes, for any body. `name` is cut to 120 characters; every list is capped
+(12 plane positions per group, 16 axis points per cylinder group, 12 blend
+radii, 8 cone half-angles, 50 cylinder groups) with a `more` count; beyond that
+the longest list is shortened first (the cylinder groups with the fewest faces
+go last of all, and the groups with the most faces stay). As a last resort
+whole sections are left out in this order: `otherSurfaces`, `blendRadii`,
+`cylinders`, `planes`, each leaving `otherSurfacesMore`, `blendRadiiMore`,
+`cylindersMore` or `planesMore: <n>`. `truncated: true` is set whenever one of
+those top-level counts is present. The result is built in one pass: 3,000
+cylinder groups take a few milliseconds. `revision` is always in the reply
+(the status reply's `documentToken` is not repeated here).
 
 - `id, type, name, revision, boundsMm, sizeMm, faceCount, edgeCount, vertexCount`.
 - `planes`: planar faces grouped by outward normal: `xPos`, `xNeg`, `yPos`,
   `yNeg`, `zPos`, `zNeg`, and `slanted` (each entry carries its `normal`). Each
   group lists distinct plane positions in ascending order as
-  `{ mm, count?, face }`: `mm` is the plane's coordinate on that axis (for
-  `slanted`, its offset along the normal), `count` the number of faces on it
-  (left out when 1) and `face` the id of the largest one (by bounding box). A
+  `{ mm, count?, face }`: `mm` is the plane's coordinate on that axis for an
+  axis-aligned group, and the signed offset along the normal for `slanted`;
+  `count` is the number of faces on it (left out when 1) and `face` the id of
+  the face with the largest bounding box at that offset (not the exact area). A
   cavity floor reads as a `zPos` entry, the inner side of the walls as `xNeg`
   and `yNeg` entries at the far side. At most 12 positions per group;
   `planes.more` maps a group to the number left out.
 - `cylinders`: groups by radius, axis direction and kind:
-  `{ radiusMm, axis, kind, count, axisPointsMm, more? }`. `axis` is `"x"`, `"y"`
-  or `"z"`, else a unit vector. `kind` is `"hole"` or `"boss"` from the face
-  normal (toward or away from the axis) and is left out when the normal does
-  not say. `axisPointsMm` lists one point on each distinct axis (at the middle
-  of the faces' extent along an axis-aligned axis), at most 16, with a `more`
-  count. Cylindrical blend faces are not listed here.
+  `{ radiusMm, axis, kind, sweepDeg?, count, faces?, axisPointsMm, more? }`.
+  `axis` is `"x"`, `"y"` or `"z"`, else a unit vector. `kind` is `"hole"` or
+  `"boss"` from the face normal (toward or away from the axis) for a full-turn
+  face (two circle edges, or one closed circle), and is left out when the
+  normal does not say. A face with exactly one circle edge is a part turn: its
+  `kind` is `"arc"`, with `sweepDeg` when the edge's start, midpoint and end
+  give it; an arc never counts as a hole or boss and stays in its own group
+  (by sweep, to the degree). A cylinder face with no circle edge at all cannot
+  say, so its normal decides as before. `count` is the number of distinct axes
+  (features), not faces; `faces` is the number of faces and appears only when
+  it differs from `count` (one boss clipped by walls can be two faces).
+  `axisPointsMm` lists one point on each distinct axis (at the middle of the
+  faces' extent along an axis-aligned axis), at most 16, with a `more` count;
+  coaxial holes through opposite walls merge into one axis point. Grouping
+  treats direction components below 1e-6 as 0 before it picks the sign, merges
+  axis points within 0.001 mm, and merges radii within 0.0001 mm of a group's
+  first radius. Cylindrical blend faces are not listed here (see `blendRadii`).
 - `otherSurfaces`: face counts by surface type (`Cone` also has `halfAngleDeg`).
 - `blendRadii`: `{ "<radius mm>": faceCount }` for fillet and blend faces.
 - Tier 1d, in each `cylinders` group, only when every face of the group is a

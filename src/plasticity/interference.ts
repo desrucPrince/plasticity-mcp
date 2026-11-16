@@ -55,7 +55,7 @@ export async function checkBodyInterference(
   if (pairs.length === 0) throw new Error("At least one body pair is required");
   if (pairs.length > MAX_PAIRS) throw new Error(`At most ${MAX_PAIRS} body pairs can be checked at once`);
   const before = await runtime.getState();
-  if (before.revision !== revision) throw new Error(`Stale revision: expected ${before.revision}, received ${revision}`);
+  if (before.revision !== revision) throw new Error(`Stale reference: expected revision ${revision}, current revision is ${before.revision}`);
   validatePairs(before, pairs);
 
   const temporaryIds = pairs.map(() => allocateTemporaryIds());
