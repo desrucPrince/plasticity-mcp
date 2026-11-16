@@ -5,6 +5,7 @@ import { copyFile, mkdir, mkdtemp, open, readFile, realpath, rm, rmdir, stat, wr
 import { dirname, extname, join, resolve } from "node:path";
 
 import { NATIVE_VIEWPORT_CAPTURE } from "./viewport-capture.ts";
+import { boundsExactness, exactBounds, explainXNurbsError, probeSurface, SURFACE_ALIGN_CONTINUITY, SURFACE_ALIGN_COINCIDENCE_MM, SURFACE_ALIGN_DRIVE, SURFACE_ALIGN_FALLBACK_WAIT_MS, SURFACE_ALIGN_READBACK_SOURCE, SURFACE_ALIGN_READY_MS, SURFACE_ALIGN_TIMEOUTS, type AlignReadBackNative, type SurfaceAlignContinuity, readSupportBounds, supportBounds, validateScreenshotView, withScreenshotView, type ExactBoundsEvidence, type ProbeSurfaceEvidence, type ProbeSurfaceRequest, type ScreenshotViewOptions } from "./surfacing.ts";
 import { nativeFunction } from "./native-function.ts";
 import { classifyPickOutcome, type PickCancelResult, type PickOutcome, type PickOutcomeFacts } from "./pick-command-outcome.ts";
 import { LONG_NATIVE_IMPORT_TIMEOUT_MS, NATIVE_STATE_READ_TIMEOUT_MS, PlasticityRuntime, type RevisionProbe, type RuntimeState } from "./runtime.ts";
@@ -441,6 +442,8 @@ export type SweepGuideMethodName = keyof typeof SWEEP_GUIDE_METHODS;
 // ContinuityType members the MCP exposes for X-sided patch boundary edges (FINDINGS gap 2); resolved by name
 // from the bound enum. G1/G2 bulge the patch off the rim and G0 stays flat. C1-C3, G3 and Free stay out.
 export const XSIDED_CONTINUITY = { g0: "G0", g1: "G1", g2: "G2" } as const;
+// The XNurbs dialog's Quality buttons (Auto, High, Max) set XNurbsFactory.enforceTolerance to these EnforceToleranceType members.
+export const XSIDED_QUALITY = { auto: "Automatic", high: "High", max: "Max" } as const;
 export type XSidedContinuity = keyof typeof XSIDED_CONTINUITY;
 
 export interface FaceControlPoint {
@@ -750,6 +753,10 @@ export interface PickCommandSpec {
   readBack?: (run: PickCommandRun<unknown>) => Promise<PickReadBack>;
   /** A rejected-unchanged run the caller turns into a result (the equal-distance no-op) instead of an error. */
   acceptUnchanged?: (run: PickCommandRun<unknown>) => boolean;
+  /** More native bindings the drive step uses by name (e.g. ContinuityType). Default none: the source and bindings are unchanged. */
+  extraBindings?: string[];
+  /** The dialog is a DOM element, not a scene object (Surface Align's AlignEdgeDialog): also search the document for it. */
+  domDialog?: boolean;
 }
 
 export interface PickReadBack {
@@ -846,8 +853,8 @@ export interface PickCommandResult<T> extends PickCommandRun<T> {
 // Settle window: after finish(), whenever no Undo step has landed yet, the helper watches the Undo stack for
 // settleMs (never past the cancelMs budget) and measures it again, so a no-effect rejection is only reported
 // after the window shows nothing landed.
-function pickCommandSource(drive: string): string {
-  return nativeFunction`async function (Command, Dialog, Vector3, args) {
+function pickCommandSource(drive: string, extraBindings: string[] = []): string {
+  return nativeFunction`async function (Command, Dialog, Vector3, ${extraBindings.map((name) => `${name}, `).join("")}args) {
     const editor = this;
     const executor = this.executor;
     const selection = this.selection;
@@ -895,7 +902,8 @@ function pickCommandSource(drive: string): string {
       const pointM = hit.onFace ? pointOnFace(hit.item, item) : hit.pointM;
       return { item, pointM, point: new Vector3(pointM[0], pointM[1], pointM[2]), normal: hit.normalM ? new Vector3(hit.normalM[0], hit.normalM[1], hit.normalM[2]) : undefined };
     });
-    const drive = async (dialog, driveArgs) => { ${drive} };
+    // open() is true while the helper still waits for the drive step; a drive that outlives it must stop touching the command.
+    const drive = async (dialog, driveArgs, open) => { ${drive} };
     const focusedInput = () => typeof document === 'undefined' ? null : document.querySelector('input.z-space-input-focused');
     const selectedCount = () => {
       let count = 0, known = false;
@@ -960,6 +968,10 @@ function pickCommandSource(drive: string): string {
       const findDialog = () => {
         let found = null;
         editor.helpers.scene.traverse(object => { if (!found && object instanceof Dialog && object.params) found = object; });
+        // Opt-in: a dialog that is a connected DOM element (no prototype patch is needed to find it).
+        if (!found && args.domDialog && typeof document !== 'undefined') {
+          for (const element of document.querySelectorAll('*')) if (element instanceof Dialog && element.params && element.isConnected) { found = element; break; }
+        }
         return found;
       };
       let dialog = null;
@@ -992,7 +1004,7 @@ function pickCommandSource(drive: string): string {
         let driveError = null, driveDone = false;
         driveOpen = true;
         let driving;
-        try { driving = Promise.resolve(drive(dialog, args.driveArgs)); } catch (error) { driving = Promise.reject(error); }
+        try { driving = Promise.resolve(drive(dialog, args.driveArgs, () => driveOpen)); } catch (error) { driving = Promise.reject(error); }
         driving.then(value => { result.drive = value ?? null; driveDone = true; }, error => { driveError = message(error); driveDone = true; });
         while (!driveDone && Date.now() < finishDeadline) await sleep(10);
         driveOpen = false;
@@ -2282,6 +2294,7 @@ export class PlasticityOperations {
         };
         return {
           reference,
+          item,
           bodyVersionId: args.bodyVersions.find(candidate => candidate.bodyId === reference.bodyId)?.versionId,
           modelBodyId: Number(item.model.Id()),
           entityId: Number(edge.entityId),
@@ -2301,6 +2314,7 @@ export class PlasticityOperations {
         throw new Error('Plasticity continuity measurements and views are inconsistent');
       }
       const vectorMm = value => [Number(value.x) * 1000, Number(value.y) * 1000, Number(value.z) * 1000];
+      const kernelEdges = new Map();
       return evaluated.measurements.map((measurement, index) => {
         const view = evaluated.views[index];
         const selectedEdge = selected.find(candidate =>
@@ -2319,6 +2333,61 @@ export class PlasticityOperations {
         const G0 = maximumPositionDeviationMm <= args.tolerances.positionMm;
         const G1 = G0 && maximumNormalAngleDeviationDeg <= args.tolerances.normalAngleDeg;
         const G2 = G1 && maximumRelativeCurvatureDeviation <= args.tolerances.relativeCurvature;
+        // Per-sample read-out (surfacing P5): g0spikes/g1spikes hold 100 x (point, deviation vector) and g2spikes 100 x
+        // (point, spike vector, w); each sample's value is its vector length, and their maxima equal g0max/g1max/g2max
+        // (live on 26.1.3: a crowned patch edge, plane-to-fillet edges, 90 degree box edges). interior is the
+        // maximum over samples 5..94 (the 5 samples at each end are the corners). worstAt: where the first level that
+        // fails its tolerance (G2 when all pass) has its maximum. Left out when the arrays are not 100 samples.
+        const extra = (() => {
+          const an = view.analysis;
+          const g0s = an?.g0spikes, g1s = an?.g1spikes, g2s = an?.g2spikes;
+          if (!g0s || !g1s || !g2s || g0s.length !== 600 || g1s.length !== 600 || g2s.length !== 700) return {};
+          const len = (array, stride, i) => Math.hypot(array[stride * i + 3], array[stride * i + 4], array[stride * i + 5]);
+          const series = [Array.from({ length: 100 }, (_, i) => len(g0s, 6, i)), Array.from({ length: 100 }, (_, i) => len(g1s, 6, i)), Array.from({ length: 100 }, (_, i) => len(g2s, 7, i))];
+          if (!series.every(values => values.every(Number.isFinite))) return {};
+          const interiorMax = values => Math.max(...values.slice(5, 95));
+          const level = !G0 ? 0 : !G1 ? 1 : 2;
+          const governing = series[level];
+          const worstAt = Math.max(...governing) > interiorMax(governing) ? 'corner' : 'interior';
+          const result = { interior: { g0Mm: interiorMax(series[0]) * 1000, g1Deg: interiorMax(series[1]) * 180 / Math.PI, g2Rel: interiorMax(series[2]) }, worstAt };
+          // Absolute curvature across the edge at the worst G2 sample, from Face.EvalBasis (probe recipe), only where one
+          // parameter direction runs along the edge and the other across it (within 1 degree), so the reported value is the
+          // normal curvature across the edge on that face. Left out otherwise.
+          try {
+            const worst = series[2].indexOf(Math.max(...series[2]));
+            // One kernel edge list per body (kernel wrappers are never freed, so they are not re-read per edge).
+            const kernelEdge = selectedEdge.edge && (() => {
+              kernelEdges.has(selectedEdge.item) || kernelEdges.set(selectedEdge.item, selectedEdge.item.model.GetEdges().GetEdges());
+              return kernelEdges.get(selectedEdge.item).find(candidate => Number(candidate.Id()) === selectedEdge.entityId);
+            })();
+            if (!kernelEdge) return result;
+            const sample = kernelEdge.GetPoint(0.5);
+            const KernelVector = sample.constructor;
+            const at = new KernelVector(Number(g2s[7 * worst]), Number(g2s[7 * worst + 1]), Number(g2s[7 * worst + 2]));
+            const onEdge = kernelEdge.FindPointNear(at);
+            const tangent = kernelEdge.GetPointAndTangent(onEdge.t).tangent;
+            const t = [Number(tangent.x), Number(tangent.y), Number(tangent.z)];
+            const tl = Math.hypot(...t);
+            const faces = kernelEdge.GetFaces().GetFaces();
+            const across = topologyId => {
+              const face = faces.find(candidate => Number(candidate.Id()) === Number(topologyId));
+              if (!face) return null;
+              const near = face.FindPointNear(onEdge.exact);
+              const basis = face.EvalBasis(near.u, near.v);
+              const unit = v => { const a = [Number(v.x), Number(v.y), Number(v.z)]; const l = Math.hypot(...a); return l > 0 ? a.map(x => x / l) : null; };
+              const u = unit(basis.uDirection), w = unit(basis.vDirection);
+              if (!u || !w || !(tl > 0)) return null;
+              const cosU = Math.abs(u[0] * t[0] + u[1] * t[1] + u[2] * t[2]) / tl, cosV = Math.abs(w[0] * t[0] + w[1] * t[1] + w[2] * t[2]) / tl;
+              const along = Math.cos(Math.PI / 180), perpendicular = Math.sin(Math.PI / 180);
+              if (cosU >= along && cosV <= perpendicular) return Number(basis.vCurvature) / 1000;
+              if (cosV >= along && cosU <= perpendicular) return Number(basis.uCurvature) / 1000;
+              return null;
+            };
+            const side1 = across(measurement.referenceFace?.topologyId), side2 = across(measurement.targetFace?.topologyId);
+            if (Number.isFinite(side1) && Number.isFinite(side2) && side1 !== null && side2 !== null) result.absoluteCurvature = { side1PerMm: side1, side2PerMm: side2 };
+          } catch (error) { /* provable or omitted */ }
+          return result;
+        })();
         return {
           edge: selectedEdge.reference,
           adjacentFaces: [
@@ -2337,6 +2406,7 @@ export class PlasticityOperations {
           tolerances: args.tolerances,
           passes: { G0, G1, G2 },
           achievedContinuity: G2 ? 'G2' : G1 ? 'G1' : G0 ? 'G0' : 'discontinuous',
+          ...extra,
         };
       });
     }`, ["MeasureContinuityFactory", "ContinuityType", "evalSurfaceContinuityMeasurements", "EvalSurfaceContinuityMeasurements_refresh"], [{
@@ -2345,6 +2415,39 @@ export class PlasticityOperations {
       bodyVersions: [...bodyVersions].map(([bodyId, versionId]) => ({ bodyId, versionId })),
     }]);
     return { documentToken: state.documentToken, revision: state.revision, analyses };
+  }
+
+  // Surfacing reads (src/plasticity/surfacing.ts): exact ray hits on curved faces and exact NURBS extents. Read-only.
+  async probeSurface(request: ProbeSurfaceRequest, revision: string): Promise<ProbeSurfaceEvidence> {
+    const state = await this.assertRevision(revision);
+    return await probeSurface(this.runtime, state, request);
+  }
+
+  async exactBounds(ids: number[], revision?: string): Promise<ExactBoundsEvidence> {
+    const state = revision === undefined ? await this.state() : await this.assertRevision(revision);
+    return await exactBounds(this.runtime, state, ids);
+  }
+
+  // describe_body's boundsExact per body. Bodies whose support evaluation fails are left out (the field is omitted).
+  async describeBoundsExactness(bodies: RuntimeState["bodies"]): Promise<Map<number, { boundsExact: boolean; boundsNote?: string }>> {
+    const result = new Map<number, { boundsExact: boolean; boundsNote?: string }>();
+    const pending: RuntimeState["bodies"] = [];
+    for (const body of bodies) {
+      const known = boundsExactness(body);
+      if (known) result.set(body.id, known);
+      else if ((body.type === "Solid" || body.type === "Sheet") && body.boundsMm) pending.push(body);
+    }
+    if (pending.length === 0) return result;
+    try {
+      const native = await readSupportBounds(this.runtime, pending.map((body) => body.id));
+      pending.forEach((body, index) => {
+        try {
+          const verdict = boundsExactness(body, supportBounds(native[index]!));
+          if (verdict) result.set(body.id, verdict);
+        } catch { /* provable or omitted */ }
+      });
+    } catch { /* provable or omitted */ }
+    return result;
   }
 
   async listMeasurements(): Promise<{
@@ -8265,11 +8368,14 @@ export class PlasticityOperations {
       edges?: { bodyId: number; edgeIds: string[] } | undefined;
       guideIds?: number[] | undefined;
       continuity?: XSidedContinuity | undefined;
+      edgeContinuity?: Array<{ edgeId: string; continuity: XSidedContinuity }> | undefined;
+      tension?: number | undefined;
+      quality?: "auto" | "high" | "max" | undefined;
     },
     revision: string,
   ): Promise<RuntimeState> {
     const state = await this.assertRevision(revision);
-    const { curveIds, edges, guideIds, continuity } = input;
+    const { curveIds, edges, guideIds, continuity, edgeContinuity, tension, quality } = input;
     if (curveIds === undefined && edges === undefined) {
       throw new Error(guideIds?.length ? "X-sided patch guides need a boundary: give curveIds or edges" : "X-sided patch requires exactly one of curveIds and edges");
     }
@@ -8291,6 +8397,22 @@ export class PlasticityOperations {
     if (continuity !== undefined && !(continuity in XSIDED_CONTINUITY)) {
       throw new Error(`X-sided patch continuity must be one of: ${Object.keys(XSIDED_CONTINUITY).join(", ")}`);
     }
+    // Per-edge continuity (XNurbsFactory.setContinuityForEdge), tension (the dialog's Tension input writes the factory's
+    // blending) and quality (the dialog's Quality buttons write enforceTolerance: EnforceToleranceType Automatic/High/Max)
+    // each changed the patch measurably on 26.1.3 (surfacing tool runs, S3 three-sheet hole). Edge IDs must be boundary edges.
+    if (edgeContinuity !== undefined) {
+      if (edges === undefined) throw new Error("X-sided patch edgeContinuity applies to boundary edges only; use edges");
+      if (edgeContinuity.length === 0) throw new Error("X-sided patch edgeContinuity must not be empty");
+      const ids = edgeContinuity.map((entry) => entry.edgeId);
+      if (new Set(ids).size !== ids.length) throw new Error("X-sided patch edgeContinuity edge IDs must be unique");
+      const outside = ids.filter((id) => !edges.edgeIds.includes(id));
+      if (outside.length > 0) throw new Error(`X-sided patch edgeContinuity edges must be boundary edges in edges.edgeIds: ${outside.join(", ")}`);
+      const bad = edgeContinuity.filter((entry) => !(entry.continuity in XSIDED_CONTINUITY));
+      if (bad.length > 0) throw new Error(`X-sided patch edge continuity must be one of: ${Object.keys(XSIDED_CONTINUITY).join(", ")}`);
+    }
+    if (tension !== undefined && !(Number.isFinite(tension) && tension >= 0.1 && tension <= 1)) throw new Error("X-sided patch tension must be between 0.1 and 1.0");
+    if (quality !== undefined && !(quality in XSIDED_QUALITY)) throw new Error(`X-sided patch quality must be one of: ${Object.keys(XSIDED_QUALITY).join(", ")}`);
+    const needsContinuityEnum = continuity !== undefined || edgeContinuity !== undefined;
     const guided = guideIds !== undefined && guideIds.length > 0;
     if (guideIds !== undefined) {
       if (guideIds.length === 0 || new Set(guideIds).size !== guideIds.length) throw new Error("X-sided patch guide IDs must be a nonempty unique list");
@@ -8298,7 +8420,8 @@ export class PlasticityOperations {
       if (invalid.length > 0) throw new Error(`X-sided patch guides must be current Wire IDs: ${invalid.join(", ")}`);
       if (guideIds.some((id) => curveIds?.includes(id))) throw new Error("X-sided patch guide must not be one of the boundary curves");
     }
-    await this.runtime.mutate(nativeFunction`async function (Factory${continuity !== undefined ? ", ContinuityType" : ""}, args) {
+    try {
+    await this.runtime.mutate(nativeFunction`async function (Factory${needsContinuityEnum ? ", ContinuityType" : ""}${quality !== undefined ? ", pk_default" : ""}, args) {
       ${findView}
       ${enumMember}
       ${commandStart(guided ? "XNurbsCommand" : "PatchCommand")}
@@ -8315,16 +8438,29 @@ export class PlasticityOperations {
           if (index < 0) throw new Error('Stale or unknown edge: ' + args.edges.bodyId + ':' + edgeId);
           return view.high.edges.get(index);
         });
-        if (args.continuityName !== undefined) factory.continuity = enumMember(ContinuityType, 'ContinuityType', args.continuityName);
-      }
+        if (args.continuityName !== undefined) factory.continuity = enumMember(ContinuityType, 'ContinuityType', args.continuityName);${edgeContinuity !== undefined ? `
+        for (const entry of args.edgeContinuity) {
+          const edge = factory.edges[args.edges.edgeIds.indexOf(entry.edgeId)];
+          if (!edge) throw new Error('Stale or unknown edge: ' + args.edges.bodyId + ':' + entry.edgeId);
+          factory.setContinuityForEdge(edge, enumMember(ContinuityType, 'ContinuityType', entry.continuityName));
+        }` : ""}
+      }${tension !== undefined ? `
+      factory.blending = args.tension;` : ""}${quality !== undefined ? `
+      factory.enforceTolerance = enumMember(pk_default.a.EnforceToleranceType, 'EnforceToleranceType', args.qualityName);` : ""}
       if (args.guideIds) factory.guides = args.guideIds.map(wire);
       ${commandEnd}
-    }`, ["XSidedFactory", ...(continuity !== undefined ? ["ContinuityType"] : [])], [{
+    }`, ["XSidedFactory", ...(needsContinuityEnum ? ["ContinuityType"] : []), ...(quality !== undefined ? ["pk_default"] : [])], [{
       ...(curveIds !== undefined ? { curveIds } : {}),
       ...(edges !== undefined ? { edges } : {}),
       ...(guided ? { guideIds } : {}),
       ...(continuity !== undefined ? { continuityName: XSIDED_CONTINUITY[continuity] } : {}),
+      ...(edgeContinuity !== undefined ? { edgeContinuity: edgeContinuity.map((entry) => ({ edgeId: entry.edgeId, continuityName: XSIDED_CONTINUITY[entry.continuity] })) } : {}),
+      ...(tension !== undefined ? { tension } : {}),
+      ...(quality !== undefined ? { qualityName: XSIDED_QUALITY[quality] } : {}),
     }]);
+    } catch (error) {
+      throw explainXNurbsError(error);
+    }
     return await this.state();
   }
 
@@ -8663,7 +8799,7 @@ export class PlasticityOperations {
     const bodyIds = [...new Set(spec.select.map((item) => item.bodyId))];
     const bodiesOf = (state: RuntimeState) => JSON.stringify(bodyIds.map((id) => state.bodies.find((body) => body.id === id) ?? null));
     const before = spec.readBack ? null : bodiesOf(await this.state());
-    const native = await this.runtime.mutate<PickCommandNativeResult>(pickCommandSource(spec.drive), [spec.command, spec.dialog, "Vector3"], [{
+    const native = await this.runtime.mutate<PickCommandNativeResult>(pickCommandSource(spec.drive, spec.extraBindings), [spec.command, spec.dialog, "Vector3", ...(spec.extraBindings ?? [])], [{
       select: spec.select,
       hits: spec.hits,
       driveArgs: spec.driveArgs ?? null,
@@ -8671,6 +8807,7 @@ export class PlasticityOperations {
       // The settle window lies inside the cancelMs budget, so the CDP timeout needs no extra time for it.
       settleMs: timeouts.settleMs ?? PICK_COMMAND_SETTLE_MS,
       label: spec.label,
+      ...(spec.domDialog ? { domDialog: true } : {}),
     }], pickCommandCdpTimeoutMs(timeouts));
     if (!native || typeof native !== "object" || typeof native.outcome !== "string") {
       this.runtime.markUncertain();
@@ -8843,6 +8980,166 @@ export class PlasticityOperations {
       planeOffsetMm: roundMicro(dot(check!.normal, moved.centerMm)),
       ...(check!.ambiguous ? { verification: "ambiguous" as const, note: check!.note! } : {}),
       ...(note ? { message: note } : {}),
+      ...(run.native.foreignActive ? { warning: `Another Plasticity command (${run.native.foreignActive}) is active; it is not part of this edit and was left alone` } : {}),
+    };
+  }
+
+  // Square (surfacing P7; FINDINGS probes-2026-11-surfacing section 5): one four-sided XNurbs Sheet from four boundary
+  // items, each a Sheet/Solid boundary edge or a Wire, factory-direct (SquareFactory.boundaries is one flat list; the
+  // command route opens an empty factory). Per-edge continuity g0 or g1 only: g2 never measured as G2 live. One Undo step.
+  async squareSurface(
+    input: { boundary: Array<{ bodyId: number; edgeId: string } | { wireId: number }>; edgeContinuity?: Array<{ edgeId: string; continuity: "g0" | "g1" }> | undefined },
+    revision: string,
+  ): Promise<{ state: RuntimeState; sheetId: number; undoSteps: number }> {
+    const state = await this.assertRevision(revision);
+    const { boundary, edgeContinuity } = input;
+    if (boundary.length !== 4) throw new Error("Square needs exactly four boundary items");
+    const keys = boundary.map((item) => ("wireId" in item ? `wire:${item.wireId}` : `edge:${item.bodyId}:${item.edgeId}`));
+    if (new Set(keys).size !== 4) throw new Error("Square boundary items must be unique");
+    for (const item of boundary) {
+      if ("wireId" in item) {
+        const wire = state.bodies.find((body) => body.id === item.wireId);
+        if (!wire || wire.type !== "Wire") throw new Error(`Square boundary wireId must be a current Wire: ${item.wireId}`);
+      } else {
+        const body = state.bodies.find((candidate) => candidate.id === item.bodyId);
+        if (!body || (body.type !== "Sheet" && body.type !== "Solid")) throw new Error(`Square boundary edges need a current Sheet or Solid body: ${item.bodyId}`);
+        const edge = body.edges.find((candidate) => candidate.id === item.edgeId);
+        if (!edge) throw new Error(`Stale or unknown Square boundary edge: ${item.bodyId}:${item.edgeId}`);
+      }
+    }
+    const boundaryEdgeIds = boundary.flatMap((item) => ("edgeId" in item ? [item.edgeId] : []));
+    if (edgeContinuity !== undefined) {
+      if (edgeContinuity.length === 0) throw new Error("Square edgeContinuity must not be empty");
+      const ids = edgeContinuity.map((entry) => entry.edgeId);
+      if (new Set(ids).size !== ids.length) throw new Error("Square edgeContinuity edge IDs must be unique");
+      const outside = ids.filter((id) => !boundaryEdgeIds.includes(id));
+      if (outside.length > 0) throw new Error(`Square edgeContinuity applies to boundary edges given in boundary: ${outside.join(", ")}`);
+      const bad = edgeContinuity.filter((entry) => entry.continuity !== "g0" && entry.continuity !== "g1");
+      if (bad.length > 0) throw new Error("Square edge continuity must be g0 or g1 (g2 never measured as G2 on 26.1.3)");
+    }
+    const beforeIds = new Set(state.bodies.map((body) => body.id));
+    try {
+      await this.runtime.mutate(nativeFunction`async function (Factory, Command, ContinuityType, args) {
+        ${findView}
+        ${enumMember}
+        if (this.executor.isBusy || this.executor.active) throw new Error('Plasticity is busy; finish or cancel the active command first');
+        const editor = this;
+        let failure;
+        const command = new Command(editor);
+        command.remember = false;
+        command.execute = async function () {
+          try {
+            const factory = new Factory(editor).resource(this);
+            const views = args.boundary.map(item => {
+              const view = find(item.wireId ?? item.bodyId);
+              if (item.wireId !== undefined) {
+                if (view.constructor.name !== 'Wire') throw new Error('Square boundary must be a Wire: ' + item.wireId);
+                return view;
+              }
+              const index = view.high?.edges?.versionIds?.indexOf(item.edgeId) ?? -1;
+              if (index < 0) throw new Error('Stale or unknown edge: ' + item.bodyId + ':' + item.edgeId);
+              return view.high.edges.get(index);
+            });
+            factory.boundaries = views;
+            for (const entry of args.edgeContinuity ?? []) {
+              const at = args.boundary.findIndex(item => item.edgeId === entry.edgeId);
+              factory.setContinuityForEdge(views[at], enumMember(ContinuityType, 'ContinuityType', entry.continuityName));
+            }
+            return await factory.commit();
+          } catch (error) { failure = error; throw error; }
+        };
+        await this.exec(command);
+        if (failure) throw failure;
+      }`, ["SquareFactory", "SquareEdgeCommand", "ContinuityType"], [{
+        boundary: boundary.map((item) => ("wireId" in item ? { wireId: item.wireId } : { bodyId: item.bodyId, edgeId: item.edgeId })),
+        ...(edgeContinuity !== undefined ? { edgeContinuity: edgeContinuity.map((entry) => ({ edgeId: entry.edgeId, continuityName: entry.continuity === "g1" ? "G1" : "G0" })) } : {}),
+      }]);
+    } catch (error) {
+      throw explainXNurbsError(error);
+    }
+    const after = await this.state();
+    const added = after.bodies.filter((body) => !beforeIds.has(body.id));
+    const sheet = added.find((body) => body.type === "Sheet");
+    const undoSteps = after.undoDepth - state.undoDepth;
+    if (!sheet || added.length !== 1 || undoSteps !== 1) {
+      throw new CommittedChangeError(`Square committed, but the read-back does not match: ${added.length} new bodies (${added.map((body) => `${body.id} ${body.type}`).join(", ") || "none"}), ${undoSteps} Undo steps. The document is at revision ${after.revision}; plasticity_undo restores it`, after.revision, undoSteps);
+    }
+    return { state: after, sheetId: sheet.id, undoSteps };
+  }
+
+  // Surface Align (surfacing P6; FINDINGS probes-2026-11-surfacing section 4): moves the moving Sheet's boundary edge onto
+  // the reference Sheet's boundary edge with g0/g1/g2 continuity, through the real AlignEdgeCommand on runPickCommand's
+  // lifecycle (one mutate call, our command identity-checked, cancel in the same call, classifyPickOutcome). The read-back
+  // samples both edges in the kernel: the moving edge must lie on the reference edge within 0.001 mm. Achieved continuity
+  // is not measured (the sheets are separate bodies; a join would change the document).
+  async surfaceAlign(
+    input: { moving: { bodyId: number; edgeId: string }; reference: { bodyId: number; edgeId: string }; continuity: SurfaceAlignContinuity },
+    revision: string,
+    timeouts: PickCommandTimeouts = SURFACE_ALIGN_TIMEOUTS,
+  ) {
+    const state = await this.assertRevision(revision);
+    const { moving, reference, continuity } = input;
+    if (!(continuity in SURFACE_ALIGN_CONTINUITY)) throw new Error(`Surface Align continuity must be one of: ${Object.keys(SURFACE_ALIGN_CONTINUITY).join(", ")}`);
+    if (moving.bodyId === reference.bodyId) throw new Error("Surface Align needs two different Sheet bodies (two edges of one body were never verified)");
+    const boundaryEdge = (ref: { bodyId: number; edgeId: string }, role: string) => {
+      const body = state.bodies.find((candidate) => candidate.id === ref.bodyId);
+      if (!body || body.type !== "Sheet") throw new Error(`Surface Align ${role} must be a current Sheet body (Solid edges were never verified): ${ref.bodyId}`);
+      const edge = body.edges.find((candidate) => candidate.id === ref.edgeId);
+      if (!edge) throw new Error(`Stale or unknown ${role} edge: ${ref.bodyId}:${ref.edgeId}`);
+      if (edge.faceIds.length !== 1) throw new Error(`The ${role} edge must be a boundary edge of its Sheet (one face): ${ref.bodyId}:${ref.edgeId}`);
+      return body;
+    };
+    const movingBody = boundaryEdge(moving, "moving");
+    const referenceBody = boundaryEdge(reference, "reference");
+    let after: RuntimeState | undefined;
+    let measured: AlignReadBackNative | undefined;
+    const run = await this.runPickCommand<{ readiness: string; readyAfterMs: number }>({
+      command: "AlignEdgeCommand",
+      dialog: "AlignEdgeDialog",
+      // The first selected edge moves (verified both ways, probe-align-3.json and -swapped.json).
+      select: [{ kind: "edge", bodyId: moving.bodyId, id: moving.edgeId }, { kind: "edge", bodyId: reference.bodyId, id: reference.edgeId }],
+      hits: [],
+      drive: SURFACE_ALIGN_DRIVE,
+      driveArgs: { movingEdgeId: moving.edgeId, referenceEdgeId: reference.edgeId, continuityName: SURFACE_ALIGN_CONTINUITY[continuity], readyMs: SURFACE_ALIGN_READY_MS, fallbackWaitMs: SURFACE_ALIGN_FALLBACK_WAIT_MS },
+      extraBindings: ["ContinuityType"],
+      domDialog: true,
+      rejectedMessage: "Plasticity could not align these edges (no effect)",
+      label: "Surface Align",
+      timeouts,
+      readBack: async (picked) => {
+        after = await this.state();
+        const movingAfter = after.bodies.find((candidate) => candidate.id === moving.bodyId);
+        const referenceAfter = after.bodies.find((candidate) => candidate.id === reference.bodyId);
+        const bodyChanged = !movingAfter || !referenceAfter || movingAfter.versionId !== movingBody.versionId || referenceAfter.versionId !== referenceBody.versionId;
+        let geometry: "pass" | "fail" | null = null;
+        let readback = "the read-back did not run";
+        if (picked.facts.finishCalled && picked.native.undoDelta === 1) {
+          try {
+            measured = await this.runtime.read<AlignReadBackNative>(SURFACE_ALIGN_READBACK_SOURCE, [{ reference, movingBodyId: moving.bodyId, samples: 21 }]);
+            const gapMm = measured.maxGapM === null ? null : measured.maxGapM * 1000;
+            const referenceKept = referenceAfter?.versionId === referenceBody.versionId;
+            const movingMoved = movingAfter !== undefined && movingAfter.versionId !== movingBody.versionId;
+            geometry = measured.referenceFound && gapMm !== null && gapMm <= SURFACE_ALIGN_COINCIDENCE_MM && referenceKept && movingMoved ? "pass" : "fail";
+            readback = !measured.referenceFound ? "the reference edge is gone" : !referenceKept ? "the reference Sheet changed" : !movingMoved ? "the moving Sheet did not change" : `the moving Sheet's nearest edge lies up to ${gapMm} mm from the reference edge (needs <= ${SURFACE_ALIGN_COINCIDENCE_MM} mm)`;
+          } catch (error) {
+            readback = error instanceof Error ? error.message : String(error);
+          }
+        }
+        return { bodyChanged, geometry, revision: after.revision, subject: `Sheets ${moving.bodyId} and ${reference.bodyId}`, readback, noChange: "no Undo step was added" };
+      },
+    });
+    const gapMm = measured!.maxGapM! * 1000;
+    return {
+      state: after!,
+      undoSteps: 1,
+      moving: { bodyId: moving.bodyId, edgeId: measured!.movingEdgeId },
+      reference,
+      continuity,
+      coincidence: { maxGapMm: Math.round(gapMm * 1e9) / 1e9, toleranceMm: SURFACE_ALIGN_COINCIDENCE_MM, samples: measured!.samples },
+      ...(measured!.maxNormalAngleDeg !== null ? { maxTangentPlaneAngleDeg: Math.round(measured!.maxNormalAngleDeg * 1e9) / 1e9 } : {}),
+      achieved: "not measured" as const,
+      note: "The sheets stay separate, so the achieved continuity is not measured: join them with plasticity_join_sheets, then call plasticity_analyze_surface_continuity on the shared edge. maxTangentPlaneAngleDeg is the largest angle between the two faces' tangent planes at 21 kernel samples along the reference edge.",
+      readiness: run.drive?.readiness ?? null,
       ...(run.native.foreignActive ? { warning: `Another Plasticity command (${run.native.foreignActive}) is active; it is not part of this edit and was left alone` } : {}),
     };
   }
@@ -11835,6 +12132,13 @@ export class PlasticityOperations {
     }
     await writeFile(output, data, { flag: "wx" });
     return { path: output, bytes: data.length, ...(viewport ? { captureMode: "viewport" as const, freshFrame: true, rendererHidden: viewport.rendererHidden, width: viewport.width, height: viewport.height } : {}) };
+  }
+
+  // plasticity_screenshot's shader and frame options: set the analysis shader and/or aim the camera, capture, and always
+  // restore both (src/plasticity/surfacing.ts). View only: the Undo depth is checked before and after.
+  async screenshotView<T extends object>(options: ScreenshotViewOptions, capture: () => Promise<T>) {
+    validateScreenshotView(options, options.frame ? await this.state() : undefined);
+    return await withScreenshotView(this.runtime, options, capture);
   }
 
   // A scaled JPEG the agent can see in the same tool response; no file is written.

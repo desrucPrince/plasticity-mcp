@@ -602,7 +602,19 @@ geometry with `plasticity_find_faces`/`plasticity_find_edges` (limit 1000),
 - View: named camera orientations, fit, and a PNG screenshot captured from the
   visible Plasticity renderer through CDP screencast. Hidden windows are
   rejected to avoid stale frames; screenshots support visual review, while exact
-  dimensions and geometry validity come from native B-Rep reads
+  dimensions and geometry validity come from native B-Rep reads. `shader`
+  (`isophotes`, `draft`, `faceDirection`, `zebraVertical`, `zebraHorizontal`,
+  `topo`) sets Plasticity's analysis shader for one capture and restores the
+  previous one in the same call, also when the capture fails; `frame: { bodyIds }`
+  aims the camera at those bodies (same view direction) and puts the camera back
+  exactly (the orbit controls, including their snap state, are restored and then
+  the saved camera pose is written back, because the controls' own recompute
+  differed in the last bits, 3e-16 m per capture). Both work with `path` (window
+  or viewport mode) and with the inline JPEG, add no Undo step (checked) and
+  report `view`. Live on 26.1.3: all six
+  shaders change the window and viewport captures (mean absolute pixel
+  difference 1.8-4.7), the default capture afterwards differs by 1.2e-5, and the
+  camera comes back with deviation 0 (`accept:native-surfacing`)
 - Documents: save a copy, open with mandatory backup, exact STEP and Parasolid
   (`.x_t`/`.x_b`) import/export, IGES (`.igs`/`.iges`) and ACIS SAT (`.sat`) export,
   native editable SVG Wire/Region import,
@@ -1331,6 +1343,106 @@ curvature deviation, the location of each maximum, and a hierarchical
 G0/G1/G2 result against explicit tolerances. Plasticity samples 100 positions;
 the result comes from native B-Rep surfaces rather than the display mesh, but it
 is not an exact continuous maximum and does not change the document.
+Relative G2 is |k1 - k2| / max(|k1|, |k2|) of the curvatures across the edge,
+so it reads 1.0 whenever one side is flat (a plane meeting a fillet), however
+small the other curvature. Each edge result now also carries `interior`
+(`g0Mm`, `g1Deg`, `g2Rel`: the maxima over samples 5..94, leaving out the five
+samples at each end, which are the corners), `worstAt` (`corner` when the first
+level that fails its tolerance, or G2 when all pass, has its maximum in those
+end samples, else `interior`), and `absoluteCurvature` (`side1PerMm`,
+`side2PerMm`: the kernel's normal curvature across the edge on each adjacent
+face at the worst G2 sample, from `Face.EvalBasis`, given only when one face
+parameter direction runs along the edge and the other across it within one
+degree). The per-sample values come from the native view's spike arrays
+(100 samples; each value is its spike vector's length, Float32, and their
+maxima equal the reported maxima). Every earlier field is unchanged: live on
+26.1.3 the old and new code returned byte-identical existing fields on 48
+edges of four bodies. On the benchmark's crowned pad and a filleted box, edges
+that read `discontinuous` because of a 1.4-17 mm G0 spike at one end read
+`worstAt: "corner"` with `interior.g0Mm` below 1e-12, and the plane-to-fillet
+edges show `absoluteCurvature` 0 and 0.3333/mm (R3) where relative G2 says 1.
+`plasticity_probe_surface` reads exact points on a curved Solid or Sheet. Give
+`rays` (1-64 `{ originMm, direction }`) or `gridMm: { axis, at }`: grid rays
+travel along -axis (default `z`) from 1 mm outside the body's bounds, and each
+`at` entry gives the other two coordinates in x, y, z order, so "surface height
+at (x, y)" is one call. Every crossing with the body's faces comes back in order
+along the ray: `pointMm`, `faceId` (`otherFaceIds` when the ray crosses an edge
+shared by several faces), `normal` (outward on a Solid), `distanceMm`, the
+kernel's `uCurvaturePerMm`/`vCurvaturePerMm` (signed by the surface
+parametrisation; compare magnitudes) and `residualMm`. `hits: 0` is a miss.
+Each point is solved on the exact kernel face: closest-point Newton steps along
+the ray (`Face.FindPointNear` for the trimmed face, `Face.EvalBasis` for its
+normal) until the kernel residual is at most 0.000001 mm. The display mesh and
+the kernel surface's own raycast only seed the search, so a ray that grazes a
+face tangentially can be missed; `unresolvedCrossings` counts mesh crossings no
+exact hit explains. Points are rounded to 1e-9 mm. Live on 26.1.3
+(`accept:native-surfacing`): a sphere, a cylinder and a 30 degree plane agree
+with analytic heights within 5e-10 mm; a cubic Bezier extruded sheet agrees
+with its control-polygon formula (z = 3a s(1-s)) within 1e-15 mm; a ray through
+a holed block returns four hits. The read changes nothing: the native call checks the undo depth and body
+count before and after.
+
+`plasticity_exact_bounds` gives the exact axis-aligned extent of 1-32 Solid or
+Sheet bodies. Plasticity 26.1.3 has no kernel extrema call, so every Solid and
+Sheet `boundsMm` is `boundsMethod: "native-box"`: the kernel's box, which for a
+B-spline face is its control-point hull. Live: a lofted Bezier sheet whose top
+is 6.75 mm reads 9 mm, and the benchmark's crowned grip pad (true top
+13.99072 mm) reads 14.499 mm, with y overstated by 1.28 mm. Each side here is
+the coordinate of a real body point found by the kernel's global body range
+(`Eval.DistancesToPoints`) from a point 100 km out along that axis. The true
+extent lies at most `maxErrorMm` beyond it: `L^2 / (2 (R - h))` from the far
+distance R and the conservative box, plus 1e-5 mm kernel resolution. `exact`
+is true when that bound is within 0.001 mm (any body up to about 0.4 m across)
+and a second query from 10 km gives the same coordinates within that radius's
+own bound (`radiiDisagreementMm`); the premise is that the kernel range is a
+global minimum. Live, the pad's support top agreed with an exact
+`plasticity_probe_surface` ray at the same x, y within 1e-6 mm.
+`overshootMm` says how far the conservative box overstates the body.
+`plasticity_describe_body` now adds `boundsExact` per body (true when the
+kernel box equals the exact extent within 0.001 mm, or when `boundsMethod` is
+`native-extrema`), and `boundsNote` with the reason when it is false; it leaves
+both out when the support read fails.
+
+`plasticity_surface_align` moves the boundary edge of one Sheet (`moving`) onto
+the boundary edge of another Sheet (`reference`) with `g0`, `g1` or `g2`
+continuity, as Plasticity's Align (Edge Align) does: the moving Sheet is
+rebuilt, the reference stays, one Undo step. It runs the real
+`AlignEdgeCommand` with the two edges selected (the first one moves), finds
+its dialog in the document (no prototype patch), waits until the command is
+`Awaiting` and its factory has updated (about 25 ms; a fixed 500 ms on a build
+without those states), keys the continuity by the reference edge, updates and
+finishes, all inside the pick-command lifecycle (one call, our command only,
+cancel in the same call, the shared outcome classifier). The read-back samples
+both edges in the kernel: `coincidence.maxGapMm` must be within 0.001 mm, and
+`maxTangentPlaneAngleDeg` is the largest angle between the two faces' tangent
+planes. The sheets stay separate, so `achieved` is `"not measured"`: join them
+and call `plasticity_analyze_surface_continuity`. Live on 26.1.3 (the probe's
+two-sheet fixture, joined): g0 gives gap 8.9e-13 mm and 24.49 degrees (G0), g1
+1.2e-6 degrees (G1, relative G2 0.78), g2 relative G2 7.5e-8 (G2); swapped
+order moves the other sheet. A 20 mm edge aligned to a 30 mm curve commits but
+misses by 1.11 mm: a certain error with one Undo step that `plasticity_undo`
+restores. Two edges of one Sheet and Solid edges are refused before the
+command starts (never verified). Stalls injected at the operations layer end
+as a certain "cancelled, unchanged" before `finish()` (or, when the drive step
+outlives its budget, a refused late `finish()` that stays undetermined) and as
+undetermined (reconcile) after it. A drive step that outlives its budget stops
+before it touches the factory. Caution: such injected stalls (budgets of
+1-120 ms; the real one is 15 s) killed the isolated renderer once in about 150
+trials, when the cancel landed while Plasticity was still computing.
+
+`plasticity_square_surface` makes one four-sided Sheet (XNurbs, one B-surface
+face, four edges) from exactly four boundary items, in order around the patch:
+`{ bodyId, edgeId }` (a Sheet or Solid edge) or `{ wireId }`, mixed freely.
+`edgeContinuity` (`g0` or `g1` per boundary edge) matches the neighbouring
+face; `g2` is not offered because it never measured as G2. It sets
+`SquareFactory.boundaries` directly inside `SquareEdgeCommand` (the command's
+own dialog route starts with an empty factory). Failures keep the raw XNurbs
+code with its meaning (30 when g1 meets perpendicular walls, as on an open
+box). Live on 26.1.3: four Bezier curves give a Sheet whose edges read back
+at the curves' own heights by probe rays (3.75, -3, 4.5, 2.25 mm within
+6e-5 mm); a flat neighbour Sheet plus three curves joins at g0 with 4.0e-4
+degrees and at g1 with 8.5e-7 degrees along the shared edge; one
+`plasticity_undo` removes the patch.
 `plasticity_analyze_edge_curvature` runs Plasticity's native curvature
 evaluator at 100 positions on each selected B-Rep edge. Wire segments use the
 numeric `segmentEntityId` returned by `plasticity_list_curve_directions`;
@@ -1675,8 +1787,29 @@ open Wires or Sheet edges bound the patch or the patch must match the
 neighbouring surface, and instead of `plasticity_create_constrained_surface`
 when the boundary is exact geometry rather than points and normals. Source Wires
 and Sheet or Solid stay. Without guides it runs `PatchCommand`; with guides it runs
-`XNurbsCommand`, both on `XSidedFactory`. Degree, spans, control type, bending,
-stretch, per-edge continuity and the C1-C3, G3 and Free types are not exposed.
+`XNurbsCommand`, both on `XSidedFactory`. Three more inputs are built and
+measured at the operations layer (`PlasticityOperations.xsidedPatch`) but not
+yet in the tool schema, because an existing test pins the schema's property
+list: `edgeContinuity` (`[{ edgeId, continuity }]`, g0/g1/g2 per boundary edge
+over the global `continuity`, `setContinuityForEdge`), `tension` (0.1-1.0,
+default 0.5, the factory's `blending`) and `quality` (`auto`, `high`, `max`:
+`enforceTolerance` = `EnforceToleranceType` Automatic, High, Max). Typing in
+the live dialog's Tension input changed only `blending`, and its Quality buttons
+only `enforceTolerance` (values 5, 1, 2). All three changed the patch
+measurably on 26.1.3 (the benchmark's three-sheet hole, centre height: g0
+28.000, g1 30.166, g1 on one of three edges 29.951, g1 with tension 0.1 29.901
+and 1.0 31.010, g2 auto 30.639, high 30.678, max 30.668 mm). `weight`, the
+other 0.5 default, changed nothing (1e-9 mm). Degree, spans, control type, stretch and the C1-C3, G3 and Free types are not
+exposed. A failure keeps the raw XNurbs code and adds its meaning: `3` no
+usable boundary input; `30` the continuity is incompatible at a corner or with
+the neighbouring faces (reproduced: g1/g2 on a Solid face's edge loop with
+perpendicular walls, and on a rectangular hole) - lower it, set it per edge, or
+blend the rim first; `29` inconsistent constraints (guides without a boundary;
+one edge that branches off the loop); `27` not fully decoded, reproduced with
+g1/g2 on an open Sheet rim whose walls are perpendicular to the patch (g0
+works); `25` not fully decoded, reproduced with extra edges that branch off the
+loop (a bounds query that also caught the vertical wall edges). Any other code
+is reported as undecoded.
 Verify the result by type and face and edge counts: reported bounds can
 overshoot the boundary.
 
