@@ -1,0 +1,71 @@
+{
+ "label": "baseline-s1-rerun",
+ "measuredAt": "2026-11-16T20:57:59.755Z",
+ "serverTree": "plasticity-mcp-bench (frozen, commit 496c478)",
+ "startUndoDepth": 0,
+ "startBodyCount": 4,
+ "endState": {
+  "undoDepth": 0,
+  "bodyCount": 4
+ },
+ "rows": [
+  {
+   "part": "S1",
+   "runs": 2,
+   "wallS": [
+    162,
+    143
+   ],
+   "turns": [
+    21,
+    20
+   ],
+   "toolCalls": [
+    33,
+    28
+   ],
+   "errors": [
+    1,
+    3
+   ],
+   "costUsd": [
+    1.598,
+    1.347
+   ],
+   "checks": [
+    "9/11",
+    "9/11"
+   ],
+   "failedChecks": [
+    [
+     "mean wall thickness 2 (exact volume / mean of the outer and inner lateral areas; needs exactly 2 lateral faces)",
+     "lateral surface is tangent-continuous along its length: every seam between two non-planar faces is G1 (analyze_surface_continuity; normal angle <= 1.0 deg, position <= 0.05 mm); vacuous when the lateral is one face"
+    ],
+    [
+     "mean wall thickness 2 (exact volume / mean of the outer and inner lateral areas; needs exactly 2 lateral faces)",
+     "lateral surface is tangent-continuous along its length: every seam between two non-planar faces is G1 (analyze_surface_continuity; normal angle <= 1.0 deg, position <= 0.05 mm); vacuous when the lateral is one face"
+    ]
+   ],
+   "finalText": [
+    "DONE — body id 1682",
+    "DONE — body id 1704"
+   ],
+   "timedOut": [
+    false,
+    false
+   ],
+   "setupErrors": [],
+   "documentScaleAtEnd": [
+    {
+     "bodies": 12,
+     "totalFaces": 19
+    },
+    {
+     "bodies": 12,
+     "totalFaces": 19
+    }
+   ]
+  }
+ ],
+ "mScaleSeries": []
+}

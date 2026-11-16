@@ -1,0 +1,355 @@
+{
+ "label": "baseline",
+ "measuredAt": "2026-11-16T20:51:30.417Z",
+ "serverTree": "plasticity-mcp-bench (frozen, commit 496c478)",
+ "startUndoDepth": 0,
+ "startBodyCount": 4,
+ "endState": {
+  "undoDepth": 0,
+  "bodyCount": 4
+ },
+ "rows": [
+  {
+   "part": "S1",
+   "runs": 2,
+   "wallS": [
+    162,
+    143
+   ],
+   "turns": [
+    21,
+    20
+   ],
+   "toolCalls": [
+    33,
+    28
+   ],
+   "errors": [
+    1,
+    3
+   ],
+   "costUsd": [
+    1.598,
+    1.347
+   ],
+   "checks": [
+    "9/11",
+    "9/11"
+   ],
+   "failedChecks": [
+    [
+     "mean wall thickness 2 (exact volume / mean of the outer and inner lateral areas; needs exactly 2 lateral faces)",
+     "lateral surface is tangent-continuous along its length: every seam between two non-planar faces is G1 (analyze_surface_continuity; normal angle <= 1.0 deg, position <= 0.05 mm); vacuous when the lateral is one face"
+    ],
+    [
+     "mean wall thickness 2 (exact volume / mean of the outer and inner lateral areas; needs exactly 2 lateral faces)",
+     "lateral surface is tangent-continuous along its length: every seam between two non-planar faces is G1 (analyze_surface_continuity; normal angle <= 1.0 deg, position <= 0.05 mm); vacuous when the lateral is one face"
+    ]
+   ],
+   "finalText": [
+    "DONE \u2014 body id 1682",
+    "DONE \u2014 body id 1704"
+   ],
+   "timedOut": [
+    false,
+    false
+   ],
+   "setupErrors": [],
+   "documentScaleAtEnd": [
+    {
+     "bodies": 12,
+     "totalFaces": 19
+    },
+    {
+     "bodies": 12,
+     "totalFaces": 19
+    }
+   ],
+   "note": "authoritative S1 baseline: rerun after fixing one verifier tolerance (O20 end ring area, +-8% -> +-12%)"
+  },
+  {
+   "part": "S2",
+   "runs": 2,
+   "wallS": [
+    200,
+    277
+   ],
+   "turns": [
+    21,
+    25
+   ],
+   "toolCalls": [
+    26,
+    31
+   ],
+   "errors": [
+    9,
+    6
+   ],
+   "costUsd": [
+    1.553,
+    2.085
+   ],
+   "checks": [
+    "10/10",
+    "9/10"
+   ],
+   "failedChecks": [
+    [],
+    [
+     "crown continuity to its neighbours >= G1 (plasticity_analyze_surface_continuity; threshold normal angle <= 1.0 deg, position <= 0.05 mm)"
+    ]
+   ],
+   "finalText": [
+    "DONE \u2014 body id 1436 (peak measured at 14.000\u201314.005 mm at the centre; the crown seam is G1 rather than G2, and reported bounds overstate the top at 14.38 mm).",
+    "DONE \u2014 body id 1464 (crown peaks at 14.005\u201314.010 mm; exact section cuts show it leaving the 8 mm rim vertically, tangent to the side wall, but Plasticity's continuity analyzer reports only G0 with a 90\u00b0 normal deviation on all 8 rim edges, so G1/G2 is not confirmed by that tool)."
+   ],
+   "timedOut": [
+    false,
+    false
+   ],
+   "setupErrors": [],
+   "documentScaleAtEnd": [
+    {
+     "bodies": 5,
+     "totalFaces": 38
+    },
+    {
+     "bodies": 5,
+     "totalFaces": 30
+    }
+   ]
+  },
+  {
+   "part": "S3",
+   "runs": 2,
+   "wallS": [
+    60,
+    49
+   ],
+   "turns": [
+    10,
+    9
+   ],
+   "toolCalls": [
+    15,
+    12
+   ],
+   "errors": [
+    0,
+    2
+   ],
+   "costUsd": [
+    0.611,
+    0.486
+   ],
+   "checks": [
+    "6/6",
+    "6/6"
+   ],
+   "failedChecks": [
+    [],
+    []
+   ],
+   "finalText": [
+    "DONE \u2014 final joined body id **1502** (one sheet, 4 faces; all six interior edges are shared by two faces, and the only free edges are the three outer rim curves). Continuity of the new surface, measured at 100 samples per edge:\n\n| Boundary edge of new surface | Neighbour | Achieved | Max gap | Max normal deviation |\n|---|---|---|---|---|\n| `2969e466795` | s3-sheet-1 | G1 | 1.2e-10 mm | 0.076\u00b0 |\n| `2969e466966` | s3-sheet-2 | G1 | 1.2e-10 mm | 0.065\u00b0 |\n| `2969e467137` | s3-sheet-3 | G1 | 1.2e-10 mm | 0.017\u00b0 |\n\nG2 was not achieved on any of the three edges, although I requested a G2 patch. The relative curvature deviation peaks at 1.0 against a 0.05 tolerance, and the peak sits at a corner vertex of the hole on each edge. The evaluator reports only the maximum, so I could not tell whether the mismatch is confined to the corners. The three original sheets are G2 with each other along their seams, so the neighbours are not what blocks G2.",
+    "DONE 1512 \u2014 new patch edges: `2995e468193` (to s3-sheet-1) G1, `2995e468364` (to s3-sheet-2) G1, `2995e468535` (to s3-sheet-3) G1; G2 was requested from the patch tool but not achieved on any of the three.\n\n- **Continuity measured:** position gap is about 1e-10 mm on all three edges, and the worst normal-angle deviation is 0.076\u00b0, 0.065\u00b0 and 0.017\u00b0 respectively (tolerance 0.1\u00b0). The relative curvature deviation peaks at 1.0 against a 0.05 tolerance, with the reported maximum at a corner vertex of the hole on each edge. The analysis only gives the maximum, so I can't say whether curvature matches away from the corners.\n- **Join:** body 1512 (still named `s3-sheet-1`) is one sheet with 4 faces and 9 edges. All 6 interior edges are shared by two faces, and the only free edges left are the 3 outer rim curves at z\u224817.74, so the hole is closed and the seams are sewn."
+   ],
+   "timedOut": [
+    false,
+    false
+   ],
+   "setupErrors": [],
+   "documentScaleAtEnd": [
+    {
+     "bodies": 5,
+     "totalFaces": 16
+    },
+    {
+     "bodies": 5,
+     "totalFaces": 16
+    }
+   ]
+  },
+  {
+   "part": "M",
+   "runs": 2,
+   "wallS": [
+    131,
+    119
+   ],
+   "turns": [
+    8,
+    5
+   ],
+   "toolCalls": [
+    8,
+    5
+   ],
+   "errors": [
+    0,
+    0
+   ],
+   "costUsd": [
+    1.065,
+    0.943
+   ],
+   "checks": [
+    "25/25",
+    "25/25"
+   ],
+   "failedChecks": [
+    [],
+    []
+   ],
+   "finalText": [
+    "DONE \u2014 all nine bodies (pcb, case-base, lid, bracket, sensor-pod, screw-1 to screw-4) are valid solids in assembled position; the only overlaps are the screws, which follow from the given numbers: the 3 mm shafts in the 2.5 mm pilots and the 5.6 mm cylindrical heads in the 90\u00b0 countersinks.",
+    "DONE"
+   ],
+   "timedOut": [
+    false,
+    false
+   ],
+   "setupErrors": [],
+   "documentScaleAtEnd": [
+    {
+     "bodies": 13,
+     "totalFaces": 181
+    },
+    {
+     "bodies": 13,
+     "totalFaces": 177
+    }
+   ]
+  }
+ ],
+ "mScaleSeries": [
+  {
+   "run": 1,
+   "turnLatencyMsByTurn": [
+    46323,
+    2718,
+    5064,
+    18330,
+    19354,
+    19057,
+    7582,
+    3149
+   ],
+   "respBytesByTurn": [
+    2782,
+    763,
+    2688,
+    4488,
+    4227,
+    8938,
+    1456,
+    0
+   ],
+   "execMsByTurn": [
+    579,
+    11,
+    360,
+    1178,
+    1592,
+    1340,
+    244,
+    0
+   ],
+   "serverTimeShare": 0.04,
+   "documentScaleAtEnd": {
+    "bodies": 13,
+    "totalFaces": 181
+   }
+  },
+  {
+   "run": 2,
+   "turnLatencyMsByTurn": [
+    37250,
+    5906,
+    17376,
+    37981,
+    4276
+   ],
+   "respBytesByTurn": [
+    5011,
+    2688,
+    4488,
+    12838,
+    0
+   ],
+   "execMsByTurn": [
+    893,
+    499,
+    1909,
+    8593,
+    0
+   ],
+   "serverTimeShare": 0.1,
+   "documentScaleAtEnd": {
+    "bodies": 13,
+    "totalFaces": 177
+   }
+  }
+ ],
+ "s1FirstPassSuperseded": {
+  "part": "S1",
+  "runs": 2,
+  "wallS": [
+   484,
+   274
+  ],
+  "turns": [
+   29,
+   27
+  ],
+  "toolCalls": [
+   40,
+   41
+  ],
+  "errors": [
+   3,
+   5
+  ],
+  "costUsd": [
+   4.298,
+   2.722
+  ],
+  "checks": [
+   "10/11",
+   "10/11"
+  ],
+  "failedChecks": [
+   [
+    "end end open: one annular rim at x=2120, outer circle O20, inner O16 (area of the ring = pi*(ro^2-ri^2))"
+   ],
+   [
+    "end end open: one annular rim at x=2120, outer circle O20, inner O16 (area of the ring = pi*(ro^2-ri^2))"
+   ]
+  ],
+  "finalText": [
+   "DONE \u2014 body id 1389",
+   "DONE \u2014 body id 1426"
+  ],
+  "timedOut": [
+   false,
+   false
+  ],
+  "setupErrors": [],
+  "documentScaleAtEnd": [
+   {
+    "bodies": 8,
+    "totalFaces": 16
+   },
+   {
+    "bodies": 16,
+    "totalFaces": 16
+   }
+  ],
+  "note": "superseded first pass: both runs failed only the O20 end-ring area check at +8.2% / +8.7% off nominal, a verifier bug (shell slope); every other check passed (10/11)"
+ },
+ "sources": {
+  "results-baseline.json": "S1 first pass, S2, S3, M",
+  "results-baseline-s1-rerun.json": "S1 authoritative rerun"
+ }
+}

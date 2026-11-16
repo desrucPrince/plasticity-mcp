@@ -1,0 +1,30 @@
+{
+  "_note": "One natural-language request per part, as the owner would type it. Dimensions and positions only, no tool hints. Every prompt ends with the closing line of its suite.",
+  "closing": {
+    "single": "Verify the result, then reply with one line: DONE and the body id.",
+    "s3": "Verify the result, then reply with one line: DONE and the id of the final joined body, then the continuity you achieved on each boundary edge of the new surface.",
+    "m": "Verify the result, then reply with one line: DONE."
+  },
+  "parts": {
+    "S1": {
+      "suite": "S",
+      "closing": "single",
+      "text": "Build me a streamlined fairing for a drone in Plasticity (millimetres): a closed body about 120 mm long whose axis runs along the world X direction, from x=2000 to x=2120, with its centre line at y=0, z=30. At x=2000 its cross-section is a circle of 40 mm diameter. At x=2060, the middle, it is a rounded rectangle 60 mm wide (y) by 30 mm high (z) with 8 mm corner radius. At x=2120 it is a circle of 20 mm diameter. The skin must flow smoothly along the whole length, with no creases or kinks anywhere. Cap both ends flat, then shell the body to a 2 mm wall with both ends open."
+    },
+    "S2": {
+      "suite": "S",
+      "closing": "single",
+      "text": "Make an ergonomic grip pad in Plasticity (millimetres). The footprint is a 90 x 50 mm rounded rectangle with 12 mm corner radius, lower-left corner at x=2000, y=0, z=0. The pad is 8 mm tall at the rim. Its top is a smoothly crowned surface that rises to 14 mm at the centre of the pad: no flat top, and no crease where the crown meets the rim. At minimum the crown must be tangent-continuous (G1) with the rim; curvature-continuous (G2) if you can. The bottom is flat. Round all bottom edges with a 1 mm radius."
+    },
+    "S3": {
+      "suite": "S",
+      "closing": "s3",
+      "text": "The open Plasticity document (millimetres) contains three separate sheet surfaces named s3-sheet-1, s3-sheet-2 and s3-sheet-3, near x=2040, y=30. They are three curved sheets that meet around the summit of a fairing and leave a three-sided hole between them. Close that hole with a new surface that is tangent-continuous (G1) with all three neighbours along its whole boundary, curvature-continuous (G2) if you can. Then join everything into one watertight sheet, as far as the tools allow."
+    },
+    "M": {
+      "suite": "M",
+      "closing": "m",
+      "text": "Design an enclosure system for an ESP32 development board in Plasticity (millimetres): six named parts, each positioned exactly as assembled, everything at x >= 2000. Use these numbers as given. The PCB is 51.5 x 28.3 x 1.6 mm with four 3.0 mm diameter mounting holes whose centres are at (2.6, 2.6), (48.9, 2.6), (2.6, 25.7) and (48.9, 25.7) mm from one PCB corner (the corner at minimum x and minimum y; the long side of the PCB runs along x). A USB-C connector sits centred on the short PCB edge at minimum x; its opening is 9.2 x 3.4 mm with 1.2 mm corner radius, and the bottom of the opening is 1.6 mm above the top face of the PCB. The tallest component is 8 mm above the PCB top. The case base's outer rectangle has its minimum corner at x=2003, y=3, z=0, and the base is 18 mm tall overall. Parts: (1) A body named pcb: the board as a plate with its four holes, placed where it sits in the assembled case. (2) A body named case-base: 2 mm walls and a 2 mm floor, open top, with 0.5 mm clearance between the PCB and the inside of the walls on every side. Four standoffs, 5 mm diameter and 4 mm tall above the floor, each with a 2.5 mm diameter pilot hole 3 mm deep, under the four PCB holes so the PCB rests on them. The USB-C opening cut through the wall at minimum x. Four screw bosses, 6 mm diameter and full wall height, one at each outer corner of the base, each centred exactly on the corner point of the outer rectangle (so part of every boss lies outside the walls and joins them and forms the 3 mm radius outer corner), each with a 2.5 mm diameter pilot hole 8 mm deep from the top. Two more 2.5 mm pilot holes, 1.2 mm deep, in the underside of the floor, on the centre line of the case width at x=2026 and x=2046. (3) A body named lid: a 2 mm thick plate sitting on top of the base, with the same outline as the base including the corner bosses. Underneath it, a lip 1.5 mm deep and 1.2 mm thick that fits inside the walls with 0.2 mm clearance per side. Four 3.4 mm diameter screw holes through the lid, countersunk (90 degrees, 6.5 mm diameter at the top), aligned with the four base bosses. A vent of five slots, each 1.6 mm wide and 10 mm long (long side along y), evenly spread across a zone 20 mm wide (x) by 10 mm (y) centred at x=2046, y=19.65. Two 2.5 mm diameter pilot holes, 1.2 mm deep, in the top of the lid at x=2014 and x=2026 (y=19.65). (4) A body named bracket: an L-bracket 30 mm wide and 3 mm thick with two legs of 40 mm outside length. One leg lies flat against the underside of the case base (z from -3 to 0), spanning x 2016 to 2056 and centred on the case width; the other leg runs from its maximum-x end straight down to z=-40 (the wall leg). Two 4.5 mm holes in the wall leg, symmetric about the centre line, 14 mm apart, centred at z=-22. Two 3.4 mm holes in the flat leg that line up with the two underside pilot holes in the case base. (5) A body named sensor-pod: a 24 x 20 x 12 mm open-top box standing on the lid top, x from 2008 to 2032, centred on y=19.65. Its floor is 1.6 mm thick. Its pocket fits a 17.8 x 15.2 mm sensor board with a 0.15 mm clearance on every side (a friction fit, no snap), centred in the box. A 10 mm wide, 4 mm deep cable notch cut down from the rim in the wall at maximum y. Two 3.0 mm holes through the pod floor, lined up with the two lid pilot holes at x=2014 and x=2026. (6) Four M3 x 8 screw stand-ins, bodies named screw-1 to screw-4: each a 3 mm diameter shaft 8 mm long under a 5.6 mm diameter head 1.7 mm tall, placed in the four lid countersunk holes with the head top flush with the lid top. Make every part its own valid solid body with exactly these names, in the assembled positions."
+    }
+  }
+}

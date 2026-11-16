@@ -1,0 +1,1481 @@
+{
+ "label": "baseline-s1-rerun",
+ "model": "default",
+ "serverTree": "plasticity-mcp-bench (frozen, commit 496c478)",
+ "endpoint": "http://127.0.0.1:57291",
+ "target": "E634FD207384F0F8D6EB10D2D01D46F2",
+ "measuredAt": "2026-11-16T20:57:59.755Z",
+ "startUndoDepth": 0,
+ "startBodyCount": 4,
+ "maxTurns": 80,
+ "runs": [
+  {
+   "part": "S1",
+   "run": 1,
+   "label": "baseline-s1-rerun",
+   "prompt": "Build me a streamlined fairing for a drone in Plasticity (millimetres): a closed body about 120 mm long whose axis runs along the world X direction, from x=2000 to x=2120, with its centre line at y=0, z=30. At x=2000 its cross-section is a circle of 40 mm diameter. At x=2060, the middle, it is a rounded rectangle 60 mm wide (y) by 30 mm high (z) with 8 mm corner radius. At x=2120 it is a circle of 20 mm diameter. The skin must flow smoothly along the whole length, with no creases or kinks anywhere. Cap both ends flat, then shell the body to a 2 mm wall with both ends open. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/bench-2026-11-run-h76uDR/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 80 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 162039,
+   "startupMs": 1057,
+   "turns": 21,
+   "toolCalls": 33,
+   "toolCallsByName": {
+    "plasticity_call": 16,
+    "plasticity_describe_body": 1,
+    "plasticity_batch": 8,
+    "plasticity_call:plasticity_list_curve_vertices": 1,
+    "plasticity_body_info": 2,
+    "plasticity_call:plasticity_analyze_surface_continuity": 1,
+    "plasticity_screenshot": 1,
+    "plasticity_call:plasticity_inspect_surface_structure": 1,
+    "plasticity_call:plasticity_inspect_arbitrary_sections": 1,
+    "plasticity_undo": 1
+   },
+   "errors": 1,
+   "retries": 1,
+   "requestBytes": 5370,
+   "responseBytes": 84430,
+   "serverExecMs": -6214,
+   "serverTimeShare": -0.038,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_call",
+     "reqBytes": 83,
+     "respBytes": 7871,
+     "isError": false,
+     "startedMs": 5001,
+     "execMs": 80
+    },
+    {
+     "turn": 1,
+     "name": "plasticity_describe_body",
+     "reqBytes": 2,
+     "respBytes": 1226,
+     "isError": false,
+     "startedMs": 5001,
+     "execMs": 805
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 34,
+     "respBytes": 1864,
+     "isError": false,
+     "startedMs": 10915,
+     "execMs": -2418
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 36,
+     "respBytes": 1747,
+     "isError": false,
+     "startedMs": 10915,
+     "execMs": -1951
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 39,
+     "respBytes": 2296,
+     "isError": false,
+     "startedMs": 10915,
+     "execMs": -1411
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 35,
+     "respBytes": 1009,
+     "isError": false,
+     "startedMs": 10915,
+     "execMs": -1002
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 38,
+     "respBytes": 818,
+     "isError": false,
+     "startedMs": 10915,
+     "execMs": -806
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 73,
+     "respBytes": 1640,
+     "isError": false,
+     "startedMs": 10915,
+     "execMs": 45
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_call",
+     "reqBytes": 44,
+     "respBytes": 1315,
+     "isError": false,
+     "startedMs": 16836,
+     "execMs": -1000
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_call",
+     "reqBytes": 42,
+     "respBytes": 695,
+     "isError": false,
+     "startedMs": 16836,
+     "execMs": -618
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_call",
+     "reqBytes": 103,
+     "respBytes": 2614,
+     "isError": false,
+     "startedMs": 16836,
+     "execMs": 47
+    },
+    {
+     "turn": 4,
+     "name": "plasticity_batch",
+     "routedTo": "batch(4 steps: create_circle,create_rectangle,create_circle,list_curve_vertices)",
+     "reqBytes": 450,
+     "respBytes": 2034,
+     "isError": false,
+     "startedMs": 21763,
+     "execMs": 631
+    },
+    {
+     "turn": 5,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_list_curve_vertices",
+     "reqBytes": 45,
+     "respBytes": 1729,
+     "isError": false,
+     "startedMs": 24684,
+     "execMs": 52
+    },
+    {
+     "turn": 6,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: fillet_curve_vertices,status)",
+     "reqBytes": 283,
+     "respBytes": 613,
+     "isError": false,
+     "startedMs": 28925,
+     "execMs": 185
+    },
+    {
+     "turn": 7,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps: loft_curves,cap_sheet_holes,describe_body)",
+     "reqBytes": 373,
+     "respBytes": 3238,
+     "isError": false,
+     "startedMs": 33263,
+     "execMs": 388
+    },
+    {
+     "turn": 8,
+     "name": "plasticity_body_info",
+     "reqBytes": 11,
+     "respBytes": 11208,
+     "isError": false,
+     "startedMs": 42490,
+     "execMs": -243
+    },
+    {
+     "turn": 8,
+     "name": "plasticity_call",
+     "reqBytes": 49,
+     "respBytes": 1662,
+     "isError": false,
+     "startedMs": 42490,
+     "execMs": 18
+    },
+    {
+     "turn": 9,
+     "name": "plasticity_batch",
+     "routedTo": "batch(8 steps: delete,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,loft_curves,cap_sheet_holes,body_info)",
+     "reqBytes": 1180,
+     "respBytes": 5903,
+     "isError": false,
+     "startedMs": 62026,
+     "execMs": 663
+    },
+    {
+     "turn": 10,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps: hollow_faces,describe_body,find_edges)",
+     "reqBytes": 413,
+     "respBytes": 4817,
+     "isError": false,
+     "startedMs": 68876,
+     "execMs": 537
+    },
+    {
+     "turn": 11,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_analyze_surface_continuity",
+     "reqBytes": 318,
+     "respBytes": 2524,
+     "isError": false,
+     "startedMs": 77508,
+     "execMs": -855
+    },
+    {
+     "turn": 11,
+     "name": "plasticity_body_info",
+     "reqBytes": 42,
+     "respBytes": 4765,
+     "isError": false,
+     "startedMs": 77508,
+     "execMs": -201
+    },
+    {
+     "turn": 11,
+     "name": "plasticity_screenshot",
+     "reqBytes": 2,
+     "respBytes": 42,
+     "isError": false,
+     "startedMs": 77508,
+     "execMs": 284
+    },
+    {
+     "turn": 12,
+     "name": "plasticity_call",
+     "reqBytes": 123,
+     "respBytes": 5114,
+     "isError": false,
+     "startedMs": 101964,
+     "execMs": 71
+    },
+    {
+     "turn": 13,
+     "name": "plasticity_call",
+     "reqBytes": 48,
+     "respBytes": 1176,
+     "isError": false,
+     "startedMs": 105180,
+     "execMs": -302
+    },
+    {
+     "turn": 13,
+     "name": "plasticity_call",
+     "reqBytes": 49,
+     "respBytes": 1484,
+     "isError": false,
+     "startedMs": 105180,
+     "execMs": 4
+    },
+    {
+     "turn": 14,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_inspect_surface_structure",
+     "reqBytes": 148,
+     "respBytes": 537,
+     "isError": false,
+     "startedMs": 110148,
+     "execMs": -1622
+    },
+    {
+     "turn": 14,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_inspect_arbitrary_sections",
+     "reqBytes": 314,
+     "respBytes": 1328,
+     "isError": false,
+     "startedMs": 110148,
+     "execMs": 299
+    },
+    {
+     "turn": 15,
+     "name": "plasticity_call",
+     "reqBytes": 43,
+     "respBytes": 1731,
+     "isError": false,
+     "startedMs": 129071,
+     "execMs": 24
+    },
+    {
+     "turn": 16,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: split_solid_by_plane,find_edges)",
+     "reqBytes": 373,
+     "respBytes": 298,
+     "isError": true,
+     "startedMs": 133419,
+     "execMs": 642,
+     "errorText": "{\"failedStep\":0,\"toolName\":\"plasticity_split_solid_by_plane\",\"error\":\"Solid split recipe failed after 1/4 confirmed steps; partial geometry remains; last confirmed revision r15.5da6b635c7122a5f: Split cutter profile must form exactly one planar Region; found 2\",\"completedSteps\":[],\"undoneSteps\":0}"
+    },
+    {
+     "turn": 17,
+     "name": "plasticity_undo",
+     "reqBytes": 35,
+     "respBytes": 6328,
+     "isError": false,
+     "startedMs": 136888,
+     "execMs": 95
+    },
+    {
+     "turn": 18,
+     "name": "plasticity_call",
+     "reqBytes": 54,
+     "respBytes": 1079,
+     "isError": false,
+     "startedMs": 144408,
+     "execMs": 18
+    },
+    {
+     "turn": 19,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps: create_box,create_body_intersection_curves,inspect_curve_structure)",
+     "reqBytes": 327,
+     "respBytes": 3028,
+     "isError": false,
+     "startedMs": 149522,
+     "execMs": 585
+    },
+    {
+     "turn": 20,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: delete,describe_body)",
+     "reqBytes": 161,
+     "respBytes": 697,
+     "isError": false,
+     "startedMs": 155624,
+     "execMs": 742
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 3945,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 9097,
+     "execMs": 885,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 5109,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 6,
+     "respBytes": 9374,
+     "execMs": -7543,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 5876,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 3,
+     "respBytes": 4624,
+     "execMs": -1571,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 4,
+     "modelMs": 4880,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2034,
+     "execMs": 631,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 5,
+     "modelMs": 2290,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1729,
+     "execMs": 52,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 6,
+     "modelMs": 4189,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 613,
+     "execMs": 185,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 7,
+     "modelMs": 4153,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 3238,
+     "execMs": 388,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 8,
+     "modelMs": 8839,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 12870,
+     "execMs": -225,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 9,
+     "modelMs": 19518,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 5903,
+     "execMs": 663,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 10,
+     "modelMs": 6187,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 4817,
+     "execMs": 537,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 11,
+     "modelMs": 8096,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 3,
+     "respBytes": 7331,
+     "execMs": -772,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 12,
+     "modelMs": 24172,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 5114,
+     "execMs": 71,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 13,
+     "modelMs": 3144,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 2660,
+     "execMs": -298,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 14,
+     "modelMs": 4964,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 1865,
+     "execMs": -1323,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 15,
+     "modelMs": 18623,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1731,
+     "execMs": 24,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 16,
+     "modelMs": 4324,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 298,
+     "execMs": 642,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 17,
+     "modelMs": 2828,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 6328,
+     "execMs": 95,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 18,
+     "modelMs": 7425,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1079,
+     "execMs": 18,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 19,
+     "modelMs": 5096,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 3028,
+     "execMs": 585,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 20,
+     "modelMs": 5517,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 697,
+     "execMs": 742,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 21,
+     "modelMs": 2560,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 0,
+     "respBytes": 0,
+     "execMs": 0,
+     "thinkingChars": 0,
+     "textChars": 19
+    }
+   ],
+   "tokens": {
+    "input": 42,
+    "output": 10985,
+    "cacheRead": 1118912,
+    "cacheWrite": 58377
+   },
+   "costUsd": 1.5975504,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 1682",
+   "documentScaleAtEnd": {
+    "bodies": 12,
+    "totalFaces": 19
+   },
+   "verification": {
+    "passed": 9,
+    "of": 11,
+    "failed": [
+     "mean wall thickness 2 (exact volume / mean of the outer and inner lateral areas; needs exactly 2 lateral faces)",
+     "lateral surface is tangent-continuous along its length: every seam between two non-planar faces is G1 (analyze_surface_continuity; normal angle <= 1.0 deg, position <= 0.05 mm); vacuous when the lateral is one face"
+    ],
+    "bodyId": 1682,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        1682
+       ],
+       "said": 1682,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "nacelle: valid closed Solid (native B-Rep Check)",
+      "ok": true,
+      "tol": "exact (native Check)",
+      "actual": {
+       "type": "Solid",
+       "closed": true,
+       "nativeValid": true,
+       "codes": []
+      }
+     },
+     {
+      "check": "length 120 along x (union of exact face bounds)",
+      "tol": "+-0.5 mm",
+      "ok": true,
+      "actual": [
+       2000,
+       2120
+      ]
+     },
+     {
+      "check": "section extents: width (y) 60, height (z) 40 (largest sections: mid station and the O40 end)",
+      "tol": "+-1.0 mm (loft overshoot allowance)",
+      "ok": true,
+      "actual": {
+       "y": 60.635,
+       "z": 40
+      }
+     },
+     {
+      "check": "start end open: one annular rim at x=2000, outer circle O40, inner O36 (area of the ring = pi*(ro^2-ri^2))",
+      "tol": "diameter +-0.5 mm; ring area +-12% (the 2 mm wall is normal to the sloped skin, so the in-plane ring at the O20 end is about 8% wider)",
+      "ok": true,
+      "actual": {
+       "rimFaces": 1,
+       "areaMm2": 242.931
+      }
+     },
+     {
+      "check": "end end open: one annular rim at x=2120, outer circle O20, inner O16 (area of the ring = pi*(ro^2-ri^2))",
+      "tol": "diameter +-0.5 mm; ring area +-12% (the 2 mm wall is normal to the sloped skin, so the in-plane ring at the O20 end is about 8% wider)",
+      "ok": true,
+      "actual": {
+       "rimFaces": 1,
+       "areaMm2": 117.996
+      }
+     },
+     {
+      "check": "mid-station (x=2060) section is 60 x 30 (exact bounds of a 0.2 mm slab cut through a copy)",
+      "tol": "+-0.5 mm",
+      "ok": true,
+      "actual": {
+       "y": 60.015,
+       "z": 30.016
+      }
+     },
+     {
+      "check": "wall thickness 2 at three stations (x=2030, 2060, 2090), from outer minus inner slab extents; slope allowance included",
+      "tol": "+-0.2 mm (0.1 plus up to 0.1 mm for the surface slope)",
+      "ok": true,
+      "actual": [
+       {
+        "y": 2.028,
+        "z": 2.008
+       },
+       {
+        "y": 2.005,
+        "z": 2.006
+       },
+       {
+        "y": 2.107,
+        "z": 2.009
+       }
+      ]
+     },
+     {
+      "check": "mean wall thickness 2 (exact volume / mean of the outer and inner lateral areas; needs exactly 2 lateral faces)",
+      "tol": "+-0.1 mm",
+      "ok": false,
+      "actual": {
+       "volumeMm3": 32172.06,
+       "lateralFaces": 5,
+       "meanThickness": null
+      }
+     },
+     {
+      "check": "no planar lateral faces (only the two end rims are planar)",
+      "tol": "face type",
+      "ok": true,
+      "actual": 0
+     },
+     {
+      "check": "lateral surface is tangent-continuous along its length: every seam between two non-planar faces is G1 (analyze_surface_continuity; normal angle <= 1.0 deg, position <= 0.05 mm); vacuous when the lateral is one face",
+      "tol": "<=1.0 deg",
+      "ok": false,
+      "actual": {
+       "seams": 3,
+       "analysed": 3,
+       "skipped": 0,
+       "worstNormalDeg": 89.796,
+       "lateralFaces": 5
+      }
+     }
+    ]
+   },
+   "screenshot": {
+    "path": "shots/S1-r1.png",
+    "mode": "window"
+   },
+   "transcript": "transcripts-baseline-s1-rerun/S1-r1.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 26
+   }
+  },
+  {
+   "part": "S1",
+   "run": 2,
+   "label": "baseline-s1-rerun",
+   "prompt": "Build me a streamlined fairing for a drone in Plasticity (millimetres): a closed body about 120 mm long whose axis runs along the world X direction, from x=2000 to x=2120, with its centre line at y=0, z=30. At x=2000 its cross-section is a circle of 40 mm diameter. At x=2060, the middle, it is a rounded rectangle 60 mm wide (y) by 30 mm high (z) with 8 mm corner radius. At x=2120 it is a circle of 20 mm diameter. The skin must flow smoothly along the whole length, with no creases or kinks anywhere. Cap both ends flat, then shell the body to a 2 mm wall with both ends open. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/bench-2026-11-run-oJfFhe/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 80 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 143243,
+   "startupMs": 773,
+   "turns": 20,
+   "toolCalls": 28,
+   "toolCallsByName": {
+    "plasticity_call": 11,
+    "plasticity_describe_body": 1,
+    "plasticity_batch": 9,
+    "plasticity_call:plasticity_list_curve_vertices": 1,
+    "plasticity_call:plasticity_inspect_curve_structure": 2,
+    "plasticity_screenshot": 2,
+    "plasticity_body_info": 1,
+    "plasticity_call:plasticity_inspect_surface_structure": 1
+   },
+   "errors": 3,
+   "retries": 3,
+   "requestBytes": 8018,
+   "responseBytes": 55151,
+   "serverExecMs": -2913,
+   "serverTimeShare": -0.02,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_call",
+     "reqBytes": 67,
+     "respBytes": 5901,
+     "isError": false,
+     "startedMs": 4295,
+     "execMs": 60
+    },
+    {
+     "turn": 1,
+     "name": "plasticity_describe_body",
+     "reqBytes": 2,
+     "respBytes": 1226,
+     "isError": false,
+     "startedMs": 4295,
+     "execMs": 583
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 34,
+     "respBytes": 1864,
+     "isError": false,
+     "startedMs": 9395,
+     "execMs": -1971
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 36,
+     "respBytes": 1747,
+     "isError": false,
+     "startedMs": 9395,
+     "execMs": -1441
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 39,
+     "respBytes": 2296,
+     "isError": false,
+     "startedMs": 9395,
+     "execMs": -1193
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 35,
+     "respBytes": 1009,
+     "isError": false,
+     "startedMs": 9395,
+     "execMs": -722
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 38,
+     "respBytes": 818,
+     "isError": false,
+     "startedMs": 9395,
+     "execMs": -302
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 44,
+     "respBytes": 1315,
+     "isError": false,
+     "startedMs": 9395,
+     "execMs": 27
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_batch",
+     "routedTo": "batch(4 steps: create_circle,create_rectangle,create_circle,list_curve_vertices)",
+     "reqBytes": 476,
+     "respBytes": 2034,
+     "isError": false,
+     "startedMs": 16426,
+     "execMs": 380
+    },
+    {
+     "turn": 4,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: fillet_curve_vertices,inspect_curve_structure)",
+     "reqBytes": 320,
+     "respBytes": 172,
+     "isError": true,
+     "startedMs": 21053,
+     "execMs": 92,
+     "errorText": "{\"failedStep\":0,\"toolName\":\"plasticity_fillet_curve_vertices\",\"error\":\"Stale or unknown curve vertices: 1694:0, 1694:1, 1694:2, 1694:3\",\"completedSteps\":[],\"undoneSteps\":0}"
+    },
+    {
+     "turn": 5,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_list_curve_vertices",
+     "reqBytes": 72,
+     "respBytes": 1729,
+     "isError": false,
+     "startedMs": 23775,
+     "execMs": 32
+    },
+    {
+     "turn": 6,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: fillet_curve_vertices,status)",
+     "reqBytes": 347,
+     "respBytes": 1098,
+     "isError": false,
+     "startedMs": 27976,
+     "execMs": 86
+    },
+    {
+     "turn": 7,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps: loft_curves,cap_sheet_holes,describe_body)",
+     "reqBytes": 373,
+     "respBytes": 3238,
+     "isError": false,
+     "startedMs": 32075,
+     "execMs": 212
+    },
+    {
+     "turn": 8,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_inspect_curve_structure",
+     "reqBytes": 86,
+     "respBytes": 171,
+     "isError": true,
+     "startedMs": 40447,
+     "execMs": -628,
+     "errorText": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"revision\"\n    ],\n    \"message\": \"Invalid input: expected string, received undefined\"\n  }\n]"
+    },
+    {
+     "turn": 8,
+     "name": "plasticity_call",
+     "reqBytes": 86,
+     "respBytes": 2644,
+     "isError": false,
+     "startedMs": 40447,
+     "execMs": 35
+    },
+    {
+     "turn": 9,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps: inspect_curve_structure,create_box,create_body_intersection_curves)",
+     "reqBytes": 311,
+     "respBytes": 2375,
+     "isError": false,
+     "startedMs": 45690,
+     "execMs": 239
+    },
+    {
+     "turn": 10,
+     "name": "plasticity_screenshot",
+     "reqBytes": 2,
+     "respBytes": 42,
+     "isError": false,
+     "startedMs": 51353,
+     "execMs": -551
+    },
+    {
+     "turn": 10,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_inspect_curve_structure",
+     "reqBytes": 119,
+     "respBytes": 2925,
+     "isError": false,
+     "startedMs": 51353,
+     "execMs": 40
+    },
+    {
+     "turn": 11,
+     "name": "plasticity_call",
+     "reqBytes": 51,
+     "respBytes": 3162,
+     "isError": false,
+     "startedMs": 62095,
+     "execMs": 17
+    },
+    {
+     "turn": 12,
+     "name": "plasticity_batch",
+     "routedTo": "batch(5 steps: inspect_curve_structure,measure_point_to_curved_edge,measure_point_to_curved_edge,measure_point_to_curved_edge,measure_point_to_curved_edge)",
+     "reqBytes": 1300,
+     "respBytes": 654,
+     "isError": true,
+     "startedMs": 69805,
+     "execMs": 83,
+     "errorText": "{\"failedStep\":1,\"toolName\":\"plasticity_measure_point_to_curved_edge\",\"error\":\"step 1 (plasticity_measure_point_to_curved_edge): return path \\\"closestPointMm\\\" does not resolve: missing .closestPointMm; available top-level keys: documentToken, revision, exact, measurementSource, point, edge, closestPointEstimateMm, normalizedParameterEstimate, estimatedDistanceMm, approximationToleranceMm, maxObser"
+    },
+    {
+     "turn": 13,
+     "name": "plasticity_batch",
+     "routedTo": "batch(4 steps: measure_point_to_curved_edge,measure_point_to_curved_edge,measure_point_to_curved_edge,measure_point_to_curved_edge)",
+     "reqBytes": 1034,
+     "respBytes": 775,
+     "isError": false,
+     "startedMs": 75860,
+     "execMs": 161
+    },
+    {
+     "turn": 14,
+     "name": "plasticity_batch",
+     "routedTo": "batch(10 steps: delete,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,loft_curves,create_box,create_body_intersection_curves,inspect_curve_structure,describe_body)",
+     "reqBytes": 1295,
+     "respBytes": 4491,
+     "isError": false,
+     "startedMs": 88158,
+     "execMs": 947
+    },
+    {
+     "turn": 15,
+     "name": "plasticity_batch",
+     "routedTo": "batch(9 steps: measure_point_to_curved_edge,measure_point_to_curved_edge,measure_point_to_curved_edge,measure_point_to_curved_edge,delete,cap_sheet_holes,find_faces,hollow_faces,describe_body)",
+     "reqBytes": 1512,
+     "respBytes": 1689,
+     "isError": false,
+     "startedMs": 99179,
+     "execMs": 654
+    },
+    {
+     "turn": 16,
+     "name": "plasticity_body_info",
+     "reqBytes": 42,
+     "respBytes": 4765,
+     "isError": false,
+     "startedMs": 104939,
+     "execMs": 28
+    },
+    {
+     "turn": 16,
+     "name": "plasticity_screenshot",
+     "reqBytes": 2,
+     "respBytes": 42,
+     "isError": false,
+     "startedMs": 104939,
+     "execMs": 129
+    },
+    {
+     "turn": 17,
+     "name": "plasticity_call",
+     "reqBytes": 99,
+     "respBytes": 5256,
+     "isError": false,
+     "startedMs": 124333,
+     "execMs": 41
+    },
+    {
+     "turn": 18,
+     "name": "plasticity_call",
+     "reqBytes": 48,
+     "respBytes": 1176,
+     "isError": false,
+     "startedMs": 128423,
+     "execMs": 5
+    },
+    {
+     "turn": 19,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_inspect_surface_structure",
+     "reqBytes": 148,
+     "respBytes": 537,
+     "isError": false,
+     "startedMs": 131670,
+     "execMs": 44
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 3521,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 7127,
+     "execMs": 643,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 4517,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 6,
+     "respBytes": 9049,
+     "execMs": -5602,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 7005,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2034,
+     "execMs": 380,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 4,
+     "modelMs": 4246,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 172,
+     "execMs": 92,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 5,
+     "modelMs": 2631,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1729,
+     "execMs": 32,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 6,
+     "modelMs": 4168,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1098,
+     "execMs": 86,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 7,
+     "modelMs": 4013,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 3238,
+     "execMs": 212,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 8,
+     "modelMs": 8160,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 2815,
+     "execMs": -593,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 9,
+     "modelMs": 5208,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2375,
+     "execMs": 239,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 10,
+     "modelMs": 5424,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 2967,
+     "execMs": -511,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 11,
+     "modelMs": 10701,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 3162,
+     "execMs": 17,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 12,
+     "modelMs": 7693,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 654,
+     "execMs": 83,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 13,
+     "modelMs": 5972,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 775,
+     "execMs": 161,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 14,
+     "modelMs": 12136,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 4491,
+     "execMs": 947,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 15,
+     "modelMs": 10074,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1689,
+     "execMs": 654,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 16,
+     "modelMs": 5106,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 4807,
+     "execMs": 157,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 17,
+     "modelMs": 19266,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 5256,
+     "execMs": 41,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 18,
+     "modelMs": 4048,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1176,
+     "execMs": 5,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 19,
+     "modelMs": 3242,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 537,
+     "execMs": 44,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 20,
+     "modelMs": 8957,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 0,
+     "respBytes": 0,
+     "execMs": 0,
+     "thinkingChars": 0,
+     "textChars": 19
+    }
+   ],
+   "tokens": {
+    "input": 40,
+    "output": 10322,
+    "cacheRead": 896837,
+    "cacheWrite": 47145
+   },
+   "costUsd": 1.3468874000000004,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 1704",
+   "documentScaleAtEnd": {
+    "bodies": 12,
+    "totalFaces": 19
+   },
+   "verification": {
+    "passed": 9,
+    "of": 11,
+    "failed": [
+     "mean wall thickness 2 (exact volume / mean of the outer and inner lateral areas; needs exactly 2 lateral faces)",
+     "lateral surface is tangent-continuous along its length: every seam between two non-planar faces is G1 (analyze_surface_continuity; normal angle <= 1.0 deg, position <= 0.05 mm); vacuous when the lateral is one face"
+    ],
+    "bodyId": 1704,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        1704
+       ],
+       "said": 1704,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "nacelle: valid closed Solid (native B-Rep Check)",
+      "ok": true,
+      "tol": "exact (native Check)",
+      "actual": {
+       "type": "Solid",
+       "closed": true,
+       "nativeValid": true,
+       "codes": []
+      }
+     },
+     {
+      "check": "length 120 along x (union of exact face bounds)",
+      "tol": "+-0.5 mm",
+      "ok": true,
+      "actual": [
+       2000,
+       2120
+      ]
+     },
+     {
+      "check": "section extents: width (y) 60, height (z) 40 (largest sections: mid station and the O40 end)",
+      "tol": "+-1.0 mm (loft overshoot allowance)",
+      "ok": true,
+      "actual": {
+       "y": 60.635,
+       "z": 40
+      }
+     },
+     {
+      "check": "start end open: one annular rim at x=2000, outer circle O40, inner O36 (area of the ring = pi*(ro^2-ri^2))",
+      "tol": "diameter +-0.5 mm; ring area +-12% (the 2 mm wall is normal to the sloped skin, so the in-plane ring at the O20 end is about 8% wider)",
+      "ok": true,
+      "actual": {
+       "rimFaces": 1,
+       "areaMm2": 242.931
+      }
+     },
+     {
+      "check": "end end open: one annular rim at x=2120, outer circle O20, inner O16 (area of the ring = pi*(ro^2-ri^2))",
+      "tol": "diameter +-0.5 mm; ring area +-12% (the 2 mm wall is normal to the sloped skin, so the in-plane ring at the O20 end is about 8% wider)",
+      "ok": true,
+      "actual": {
+       "rimFaces": 1,
+       "areaMm2": 117.996
+      }
+     },
+     {
+      "check": "mid-station (x=2060) section is 60 x 30 (exact bounds of a 0.2 mm slab cut through a copy)",
+      "tol": "+-0.5 mm",
+      "ok": true,
+      "actual": {
+       "y": 60.015,
+       "z": 30.016
+      }
+     },
+     {
+      "check": "wall thickness 2 at three stations (x=2030, 2060, 2090), from outer minus inner slab extents; slope allowance included",
+      "tol": "+-0.2 mm (0.1 plus up to 0.1 mm for the surface slope)",
+      "ok": true,
+      "actual": [
+       {
+        "y": 2.028,
+        "z": 2.008
+       },
+       {
+        "y": 2.005,
+        "z": 2.006
+       },
+       {
+        "y": 2.107,
+        "z": 2.009
+       }
+      ]
+     },
+     {
+      "check": "mean wall thickness 2 (exact volume / mean of the outer and inner lateral areas; needs exactly 2 lateral faces)",
+      "tol": "+-0.1 mm",
+      "ok": false,
+      "actual": {
+       "volumeMm3": 32172.06,
+       "lateralFaces": 5,
+       "meanThickness": null
+      }
+     },
+     {
+      "check": "no planar lateral faces (only the two end rims are planar)",
+      "tol": "face type",
+      "ok": true,
+      "actual": 0
+     },
+     {
+      "check": "lateral surface is tangent-continuous along its length: every seam between two non-planar faces is G1 (analyze_surface_continuity; normal angle <= 1.0 deg, position <= 0.05 mm); vacuous when the lateral is one face",
+      "tol": "<=1.0 deg",
+      "ok": false,
+      "actual": {
+       "seams": 3,
+       "analysed": 3,
+       "skipped": 0,
+       "worstNormalDeg": 89.796,
+       "lateralFaces": 5
+      }
+     }
+    ]
+   },
+   "screenshot": {
+    "path": "shots/S1-r2.png",
+    "mode": "window"
+   },
+   "transcript": "transcripts-baseline-s1-rerun/S1-r2.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 28
+   }
+  }
+ ]
+}

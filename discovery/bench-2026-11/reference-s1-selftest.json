@@ -1,0 +1,118 @@
+{
+ "which": "s1",
+ "passed": 10,
+ "of": 10,
+ "checks": [
+  {
+   "check": "nacelle: valid closed Solid (native B-Rep Check)",
+   "ok": true,
+   "tol": "exact (native Check)",
+   "actual": {
+    "type": "Solid",
+    "closed": true,
+    "nativeValid": true,
+    "codes": []
+   }
+  },
+  {
+   "check": "length 120 along x (union of exact face bounds)",
+   "tol": "+-0.5 mm",
+   "ok": true,
+   "actual": [
+    2000,
+    2120
+   ]
+  },
+  {
+   "check": "section extents: width (y) 60, height (z) 40 (largest sections: mid station and the O40 end)",
+   "tol": "+-1.0 mm (loft overshoot allowance)",
+   "ok": true,
+   "actual": {
+    "y": 60.571,
+    "z": 39.998
+   }
+  },
+  {
+   "check": "start end open: one annular rim at x=2000, outer circle O40, inner O36 (area of the ring = pi*(ro^2-ri^2))",
+   "tol": "diameter +-0.5 mm; ring area +-12% (the 2 mm wall is normal to the sloped skin, so the in-plane ring at the O20 end is about 8% wider)",
+   "ok": true,
+   "actual": {
+    "rimFaces": 1,
+    "areaMm2": 244.51
+   }
+  },
+  {
+   "check": "end end open: one annular rim at x=2120, outer circle O20, inner O16 (area of the ring = pi*(ro^2-ri^2))",
+   "tol": "diameter +-0.5 mm; ring area +-12% (the 2 mm wall is normal to the sloped skin, so the in-plane ring at the O20 end is about 8% wider)",
+   "ok": true,
+   "actual": {
+    "rimFaces": 1,
+    "areaMm2": 118.153
+   }
+  },
+  {
+   "check": "mid-station (x=2060) section is 60 x 30 (exact bounds of a 0.2 mm slab cut through a copy)",
+   "tol": "+-0.5 mm",
+   "ok": true,
+   "actual": {
+    "y": 60.069,
+    "z": 30.018
+   }
+  },
+  {
+   "check": "wall thickness 2 at three stations (x=2030, 2060, 2090), from outer minus inner slab extents; slope allowance included",
+   "tol": "+-0.2 mm (0.1 plus up to 0.1 mm for the surface slope)",
+   "ok": true,
+   "actual": [
+    {
+     "y": 2.039,
+     "z": 2.004
+    },
+    {
+     "y": 2.008,
+     "z": 2.003
+    },
+    {
+     "y": 2.133,
+     "z": 2.018
+    }
+   ]
+  },
+  {
+   "check": "mean wall thickness 2 (exact volume / mean of the outer and inner lateral areas; needs exactly 2 lateral faces)",
+   "tol": "+-0.1 mm",
+   "ok": true,
+   "actual": {
+    "volumeMm3": 32255.428,
+    "lateralFaces": 2,
+    "meanThickness": 2.001
+   }
+  },
+  {
+   "check": "no planar lateral faces (only the two end rims are planar)",
+   "tol": "face type",
+   "ok": true,
+   "actual": 0
+  },
+  {
+   "check": "lateral surface is tangent-continuous along its length: every seam between two non-planar faces is G1 (analyze_surface_continuity; normal angle <= 1.0 deg, position <= 0.05 mm); vacuous when the lateral is one face",
+   "tol": "<=1.0 deg",
+   "ok": true,
+   "actual": {
+    "seams": 0,
+    "analysed": 0,
+    "skipped": 0,
+    "worstNormalDeg": 0,
+    "lateralFaces": 2
+   }
+  }
+ ],
+ "restored": {
+  "ok": true,
+  "undoDepth": 0,
+  "bodyCount": 4,
+  "redoDepth": 15
+ },
+ "startUndoDepth": 0,
+ "startBodies": 4
+}

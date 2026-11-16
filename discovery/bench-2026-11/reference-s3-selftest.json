@@ -1,0 +1,97 @@
+{
+ "which": "s3",
+ "passed": 5,
+ "of": 5,
+ "checks": [
+  {
+   "check": "the three hole edges are still edges of the final body (centres at the analytic hole-edge midpoints)",
+   "tol": "+-0.01 mm",
+   "ok": true,
+   "actual": [
+    "2232e360251",
+    "2232e360422",
+    "2232e360593"
+   ]
+  },
+  {
+   "check": "every hole edge is shared by exactly two faces (hole closed and joined to the neighbours)",
+   "tol": "exact topology",
+   "ok": true,
+   "actual": [
+    2,
+    2,
+    2
+   ]
+  },
+  {
+   "check": "one patch face whose boundary is exactly the three hole edges",
+   "tol": "+-0.01 mm (edge centres) + edge count 3",
+   "ok": true,
+   "actual": {
+    "id": "2232f360695",
+    "surfaceType": "BSurf",
+    "edges": 3
+   }
+  },
+  {
+   "check": "continuity per hole edge >= G1 (analyze_surface_continuity; normal angle <= 1 deg, position <= 0.05 mm)",
+   "tol": "G1: <=1 deg, <=0.05 mm",
+   "ok": true,
+   "actual": [
+    {
+     "edge": "2232e360251",
+     "found": "G1",
+     "normalDeg": 0.03,
+     "posMm": 1.22e-10,
+     "relCurv": 1
+    },
+    {
+     "edge": "2232e360422",
+     "found": "G1",
+     "normalDeg": 0.025,
+     "posMm": 1.22e-10,
+     "relCurv": 1
+    },
+    {
+     "edge": "2232e360593",
+     "found": "G1",
+     "normalDeg": 0.013,
+     "posMm": 1.22e-10,
+     "relCurv": 1
+    }
+   ]
+  },
+  {
+   "check": "continuity reaches G2 on all hole edges (informational)",
+   "soft": true,
+   "tol": "relative curvature <= 0.05",
+   "ok": false
+  },
+  {
+   "check": "joined body valid (native Check) and watertight as far as possible: only the 3 outer rim edges are free (or 0 if closed to a solid)",
+   "tol": "free edges == 3 or 0",
+   "ok": true,
+   "actual": {
+    "type": "Sheet",
+    "nativeValid": true,
+    "closed": false,
+    "freeEdges": 3
+   }
+  },
+  {
+   "check": "face count 4 (3 neighbour sheets + 1 patch; informational)",
+   "soft": true,
+   "tol": "exact",
+   "ok": true,
+   "actual": 4
+  }
+ ],
+ "restored": {
+  "ok": true,
+  "undoDepth": 0,
+  "bodyCount": 4,
+  "redoDepth": 16
+ },
+ "startUndoDepth": 0,
+ "startBodies": 4
+}

@@ -1,0 +1,146 @@
+{
+ "which": "s2",
+ "passed": 9,
+ "of": 9,
+ "checks": [
+  {
+   "check": "pad: valid closed Solid (native B-Rep Check)",
+   "ok": true,
+   "tol": "exact (native Check)",
+   "actual": {
+    "type": "Solid",
+    "closed": true,
+    "nativeValid": true,
+    "codes": []
+   }
+  },
+  {
+   "check": "pad (union of exact face bounds) bounds",
+   "tol": "+-0.2 mm",
+   "ok": true,
+   "expected": {
+    "min": [
+     2000,
+     0,
+     0
+    ],
+    "max": [
+     2090,
+     50,
+     14
+    ]
+   },
+   "actual": {
+    "min": [
+     2000,
+     0,
+     0
+    ],
+    "max": [
+     2090,
+     50,
+     13.991
+    ]
+   }
+  },
+  {
+   "check": "top (highest) face is non-planar (BSpline or equivalent)",
+   "tol": "surfaceType != Plane",
+   "ok": true,
+   "actual": {
+    "surfaceType": "BSurf",
+    "planar": false
+   }
+  },
+  {
+   "check": "crown peak at the plan centre (closest objective: crown face centre point and area centroid; a true peak read is impossible, sections fail on BSpline boundaries)",
+   "tol": "+-1 mm in x,y",
+   "ok": true,
+   "actual": {
+    "faceCentre": [
+     2045.013,
+     25.064,
+     13.991
+    ],
+    "areaCentroid": [
+     2045,
+     25.002,
+     9.625
+    ]
+   }
+  },
+  {
+   "check": "crown peak height 14 (crown face exact bounds max z)",
+   "tol": "+-0.2 mm",
+   "ok": true,
+   "actual": 13.991
+  },
+  {
+   "check": "rim height 8 at the four side midpoints: either the top of the rim blend (highest non-crown face within 1 mm of the midpoint) or the top of the vertical side wall is 8",
+   "tol": "+-0.3 mm",
+   "ok": true,
+   "actual": [
+    {
+     "at": "x-",
+     "blendTopZ": 8,
+     "wallTopZ": 6
+    },
+    {
+     "at": "x+",
+     "blendTopZ": 8,
+     "wallTopZ": 6
+    },
+    {
+     "at": "y-",
+     "blendTopZ": 8,
+     "wallTopZ": 6
+    },
+    {
+     "at": "y+",
+     "blendTopZ": 8,
+     "wallTopZ": 6
+    }
+   ]
+  },
+  {
+   "check": "crown continuity to its neighbours >= G1 (plasticity_analyze_surface_continuity; threshold normal angle <= 1.0 deg, position <= 0.05 mm)",
+   "tol": "G1: <=1.0 deg normal, <=0.05 mm position",
+   "ok": true,
+   "actual": {
+    "edges": 8,
+    "analysed": 8,
+    "worstNormalDeg": 0.03,
+    "found": "G1"
+   }
+  },
+  {
+   "check": "crown reaches G2 (requested level; informational)",
+   "soft": true,
+   "tol": "relative curvature <= 0.05",
+   "ok": false,
+   "actual": {
+    "worstRelCurv": 1
+   }
+  },
+  {
+   "check": "flat bottom at z=0",
+   "tol": "+-0.05 mm",
+   "ok": true,
+   "actual": 1
+  },
+  {
+   "check": "bottom edges rounded R1 (cylindrical/toroidal faces r=1 touching z=0, at least 8 for a rounded rectangle: 4 sides + 4 corners)",
+   "tol": "radius +-0.05 mm",
+   "ok": true,
+   "actual": 8
+  }
+ ],
+ "restored": {
+  "ok": true,
+  "undoDepth": 0,
+  "bodyCount": 4,
+  "redoDepth": 9
+ },
+ "startUndoDepth": 0,
+ "startBodies": 4
+}

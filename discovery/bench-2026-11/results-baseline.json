@@ -1,0 +1,5564 @@
+{
+ "label": "baseline",
+ "model": "default",
+ "serverTree": "plasticity-mcp-bench (frozen, commit 496c478)",
+ "endpoint": "http://127.0.0.1:57291",
+ "target": "E634FD207384F0F8D6EB10D2D01D46F2",
+ "measuredAt": "2026-11-16T20:51:30.417Z",
+ "startUndoDepth": 0,
+ "startBodyCount": 4,
+ "maxTurns": 80,
+ "runs": [
+  {
+   "part": "S1",
+   "run": 1,
+   "label": "baseline",
+   "prompt": "Build me a streamlined fairing for a drone in Plasticity (millimetres): a closed body about 120 mm long whose axis runs along the world X direction, from x=2000 to x=2120, with its centre line at y=0, z=30. At x=2000 its cross-section is a circle of 40 mm diameter. At x=2060, the middle, it is a rounded rectangle 60 mm wide (y) by 30 mm high (z) with 8 mm corner radius. At x=2120 it is a circle of 20 mm diameter. The skin must flow smoothly along the whole length, with no creases or kinks anywhere. Cap both ends flat, then shell the body to a 2 mm wall with both ends open. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/bench-2026-11-run-qU0GaJ/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 80 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 484344,
+   "startupMs": 880,
+   "turns": 29,
+   "toolCalls": 40,
+   "toolCallsByName": {
+    "plasticity_call": 13,
+    "plasticity_describe_body": 1,
+    "plasticity_batch": 18,
+    "plasticity_call:plasticity_list_curve_vertices": 1,
+    "plasticity_body_info": 1,
+    "plasticity_undo": 1,
+    "plasticity_find_faces": 1,
+    "plasticity_call:plasticity_evaluate_curve_segments": 1,
+    "plasticity_reconcile": 1,
+    "plasticity_find_edges": 1,
+    "plasticity_screenshot": 1
+   },
+   "errors": 3,
+   "retries": 3,
+   "requestBytes": 44751,
+   "responseBytes": 141739,
+   "serverExecMs": 8466,
+   "serverTimeShare": 0.017,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_call",
+     "reqBytes": 86,
+     "respBytes": 7915,
+     "isError": false,
+     "startedMs": 4865,
+     "execMs": 51
+    },
+    {
+     "turn": 1,
+     "name": "plasticity_describe_body",
+     "reqBytes": 2,
+     "respBytes": 1226,
+     "isError": false,
+     "startedMs": 4865,
+     "execMs": 530
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 34,
+     "respBytes": 1864,
+     "isError": false,
+     "startedMs": 10788,
+     "execMs": -2500
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 36,
+     "respBytes": 1747,
+     "isError": false,
+     "startedMs": 10788,
+     "execMs": -1996
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 39,
+     "respBytes": 2296,
+     "isError": false,
+     "startedMs": 10788,
+     "execMs": -1481
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 35,
+     "respBytes": 1009,
+     "isError": false,
+     "startedMs": 10788,
+     "execMs": -1186
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 38,
+     "respBytes": 818,
+     "isError": false,
+     "startedMs": 10788,
+     "execMs": -770
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 44,
+     "respBytes": 1315,
+     "isError": false,
+     "startedMs": 10788,
+     "execMs": -292
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 49,
+     "respBytes": 1662,
+     "isError": false,
+     "startedMs": 10788,
+     "execMs": 5
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_batch",
+     "routedTo": "batch(4 steps: create_circle,create_rectangle,create_circle,list_curve_vertices)",
+     "reqBytes": 476,
+     "respBytes": 2034,
+     "isError": false,
+     "startedMs": 16704,
+     "execMs": 174
+    },
+    {
+     "turn": 4,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: fillet_curve_vertices,inspect_curve_structure)",
+     "reqBytes": 321,
+     "respBytes": 172,
+     "isError": true,
+     "startedMs": 22541,
+     "execMs": 73,
+     "errorText": "{\"failedStep\":0,\"toolName\":\"plasticity_fillet_curve_vertices\",\"error\":\"Stale or unknown curve vertices: 1322:0, 1322:1, 1322:2, 1322:3\",\"completedSteps\":[],\"undoneSteps\":0}"
+    },
+    {
+     "turn": 5,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_list_curve_vertices",
+     "reqBytes": 72,
+     "respBytes": 1729,
+     "isError": false,
+     "startedMs": 25120,
+     "execMs": 43
+    },
+    {
+     "turn": 6,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps: fillet_curve_vertices,inspect_curve_structure,describe_body)",
+     "reqBytes": 391,
+     "respBytes": 3411,
+     "isError": false,
+     "startedMs": 29100,
+     "execMs": 80
+    },
+    {
+     "turn": 7,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps: loft_curves,cap_sheet_holes,describe_body)",
+     "reqBytes": 379,
+     "respBytes": 3238,
+     "isError": false,
+     "startedMs": 32986,
+     "execMs": 189
+    },
+    {
+     "turn": 8,
+     "name": "plasticity_body_info",
+     "reqBytes": 25,
+     "respBytes": 9641,
+     "isError": false,
+     "startedMs": 44311,
+     "execMs": 31
+    },
+    {
+     "turn": 9,
+     "name": "plasticity_undo",
+     "reqBytes": 98,
+     "respBytes": 4459,
+     "isError": false,
+     "startedMs": 77367,
+     "execMs": -123
+    },
+    {
+     "turn": 9,
+     "name": "plasticity_call",
+     "reqBytes": 41,
+     "respBytes": 956,
+     "isError": false,
+     "startedMs": 77367,
+     "execMs": 7
+    },
+    {
+     "turn": 10,
+     "name": "plasticity_batch",
+     "routedTo": "batch(11 steps: create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,loft_curves,cap_sheet_holes,describe_body)",
+     "reqBytes": 1730,
+     "respBytes": 2502,
+     "isError": true,
+     "startedMs": 89223,
+     "execMs": 428,
+     "errorText": "{\"failedStep\":8,\"toolName\":\"plasticity_loft_curves\",\"error\":\"Plasticity command failed: Error: At least one guide is not touching one of the profiles\",\"completedSteps\":[{\"step\":0,\"toolName\":\"plasticity_create_nurbs_curve\",\"added\":[1325],\"addedBodies\":[{\"id\":1325,\"versionId\":2351,\"type\":\"Wire\",\"name\":\"Curve.003\",\"boundsMm\":{\"min\":[2000,7.3887,36.7385],\"max\":[2120,25.568,46.5644]},\"boundsMethod\":\"na"
+    },
+    {
+     "turn": 11,
+     "name": "plasticity_batch",
+     "routedTo": "batch(8 steps: delete,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,loft_curves,cap_sheet_holes,describe_body)",
+     "reqBytes": 1082,
+     "respBytes": 2798,
+     "isError": false,
+     "startedMs": 100242,
+     "execMs": 453
+    },
+    {
+     "turn": 12,
+     "name": "plasticity_call",
+     "reqBytes": 103,
+     "respBytes": 5188,
+     "isError": false,
+     "startedMs": 111201,
+     "execMs": 46
+    },
+    {
+     "turn": 13,
+     "name": "plasticity_call",
+     "reqBytes": 48,
+     "respBytes": 1176,
+     "isError": false,
+     "startedMs": 116290,
+     "execMs": -1490
+    },
+    {
+     "turn": 13,
+     "name": "plasticity_call",
+     "reqBytes": 54,
+     "respBytes": 1079,
+     "isError": false,
+     "startedMs": 116290,
+     "execMs": -972
+    },
+    {
+     "turn": 13,
+     "name": "plasticity_call",
+     "reqBytes": 46,
+     "respBytes": 1254,
+     "isError": false,
+     "startedMs": 116290,
+     "execMs": -495
+    },
+    {
+     "turn": 13,
+     "name": "plasticity_find_faces",
+     "reqBytes": 62,
+     "respBytes": 1979,
+     "isError": false,
+     "startedMs": 116290,
+     "execMs": 14
+    },
+    {
+     "turn": 14,
+     "name": "plasticity_batch",
+     "routedTo": "batch(4 steps: inspect_surface_structure,create_box,create_body_intersection_curves,inspect_curve_structure)",
+     "reqBytes": 431,
+     "respBytes": 3361,
+     "isError": false,
+     "startedMs": 123191,
+     "execMs": 236
+    },
+    {
+     "turn": 15,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_evaluate_curve_segments",
+     "reqBytes": 242,
+     "respBytes": 619,
+     "isError": false,
+     "startedMs": 129500,
+     "execMs": 33
+    },
+    {
+     "turn": 16,
+     "name": "plasticity_batch",
+     "routedTo": "batch(1 steps: evaluate_curve_segments)",
+     "reqBytes": 3607,
+     "respBytes": 2429,
+     "isError": false,
+     "startedMs": 147390,
+     "execMs": 45
+    },
+    {
+     "turn": 17,
+     "name": "plasticity_batch",
+     "routedTo": "batch(27 steps: delete,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve)",
+     "reqBytes": 3818,
+     "respBytes": 5844,
+     "isError": true,
+     "startedMs": 200902,
+     "execMs": 11112,
+     "errorText": "{\"failedStep\":21,\"toolName\":\"plasticity_loft_curves\",\"error\":\"CDP request timed out: Runtime.callFunctionOn\",\"completedSteps\":[{\"step\":0,\"toolName\":\"plasticity_delete\",\"removed\":[1333,1334,1335,1336,1337,1338,1339,1340],\"regionsAdded\":[\"2422r390594\"]},{\"step\":1,\"toolName\":\"plasticity_create_nurbs_curve\",\"added\":[1341],\"addedBodies\":[{\"id\":1341,\"versionId\":2423,\"type\":\"Wire\",\"name\":\"Curve.003\",\"bou"
+    },
+    {
+     "turn": 18,
+     "name": "plasticity_reconcile",
+     "reqBytes": 2,
+     "respBytes": 28271,
+     "isError": false,
+     "startedMs": 215189,
+     "execMs": 13
+    },
+    {
+     "turn": 19,
+     "name": "plasticity_batch",
+     "routedTo": "batch(6 steps: loft_curves,cap_sheet_holes,describe_body,create_box,create_body_intersection_curves,inspect_curve_structure)",
+     "reqBytes": 812,
+     "respBytes": 2991,
+     "isError": false,
+     "startedMs": 226158,
+     "execMs": 584
+    },
+    {
+     "turn": 20,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: evaluate_curve_segments,evaluate_curve_segments)",
+     "reqBytes": 7477,
+     "respBytes": 4920,
+     "isError": false,
+     "startedMs": 258811,
+     "execMs": 56
+    },
+    {
+     "turn": 21,
+     "name": "plasticity_batch",
+     "routedTo": "batch(20 steps: delete,create_control_point_curve,create_control_point_curve,create_control_point_curve,create_control_point_curve,create_control_point_curve,create_control_point_curve,create_control_point_curve,create_control_point_curve,create_control_point_curve,create_control_point_curve,create_control_point_curve)",
+     "reqBytes": 2714,
+     "respBytes": 8834,
+     "isError": false,
+     "startedMs": 306569,
+     "execMs": 2600
+    },
+    {
+     "turn": 22,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: evaluate_curve_segments,evaluate_curve_segments)",
+     "reqBytes": 7419,
+     "respBytes": 4934,
+     "isError": false,
+     "startedMs": 343376,
+     "execMs": 77
+    },
+    {
+     "turn": 23,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: delete,evaluate_curve_segments)",
+     "reqBytes": 539,
+     "respBytes": 504,
+     "isError": false,
+     "startedMs": 376112,
+     "execMs": 147
+    },
+    {
+     "turn": 24,
+     "name": "plasticity_batch",
+     "routedTo": "batch(1 steps: evaluate_curve_segments)",
+     "reqBytes": 1330,
+     "respBytes": 941,
+     "isError": false,
+     "startedMs": 392340,
+     "execMs": 54
+    },
+    {
+     "turn": 25,
+     "name": "plasticity_batch",
+     "routedTo": "batch(14 steps: create_control_point_curve,create_control_point_curve,create_control_point_curve,create_control_point_curve,create_control_point_curve,create_control_point_curve,create_control_point_curve,create_control_point_curve,loft_curves,cap_sheet_holes,describe_body,create_box)",
+     "reqBytes": 2549,
+     "respBytes": 6532,
+     "isError": false,
+     "startedMs": 412054,
+     "execMs": 1176
+    },
+    {
+     "turn": 26,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: evaluate_curve_segments,evaluate_curve_segments)",
+     "reqBytes": 7419,
+     "respBytes": 4931,
+     "isError": false,
+     "startedMs": 445580,
+     "execMs": 527
+    },
+    {
+     "turn": 27,
+     "name": "plasticity_batch",
+     "routedTo": "batch(8 steps: delete,create_box,create_body_intersection_curves,inspect_curve_structure,delete,hollow_faces,describe_body,find_faces)",
+     "reqBytes": 969,
+     "respBytes": 3347,
+     "isError": false,
+     "startedMs": 466415,
+     "execMs": 775
+    },
+    {
+     "turn": 28,
+     "name": "plasticity_find_edges",
+     "reqBytes": 130,
+     "respBytes": 1772,
+     "isError": false,
+     "startedMs": 475036,
+     "execMs": 12
+    },
+    {
+     "turn": 28,
+     "name": "plasticity_screenshot",
+     "reqBytes": 2,
+     "respBytes": 41,
+     "isError": false,
+     "startedMs": 475036,
+     "execMs": 200
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 3984,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 9141,
+     "execMs": 581,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 5393,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 7,
+     "respBytes": 10711,
+     "execMs": -8220,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 5911,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2034,
+     "execMs": 174,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 4,
+     "modelMs": 5664,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 172,
+     "execMs": 73,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 5,
+     "modelMs": 2505,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1729,
+     "execMs": 43,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 6,
+     "modelMs": 3937,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 3411,
+     "execMs": 80,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 7,
+     "modelMs": 3806,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 3238,
+     "execMs": 189,
+     "thinkingChars": 0,
+     "textChars": 27
+    },
+    {
+     "turn": 8,
+     "modelMs": 11136,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 9641,
+     "execMs": 31,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 9,
+     "modelMs": 33025,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 5415,
+     "execMs": -116,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 10,
+     "modelMs": 11849,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2502,
+     "execMs": 428,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 11,
+     "modelMs": 10591,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2798,
+     "execMs": 453,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 12,
+     "modelMs": 10507,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 5188,
+     "execMs": 46,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 13,
+     "modelMs": 5043,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 4,
+     "respBytes": 5488,
+     "execMs": -2943,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 14,
+     "modelMs": 6887,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 3361,
+     "execMs": 236,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 15,
+     "modelMs": 6072,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 619,
+     "execMs": 33,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 16,
+     "modelMs": 17857,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2429,
+     "execMs": 45,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 17,
+     "modelMs": 53468,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 5844,
+     "execMs": 11112,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 18,
+     "modelMs": 3175,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 28271,
+     "execMs": 13,
+     "thinkingChars": 0,
+     "textChars": 45
+    },
+    {
+     "turn": 19,
+     "modelMs": 10955,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2991,
+     "execMs": 584,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 20,
+     "modelMs": 32069,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 4920,
+     "execMs": 56,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 21,
+     "modelMs": 47702,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 8834,
+     "execMs": 2600,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 22,
+     "modelMs": 34207,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 4934,
+     "execMs": 77,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 23,
+     "modelMs": 32658,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 504,
+     "execMs": 147,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 24,
+     "modelMs": 16081,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 941,
+     "execMs": 54,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 25,
+     "modelMs": 19660,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 6532,
+     "execMs": 1176,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 26,
+     "modelMs": 32350,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 4931,
+     "execMs": 527,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 27,
+     "modelMs": 20307,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 3347,
+     "execMs": 775,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 28,
+     "modelMs": 7846,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 1813,
+     "execMs": 212,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 29,
+     "modelMs": 5190,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 0,
+     "respBytes": 0,
+     "execMs": 0,
+     "thinkingChars": 0,
+     "textChars": 19
+    }
+   ],
+   "tokens": {
+    "input": 58,
+    "output": 46581,
+    "cacheRead": 2127602,
+    "cacheWrite": 125534
+   },
+   "costUsd": 4.297768400000001,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 1389",
+   "documentScaleAtEnd": {
+    "bodies": 8,
+    "totalFaces": 16
+   },
+   "verification": {
+    "passed": 10,
+    "of": 11,
+    "failed": [
+     "end end open: one annular rim at x=2120, outer circle O20, inner O16 (area of the ring = pi*(ro^2-ri^2))"
+    ],
+    "bodyId": 1389,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        1389
+       ],
+       "said": 1389,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "nacelle: valid closed Solid (native B-Rep Check)",
+      "ok": true,
+      "tol": "exact (native Check)",
+      "actual": {
+       "type": "Solid",
+       "closed": true,
+       "nativeValid": true,
+       "codes": []
+      }
+     },
+     {
+      "check": "length 120 along x (union of exact face bounds)",
+      "tol": "+-0.5 mm",
+      "ok": true,
+      "actual": [
+       2000,
+       2120
+      ]
+     },
+     {
+      "check": "section extents: width (y) 60, height (z) 40 (largest sections: mid station and the O40 end)",
+      "tol": "+-1.0 mm (loft overshoot allowance)",
+      "ok": true,
+      "actual": {
+       "y": 60.783,
+       "z": 39.959
+      }
+     },
+     {
+      "check": "start end open: one annular rim at x=2000, outer circle O40, inner O36 (area of the ring = pi*(ro^2-ri^2))",
+      "tol": "diameter +-0.5 mm; ring area +-8% (slope of the shell widens the in-plane ring)",
+      "ok": true,
+      "actual": {
+       "rimFaces": 1,
+       "areaMm2": 248.585
+      }
+     },
+     {
+      "check": "end end open: one annular rim at x=2120, outer circle O20, inner O16 (area of the ring = pi*(ro^2-ri^2))",
+      "tol": "diameter +-0.5 mm; ring area +-8% (slope of the shell widens the in-plane ring)",
+      "ok": false,
+      "actual": {
+       "rimFaces": 1,
+       "areaMm2": 122.342
+      }
+     },
+     {
+      "check": "mid-station (x=2060) section is 60 x 30 (exact bounds of a 0.2 mm slab cut through a copy)",
+      "tol": "+-0.5 mm",
+      "ok": true,
+      "actual": {
+       "y": 60.017,
+       "z": 30.017
+      }
+     },
+     {
+      "check": "wall thickness 2 at three stations (x=2030, 2060, 2090), from outer minus inner slab extents; slope allowance included",
+      "tol": "+-0.2 mm (0.1 plus up to 0.1 mm for the surface slope)",
+      "ok": true,
+      "actual": [
+       {
+        "y": 2.023,
+        "z": 2.01
+       },
+       {
+        "y": 2.007,
+        "z": 2.006
+       },
+       {
+        "y": 2.106,
+        "z": 2.008
+       }
+      ]
+     },
+     {
+      "check": "mean wall thickness 2 (exact volume / mean of the outer and inner lateral areas; needs exactly 2 lateral faces)",
+      "tol": "+-0.1 mm",
+      "ok": true,
+      "actual": {
+       "volumeMm3": 32771.212,
+       "lateralFaces": 2,
+       "meanThickness": 1.997
+      }
+     },
+     {
+      "check": "no planar lateral faces (only the two end rims are planar)",
+      "tol": "face type",
+      "ok": true,
+      "actual": 0
+     },
+     {
+      "check": "lateral surface is tangent-continuous along its length: every seam between two non-planar faces is G1 (analyze_surface_continuity; normal angle <= 1.0 deg, position <= 0.05 mm); vacuous when the lateral is one face",
+      "tol": "<=1.0 deg",
+      "ok": true,
+      "actual": {
+       "seams": 0,
+       "analysed": 0,
+       "skipped": 0,
+       "worstNormalDeg": 0,
+       "lateralFaces": 2
+      }
+     }
+    ]
+   },
+   "screenshot": {
+    "path": "shots/S1-r1.png",
+    "mode": "window"
+   },
+   "transcript": "transcripts-baseline/S1-r1.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 90
+   }
+  },
+  {
+   "part": "S1",
+   "run": 2,
+   "label": "baseline",
+   "prompt": "Build me a streamlined fairing for a drone in Plasticity (millimetres): a closed body about 120 mm long whose axis runs along the world X direction, from x=2000 to x=2120, with its centre line at y=0, z=30. At x=2000 its cross-section is a circle of 40 mm diameter. At x=2060, the middle, it is a rounded rectangle 60 mm wide (y) by 30 mm high (z) with 8 mm corner radius. At x=2120 it is a circle of 20 mm diameter. The skin must flow smoothly along the whole length, with no creases or kinks anywhere. Cap both ends flat, then shell the body to a 2 mm wall with both ends open. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/bench-2026-11-run-gji2P0/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 80 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 273559,
+   "startupMs": 1127,
+   "turns": 27,
+   "toolCalls": 41,
+   "toolCallsByName": {
+    "plasticity_call": 14,
+    "plasticity_describe_body": 1,
+    "plasticity_batch": 11,
+    "plasticity_call:plasticity_list_curve_vertices": 1,
+    "plasticity_screenshot": 5,
+    "plasticity_call:plasticity_inspect_curve_structure": 1,
+    "plasticity_body_info": 2,
+    "plasticity_undo": 4,
+    "plasticity_call:plasticity_analyze_surface_continuity": 1,
+    "plasticity_find_edges": 1
+   },
+   "errors": 5,
+   "retries": 5,
+   "requestBytes": 10637,
+   "responseBytes": 104846,
+   "serverExecMs": -1513,
+   "serverTimeShare": -0.006,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_call",
+     "reqBytes": 83,
+     "respBytes": 6060,
+     "isError": false,
+     "startedMs": 5039,
+     "execMs": 55
+    },
+    {
+     "turn": 1,
+     "name": "plasticity_describe_body",
+     "reqBytes": 2,
+     "respBytes": 1226,
+     "isError": false,
+     "startedMs": 5039,
+     "execMs": 532
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 34,
+     "respBytes": 1864,
+     "isError": false,
+     "startedMs": 10083,
+     "execMs": -1671
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 35,
+     "respBytes": 1009,
+     "isError": false,
+     "startedMs": 10083,
+     "execMs": -1155
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 36,
+     "respBytes": 1747,
+     "isError": false,
+     "startedMs": 10083,
+     "execMs": -885
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 38,
+     "respBytes": 818,
+     "isError": false,
+     "startedMs": 10083,
+     "execMs": -398
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 69,
+     "respBytes": 2188,
+     "isError": false,
+     "startedMs": 10083,
+     "execMs": 28
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_call",
+     "reqBytes": 38,
+     "respBytes": 1698,
+     "isError": false,
+     "startedMs": 16242,
+     "execMs": -716
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_call",
+     "reqBytes": 44,
+     "respBytes": 1315,
+     "isError": false,
+     "startedMs": 16242,
+     "execMs": -241
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_call",
+     "reqBytes": 46,
+     "respBytes": 1279,
+     "isError": false,
+     "startedMs": 16242,
+     "execMs": 5
+    },
+    {
+     "turn": 4,
+     "name": "plasticity_batch",
+     "routedTo": "batch(4 steps: create_circle,create_polyline,create_circle,list_curve_vertices)",
+     "reqBytes": 446,
+     "respBytes": 2031,
+     "isError": false,
+     "startedMs": 22230,
+     "execMs": 258
+    },
+    {
+     "turn": 5,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: fillet_curve_vertices,inspect_curve_structure)",
+     "reqBytes": 320,
+     "respBytes": 172,
+     "isError": true,
+     "startedMs": 26595,
+     "execMs": 86,
+     "errorText": "{\"failedStep\":0,\"toolName\":\"plasticity_fillet_curve_vertices\",\"error\":\"Stale or unknown curve vertices: 1402:0, 1402:1, 1402:2, 1402:3\",\"completedSteps\":[],\"undoneSteps\":0}"
+    },
+    {
+     "turn": 6,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_list_curve_vertices",
+     "reqBytes": 72,
+     "respBytes": 1729,
+     "isError": false,
+     "startedMs": 29501,
+     "execMs": 27
+    },
+    {
+     "turn": 7,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: fillet_curve_vertices,inspect_curve_structure)",
+     "reqBytes": 340,
+     "respBytes": 286,
+     "isError": true,
+     "startedMs": 33169,
+     "execMs": 190,
+     "errorText": "{\"failedStep\":1,\"toolName\":\"plasticity_inspect_curve_structure\",\"error\":\"$0.added[0] is out of range: step 0 added has 0\",\"completedSteps\":[{\"step\":0,\"toolName\":\"plasticity_fillet_curve_vertices\",\"added\":[],\"removed\":[],\"regionsAdded\":[\"2733r412737\"],\"addedBodies\":[]}],\"undoneSteps\":1}"
+    },
+    {
+     "turn": 8,
+     "name": "plasticity_batch",
+     "routedTo": "batch(5 steps: fillet_curve_vertices,inspect_curve_structure,loft_curves,cap_sheet_holes,status)",
+     "reqBytes": 740,
+     "respBytes": 417,
+     "isError": true,
+     "startedMs": 39109,
+     "execMs": 90,
+     "errorText": "{\"failedStep\":1,\"toolName\":\"plasticity_inspect_curve_structure\",\"error\":\"step 1 (plasticity_inspect_curve_structure): return path \\\"curves[*].segments[*].type\\\" does not resolve: missing .type; available top-level keys: documentToken, revision, curves\",\"completedSteps\":[{\"step\":0,\"toolName\":\"plasticity_fillet_curve_vertices\",\"added\":[],\"removed\":[],\"regionsAdded\":[\"2736r413082\"],\"addedBodies\":[]}]"
+    },
+    {
+     "turn": 9,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps: loft_curves,cap_sheet_holes,status)",
+     "reqBytes": 366,
+     "respBytes": 1033,
+     "isError": false,
+     "startedMs": 43290,
+     "execMs": 279
+    },
+    {
+     "turn": 10,
+     "name": "plasticity_screenshot",
+     "reqBytes": 2,
+     "respBytes": 41,
+     "isError": false,
+     "startedMs": 48145,
+     "execMs": -416
+    },
+    {
+     "turn": 10,
+     "name": "plasticity_call",
+     "reqBytes": 112,
+     "respBytes": 3248,
+     "isError": false,
+     "startedMs": 48145,
+     "execMs": 43
+    },
+    {
+     "turn": 11,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_inspect_curve_structure",
+     "reqBytes": 86,
+     "respBytes": 171,
+     "isError": true,
+     "startedMs": 60726,
+     "execMs": -461,
+     "errorText": "[\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"revision\"\n    ],\n    \"message\": \"Invalid input: expected string, received undefined\"\n  }\n]"
+    },
+    {
+     "turn": 11,
+     "name": "plasticity_body_info",
+     "reqBytes": 39,
+     "respBytes": 3159,
+     "isError": false,
+     "startedMs": 60726,
+     "execMs": 31
+    },
+    {
+     "turn": 12,
+     "name": "plasticity_call",
+     "reqBytes": 41,
+     "respBytes": 956,
+     "isError": false,
+     "startedMs": 69313,
+     "execMs": -932
+    },
+    {
+     "turn": 12,
+     "name": "plasticity_call",
+     "reqBytes": 49,
+     "respBytes": 1662,
+     "isError": false,
+     "startedMs": 69313,
+     "execMs": -386
+    },
+    {
+     "turn": 12,
+     "name": "plasticity_undo",
+     "reqBytes": 44,
+     "respBytes": 4458,
+     "isError": false,
+     "startedMs": 69313,
+     "execMs": 132
+    },
+    {
+     "turn": 13,
+     "name": "plasticity_batch",
+     "routedTo": "batch(7 steps: create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,loft_curves,cap_sheet_holes,body_info)",
+     "reqBytes": 987,
+     "respBytes": 2505,
+     "isError": false,
+     "startedMs": 79097,
+     "execMs": 398
+    },
+    {
+     "turn": 14,
+     "name": "plasticity_body_info",
+     "reqBytes": 25,
+     "respBytes": 6246,
+     "isError": false,
+     "startedMs": 83856,
+     "execMs": 17
+    },
+    {
+     "turn": 14,
+     "name": "plasticity_screenshot",
+     "reqBytes": 2,
+     "respBytes": 42,
+     "isError": false,
+     "startedMs": 83856,
+     "execMs": 126
+    },
+    {
+     "turn": 15,
+     "name": "plasticity_undo",
+     "reqBytes": 45,
+     "respBytes": 5245,
+     "isError": false,
+     "startedMs": 138483,
+     "execMs": 274
+    },
+    {
+     "turn": 16,
+     "name": "plasticity_batch",
+     "routedTo": "batch(11 steps: create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,loft_curves,cap_sheet_holes,body_info)",
+     "reqBytes": 1799,
+     "respBytes": 2474,
+     "isError": true,
+     "startedMs": 148664,
+     "execMs": 427,
+     "errorText": "{\"failedStep\":8,\"toolName\":\"plasticity_loft_curves\",\"error\":\"Plasticity command failed: Error: At least one guide is not touching one of the profiles\",\"completedSteps\":[{\"step\":0,\"toolName\":\"plasticity_create_nurbs_curve\",\"added\":[1410],\"addedBodies\":[{\"id\":1410,\"versionId\":2761,\"type\":\"Wire\",\"name\":\"Curve.003\",\"boundsMm\":{\"min\":[2000,9.652,32.615],\"max\":[2120,35.051,37.992]},\"boundsMethod\":\"nativ"
+    },
+    {
+     "turn": 16,
+     "name": "plasticity_screenshot",
+     "reqBytes": 2,
+     "respBytes": 42,
+     "isError": false,
+     "startedMs": 148664,
+     "execMs": 585
+    },
+    {
+     "turn": 17,
+     "name": "plasticity_batch",
+     "routedTo": "batch(12 steps: delete,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,create_nurbs_curve,loft_curves,cap_sheet_holes,body_info)",
+     "reqBytes": 2054,
+     "respBytes": 4570,
+     "isError": false,
+     "startedMs": 201922,
+     "execMs": 538
+    },
+    {
+     "turn": 17,
+     "name": "plasticity_screenshot",
+     "reqBytes": 2,
+     "respBytes": 42,
+     "isError": false,
+     "startedMs": 201922,
+     "execMs": 629
+    },
+    {
+     "turn": 18,
+     "name": "plasticity_call",
+     "reqBytes": 47,
+     "respBytes": 2384,
+     "isError": false,
+     "startedMs": 207995,
+     "execMs": 6
+    },
+    {
+     "turn": 19,
+     "name": "plasticity_call",
+     "reqBytes": 45,
+     "respBytes": 1733,
+     "isError": false,
+     "startedMs": 213136,
+     "execMs": 11
+    },
+    {
+     "turn": 20,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: imprint_curves_on_body,body_info)",
+     "reqBytes": 428,
+     "respBytes": 2684,
+     "isError": false,
+     "startedMs": 217740,
+     "execMs": 179
+    },
+    {
+     "turn": 21,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_analyze_surface_continuity",
+     "reqBytes": 1137,
+     "respBytes": 19797,
+     "isError": false,
+     "startedMs": 225234,
+     "execMs": 84
+    },
+    {
+     "turn": 22,
+     "name": "plasticity_undo",
+     "reqBytes": 35,
+     "respBytes": 7718,
+     "isError": false,
+     "startedMs": 238890,
+     "execMs": 87
+    },
+    {
+     "turn": 23,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: find_faces,show_face_control_points)",
+     "reqBytes": 310,
+     "respBytes": 1069,
+     "isError": false,
+     "startedMs": 243544,
+     "execMs": 128
+    },
+    {
+     "turn": 24,
+     "name": "plasticity_undo",
+     "reqBytes": 35,
+     "respBytes": 7716,
+     "isError": false,
+     "startedMs": 253365,
+     "execMs": 91
+    },
+    {
+     "turn": 25,
+     "name": "plasticity_batch",
+     "routedTo": "batch(4 steps: find_faces,hollow_faces,describe_body,find_edges)",
+     "reqBytes": 510,
+     "respBytes": 946,
+     "isError": false,
+     "startedMs": 258903,
+     "execMs": 146
+    },
+    {
+     "turn": 25,
+     "name": "plasticity_screenshot",
+     "reqBytes": 2,
+     "respBytes": 42,
+     "isError": false,
+     "startedMs": 258903,
+     "execMs": 239
+    },
+    {
+     "turn": 26,
+     "name": "plasticity_find_edges",
+     "reqBytes": 90,
+     "respBytes": 1024,
+     "isError": false,
+     "startedMs": 264944,
+     "execMs": 27
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 3912,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 7286,
+     "execMs": 587,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 4512,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 5,
+     "respBytes": 7626,
+     "execMs": -4081,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 6131,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 3,
+     "respBytes": 4292,
+     "execMs": -952,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 4,
+     "modelMs": 5982,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2031,
+     "execMs": 258,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 5,
+     "modelMs": 4107,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 172,
+     "execMs": 86,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 6,
+     "modelMs": 2819,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1729,
+     "execMs": 27,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 7,
+     "modelMs": 3641,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 286,
+     "execMs": 190,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 8,
+     "modelMs": 5750,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 417,
+     "execMs": 90,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 9,
+     "modelMs": 4092,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1033,
+     "execMs": 279,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 10,
+     "modelMs": 4575,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 3289,
+     "execMs": -373,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 11,
+     "modelMs": 12538,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 3330,
+     "execMs": -430,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 12,
+     "modelMs": 8557,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 3,
+     "respBytes": 7076,
+     "execMs": -1186,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 13,
+     "modelMs": 9652,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2505,
+     "execMs": 398,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 14,
+     "modelMs": 4361,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 6288,
+     "execMs": 143,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 15,
+     "modelMs": 54501,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 5245,
+     "execMs": 274,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 16,
+     "modelMs": 9907,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 2516,
+     "execMs": 1012,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 17,
+     "modelMs": 52673,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 4612,
+     "execMs": 1167,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 18,
+     "modelMs": 5445,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2384,
+     "execMs": 6,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 19,
+     "modelMs": 5134,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1733,
+     "execMs": 11,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 20,
+     "modelMs": 4593,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2684,
+     "execMs": 179,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 21,
+     "modelMs": 7315,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 19797,
+     "execMs": 84,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 22,
+     "modelMs": 13572,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 7718,
+     "execMs": 87,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 23,
+     "modelMs": 4567,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1069,
+     "execMs": 128,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 24,
+     "modelMs": 9694,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 7716,
+     "execMs": 91,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 25,
+     "modelMs": 5447,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 988,
+     "execMs": 385,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 26,
+     "modelMs": 5802,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1024,
+     "execMs": 27,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 27,
+     "modelMs": 5139,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 0,
+     "respBytes": 0,
+     "execMs": 0,
+     "thinkingChars": 0,
+     "textChars": 19
+    }
+   ],
+   "tokens": {
+    "input": 54,
+    "output": 21407,
+    "cacheRead": 1678066,
+    "cacheWrite": 95608
+   },
+   "costUsd": 2.7220532,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 1426",
+   "documentScaleAtEnd": {
+    "bodies": 16,
+    "totalFaces": 16
+   },
+   "verification": {
+    "passed": 10,
+    "of": 11,
+    "failed": [
+     "end end open: one annular rim at x=2120, outer circle O20, inner O16 (area of the ring = pi*(ro^2-ri^2))"
+    ],
+    "bodyId": 1426,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        1426
+       ],
+       "said": 1426,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "nacelle: valid closed Solid (native B-Rep Check)",
+      "ok": true,
+      "tol": "exact (native Check)",
+      "actual": {
+       "type": "Solid",
+       "closed": true,
+       "nativeValid": true,
+       "codes": []
+      }
+     },
+     {
+      "check": "length 120 along x (union of exact face bounds)",
+      "tol": "+-0.5 mm",
+      "ok": true,
+      "actual": [
+       2000,
+       2120
+      ]
+     },
+     {
+      "check": "section extents: width (y) 60, height (z) 40 (largest sections: mid station and the O40 end)",
+      "tol": "+-1.0 mm (loft overshoot allowance)",
+      "ok": true,
+      "actual": {
+       "y": 60.631,
+       "z": 39.959
+      }
+     },
+     {
+      "check": "start end open: one annular rim at x=2000, outer circle O40, inner O36 (area of the ring = pi*(ro^2-ri^2))",
+      "tol": "diameter +-0.5 mm; ring area +-8% (slope of the shell widens the in-plane ring)",
+      "ok": true,
+      "actual": {
+       "rimFaces": 1,
+       "areaMm2": 247.904
+      }
+     },
+     {
+      "check": "end end open: one annular rim at x=2120, outer circle O20, inner O16 (area of the ring = pi*(ro^2-ri^2))",
+      "tol": "diameter +-0.5 mm; ring area +-8% (slope of the shell widens the in-plane ring)",
+      "ok": false,
+      "actual": {
+       "rimFaces": 1,
+       "areaMm2": 122.889
+      }
+     },
+     {
+      "check": "mid-station (x=2060) section is 60 x 30 (exact bounds of a 0.2 mm slab cut through a copy)",
+      "tol": "+-0.5 mm",
+      "ok": true,
+      "actual": {
+       "y": 60.014,
+       "z": 30.016
+      }
+     },
+     {
+      "check": "wall thickness 2 at three stations (x=2030, 2060, 2090), from outer minus inner slab extents; slope allowance included",
+      "tol": "+-0.2 mm (0.1 plus up to 0.1 mm for the surface slope)",
+      "ok": true,
+      "actual": [
+       {
+        "y": 2.019,
+        "z": 2.012
+       },
+       {
+        "y": 2.005,
+        "z": 2.006
+       },
+       {
+        "y": 2.104,
+        "z": 2.008
+       }
+      ]
+     },
+     {
+      "check": "mean wall thickness 2 (exact volume / mean of the outer and inner lateral areas; needs exactly 2 lateral faces)",
+      "tol": "+-0.1 mm",
+      "ok": true,
+      "actual": {
+       "volumeMm3": 32895.951,
+       "lateralFaces": 2,
+       "meanThickness": 2.005
+      }
+     },
+     {
+      "check": "no planar lateral faces (only the two end rims are planar)",
+      "tol": "face type",
+      "ok": true,
+      "actual": 0
+     },
+     {
+      "check": "lateral surface is tangent-continuous along its length: every seam between two non-planar faces is G1 (analyze_surface_continuity; normal angle <= 1.0 deg, position <= 0.05 mm); vacuous when the lateral is one face",
+      "tol": "<=1.0 deg",
+      "ok": true,
+      "actual": {
+       "seams": 0,
+       "analysed": 0,
+       "skipped": 0,
+       "worstNormalDeg": 0,
+       "lateralFaces": 2
+      }
+     }
+    ]
+   },
+   "screenshot": {
+    "path": "shots/S1-r2.png",
+    "mode": "window"
+   },
+   "transcript": "transcripts-baseline/S1-r2.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 33
+   }
+  },
+  {
+   "part": "S2",
+   "run": 1,
+   "label": "baseline",
+   "prompt": "Make an ergonomic grip pad in Plasticity (millimetres). The footprint is a 90 x 50 mm rounded rectangle with 12 mm corner radius, lower-left corner at x=2000, y=0, z=0. The pad is 8 mm tall at the rim. Its top is a smoothly crowned surface that rises to 14 mm at the centre of the pad: no flat top, and no crease where the crown meets the rim. At minimum the crown must be tangent-continuous (G1) with the rim; curvature-continuous (G2) if you can. The bottom is flat. Round all bottom edges with a 1 mm radius. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/bench-2026-11-run-31lCS7/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 80 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 200111,
+   "startupMs": 879,
+   "turns": 21,
+   "toolCalls": 26,
+   "toolCallsByName": {
+    "plasticity_call": 9,
+    "plasticity_batch": 17
+   },
+   "errors": 9,
+   "retries": 9,
+   "requestBytes": 14704,
+   "responseBytes": 48276,
+   "serverExecMs": 1334,
+   "serverTimeShare": 0.007,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_call",
+     "reqBytes": 111,
+     "respBytes": 11616,
+     "isError": false,
+     "startedMs": 7543,
+     "execMs": 58
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 35,
+     "respBytes": 2111,
+     "isError": false,
+     "startedMs": 14455,
+     "execMs": -1207
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 49,
+     "respBytes": 1662,
+     "isError": false,
+     "startedMs": 14455,
+     "execMs": -731
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 110,
+     "respBytes": 5050,
+     "isError": false,
+     "startedMs": 14455,
+     "execMs": 34
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_batch",
+     "routedTo": "batch(8 steps: create_box,fillet,fillet,create_nurbs_curve,find_faces,find_edges,xsided_patch,describe_body)",
+     "reqBytes": 1100,
+     "respBytes": 1369,
+     "isError": true,
+     "startedMs": 35817,
+     "execMs": -89,
+     "errorText": "{\"failedStep\":6,\"toolName\":\"plasticity_xsided_patch\",\"error\":\"Plasticity command failed: Error: XNurbs operation failed with error `30`.\",\"completedSteps\":[{\"step\":0,\"toolName\":\"plasticity_create_box\",\"added\":[1433],\"addedBodies\":[{\"id\":1433,\"versionId\":2849,\"type\":\"Solid\",\"name\":\"Grip pad\",\"boundsMm\":{\"min\":[2000,0,0],\"max\":[2090,50,8]},\"boundsMethod\":\"native-box\",\"faceCount\":6,\"edgeCount\":12,\"ve"
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_call",
+     "reqBytes": 55,
+     "respBytes": 1496,
+     "isError": false,
+     "startedMs": 35817,
+     "execMs": -59
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_call",
+     "reqBytes": 34,
+     "respBytes": 1599,
+     "isError": false,
+     "startedMs": 35817,
+     "execMs": 6
+    },
+    {
+     "turn": 4,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: xsided_patch,describe_body)",
+     "reqBytes": 319,
+     "respBytes": 174,
+     "isError": true,
+     "startedMs": 40218,
+     "execMs": 78,
+     "errorText": "{\"failedStep\":0,\"toolName\":\"plasticity_xsided_patch\",\"error\":\"Plasticity command failed: Error: XNurbs operation failed with error `30`.\",\"completedSteps\":[],\"undoneSteps\":0}"
+    },
+    {
+     "turn": 5,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: xsided_patch,describe_body)",
+     "reqBytes": 319,
+     "respBytes": 174,
+     "isError": true,
+     "startedMs": 44993,
+     "execMs": 68,
+     "errorText": "{\"failedStep\":0,\"toolName\":\"plasticity_xsided_patch\",\"error\":\"Plasticity command failed: Error: XNurbs operation failed with error `30`.\",\"completedSteps\":[],\"undoneSteps\":0}"
+    },
+    {
+     "turn": 6,
+     "name": "plasticity_call",
+     "reqBytes": 35,
+     "respBytes": 975,
+     "isError": false,
+     "startedMs": 50355,
+     "execMs": -719
+    },
+    {
+     "turn": 6,
+     "name": "plasticity_call",
+     "reqBytes": 34,
+     "respBytes": 787,
+     "isError": false,
+     "startedMs": 50355,
+     "execMs": -294
+    },
+    {
+     "turn": 6,
+     "name": "plasticity_call",
+     "reqBytes": 46,
+     "respBytes": 768,
+     "isError": false,
+     "startedMs": 50355,
+     "execMs": 6
+    },
+    {
+     "turn": 7,
+     "name": "plasticity_batch",
+     "routedTo": "batch(4 steps: delete_faces,find_edges,xsided_patch,describe_body)",
+     "reqBytes": 458,
+     "respBytes": 520,
+     "isError": true,
+     "startedMs": 54647,
+     "execMs": 151,
+     "errorText": "{\"failedStep\":2,\"toolName\":\"plasticity_xsided_patch\",\"error\":\"Plasticity command failed: Error: XNurbs operation failed with error `25`.\",\"completedSteps\":[{\"step\":0,\"toolName\":\"plasticity_delete_faces\"},{\"step\":1,\"toolName\":\"plasticity_find_edges\",\"result\":{\"matches[*].id\":[\"2854e423835\",\"2854e423539\",\"2854e423813\",\"2854e423527\",\"2854e423477\",\"2854e423857\",\"2854e423455\",\"2854e423449\",\"2854e423443"
+    },
+    {
+     "turn": 8,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps: find_edges,xsided_patch,describe_body)",
+     "reqBytes": 341,
+     "respBytes": 360,
+     "isError": true,
+     "startedMs": 59808,
+     "execMs": 121,
+     "errorText": "{\"failedStep\":1,\"toolName\":\"plasticity_xsided_patch\",\"error\":\"Plasticity command failed: Error: XNurbs operation failed with error `27`.\",\"completedSteps\":[{\"step\":0,\"toolName\":\"plasticity_find_edges\",\"result\":{\"matches[*].id\":[\"2854e423455\",\"2854e423449\",\"2854e423443\",\"2854e423437\",\"2854e423409\",\"2854e423377\",\"2854e423429\",\"2854e423419\"]}}],\"undoneSteps\":0}"
+    },
+    {
+     "turn": 9,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: xsided_patch,describe_body)",
+     "reqBytes": 304,
+     "respBytes": 174,
+     "isError": true,
+     "startedMs": 63743,
+     "execMs": 121,
+     "errorText": "{\"failedStep\":0,\"toolName\":\"plasticity_xsided_patch\",\"error\":\"Plasticity command failed: Error: XNurbs operation failed with error `27`.\",\"completedSteps\":[],\"undoneSteps\":0}"
+    },
+    {
+     "turn": 10,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: xsided_patch,describe_body)",
+     "reqBytes": 304,
+     "respBytes": 174,
+     "isError": true,
+     "startedMs": 67860,
+     "execMs": 119,
+     "errorText": "{\"failedStep\":0,\"toolName\":\"plasticity_xsided_patch\",\"error\":\"Plasticity command failed: Error: XNurbs operation failed with error `27`.\",\"completedSteps\":[],\"undoneSteps\":0}"
+    },
+    {
+     "turn": 11,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: xsided_patch,describe_body)",
+     "reqBytes": 304,
+     "respBytes": 2923,
+     "isError": false,
+     "startedMs": 72061,
+     "execMs": 133
+    },
+    {
+     "turn": 12,
+     "name": "plasticity_batch",
+     "routedTo": "batch(12 steps: delete,create_box,fillet,fillet,fillet,create_nurbs_curve,find_faces,delete_faces,find_edges,xsided_patch,join_sheets,describe_body)",
+     "reqBytes": 1649,
+     "respBytes": 4481,
+     "isError": false,
+     "startedMs": 108468,
+     "execMs": 636
+    },
+    {
+     "turn": 13,
+     "name": "plasticity_batch",
+     "routedTo": "batch(8 steps: find_faces,find_edges,find_edges,create_box,create_box,create_box,check_interference,delete)",
+     "reqBytes": 1176,
+     "respBytes": 2386,
+     "isError": false,
+     "startedMs": 123905,
+     "execMs": 265
+    },
+    {
+     "turn": 14,
+     "name": "plasticity_batch",
+     "routedTo": "batch(7 steps: create_box,create_box,create_box,create_box,create_box,check_interference,delete)",
+     "reqBytes": 962,
+     "respBytes": 604,
+     "isError": false,
+     "startedMs": 133251,
+     "execMs": 491
+    },
+    {
+     "turn": 15,
+     "name": "plasticity_batch",
+     "routedTo": "batch(7 steps: create_box,create_box,create_box,create_box,create_box,check_interference,delete)",
+     "reqBytes": 1034,
+     "respBytes": 1893,
+     "isError": true,
+     "startedMs": 141430,
+     "execMs": 445,
+     "errorText": "{\"failedStep\":5,\"toolName\":\"plasticity_check_interference\",\"error\":\"step 5 (plasticity_check_interference): return path \\\"pairs[*].intersectionBoundsMm\\\" does not resolve: missing .intersectionBoundsMm; available top-level keys: sessionId, documentToken, revision, source, pairs\",\"completedSteps\":[{\"step\":0,\"toolName\":\"plasticity_create_box\",\"added\":[1447],\"addedBodies\":[{\"id\":1447,\"versionId\":2873"
+    },
+    {
+     "turn": 16,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: check_interference,delete)",
+     "reqBytes": 421,
+     "respBytes": 638,
+     "isError": false,
+     "startedMs": 145938,
+     "execMs": 212
+    },
+    {
+     "turn": 17,
+     "name": "plasticity_batch",
+     "routedTo": "batch(6 steps: create_box,create_box,check_interference,delete,analyze_surface_continuity,call)",
+     "reqBytes": 1412,
+     "respBytes": 613,
+     "isError": true,
+     "startedMs": 156557,
+     "execMs": 293,
+     "errorText": "{\"failedStep\":5,\"toolName\":\"plasticity_call\",\"error\":\"Unknown Plasticity MCP operation: plasticity_call\",\"completedSteps\":[{\"step\":0,\"toolName\":\"plasticity_create_box\",\"added\":[1452]},{\"step\":1,\"toolName\":\"plasticity_create_box\",\"added\":[1453]},{\"step\":2,\"toolName\":\"plasticity_check_interference\",\"result\":{\"pairs[*].status\":[\"no-volumetric-interference\",\"no-volumetric-interference\"]}},{\"step\":3,\"t"
+    },
+    {
+     "turn": 18,
+     "name": "plasticity_batch",
+     "routedTo": "batch(6 steps: create_box,create_box,create_box,check_interference,delete,analyze_surface_continuity)",
+     "reqBytes": 866,
+     "respBytes": 1431,
+     "isError": false,
+     "startedMs": 166106,
+     "execMs": 308
+    },
+    {
+     "turn": 19,
+     "name": "plasticity_batch",
+     "routedTo": "batch(16 steps: delete_faces,create_nurbs_curve,find_edges,xsided_patch,join_sheets,delete,create_box,create_box,create_box,create_box,create_box,check_interference)",
+     "reqBytes": 2134,
+     "respBytes": 2573,
+     "isError": false,
+     "startedMs": 182804,
+     "execMs": 752
+    },
+    {
+     "turn": 20,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps: analyze_surface_continuity,measure,measure_solid_properties)",
+     "reqBytes": 1092,
+     "respBytes": 1725,
+     "isError": false,
+     "startedMs": 192966,
+     "execMs": 136
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 6664,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 11616,
+     "execMs": 58,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 6854,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 3,
+     "respBytes": 8823,
+     "execMs": -1904,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 21328,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 3,
+     "respBytes": 4464,
+     "execMs": -142,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 4,
+     "modelMs": 4395,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 174,
+     "execMs": 78,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 5,
+     "modelMs": 4697,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 174,
+     "execMs": 68,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 6,
+     "modelMs": 5294,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 3,
+     "respBytes": 2530,
+     "execMs": -1007,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 7,
+     "modelMs": 4286,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 520,
+     "execMs": 151,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 8,
+     "modelMs": 5010,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 360,
+     "execMs": 121,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 9,
+     "modelMs": 3813,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 174,
+     "execMs": 121,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 10,
+     "modelMs": 3996,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 174,
+     "execMs": 119,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 11,
+     "modelMs": 4081,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2923,
+     "execMs": 133,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 12,
+     "modelMs": 36274,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 4481,
+     "execMs": 636,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 13,
+     "modelMs": 14802,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2386,
+     "execMs": 265,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 14,
+     "modelMs": 9081,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 604,
+     "execMs": 491,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 15,
+     "modelMs": 7687,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1893,
+     "execMs": 445,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 16,
+     "modelMs": 4063,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 638,
+     "execMs": 212,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 17,
+     "modelMs": 10407,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 613,
+     "execMs": 293,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 18,
+     "modelMs": 9257,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1431,
+     "execMs": 308,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 19,
+     "modelMs": 16390,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2573,
+     "execMs": 752,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 20,
+     "modelMs": 9410,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1725,
+     "execMs": 136,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 21,
+     "modelMs": 4526,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 0,
+     "respBytes": 0,
+     "execMs": 0,
+     "thinkingChars": 0,
+     "textChars": 158
+    }
+   ],
+   "tokens": {
+    "input": 42,
+    "output": 17034,
+    "cacheRead": 935915,
+    "cacheWrite": 42773
+   },
+   "costUsd": 1.553247,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 1436 (peak measured at 14.000–14.005 mm at the centre; the crown seam is G1 rather than G2, and reported bounds overstate the top at 14.38 mm).",
+   "documentScaleAtEnd": {
+    "bodies": 5,
+    "totalFaces": 38
+   },
+   "verification": {
+    "passed": 10,
+    "of": 10,
+    "failed": [],
+    "bodyId": 1436,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        1436
+       ],
+       "said": 1436,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "pad: valid closed Solid (native B-Rep Check)",
+      "ok": true,
+      "tol": "exact (native Check)",
+      "actual": {
+       "type": "Solid",
+       "closed": true,
+       "nativeValid": true,
+       "codes": []
+      }
+     },
+     {
+      "check": "pad (union of exact face bounds) bounds",
+      "tol": "+-0.2 mm",
+      "ok": true,
+      "expected": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2090,
+        50,
+        14
+       ]
+      },
+      "actual": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2090,
+        50,
+        14.002
+       ]
+      }
+     },
+     {
+      "check": "top (highest) face is non-planar (BSpline or equivalent)",
+      "tol": "surfaceType != Plane",
+      "ok": true,
+      "actual": {
+       "surfaceType": "BSurf",
+       "planar": false
+      }
+     },
+     {
+      "check": "crown peak at the plan centre (closest objective: crown face centre point and area centroid; a true peak read is impossible, sections fail on BSpline boundaries)",
+      "tol": "+-1 mm in x,y",
+      "ok": true,
+      "actual": {
+       "faceCentre": [
+        2045,
+        25,
+        14.002
+       ],
+       "areaCentroid": [
+        2045,
+        25,
+        12.472
+       ]
+      }
+     },
+     {
+      "check": "crown peak height 14 (crown face exact bounds max z)",
+      "tol": "+-0.2 mm",
+      "ok": true,
+      "actual": 14.002
+     },
+     {
+      "check": "rim height 8 at the four side midpoints: either the top of the rim blend (highest non-crown face within 1 mm of the midpoint) or the top of the vertical side wall is 8",
+      "tol": "+-0.3 mm",
+      "ok": true,
+      "actual": [
+       {
+        "at": "x-",
+        "blendTopZ": 12,
+        "wallTopZ": 8
+       },
+       {
+        "at": "x+",
+        "blendTopZ": 12,
+        "wallTopZ": 8
+       },
+       {
+        "at": "y-",
+        "blendTopZ": 12,
+        "wallTopZ": 8
+       },
+       {
+        "at": "y+",
+        "blendTopZ": 12,
+        "wallTopZ": 8
+       }
+      ]
+     },
+     {
+      "check": "crown continuity to its neighbours >= G1 (plasticity_analyze_surface_continuity; threshold normal angle <= 1.0 deg, position <= 0.05 mm)",
+      "tol": "G1: <=1.0 deg normal, <=0.05 mm position",
+      "ok": true,
+      "actual": {
+       "edges": 8,
+       "analysed": 8,
+       "worstNormalDeg": 0.002,
+       "found": "G1"
+      }
+     },
+     {
+      "check": "crown reaches G2 (requested level; informational)",
+      "soft": true,
+      "tol": "relative curvature <= 0.05",
+      "ok": false,
+      "actual": {
+       "worstRelCurv": 1
+      }
+     },
+     {
+      "check": "flat bottom at z=0",
+      "tol": "+-0.05 mm",
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "bottom edges rounded R1 (cylindrical/toroidal faces r=1 touching z=0, at least 8 for a rounded rectangle: 4 sides + 4 corners)",
+      "tol": "radius +-0.05 mm",
+      "ok": true,
+      "actual": 8
+     }
+    ]
+   },
+   "screenshot": {
+    "path": "shots/S2-r1.png",
+    "mode": "window"
+   },
+   "transcript": "transcripts-baseline/S2-r1.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 49
+   }
+  },
+  {
+   "part": "S2",
+   "run": 2,
+   "label": "baseline",
+   "prompt": "Make an ergonomic grip pad in Plasticity (millimetres). The footprint is a 90 x 50 mm rounded rectangle with 12 mm corner radius, lower-left corner at x=2000, y=0, z=0. The pad is 8 mm tall at the rim. Its top is a smoothly crowned surface that rises to 14 mm at the centre of the pad: no flat top, and no crease where the crown meets the rim. At minimum the crown must be tangent-continuous (G1) with the rim; curvature-continuous (G2) if you can. The bottom is flat. Round all bottom edges with a 1 mm radius. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/bench-2026-11-run-sSJIma/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 80 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 276910,
+   "startupMs": 925,
+   "turns": 25,
+   "toolCalls": 31,
+   "toolCallsByName": {
+    "plasticity_call": 9,
+    "plasticity_describe_body": 1,
+    "plasticity_batch": 18,
+    "plasticity_call:plasticity_analyze_surface_continuity": 2,
+    "plasticity_call:plasticity_list_curve_directions": 1
+   },
+   "errors": 6,
+   "retries": 6,
+   "requestBytes": 14045,
+   "responseBytes": 68208,
+   "serverExecMs": 1140,
+   "serverTimeShare": 0.004,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_call",
+     "reqBytes": 100,
+     "respBytes": 11183,
+     "isError": false,
+     "startedMs": 9294,
+     "execMs": -106
+    },
+    {
+     "turn": 1,
+     "name": "plasticity_describe_body",
+     "reqBytes": 2,
+     "respBytes": 1226,
+     "isError": false,
+     "startedMs": 9294,
+     "execMs": 491
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 35,
+     "respBytes": 2111,
+     "isError": false,
+     "startedMs": 18212,
+     "execMs": -915
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 49,
+     "respBytes": 1662,
+     "isError": false,
+     "startedMs": 18212,
+     "execMs": -500
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 39,
+     "respBytes": 2296,
+     "isError": false,
+     "startedMs": 18212,
+     "execMs": 7
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_call",
+     "reqBytes": 106,
+     "respBytes": 4680,
+     "isError": false,
+     "startedMs": 31884,
+     "execMs": 52
+    },
+    {
+     "turn": 4,
+     "name": "plasticity_batch",
+     "routedTo": "batch(6 steps: create_box,fillet,find_faces,find_edges,xsided_patch,describe_body)",
+     "reqBytes": 785,
+     "respBytes": 844,
+     "isError": true,
+     "startedMs": 42142,
+     "execMs": 383,
+     "errorText": "{\"failedStep\":4,\"toolName\":\"plasticity_xsided_patch\",\"error\":\"Plasticity command failed: Error: XNurbs operation failed with error `30`.\",\"completedSteps\":[{\"step\":0,\"toolName\":\"plasticity_create_box\",\"added\":[1464],\"addedBodies\":[{\"id\":1464,\"versionId\":2893,\"type\":\"Solid\",\"name\":\"grip-pad\",\"boundsMm\":{\"min\":[2000,0,0],\"max\":[2090,50,8]},\"boundsMethod\":\"native-box\",\"faceCount\":6,\"edgeCount\":12,\"ve"
+    },
+    {
+     "turn": 5,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: xsided_patch,describe_body)",
+     "reqBytes": 319,
+     "respBytes": 174,
+     "isError": true,
+     "startedMs": 46331,
+     "execMs": 48,
+     "errorText": "{\"failedStep\":0,\"toolName\":\"plasticity_xsided_patch\",\"error\":\"Plasticity command failed: Error: XNurbs operation failed with error `30`.\",\"completedSteps\":[],\"undoneSteps\":0}"
+    },
+    {
+     "turn": 6,
+     "name": "plasticity_batch",
+     "routedTo": "batch(4 steps: create_nurbs_curve,create_nurbs_curve,xsided_patch,describe_body)",
+     "reqBytes": 914,
+     "respBytes": 847,
+     "isError": true,
+     "startedMs": 59940,
+     "execMs": 679,
+     "errorText": "{\"failedStep\":2,\"toolName\":\"plasticity_xsided_patch\",\"error\":\"Plasticity command failed: Error: XNurbs operation failed with error `30`.\",\"completedSteps\":[{\"step\":0,\"toolName\":\"plasticity_create_nurbs_curve\",\"added\":[1465],\"addedBodies\":[{\"id\":1465,\"versionId\":2895,\"type\":\"Wire\",\"name\":\"Curve.003\",\"boundsMm\":{\"min\":[2000,24.999999999999982,8],\"max\":[2090.0000000000005,25.000000000000018,14.005372"
+    },
+    {
+     "turn": 7,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: xsided_patch,describe_body)",
+     "reqBytes": 342,
+     "respBytes": 1042,
+     "isError": false,
+     "startedMs": 75886,
+     "execMs": 136
+    },
+    {
+     "turn": 8,
+     "name": "plasticity_batch",
+     "routedTo": "batch(5 steps: delete,delete_faces,create_nurbs_curve,create_nurbs_curve,describe_body)",
+     "reqBytes": 614,
+     "respBytes": 563,
+     "isError": true,
+     "startedMs": 91085,
+     "execMs": 86,
+     "errorText": "{\"failedStep\":1,\"toolName\":\"plasticity_delete_faces\",\"error\":\"[\\n  {\\n    \\\"expected\\\": \\\"array\\\",\\n    \\\"code\\\": \\\"invalid_type\\\",\\n    \\\"path\\\": [\\n      \\\"faces\\\"\\n    ],\\n    \\\"message\\\": \\\"Invalid input: expected array, received undefined\\\"\\n  },\\n  {\\n    \\\"code\\\": \\\"unrecognized_keys\\\",\\n    \\\"keys\\\": [\\n      \\\"bodyId\\\",\\n      \\\"faceIds\\\"\\n    ],\\n    \\\"path\\\": [],\\n    \\\"message\\\": \\\"Unr"
+    },
+    {
+     "turn": 9,
+     "name": "plasticity_batch",
+     "routedTo": "batch(4 steps: delete_faces,create_nurbs_curve,create_nurbs_curve,describe_body)",
+     "reqBytes": 553,
+     "respBytes": 3434,
+     "isError": false,
+     "startedMs": 96012,
+     "execMs": 423
+    },
+    {
+     "turn": 10,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps: find_edges,xsided_patch,describe_body)",
+     "reqBytes": 397,
+     "respBytes": 1232,
+     "isError": false,
+     "startedMs": 103463,
+     "execMs": 311
+    },
+    {
+     "turn": 11,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: join_sheets,describe_body)",
+     "reqBytes": 152,
+     "respBytes": 2635,
+     "isError": false,
+     "startedMs": 107534,
+     "execMs": 141
+    },
+    {
+     "turn": 12,
+     "name": "plasticity_batch",
+     "routedTo": "batch(4 steps: fillet,find_faces,find_edges,describe_body)",
+     "reqBytes": 486,
+     "respBytes": 1547,
+     "isError": false,
+     "startedMs": 115749,
+     "execMs": -699
+    },
+    {
+     "turn": 12,
+     "name": "plasticity_call",
+     "reqBytes": 110,
+     "respBytes": 3371,
+     "isError": false,
+     "startedMs": 115749,
+     "execMs": 40
+    },
+    {
+     "turn": 13,
+     "name": "plasticity_batch",
+     "routedTo": "batch(8 steps: analyze_surface_continuity,create_box,create_cylinder,create_box,create_box,create_box,create_box,check_interference)",
+     "reqBytes": 1606,
+     "respBytes": 4587,
+     "isError": false,
+     "startedMs": 128835,
+     "execMs": 695
+    },
+    {
+     "turn": 14,
+     "name": "plasticity_batch",
+     "routedTo": "batch(6 steps: delete,create_box,create_cylinder,create_cylinder,check_interference,delete)",
+     "reqBytes": 833,
+     "respBytes": 594,
+     "isError": false,
+     "startedMs": 141945,
+     "execMs": -1758
+    },
+    {
+     "turn": 14,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_analyze_surface_continuity",
+     "reqBytes": 513,
+     "respBytes": 97,
+     "isError": true,
+     "startedMs": 141945,
+     "execMs": 44,
+     "errorText": "Stale reference: expected revision r18.02b83dd188b816b9, current revision is r23.3557c164f8981595"
+    },
+    {
+     "turn": 15,
+     "name": "plasticity_batch",
+     "routedTo": "batch(5 steps: create_box,create_box,check_interference,delete,analyze_surface_continuity)",
+     "reqBytes": 1019,
+     "respBytes": 557,
+     "isError": false,
+     "startedMs": 153479,
+     "execMs": 347
+    },
+    {
+     "turn": 16,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_analyze_surface_continuity",
+     "reqBytes": 513,
+     "respBytes": 6205,
+     "isError": false,
+     "startedMs": 158984,
+     "execMs": 48
+    },
+    {
+     "turn": 17,
+     "name": "plasticity_batch",
+     "routedTo": "batch(6 steps: create_cylinder,create_cylinder,create_cylinder,create_cylinder,check_interference,delete)",
+     "reqBytes": 935,
+     "respBytes": 843,
+     "isError": false,
+     "startedMs": 174004,
+     "execMs": 527
+    },
+    {
+     "turn": 18,
+     "name": "plasticity_batch",
+     "routedTo": "batch(7 steps: create_cylinder,create_cylinder,create_cylinder,create_cylinder,check_interference,delete,inspect_surface_structure)",
+     "reqBytes": 1065,
+     "respBytes": 1582,
+     "isError": false,
+     "startedMs": 197761,
+     "execMs": 794
+    },
+    {
+     "turn": 19,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps: find_faces,find_edges,analyze_surface_continuity)",
+     "reqBytes": 868,
+     "respBytes": 739,
+     "isError": false,
+     "startedMs": 214604,
+     "execMs": 52
+    },
+    {
+     "turn": 20,
+     "name": "plasticity_call",
+     "reqBytes": 54,
+     "respBytes": 1079,
+     "isError": false,
+     "startedMs": 234745,
+     "execMs": -883
+    },
+    {
+     "turn": 20,
+     "name": "plasticity_call",
+     "reqBytes": 46,
+     "respBytes": 1254,
+     "isError": false,
+     "startedMs": 234745,
+     "execMs": -405
+    },
+    {
+     "turn": 20,
+     "name": "plasticity_call",
+     "reqBytes": 44,
+     "respBytes": 552,
+     "isError": false,
+     "startedMs": 234745,
+     "execMs": 10
+    },
+    {
+     "turn": 21,
+     "name": "plasticity_batch",
+     "routedTo": "batch(7 steps: create_box,create_box,create_box,rotate,create_body_intersection_curves,delete,list_curve_directions)",
+     "reqBytes": 780,
+     "respBytes": 1241,
+     "isError": true,
+     "startedMs": 243667,
+     "execMs": 575,
+     "errorText": "{\"failedStep\":4,\"toolName\":\"plasticity_create_body_intersection_curves\",\"error\":\"Plasticity command failed: Error: Operation failed at PK_EDGE_make_wire_body with error `PK_ERROR_non_manifold` (547) \",\"completedSteps\":[{\"step\":0,\"toolName\":\"plasticity_create_box\",\"added\":[1490],\"addedBodies\":[{\"id\":1490,\"versionId\":2929,\"type\":\"Solid\",\"name\":\"sec-a\",\"boundsMm\":{\"min\":[1989.9999999999998,24.9999999"
+    },
+    {
+     "turn": 22,
+     "name": "plasticity_batch",
+     "routedTo": "batch(5 steps: create_body_intersection_curves,create_body_intersection_curves,create_body_intersection_curves,delete,list_curve_directions)",
+     "reqBytes": 475,
+     "respBytes": 2025,
+     "isError": false,
+     "startedMs": 248519,
+     "execMs": 369
+    },
+    {
+     "turn": 23,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_list_curve_directions",
+     "reqBytes": 47,
+     "respBytes": 7543,
+     "isError": false,
+     "startedMs": 252765,
+     "execMs": 46
+    },
+    {
+     "turn": 24,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: delete,describe_body)",
+     "reqBytes": 244,
+     "respBytes": 463,
+     "isError": false,
+     "startedMs": 270397,
+     "execMs": 102
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 8369,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 12409,
+     "execMs": 385,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 8428,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 3,
+     "respBytes": 6069,
+     "execMs": -1408,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 13664,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 4680,
+     "execMs": 52,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 4,
+     "modelMs": 10207,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 844,
+     "execMs": 383,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 5,
+     "modelMs": 3806,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 174,
+     "execMs": 48,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 6,
+     "modelMs": 13562,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 847,
+     "execMs": 679,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 7,
+     "modelMs": 15266,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1042,
+     "execMs": 136,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 8,
+     "modelMs": 15063,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 563,
+     "execMs": 86,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 9,
+     "modelMs": 4840,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 3434,
+     "execMs": 423,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 10,
+     "modelMs": 7028,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1232,
+     "execMs": 311,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 11,
+     "modelMs": 3760,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2635,
+     "execMs": 141,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 12,
+     "modelMs": 8074,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 4918,
+     "execMs": -659,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 13,
+     "modelMs": 13045,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 4587,
+     "execMs": 695,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 14,
+     "modelMs": 12416,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 691,
+     "execMs": -1714,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 15,
+     "modelMs": 11489,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 557,
+     "execMs": 347,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 16,
+     "modelMs": 5159,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 6205,
+     "execMs": 48,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 17,
+     "modelMs": 14972,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 843,
+     "execMs": 527,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 18,
+     "modelMs": 23231,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1582,
+     "execMs": 794,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 19,
+     "modelMs": 16049,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 739,
+     "execMs": 52,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 20,
+     "modelMs": 20089,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 3,
+     "respBytes": 2885,
+     "execMs": -1278,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 21,
+     "modelMs": 8912,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1241,
+     "execMs": 575,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 22,
+     "modelMs": 4277,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2025,
+     "execMs": 369,
+     "thinkingChars": 0,
+     "textChars": 69
+    },
+    {
+     "turn": 23,
+     "modelMs": 3878,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 7543,
+     "execMs": 46,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 24,
+     "modelMs": 17586,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 463,
+     "execMs": 102,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 25,
+     "modelMs": 3380,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 0,
+     "respBytes": 0,
+     "execMs": 0,
+     "thinkingChars": 0,
+     "textChars": 281
+    }
+   ],
+   "tokens": {
+    "input": 50,
+    "output": 22182,
+    "cacheRead": 1293992,
+    "cacheWrite": 58631
+   },
+   "costUsd": 2.0845743999999997,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 1464 (crown peaks at 14.005–14.010 mm; exact section cuts show it leaving the 8 mm rim vertically, tangent to the side wall, but Plasticity's continuity analyzer reports only G0 with a 90° normal deviation on all 8 rim edges, so G1/G2 is not confirmed by that tool).",
+   "documentScaleAtEnd": {
+    "bodies": 5,
+    "totalFaces": 30
+   },
+   "verification": {
+    "passed": 9,
+    "of": 10,
+    "failed": [
+     "crown continuity to its neighbours >= G1 (plasticity_analyze_surface_continuity; threshold normal angle <= 1.0 deg, position <= 0.05 mm)"
+    ],
+    "bodyId": 1464,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        1464
+       ],
+       "said": 1464,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "pad: valid closed Solid (native B-Rep Check)",
+      "ok": true,
+      "tol": "exact (native Check)",
+      "actual": {
+       "type": "Solid",
+       "closed": true,
+       "nativeValid": true,
+       "codes": []
+      }
+     },
+     {
+      "check": "pad (union of exact face bounds) bounds",
+      "tol": "+-0.2 mm",
+      "ok": true,
+      "expected": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2090,
+        50,
+        14
+       ]
+      },
+      "actual": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2090,
+        50,
+        14.008
+       ]
+      }
+     },
+     {
+      "check": "top (highest) face is non-planar (BSpline or equivalent)",
+      "tol": "surfaceType != Plane",
+      "ok": true,
+      "actual": {
+       "surfaceType": "BSurf",
+       "planar": false
+      }
+     },
+     {
+      "check": "crown peak at the plan centre (closest objective: crown face centre point and area centroid; a true peak read is impossible, sections fail on BSpline boundaries)",
+      "tol": "+-1 mm in x,y",
+      "ok": true,
+      "actual": {
+       "faceCentre": [
+        2045.006,
+        25.018,
+        14.008
+       ],
+       "areaCentroid": [
+        2045.009,
+        24.995,
+        12.102
+       ]
+      }
+     },
+     {
+      "check": "crown peak height 14 (crown face exact bounds max z)",
+      "tol": "+-0.2 mm",
+      "ok": true,
+      "actual": 14.008
+     },
+     {
+      "check": "rim height 8 at the four side midpoints: either the top of the rim blend (highest non-crown face within 1 mm of the midpoint) or the top of the vertical side wall is 8",
+      "tol": "+-0.3 mm",
+      "ok": true,
+      "actual": [
+       {
+        "at": "x-",
+        "blendTopZ": 8,
+        "wallTopZ": 8
+       },
+       {
+        "at": "x+",
+        "blendTopZ": 8,
+        "wallTopZ": 8
+       },
+       {
+        "at": "y-",
+        "blendTopZ": 8,
+        "wallTopZ": 8
+       },
+       {
+        "at": "y+",
+        "blendTopZ": 8,
+        "wallTopZ": 8
+       }
+      ]
+     },
+     {
+      "check": "crown continuity to its neighbours >= G1 (plasticity_analyze_surface_continuity; threshold normal angle <= 1.0 deg, position <= 0.05 mm)",
+      "tol": "G1: <=1.0 deg normal, <=0.05 mm position",
+      "ok": false,
+      "actual": {
+       "edges": 8,
+       "analysed": 8,
+       "worstNormalDeg": 90,
+       "found": "G0"
+      }
+     },
+     {
+      "check": "crown reaches G2 (requested level; informational)",
+      "soft": true,
+      "tol": "relative curvature <= 0.05",
+      "ok": false,
+      "actual": {
+       "worstRelCurv": 1
+      }
+     },
+     {
+      "check": "flat bottom at z=0",
+      "tol": "+-0.05 mm",
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "bottom edges rounded R1 (cylindrical/toroidal faces r=1 touching z=0, at least 8 for a rounded rectangle: 4 sides + 4 corners)",
+      "tol": "radius +-0.05 mm",
+      "ok": true,
+      "actual": 8
+     }
+    ]
+   },
+   "screenshot": {
+    "path": "shots/S2-r2.png",
+    "mode": "window"
+   },
+   "transcript": "transcripts-baseline/S2-r2.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 45
+   }
+  },
+  {
+   "part": "S3",
+   "run": 1,
+   "label": "baseline",
+   "prompt": "The open Plasticity document (millimetres) contains three separate sheet surfaces named s3-sheet-1, s3-sheet-2 and s3-sheet-3, near x=2040, y=30. They are three curved sheets that meet around the summit of a fairing and leave a three-sided hole between them. Close that hole with a new surface that is tangent-continuous (G1) with all three neighbours along its whole boundary, curvature-continuous (G2) if you can. Then join everything into one watertight sheet, as far as the tools allow. Verify the result, then reply with one line: DONE and the id of the final joined body, then the continuity you achieved on each boundary edge of the new surface.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/bench-2026-11-run-d21Tgs/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 80 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 60102,
+   "startupMs": 884,
+   "turns": 10,
+   "toolCalls": 15,
+   "toolCallsByName": {
+    "plasticity_describe_body": 1,
+    "plasticity_call": 5,
+    "plasticity_batch": 4,
+    "plasticity_body_info": 3,
+    "plasticity_call:plasticity_analyze_surface_continuity": 2
+   },
+   "errors": 0,
+   "retries": 0,
+   "requestBytes": 2473,
+   "responseBytes": 35011,
+   "serverExecMs": -5178,
+   "serverTimeShare": -0.086,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_describe_body",
+     "reqBytes": 2,
+     "respBytes": 2060,
+     "isError": false,
+     "startedMs": 4648,
+     "execMs": -417
+    },
+    {
+     "turn": 1,
+     "name": "plasticity_call",
+     "reqBytes": 75,
+     "respBytes": 7389,
+     "isError": false,
+     "startedMs": 4648,
+     "execMs": 55
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 35,
+     "respBytes": 2111,
+     "isError": false,
+     "startedMs": 9464,
+     "execMs": -1967
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 34,
+     "respBytes": 787,
+     "isError": false,
+     "startedMs": 9464,
+     "execMs": -1451
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 49,
+     "respBytes": 1662,
+     "isError": false,
+     "startedMs": 9464,
+     "execMs": -938
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps: body_info,body_info,body_info)",
+     "reqBytes": 245,
+     "respBytes": 518,
+     "isError": false,
+     "startedMs": 9464,
+     "execMs": 42
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_body_info",
+     "reqBytes": 25,
+     "respBytes": 2725,
+     "isError": false,
+     "startedMs": 13890,
+     "execMs": -768
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_body_info",
+     "reqBytes": 25,
+     "respBytes": 2725,
+     "isError": false,
+     "startedMs": 13890,
+     "execMs": -310
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_body_info",
+     "reqBytes": 25,
+     "respBytes": 2717,
+     "isError": false,
+     "startedMs": 13890,
+     "execMs": 15
+    },
+    {
+     "turn": 4,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps: join_sheets,find_edges,describe_body)",
+     "reqBytes": 340,
+     "respBytes": 2399,
+     "isError": false,
+     "startedMs": 18531,
+     "execMs": 114
+    },
+    {
+     "turn": 5,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps: xsided_patch,join_sheets,find_edges)",
+     "reqBytes": 458,
+     "respBytes": 1339,
+     "isError": false,
+     "startedMs": 23000,
+     "execMs": 227
+    },
+    {
+     "turn": 6,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: analyze_surface_continuity,find_edges)",
+     "reqBytes": 444,
+     "respBytes": 923,
+     "isError": false,
+     "startedMs": 28432,
+     "execMs": 55
+    },
+    {
+     "turn": 7,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_analyze_surface_continuity",
+     "reqBytes": 318,
+     "respBytes": 2491,
+     "isError": false,
+     "startedMs": 32086,
+     "execMs": 43
+    },
+    {
+     "turn": 8,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_analyze_surface_continuity",
+     "reqBytes": 318,
+     "respBytes": 2569,
+     "isError": false,
+     "startedMs": 38461,
+     "execMs": 73
+    },
+    {
+     "turn": 9,
+     "name": "plasticity_call",
+     "reqBytes": 80,
+     "respBytes": 2596,
+     "isError": false,
+     "startedMs": 48811,
+     "execMs": 49
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 3764,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 9449,
+     "execMs": -362,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 4761,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 4,
+     "respBytes": 5078,
+     "execMs": -4314,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 4385,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 3,
+     "respBytes": 8167,
+     "execMs": -1063,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 4,
+     "modelMs": 4626,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2399,
+     "execMs": 114,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 5,
+     "modelMs": 4355,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1339,
+     "execMs": 227,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 6,
+     "modelMs": 5205,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 923,
+     "execMs": 55,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 7,
+     "modelMs": 3598,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2491,
+     "execMs": 43,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 8,
+     "modelMs": 6332,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2569,
+     "execMs": 73,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 9,
+     "modelMs": 10276,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2596,
+     "execMs": 49,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 10,
+     "modelMs": 6841,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 0,
+     "respBytes": 0,
+     "execMs": 0,
+     "thinkingChars": 0,
+     "textChars": 948
+    }
+   ],
+   "tokens": {
+    "input": 20,
+    "output": 3805,
+    "cacheRead": 355619,
+    "cacheWrite": 24232
+   },
+   "costUsd": 0.6111958,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — final joined body id **1502** (one sheet, 4 faces; all six interior edges are shared by two faces, and the only free edges are the three outer rim curves). Continuity of the new surface, measured at 100 samples per edge:\n\n| Boundary edge of new surface | Neighbour | Achieved | Max gap | Max normal deviation |\n|---|---|---|---|---|\n| `2969e466795` | s3-sheet-1 | G1 | 1.2e-10 mm | 0.076° |\n| `2969e466966` | s3-sheet-2 | G1 | 1.2e-10 mm | 0.065° |\n| `2969e467137` | s3-sheet-3 | G1 | 1.2e-10 mm | 0.017° |\n\nG2 was not achieved on any of the three edges, although I requested a G2 patch. The relative curvature deviation peaks at 1.0 against a 0.05 tolerance, and the peak sits at a corner vertex of the hole on each edge. The evaluator reports only the maximum, so I could not tell whether the mismatch is confined to the corners. The three original sheets are G2 with each other along their seams, so the neighbours are not what blocks G2.",
+   "documentScaleAtEnd": {
+    "bodies": 5,
+    "totalFaces": 16
+   },
+   "verification": {
+    "passed": 6,
+    "of": 6,
+    "failed": [],
+    "bodyId": 1502,
+    "checks": [
+     {
+      "check": "a result body exists",
+      "ok": true,
+      "actual": {
+       "said": 1502,
+       "how": "id from DONE line",
+       "candidates": [
+        "1502:Sheet:4f",
+        "1:Solid:11f",
+        "5:Sheet:1f"
+       ]
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "the three hole edges are still edges of the final body (centres at the analytic hole-edge midpoints)",
+      "tol": "+-0.01 mm",
+      "ok": true,
+      "actual": [
+       "2969e466795",
+       "2969e466966",
+       "2969e467137"
+      ]
+     },
+     {
+      "check": "every hole edge is shared by exactly two faces (hole closed and joined to the neighbours)",
+      "tol": "exact topology",
+      "ok": true,
+      "actual": [
+       2,
+       2,
+       2
+      ]
+     },
+     {
+      "check": "one patch face whose boundary is exactly the three hole edges",
+      "tol": "+-0.01 mm (edge centres) + edge count 3",
+      "ok": true,
+      "actual": {
+       "id": "2969f467239",
+       "surfaceType": "BSurf",
+       "edges": 3
+      }
+     },
+     {
+      "check": "continuity per hole edge >= G1 (analyze_surface_continuity; normal angle <= 1 deg, position <= 0.05 mm)",
+      "tol": "G1: <=1 deg, <=0.05 mm",
+      "ok": true,
+      "actual": [
+       {
+        "edge": "2969e466795",
+        "found": "G1",
+        "normalDeg": 0.076,
+        "posMm": 1.22e-10,
+        "relCurv": 1
+       },
+       {
+        "edge": "2969e466966",
+        "found": "G1",
+        "normalDeg": 0.065,
+        "posMm": 1.22e-10,
+        "relCurv": 1
+       },
+       {
+        "edge": "2969e467137",
+        "found": "G1",
+        "normalDeg": 0.017,
+        "posMm": 1.22e-10,
+        "relCurv": 1
+       }
+      ]
+     },
+     {
+      "check": "continuity reaches G2 on all hole edges (informational)",
+      "soft": true,
+      "tol": "relative curvature <= 0.05",
+      "ok": false
+     },
+     {
+      "check": "joined body valid (native Check) and watertight as far as possible: only the 3 outer rim edges are free (or 0 if closed to a solid)",
+      "tol": "free edges == 3 or 0",
+      "ok": true,
+      "actual": {
+       "type": "Sheet",
+       "nativeValid": true,
+       "closed": false,
+       "freeEdges": 3
+      }
+     },
+     {
+      "check": "face count 4 (3 neighbour sheets + 1 patch; informational)",
+      "soft": true,
+      "tol": "exact",
+      "ok": true,
+      "actual": 4
+     }
+    ]
+   },
+   "screenshot": {
+    "path": "shots/S3-r1.png",
+    "mode": "window"
+   },
+   "transcript": "transcripts-baseline/S3-r1.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 16
+   }
+  },
+  {
+   "part": "S3",
+   "run": 2,
+   "label": "baseline",
+   "prompt": "The open Plasticity document (millimetres) contains three separate sheet surfaces named s3-sheet-1, s3-sheet-2 and s3-sheet-3, near x=2040, y=30. They are three curved sheets that meet around the summit of a fairing and leave a three-sided hole between them. Close that hole with a new surface that is tangent-continuous (G1) with all three neighbours along its whole boundary, curvature-continuous (G2) if you can. Then join everything into one watertight sheet, as far as the tools allow. Verify the result, then reply with one line: DONE and the id of the final joined body, then the continuity you achieved on each boundary edge of the new surface.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/bench-2026-11-run-HoLY4Z/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 80 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 48750,
+   "startupMs": 1114,
+   "turns": 9,
+   "toolCalls": 12,
+   "toolCallsByName": {
+    "plasticity_describe_body": 1,
+    "plasticity_call": 4,
+    "plasticity_list_bodies": 1,
+    "plasticity_batch": 4,
+    "plasticity_find_edges": 1,
+    "plasticity_call:plasticity_analyze_surface_continuity": 1
+   },
+   "errors": 2,
+   "retries": 2,
+   "requestBytes": 1712,
+   "responseBytes": 30248,
+   "serverExecMs": -1967,
+   "serverTimeShare": -0.04,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_describe_body",
+     "reqBytes": 2,
+     "respBytes": 2060,
+     "isError": false,
+     "startedMs": 4294,
+     "execMs": -1
+    },
+    {
+     "turn": 1,
+     "name": "plasticity_call",
+     "reqBytes": 69,
+     "respBytes": 5638,
+     "isError": false,
+     "startedMs": 4294,
+     "execMs": 45
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 35,
+     "respBytes": 2111,
+     "isError": false,
+     "startedMs": 8890,
+     "execMs": -1378
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 34,
+     "respBytes": 787,
+     "isError": false,
+     "startedMs": 8890,
+     "execMs": -731
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 49,
+     "respBytes": 1662,
+     "isError": false,
+     "startedMs": 8890,
+     "execMs": -529
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_list_bodies",
+     "reqBytes": 30,
+     "respBytes": 9491,
+     "isError": false,
+     "startedMs": 8890,
+     "execMs": 22
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: join_sheets,find_edges)",
+     "reqBytes": 265,
+     "respBytes": 259,
+     "isError": true,
+     "startedMs": 13456,
+     "execMs": 141,
+     "errorText": "{\"failedStep\":1,\"toolName\":\"plasticity_find_edges\",\"error\":\"$0.added[0] is out of range: step 0 added has 0\",\"completedSteps\":[{\"step\":0,\"toolName\":\"plasticity_join_sheets\",\"added\":[],\"removed\":[1513,1514],\"regionsAdded\":[],\"addedBodies\":[]}],\"undoneSteps\":0}"
+    },
+    {
+     "turn": 4,
+     "name": "plasticity_find_edges",
+     "reqBytes": 104,
+     "respBytes": 83,
+     "isError": true,
+     "startedMs": 17592,
+     "execMs": 42,
+     "errorText": "Stale reference: expected revision latest, current revision is r14.b6916af5145a9074"
+    },
+    {
+     "turn": 5,
+     "name": "plasticity_batch",
+     "routedTo": "batch(1 steps: find_edges)",
+     "reqBytes": 193,
+     "respBytes": 819,
+     "isError": false,
+     "startedMs": 21614,
+     "execMs": 63
+    },
+    {
+     "turn": 6,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: xsided_patch,describe_body)",
+     "reqBytes": 233,
+     "respBytes": 1180,
+     "isError": false,
+     "startedMs": 25763,
+     "execMs": 201
+    },
+    {
+     "turn": 7,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps: join_sheets,find_edges)",
+     "reqBytes": 263,
+     "respBytes": 1200,
+     "isError": false,
+     "startedMs": 29992,
+     "execMs": 117
+    },
+    {
+     "turn": 8,
+     "name": "plasticity_call",
+     "routedTo": "plasticity_analyze_surface_continuity",
+     "reqBytes": 435,
+     "respBytes": 4958,
+     "isError": false,
+     "startedMs": 35184,
+     "execMs": 41
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 3180,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 7698,
+     "execMs": 44,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 4550,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 4,
+     "respBytes": 14051,
+     "execMs": -2616,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 4544,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 259,
+     "execMs": 141,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 4,
+     "modelMs": 3996,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 83,
+     "execMs": 42,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 5,
+     "modelMs": 3980,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 819,
+     "execMs": 63,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 6,
+     "modelMs": 4086,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1180,
+     "execMs": 201,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 7,
+     "modelMs": 4028,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1200,
+     "execMs": 117,
+     "thinkingChars": 0,
+     "textChars": 32
+    },
+    {
+     "turn": 8,
+     "modelMs": 5074,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 4958,
+     "execMs": 41,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 9,
+     "modelMs": 8484,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 0,
+     "respBytes": 0,
+     "execMs": 0,
+     "thinkingChars": 0,
+     "textChars": 873
+    }
+   ],
+   "tokens": {
+    "input": 18,
+    "output": 2357,
+    "cacheRead": 304372,
+    "cacheWrite": 20670
+   },
+   "costUsd": 0.4860184,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE 1512 — new patch edges: `2995e468193` (to s3-sheet-1) G1, `2995e468364` (to s3-sheet-2) G1, `2995e468535` (to s3-sheet-3) G1; G2 was requested from the patch tool but not achieved on any of the three.\n\n- **Continuity measured:** position gap is about 1e-10 mm on all three edges, and the worst normal-angle deviation is 0.076°, 0.065° and 0.017° respectively (tolerance 0.1°). The relative curvature deviation peaks at 1.0 against a 0.05 tolerance, with the reported maximum at a corner vertex of the hole on each edge. The analysis only gives the maximum, so I can't say whether curvature matches away from the corners.\n- **Join:** body 1512 (still named `s3-sheet-1`) is one sheet with 4 faces and 9 edges. All 6 interior edges are shared by two faces, and the only free edges left are the 3 outer rim curves at z≈17.74, so the hole is closed and the seams are sewn.",
+   "documentScaleAtEnd": {
+    "bodies": 5,
+    "totalFaces": 16
+   },
+   "verification": {
+    "passed": 6,
+    "of": 6,
+    "failed": [],
+    "bodyId": 1512,
+    "checks": [
+     {
+      "check": "a result body exists",
+      "ok": true,
+      "actual": {
+       "said": 1512,
+       "how": "id from DONE line",
+       "candidates": [
+        "1512:Sheet:4f",
+        "1:Solid:11f",
+        "5:Sheet:1f"
+       ]
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "the three hole edges are still edges of the final body (centres at the analytic hole-edge midpoints)",
+      "tol": "+-0.01 mm",
+      "ok": true,
+      "actual": [
+       "2995e468193",
+       "2995e468364",
+       "2995e468535"
+      ]
+     },
+     {
+      "check": "every hole edge is shared by exactly two faces (hole closed and joined to the neighbours)",
+      "tol": "exact topology",
+      "ok": true,
+      "actual": [
+       2,
+       2,
+       2
+      ]
+     },
+     {
+      "check": "one patch face whose boundary is exactly the three hole edges",
+      "tol": "+-0.01 mm (edge centres) + edge count 3",
+      "ok": true,
+      "actual": {
+       "id": "2995f468637",
+       "surfaceType": "BSurf",
+       "edges": 3
+      }
+     },
+     {
+      "check": "continuity per hole edge >= G1 (analyze_surface_continuity; normal angle <= 1 deg, position <= 0.05 mm)",
+      "tol": "G1: <=1 deg, <=0.05 mm",
+      "ok": true,
+      "actual": [
+       {
+        "edge": "2995e468193",
+        "found": "G1",
+        "normalDeg": 0.076,
+        "posMm": 1.22e-10,
+        "relCurv": 1
+       },
+       {
+        "edge": "2995e468364",
+        "found": "G1",
+        "normalDeg": 0.065,
+        "posMm": 1.22e-10,
+        "relCurv": 1
+       },
+       {
+        "edge": "2995e468535",
+        "found": "G1",
+        "normalDeg": 0.017,
+        "posMm": 1.22e-10,
+        "relCurv": 1
+       }
+      ]
+     },
+     {
+      "check": "continuity reaches G2 on all hole edges (informational)",
+      "soft": true,
+      "tol": "relative curvature <= 0.05",
+      "ok": false
+     },
+     {
+      "check": "joined body valid (native Check) and watertight as far as possible: only the 3 outer rim edges are free (or 0 if closed to a solid)",
+      "tol": "free edges == 3 or 0",
+      "ok": true,
+      "actual": {
+       "type": "Sheet",
+       "nativeValid": true,
+       "closed": false,
+       "freeEdges": 3
+      }
+     },
+     {
+      "check": "face count 4 (3 neighbour sheets + 1 patch; informational)",
+      "soft": true,
+      "tol": "exact",
+      "ok": true,
+      "actual": 4
+     }
+    ]
+   },
+   "screenshot": {
+    "path": "shots/S3-r2.png",
+    "mode": "window"
+   },
+   "transcript": "transcripts-baseline/S3-r2.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 16
+   }
+  },
+  {
+   "part": "M",
+   "run": 1,
+   "label": "baseline",
+   "prompt": "Design an enclosure system for an ESP32 development board in Plasticity (millimetres): six named parts, each positioned exactly as assembled, everything at x >= 2000. Use these numbers as given. The PCB is 51.5 x 28.3 x 1.6 mm with four 3.0 mm diameter mounting holes whose centres are at (2.6, 2.6), (48.9, 2.6), (2.6, 25.7) and (48.9, 25.7) mm from one PCB corner (the corner at minimum x and minimum y; the long side of the PCB runs along x). A USB-C connector sits centred on the short PCB edge at minimum x; its opening is 9.2 x 3.4 mm with 1.2 mm corner radius, and the bottom of the opening is 1.6 mm above the top face of the PCB. The tallest component is 8 mm above the PCB top. The case base's outer rectangle has its minimum corner at x=2003, y=3, z=0, and the base is 18 mm tall overall. Parts: (1) A body named pcb: the board as a plate with its four holes, placed where it sits in the assembled case. (2) A body named case-base: 2 mm walls and a 2 mm floor, open top, with 0.5 mm clearance between the PCB and the inside of the walls on every side. Four standoffs, 5 mm diameter and 4 mm tall above the floor, each with a 2.5 mm diameter pilot hole 3 mm deep, under the four PCB holes so the PCB rests on them. The USB-C opening cut through the wall at minimum x. Four screw bosses, 6 mm diameter and full wall height, one at each outer corner of the base, each centred exactly on the corner point of the outer rectangle (so part of every boss lies outside the walls and joins them and forms the 3 mm radius outer corner), each with a 2.5 mm diameter pilot hole 8 mm deep from the top. Two more 2.5 mm pilot holes, 1.2 mm deep, in the underside of the floor, on the centre line of the case width at x=2026 and x=2046. (3) A body named lid: a 2 mm thick plate sitting on top of the base, with the same outline as the base including the corner bosses. Underneath it, a lip 1.5 mm deep and 1.2 mm thick that fits inside the walls with 0.2 mm clearance per side. Four 3.4 mm diameter screw holes through the lid, countersunk (90 degrees, 6.5 mm diameter at the top), aligned with the four base bosses. A vent of five slots, each 1.6 mm wide and 10 mm long (long side along y), evenly spread across a zone 20 mm wide (x) by 10 mm (y) centred at x=2046, y=19.65. Two 2.5 mm diameter pilot holes, 1.2 mm deep, in the top of the lid at x=2014 and x=2026 (y=19.65). (4) A body named bracket: an L-bracket 30 mm wide and 3 mm thick with two legs of 40 mm outside length. One leg lies flat against the underside of the case base (z from -3 to 0), spanning x 2016 to 2056 and centred on the case width; the other leg runs from its maximum-x end straight down to z=-40 (the wall leg). Two 4.5 mm holes in the wall leg, symmetric about the centre line, 14 mm apart, centred at z=-22. Two 3.4 mm holes in the flat leg that line up with the two underside pilot holes in the case base. (5) A body named sensor-pod: a 24 x 20 x 12 mm open-top box standing on the lid top, x from 2008 to 2032, centred on y=19.65. Its floor is 1.6 mm thick. Its pocket fits a 17.8 x 15.2 mm sensor board with a 0.15 mm clearance on every side (a friction fit, no snap), centred in the box. A 10 mm wide, 4 mm deep cable notch cut down from the rim in the wall at maximum y. Two 3.0 mm holes through the pod floor, lined up with the two lid pilot holes at x=2014 and x=2026. (6) Four M3 x 8 screw stand-ins, bodies named screw-1 to screw-4: each a 3 mm diameter shaft 8 mm long under a 5.6 mm diameter head 1.7 mm tall, placed in the four lid countersunk holes with the head top flush with the lid top. Make every part its own valid solid body with exactly these names, in the assembled positions. Verify the result, then reply with one line: DONE.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/bench-2026-11-run-Wazy9B/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 80 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 131084,
+   "startupMs": 729,
+   "turns": 8,
+   "toolCalls": 8,
+   "toolCallsByName": {
+    "plasticity_call": 2,
+    "plasticity_describe_body": 1,
+    "plasticity_batch": 4,
+    "plasticity_check_interference": 1
+   },
+   "errors": 0,
+   "retries": 0,
+   "requestBytes": 10320,
+   "responseBytes": 25342,
+   "serverExecMs": 5304,
+   "serverTimeShare": 0.04,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_call",
+     "reqBytes": 38,
+     "respBytes": 1556,
+     "isError": false,
+     "startedMs": 47051,
+     "execMs": -23
+    },
+    {
+     "turn": 1,
+     "name": "plasticity_describe_body",
+     "reqBytes": 2,
+     "respBytes": 1226,
+     "isError": false,
+     "startedMs": 47051,
+     "execMs": 602
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 39,
+     "respBytes": 763,
+     "isError": false,
+     "startedMs": 50371,
+     "execMs": 11
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps: create_box,create_through_hole_pattern,describe_body)",
+     "reqBytes": 435,
+     "respBytes": 2688,
+     "isError": false,
+     "startedMs": 55447,
+     "execMs": 360
+    },
+    {
+     "turn": 4,
+     "name": "plasticity_batch",
+     "routedTo": "batch(25 steps: create_box,create_box,boolean,create_cylinder,create_cylinder,create_cylinder,create_cylinder,create_cylinder,create_cylinder,create_cylinder,create_cylinder,boolean)",
+     "reqBytes": 3181,
+     "respBytes": 4488,
+     "isError": false,
+     "startedMs": 74137,
+     "execMs": 1178
+    },
+    {
+     "turn": 5,
+     "name": "plasticity_batch",
+     "routedTo": "batch(23 steps: delete,create_box,create_cylinder,create_cylinder,create_cylinder,create_cylinder,create_box,boolean,create_box,create_cylinder,create_cylinder,create_cylinder)",
+     "reqBytes": 2880,
+     "respBytes": 4227,
+     "isError": false,
+     "startedMs": 94668,
+     "execMs": 1592
+    },
+    {
+     "turn": 6,
+     "name": "plasticity_batch",
+     "routedTo": "batch(28 steps: create_box,create_box,boolean,create_cylinder,create_cylinder,create_cylinder,create_cylinder,boolean,create_box,create_box,create_box,create_cylinder)",
+     "reqBytes": 3372,
+     "respBytes": 8938,
+     "isError": false,
+     "startedMs": 115317,
+     "execMs": 1340
+    },
+    {
+     "turn": 7,
+     "name": "plasticity_check_interference",
+     "reqBytes": 373,
+     "respBytes": 1456,
+     "isError": false,
+     "startedMs": 124240,
+     "execMs": 244
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 46323,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 2782,
+     "execMs": 579,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 2718,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 763,
+     "execMs": 11,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 5064,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2688,
+     "execMs": 360,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 4,
+     "modelMs": 18330,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 4488,
+     "execMs": 1178,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 5,
+     "modelMs": 19354,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 4227,
+     "execMs": 1592,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 6,
+     "modelMs": 19057,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 8938,
+     "execMs": 1340,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 7,
+     "modelMs": 7582,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 1456,
+     "execMs": 244,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 8,
+     "modelMs": 3149,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 0,
+     "respBytes": 0,
+     "execMs": 0,
+     "thinkingChars": 0,
+     "textChars": 291
+    }
+   ],
+   "tokens": {
+    "input": 16,
+    "output": 12463,
+    "cacheRead": 288709,
+    "cacheWrite": 31788
+   },
+   "costUsd": 1.0649978,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — all nine bodies (pcb, case-base, lid, bracket, sensor-pod, screw-1 to screw-4) are valid solids in assembled position; the only overlaps are the screws, which follow from the given numbers: the 3 mm shafts in the 2.5 mm pilots and the 5.6 mm cylindrical heads in the 90° countersinks.",
+   "documentScaleAtEnd": {
+    "bodies": 13,
+    "totalFaces": 181
+   },
+   "verification": {
+    "passed": 25,
+    "of": 25,
+    "failed": [],
+    "bodyId": null,
+    "checks": [
+     {
+      "check": "six part groups exist by name: pcb, case-base, lid, bracket, sensor-pod, screw-1..4 (9 solids)",
+      "tol": "exact name match, type Solid",
+      "ok": true,
+      "actual": [
+       "pcb:1516",
+       "case-base:1521",
+       "lid:1543",
+       "bracket:1573",
+       "sensor-pod:1579",
+       "screw-1:1584",
+       "screw-2:1586",
+       "screw-3:1588",
+       "screw-4:1590"
+      ]
+     },
+     {
+      "check": "each part is a valid closed Solid (native B-Rep Check)",
+      "tol": "exact",
+      "ok": true,
+      "actual": "all valid"
+     },
+     {
+      "check": "PCB stand-in is 51.5 x 28.3 x 1.6 at its design position (min corner 2005.5, 5.5, 6)",
+      "tol": "+-0.05 mm",
+      "ok": true,
+      "actual": {
+       "min": [
+        2005.5,
+        5.5,
+        6
+       ],
+       "max": [
+        2057,
+        33.8,
+        7.6
+       ]
+      }
+     },
+     {
+      "check": "PCB has four O3.0 mounting holes at (2.6, 2.6), (48.9, 2.6), (2.6, 25.7), (48.9, 25.7) from its corner",
+      "tol": "+-0.1 mm position, +-0.05 radius",
+      "ok": true,
+      "actual": [
+       [
+        2008.1,
+        8.1,
+        1.5
+       ],
+       [
+        2054.4,
+        31.2,
+        1.5
+       ],
+       [
+        2008.1,
+        31.2,
+        1.5
+       ],
+       [
+        2054.4,
+        8.1,
+        1.5
+       ]
+      ]
+     },
+     {
+      "check": "PCB sits on four standoff tops: standoff top faces at z=6 under each PCB hole, PCB bottom at z=6 (gap 0)",
+      "tol": "gap 0 +-0.05 mm",
+      "ok": true,
+      "actual": {
+       "pcbBottom": 6,
+       "standoffTopFaces": 4
+      }
+     },
+     {
+      "check": "0.5 clearance between the PCB and the inner walls on all four sides (x-min, x-max, y-min, y-max)",
+      "tol": "0.5 +-0.05 mm",
+      "ok": true,
+      "actual": [
+       0.5,
+       0.5,
+       0.5,
+       0.5
+      ]
+     },
+     {
+      "check": "standoff pilots (O2.5, z axis, between z=2 and 6) coaxial with the four PCB holes",
+      "tol": "+-0.1 mm",
+      "ok": true,
+      "actual": [
+       [
+        2054.4,
+        31.2,
+        3,
+        6
+       ],
+       [
+        2008.1,
+        31.2,
+        3,
+        6
+       ],
+       [
+        2054.4,
+        8.1,
+        3,
+        6
+       ],
+       [
+        2008.1,
+        8.1,
+        3,
+        6
+       ],
+       [
+        2046,
+        19.65,
+        0,
+        1.2
+       ],
+       [
+        2026,
+        19.65,
+        0,
+        1.2
+       ]
+      ]
+     },
+     {
+      "check": "USB-C opening 9.2 x 3.4 in the x-min wall, centred on the connector position (y=19.65, z=10.9)",
+      "tol": "size +-0.2 mm, centre +-0.2 mm",
+      "ok": true,
+      "actual": {
+       "w": 9.2,
+       "h": 3.4,
+       "cy": 19.65,
+       "cz": 10.9
+      }
+     },
+     {
+      "check": "USB-C opening corners R1.2 (four x-axis cylinders r=1.2)",
+      "tol": "radius +-0.1 mm",
+      "soft": true,
+      "ok": true,
+      "actual": 4
+     },
+     {
+      "check": "base size: outer 56.5 x 33.3 x 18 including the corner bosses, with bosses reaching x=2000",
+      "tol": "+-0.1 mm",
+      "ok": true,
+      "actual": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2062.5,
+        39.3,
+        18
+       ]
+      }
+     },
+     {
+      "check": "outer vertical corners R3 (a r=3 vertical cylinder at each corner: either the corner boss or an R3 fillet centre)",
+      "tol": "radius +-0.05, axis +-0.15 mm",
+      "ok": true,
+      "actual": [
+       [
+        2003,
+        3
+       ],
+       [
+        2003,
+        3
+       ],
+       [
+        2059.5,
+        3
+       ],
+       [
+        2059.5,
+        3
+       ],
+       [
+        2003,
+        36.3
+       ],
+       [
+        2003,
+        36.3
+       ],
+       [
+        2059.5,
+        36.3
+       ],
+       [
+        2059.5,
+        36.3
+       ]
+      ]
+     },
+     {
+      "check": "four O6 corner bosses at the outer corner points with O2.5 pilots reaching the rim (pilot cylinders on the same axes, top at z=18, depth about 8)",
+      "tol": "axis +-0.1 mm, radius +-0.05, depth 8 +-0.5",
+      "ok": true,
+      "actual": [
+       [
+        2003,
+        3,
+        8
+       ],
+       [
+        2059.5,
+        36.3,
+        8
+       ],
+       [
+        2003,
+        36.3,
+        8
+       ],
+       [
+        2059.5,
+        3,
+        8
+       ]
+      ]
+     },
+     {
+      "check": "lid lip: outer faces 0.2 inside the cavity walls on each side, lip depth 1.5 (faces z 16.5 to 18)",
+      "tol": "clearance 0.2 +-0.05 mm, depth 1.5 +-0.1 mm",
+      "ok": true,
+      "actual": [
+       {
+        "at": 2005.2,
+        "z": [
+         16.5,
+         18
+        ]
+       },
+       {
+        "at": 2057.3,
+        "z": [
+         16.5,
+         18
+        ]
+       },
+       {
+        "at": 5.2,
+        "z": [
+         16.5,
+         18
+        ]
+       },
+       {
+        "at": 34.1,
+        "z": [
+         16.5,
+         18
+        ]
+       }
+      ]
+     },
+     {
+      "check": "lid screw holes O3.4 coaxial with the four base bosses",
+      "tol": "+-0.1 mm, radius +-0.05",
+      "ok": true,
+      "actual": [
+       [
+        2059.5,
+        36.3
+       ],
+       [
+        2003,
+        36.3
+       ],
+       [
+        2059.5,
+        3
+       ],
+       [
+        2003,
+        3
+       ]
+      ]
+     },
+     {
+      "check": "four countersinks in the lid (at least four conical faces)",
+      "tol": "count",
+      "ok": true,
+      "actual": 4
+     },
+     {
+      "check": "five vent slots of width 1.6 inside the 20 x 10 zone centred at (2046, 19.65): ten slot side faces in pairs",
+      "tol": "width 1.6 +-0.1 mm, zone +-0.3 mm",
+      "ok": true,
+      "actual": {
+       "sideFaces": 10,
+       "widths": [
+        1.6,
+        1.6,
+        1.6,
+        1.6,
+        1.6
+       ]
+      }
+     },
+     {
+      "check": "two O2.5 blind pilots in the lid top for the sensor pod at (2014,19.65) and (2026,19.65), depth 1.2",
+      "tol": "+-0.1 mm, depth +-0.3",
+      "ok": true,
+      "actual": [
+       [
+        2014,
+        19.65,
+        1.2
+       ],
+       [
+        2026,
+        19.65,
+        1.2
+       ]
+      ]
+     },
+     {
+      "check": "bracket: L shape 30 wide, 3 thick, legs 40 and 40 (bounds x 2016..2056, y 4.65..34.65, z -40..0)",
+      "tol": "+-0.1 mm",
+      "ok": true,
+      "actual": {
+       "min": [
+        2016,
+        4.65,
+        -40
+       ],
+       "max": [
+        2056,
+        34.65,
+        0
+       ]
+      }
+     },
+     {
+      "check": "bracket wall leg has two O4.5 holes (x axis) at y=12.65 and 26.65, z=-22",
+      "tol": "+-0.2 mm",
+      "ok": true,
+      "actual": [
+       [
+        26.65,
+        -22
+       ],
+       [
+        12.65,
+        -22
+       ]
+      ]
+     },
+     {
+      "check": "bracket base-leg holes (O3.4) coaxial with the two O2.5 pilots in the case-base underside",
+      "tol": "+-0.1 mm",
+      "ok": true,
+      "actual": {
+       "bracketHoles": [
+        [
+         2026,
+         19.65
+        ],
+        [
+         2046,
+         19.65
+        ]
+       ],
+       "underPilots": [
+        [
+         2046,
+         19.65
+        ],
+        [
+         2026,
+         19.65
+        ]
+       ]
+      }
+     },
+     {
+      "check": "sensor pod 24 x 20 x 12 mounted on the lid top (min z = 20), centred at y=19.65, x 2008..2032",
+      "tol": "+-0.1 mm",
+      "ok": true,
+      "actual": {
+       "min": [
+        2008,
+        9.65,
+        20
+       ],
+       "max": [
+        2032,
+        29.65,
+        32
+       ]
+      }
+     },
+     {
+      "check": "sensor pocket 18.1 x 15.5 (17.8 x 15.2 board + 0.15 per side) with a 1.6 mm floor",
+      "tol": "+-0.1 mm walls, floor +-0.05 mm",
+      "ok": true,
+      "actual": {
+       "walls": [
+        2010.95,
+        2029.05,
+        11.9,
+        27.4
+       ],
+       "floorPlane": true
+      }
+     },
+     {
+      "check": "10 x 4 cable notch in the +y wall of the pod (notch floor at z=28, 10 wide)",
+      "tol": "+-0.2 mm",
+      "ok": true,
+      "actual": {
+       "z": 28,
+       "w": 10
+      }
+     },
+     {
+      "check": "pod floor holes O3.0 coaxial with the two lid pilots",
+      "tol": "+-0.1 mm",
+      "ok": true,
+      "actual": [
+       [
+        2014,
+        19.65
+       ],
+       [
+        2026,
+        19.65
+       ]
+      ]
+     },
+     {
+      "check": "four M3x8 screw stand-ins (head O5.6 x 1.7 on a O3 x 8 shaft) at the four lid holes, head top flush with the lid top, one per hole",
+      "tol": "+-0.2 mm",
+      "ok": true,
+      "actual": [
+       true,
+       true,
+       true,
+       true
+      ]
+     },
+     {
+      "check": "no interference between any pair of the nine parts (28 pairs; screws vs case-base and lid excepted as nominal fits)",
+      "tol": "exact (native boolean intersection); touching is not interference",
+      "ok": true,
+      "actual": {
+       "pairs": 28,
+       "checked": 28,
+       "clashes": []
+      }
+     }
+    ]
+   },
+   "screenshot": {
+    "path": "shots/M-r1.png",
+    "mode": "window"
+   },
+   "transcript": "transcripts-baseline/M-r1.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 94
+   }
+  },
+  {
+   "part": "M",
+   "run": 2,
+   "label": "baseline",
+   "prompt": "Design an enclosure system for an ESP32 development board in Plasticity (millimetres): six named parts, each positioned exactly as assembled, everything at x >= 2000. Use these numbers as given. The PCB is 51.5 x 28.3 x 1.6 mm with four 3.0 mm diameter mounting holes whose centres are at (2.6, 2.6), (48.9, 2.6), (2.6, 25.7) and (48.9, 25.7) mm from one PCB corner (the corner at minimum x and minimum y; the long side of the PCB runs along x). A USB-C connector sits centred on the short PCB edge at minimum x; its opening is 9.2 x 3.4 mm with 1.2 mm corner radius, and the bottom of the opening is 1.6 mm above the top face of the PCB. The tallest component is 8 mm above the PCB top. The case base's outer rectangle has its minimum corner at x=2003, y=3, z=0, and the base is 18 mm tall overall. Parts: (1) A body named pcb: the board as a plate with its four holes, placed where it sits in the assembled case. (2) A body named case-base: 2 mm walls and a 2 mm floor, open top, with 0.5 mm clearance between the PCB and the inside of the walls on every side. Four standoffs, 5 mm diameter and 4 mm tall above the floor, each with a 2.5 mm diameter pilot hole 3 mm deep, under the four PCB holes so the PCB rests on them. The USB-C opening cut through the wall at minimum x. Four screw bosses, 6 mm diameter and full wall height, one at each outer corner of the base, each centred exactly on the corner point of the outer rectangle (so part of every boss lies outside the walls and joins them and forms the 3 mm radius outer corner), each with a 2.5 mm diameter pilot hole 8 mm deep from the top. Two more 2.5 mm pilot holes, 1.2 mm deep, in the underside of the floor, on the centre line of the case width at x=2026 and x=2046. (3) A body named lid: a 2 mm thick plate sitting on top of the base, with the same outline as the base including the corner bosses. Underneath it, a lip 1.5 mm deep and 1.2 mm thick that fits inside the walls with 0.2 mm clearance per side. Four 3.4 mm diameter screw holes through the lid, countersunk (90 degrees, 6.5 mm diameter at the top), aligned with the four base bosses. A vent of five slots, each 1.6 mm wide and 10 mm long (long side along y), evenly spread across a zone 20 mm wide (x) by 10 mm (y) centred at x=2046, y=19.65. Two 2.5 mm diameter pilot holes, 1.2 mm deep, in the top of the lid at x=2014 and x=2026 (y=19.65). (4) A body named bracket: an L-bracket 30 mm wide and 3 mm thick with two legs of 40 mm outside length. One leg lies flat against the underside of the case base (z from -3 to 0), spanning x 2016 to 2056 and centred on the case width; the other leg runs from its maximum-x end straight down to z=-40 (the wall leg). Two 4.5 mm holes in the wall leg, symmetric about the centre line, 14 mm apart, centred at z=-22. Two 3.4 mm holes in the flat leg that line up with the two underside pilot holes in the case base. (5) A body named sensor-pod: a 24 x 20 x 12 mm open-top box standing on the lid top, x from 2008 to 2032, centred on y=19.65. Its floor is 1.6 mm thick. Its pocket fits a 17.8 x 15.2 mm sensor board with a 0.15 mm clearance on every side (a friction fit, no snap), centred in the box. A 10 mm wide, 4 mm deep cable notch cut down from the rim in the wall at maximum y. Two 3.0 mm holes through the pod floor, lined up with the two lid pilot holes at x=2014 and x=2026. (6) Four M3 x 8 screw stand-ins, bodies named screw-1 to screw-4: each a 3 mm diameter shaft 8 mm long under a 5.6 mm diameter head 1.7 mm tall, placed in the four lid countersunk holes with the head top flush with the lid top. Make every part its own valid solid body with exactly these names, in the assembled positions. Verify the result, then reply with one line: DONE.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/bench-2026-11-run-ojV4sY/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 80 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 118986,
+   "startupMs": 886,
+   "turns": 5,
+   "toolCalls": 5,
+   "toolCallsByName": {
+    "plasticity_call": 1,
+    "plasticity_describe_body": 1,
+    "plasticity_batch": 3
+   },
+   "errors": 0,
+   "retries": 0,
+   "requestBytes": 9231,
+   "responseBytes": 25025,
+   "serverExecMs": 11894,
+   "serverTimeShare": 0.1,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_call",
+     "reqBytes": 23,
+     "respBytes": 3785,
+     "isError": false,
+     "startedMs": 38136,
+     "execMs": 64
+    },
+    {
+     "turn": 1,
+     "name": "plasticity_describe_body",
+     "reqBytes": 2,
+     "respBytes": 1226,
+     "isError": false,
+     "startedMs": 38136,
+     "execMs": 829
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps: create_box,create_through_hole_pattern,describe_body)",
+     "reqBytes": 435,
+     "respBytes": 2688,
+     "isError": false,
+     "startedMs": 44871,
+     "execMs": 499
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_batch",
+     "routedTo": "batch(25 steps: create_box,create_box,boolean,create_cylinder,create_cylinder,create_cylinder,create_cylinder,create_cylinder,create_cylinder,create_cylinder,create_cylinder,boolean)",
+     "reqBytes": 3181,
+     "respBytes": 4488,
+     "isError": false,
+     "startedMs": 62746,
+     "execMs": 1909
+    },
+    {
+     "turn": 4,
+     "name": "plasticity_batch",
+     "routedTo": "batch(44 steps: create_box,create_cylinder,create_cylinder,create_cylinder,create_cylinder,boolean,create_box,create_box,boolean,boolean,create_box,create_box)",
+     "reqBytes": 5590,
+     "respBytes": 12838,
+     "isError": false,
+     "startedMs": 102637,
+     "execMs": 8593
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 37250,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 2,
+     "respBytes": 5011,
+     "execMs": 893,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 5906,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 2688,
+     "execMs": 499,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 17376,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 4488,
+     "execMs": 1909,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 4,
+     "modelMs": 37981,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 1,
+     "respBytes": 12838,
+     "execMs": 8593,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 5,
+     "modelMs": 4276,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "toolCalls": 0,
+     "respBytes": 0,
+     "execMs": 0,
+     "thinkingChars": 0,
+     "textChars": 4
+    }
+   ],
+   "tokens": {
+    "input": 10,
+    "output": 10905,
+    "cacheRead": 157042,
+    "cacheWrite": 29733
+   },
+   "costUsd": 0.9434163999999999,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE",
+   "documentScaleAtEnd": {
+    "bodies": 13,
+    "totalFaces": 177
+   },
+   "verification": {
+    "passed": 25,
+    "of": 25,
+    "failed": [],
+    "bodyId": null,
+    "checks": [
+     {
+      "check": "six part groups exist by name: pcb, case-base, lid, bracket, sensor-pod, screw-1..4 (9 solids)",
+      "tol": "exact name match, type Solid",
+      "ok": true,
+      "actual": [
+       "pcb:1592",
+       "case-base:1597",
+       "lid:1619",
+       "bracket:1645",
+       "sensor-pod:1651",
+       "screw-1:1656",
+       "screw-2:1658",
+       "screw-3:1660",
+       "screw-4:1662"
+      ]
+     },
+     {
+      "check": "each part is a valid closed Solid (native B-Rep Check)",
+      "tol": "exact",
+      "ok": true,
+      "actual": "all valid"
+     },
+     {
+      "check": "PCB stand-in is 51.5 x 28.3 x 1.6 at its design position (min corner 2005.5, 5.5, 6)",
+      "tol": "+-0.05 mm",
+      "ok": true,
+      "actual": {
+       "min": [
+        2005.5,
+        5.5,
+        6
+       ],
+       "max": [
+        2057,
+        33.8,
+        7.6
+       ]
+      }
+     },
+     {
+      "check": "PCB has four O3.0 mounting holes at (2.6, 2.6), (48.9, 2.6), (2.6, 25.7), (48.9, 25.7) from its corner",
+      "tol": "+-0.1 mm position, +-0.05 radius",
+      "ok": true,
+      "actual": [
+       [
+        2008.1,
+        8.1,
+        1.5
+       ],
+       [
+        2054.4,
+        31.2,
+        1.5
+       ],
+       [
+        2008.1,
+        31.2,
+        1.5
+       ],
+       [
+        2054.4,
+        8.1,
+        1.5
+       ]
+      ]
+     },
+     {
+      "check": "PCB sits on four standoff tops: standoff top faces at z=6 under each PCB hole, PCB bottom at z=6 (gap 0)",
+      "tol": "gap 0 +-0.05 mm",
+      "ok": true,
+      "actual": {
+       "pcbBottom": 6,
+       "standoffTopFaces": 4
+      }
+     },
+     {
+      "check": "0.5 clearance between the PCB and the inner walls on all four sides (x-min, x-max, y-min, y-max)",
+      "tol": "0.5 +-0.05 mm",
+      "ok": true,
+      "actual": [
+       0.5,
+       0.5,
+       0.5,
+       0.5
+      ]
+     },
+     {
+      "check": "standoff pilots (O2.5, z axis, between z=2 and 6) coaxial with the four PCB holes",
+      "tol": "+-0.1 mm",
+      "ok": true,
+      "actual": [
+       [
+        2054.4,
+        31.2,
+        3,
+        6
+       ],
+       [
+        2008.1,
+        31.2,
+        3,
+        6
+       ],
+       [
+        2054.4,
+        8.1,
+        3,
+        6
+       ],
+       [
+        2008.1,
+        8.1,
+        3,
+        6
+       ],
+       [
+        2046,
+        19.65,
+        0,
+        1.2
+       ],
+       [
+        2026,
+        19.65,
+        0,
+        1.2
+       ]
+      ]
+     },
+     {
+      "check": "USB-C opening 9.2 x 3.4 in the x-min wall, centred on the connector position (y=19.65, z=10.9)",
+      "tol": "size +-0.2 mm, centre +-0.2 mm",
+      "ok": true,
+      "actual": {
+       "w": 9.2,
+       "h": 3.4,
+       "cy": 19.65,
+       "cz": 10.9
+      }
+     },
+     {
+      "check": "USB-C opening corners R1.2 (four x-axis cylinders r=1.2)",
+      "tol": "radius +-0.1 mm",
+      "soft": true,
+      "ok": true,
+      "actual": 4
+     },
+     {
+      "check": "base size: outer 56.5 x 33.3 x 18 including the corner bosses, with bosses reaching x=2000",
+      "tol": "+-0.1 mm",
+      "ok": true,
+      "actual": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2062.5,
+        39.3,
+        18
+       ]
+      }
+     },
+     {
+      "check": "outer vertical corners R3 (a r=3 vertical cylinder at each corner: either the corner boss or an R3 fillet centre)",
+      "tol": "radius +-0.05, axis +-0.15 mm",
+      "ok": true,
+      "actual": [
+       [
+        2003,
+        3
+       ],
+       [
+        2003,
+        3
+       ],
+       [
+        2059.5,
+        3
+       ],
+       [
+        2059.5,
+        3
+       ],
+       [
+        2003,
+        36.3
+       ],
+       [
+        2003,
+        36.3
+       ],
+       [
+        2059.5,
+        36.3
+       ],
+       [
+        2059.5,
+        36.3
+       ]
+      ]
+     },
+     {
+      "check": "four O6 corner bosses at the outer corner points with O2.5 pilots reaching the rim (pilot cylinders on the same axes, top at z=18, depth about 8)",
+      "tol": "axis +-0.1 mm, radius +-0.05, depth 8 +-0.5",
+      "ok": true,
+      "actual": [
+       [
+        2003,
+        3,
+        8
+       ],
+       [
+        2059.5,
+        36.3,
+        8
+       ],
+       [
+        2003,
+        36.3,
+        8
+       ],
+       [
+        2059.5,
+        3,
+        8
+       ]
+      ]
+     },
+     {
+      "check": "lid lip: outer faces 0.2 inside the cavity walls on each side, lip depth 1.5 (faces z 16.5 to 18)",
+      "tol": "clearance 0.2 +-0.05 mm, depth 1.5 +-0.1 mm",
+      "ok": true,
+      "actual": [
+       {
+        "at": 2005.2,
+        "z": [
+         16.5,
+         18
+        ]
+       },
+       {
+        "at": 2057.3,
+        "z": [
+         16.5,
+         18
+        ]
+       },
+       {
+        "at": 5.2,
+        "z": [
+         16.5,
+         18
+        ]
+       },
+       {
+        "at": 34.1,
+        "z": [
+         16.5,
+         18
+        ]
+       }
+      ]
+     },
+     {
+      "check": "lid screw holes O3.4 coaxial with the four base bosses",
+      "tol": "+-0.1 mm, radius +-0.05",
+      "ok": true,
+      "actual": [
+       [
+        2003,
+        3
+       ],
+       [
+        2003,
+        36.3
+       ],
+       [
+        2059.5,
+        3
+       ],
+       [
+        2059.5,
+        36.3
+       ]
+      ]
+     },
+     {
+      "check": "four countersinks in the lid (at least four conical faces)",
+      "tol": "count",
+      "ok": true,
+      "actual": 4
+     },
+     {
+      "check": "five vent slots of width 1.6 inside the 20 x 10 zone centred at (2046, 19.65): ten slot side faces in pairs",
+      "tol": "width 1.6 +-0.1 mm, zone +-0.3 mm",
+      "ok": true,
+      "actual": {
+       "sideFaces": 10,
+       "widths": [
+        1.6,
+        1.6,
+        1.6,
+        1.6,
+        1.6
+       ]
+      }
+     },
+     {
+      "check": "two O2.5 blind pilots in the lid top for the sensor pod at (2014,19.65) and (2026,19.65), depth 1.2",
+      "tol": "+-0.1 mm, depth +-0.3",
+      "ok": true,
+      "actual": [
+       [
+        2014,
+        19.65,
+        1.2
+       ],
+       [
+        2026,
+        19.65,
+        1.2
+       ]
+      ]
+     },
+     {
+      "check": "bracket: L shape 30 wide, 3 thick, legs 40 and 40 (bounds x 2016..2056, y 4.65..34.65, z -40..0)",
+      "tol": "+-0.1 mm",
+      "ok": true,
+      "actual": {
+       "min": [
+        2016,
+        4.65,
+        -40
+       ],
+       "max": [
+        2056,
+        34.65,
+        0
+       ]
+      }
+     },
+     {
+      "check": "bracket wall leg has two O4.5 holes (x axis) at y=12.65 and 26.65, z=-22",
+      "tol": "+-0.2 mm",
+      "ok": true,
+      "actual": [
+       [
+        26.65,
+        -22
+       ],
+       [
+        12.65,
+        -22
+       ]
+      ]
+     },
+     {
+      "check": "bracket base-leg holes (O3.4) coaxial with the two O2.5 pilots in the case-base underside",
+      "tol": "+-0.1 mm",
+      "ok": true,
+      "actual": {
+       "bracketHoles": [
+        [
+         2046,
+         19.65
+        ],
+        [
+         2026,
+         19.65
+        ]
+       ],
+       "underPilots": [
+        [
+         2046,
+         19.65
+        ],
+        [
+         2026,
+         19.65
+        ]
+       ]
+      }
+     },
+     {
+      "check": "sensor pod 24 x 20 x 12 mounted on the lid top (min z = 20), centred at y=19.65, x 2008..2032",
+      "tol": "+-0.1 mm",
+      "ok": true,
+      "actual": {
+       "min": [
+        2008,
+        9.65,
+        20
+       ],
+       "max": [
+        2032,
+        29.65,
+        32
+       ]
+      }
+     },
+     {
+      "check": "sensor pocket 18.1 x 15.5 (17.8 x 15.2 board + 0.15 per side) with a 1.6 mm floor",
+      "tol": "+-0.1 mm walls, floor +-0.05 mm",
+      "ok": true,
+      "actual": {
+       "walls": [
+        2010.95,
+        2029.05,
+        11.9,
+        27.4
+       ],
+       "floorPlane": true
+      }
+     },
+     {
+      "check": "10 x 4 cable notch in the +y wall of the pod (notch floor at z=28, 10 wide)",
+      "tol": "+-0.2 mm",
+      "ok": true,
+      "actual": {
+       "z": 28,
+       "w": 10
+      }
+     },
+     {
+      "check": "pod floor holes O3.0 coaxial with the two lid pilots",
+      "tol": "+-0.1 mm",
+      "ok": true,
+      "actual": [
+       [
+        2026,
+        19.65
+       ],
+       [
+        2014,
+        19.65
+       ]
+      ]
+     },
+     {
+      "check": "four M3x8 screw stand-ins (head O5.6 x 1.7 on a O3 x 8 shaft) at the four lid holes, head top flush with the lid top, one per hole",
+      "tol": "+-0.2 mm",
+      "ok": true,
+      "actual": [
+       true,
+       true,
+       true,
+       true
+      ]
+     },
+     {
+      "check": "no interference between any pair of the nine parts (28 pairs; screws vs case-base and lid excepted as nominal fits)",
+      "tol": "exact (native boolean intersection); touching is not interference",
+      "ok": true,
+      "actual": {
+       "pairs": 28,
+       "checked": 28,
+       "clashes": []
+      }
+     }
+    ]
+   },
+   "screenshot": {
+    "path": "shots/M-r2.png",
+    "mode": "window"
+   },
+   "transcript": "transcripts-baseline/M-r2.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 94
+   }
+  }
+ ]
+}
