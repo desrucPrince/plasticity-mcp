@@ -219,6 +219,8 @@ function fixture(scenario: Scenario = "commit", options: Options = {}) {
 const FAST: PickCommandTimeouts = { dialogMs: 60, finishMs: 80, cancelMs: 60 };
 const PAIR = { bodyId: 5, movingFaceId: "fxp", referenceFaceId: "fxn", distanceMm: 30 };
 const RECONCILE = /the result is uncertain\. Call plasticity_reconcile before any other edit/;
+// Round 4: a determinate mismatch (one clean Undo step, wrong geometry) is a CERTAIN error that names the undo.
+const UNDO_RESTORES = /The document is in a known state at revision \S+: one Undo step was added, and plasticity_undo restores the previous geometry/;
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function assertCleanEnd(f: ReturnType<typeof fixture>) {
@@ -331,27 +333,26 @@ test("a cancel that fails after finish() is still uncertain and names the cancel
 
 // ---- item 2: a commit with no Undo step that did not reach the request is an error
 
-test("no Undo step, unchanged body, distance not reached: 'Plasticity made no change', runtime certain", async () => {
+test("no Undo step, unchanged body, distance not reached after finish(): 'Plasticity made no change', runtime uncertain (round 4: no no-effect rejection)", async () => {
   for (const [input, refDistanceM, message] of [
     [PAIR, 0.02, "Plasticity made no change: distance is still 20 mm, requested 30 mm"],
     [{ bodyId: 5, movingFaceId: "fz", distanceMm: 20 }, 0.012, "Plasticity made no change: distance is still 12 mm, requested 20 mm"],
   ] as const) {
     const f = fixture("commit-noop", { refDistanceM });
     await assert.rejects(f.operations.setDrivingDistance(input, "r1", FAST), (error: Error) => {
-      assert.equal(error.message, message);
+      assert.ok(error.message.includes(message), error.message);
+      assert.match(error.message, RECONCILE);
       return true;
     });
-    assert.equal(f.isUncertain(), false, "nothing changed and nothing is active");
+    assert.equal(f.isUncertain(), true, "finish() was called and Plasticity gave no no-effect rejection");
     assertCleanEnd(f);
   }
 });
 
-test("no Undo step and the distance already equals the request (within 1e-6 mm) is still the no-op result", async () => {
+test("no Undo step and the distance already equals the request (within 1e-6 mm), but no no-effect rejection after finish(): uncertain (round 4)", async () => {
   const f = fixture("commit-noop", { refDistanceM: 0.012 });
-  const result = await f.operations.setDrivingDistance({ bodyId: 5, movingFaceId: "fz", distanceMm: 12 + 5e-7 }, "r1", FAST);
-  assert.equal(result.changed, false);
-  assert.equal(result.undoSteps, 0);
-  assert.match(result.message ?? "", /^distance already 12 mm; nothing changed$/);
+  await assert.rejects(f.operations.setDrivingDistance({ bodyId: 5, movingFaceId: "fz", distanceMm: 12 + 5e-7 }, "r1", FAST), RECONCILE);
+  assert.equal(f.isUncertain(), true);
 });
 
 // ---- item 3: the read-back must see the moving face's plane change
@@ -361,10 +362,10 @@ test("nothing moved but another face already sits at the target offset: an error
   await assert.rejects(f.operations.setDrivingDistance(PAIR, "r1", FAST), (error: Error) => {
     assert.match(error.message, /read-back does not match: no face moved to 2030 mm/);
     assert.match(error.message, /Plasticity made no change: distance is still 20 mm, requested 30 mm/);
-    assert.match(error.message, RECONCILE);
+    assert.match(error.message, UNDO_RESTORES);
     return true;
   });
-  assert.equal(f.isUncertain(), true, "an Undo step was added, so the document did change");
+  assert.equal(f.isUncertain(), false, "an Undo step was added in a known way: a certain error, plasticity_undo restores it");
 });
 
 test("a different face moved to the target while the moving face stayed: an error naming it", async () => {
@@ -372,16 +373,16 @@ test("a different face moved to the target while the moving face stayed: an erro
   const f = fixture("commit-other-face", { otherFaceId: "fx10", extraFaces: [{ id: "fx10", surfaceType: "Plane", planar: true, centerMm: [2010, 2, 1], normal: [1, 0, 0], edgeIds: [] }] });
   await assert.rejects(f.operations.setDrivingDistance(PAIR, "r1", FAST), (error: Error) => {
     assert.match(error.message, /a different face moved \(planes at 2010 mm lost a face; the moving face at 2020 mm did not move\)/);
-    assert.match(error.message, RECONCILE);
+    assert.match(error.message, UNDO_RESTORES);
     return true;
   });
-  assert.equal(f.isUncertain(), true);
+  assert.equal(f.isUncertain(), false);
 });
 
 test("the reference face moved instead of the moving face: an error, the reference plane is checked", async () => {
   const f = fixture("commit-other-face", { otherFaceId: "fxn" });
   await assert.rejects(f.operations.setDrivingDistance(PAIR, "r1", FAST), /read-back does not match: no face moved to 2030 mm/);
-  assert.equal(f.isUncertain(), true);
+  assert.equal(f.isUncertain(), false);
 });
 
 test("make flush: the moving face merges into an existing coplanar face at the target, a success", async () => {
@@ -405,10 +406,10 @@ test("a moving face that lands on the far side of the reference, at the requeste
 
 test("a foreign command active after a non-commit outcome is named in the error and left alone", async () => {
   const f = fixture("commit-fails", { executor: "swallowing", foreignAfterCommit: true });
-  await assert.rejects(f.operations.setDrivingDistance(PAIR, "r1", FAST), /^Error: Driving distance failed: Kernel failed; another Plasticity command \(ForeignCommand\) is active and was left alone; the document is unchanged$/);
+  await assert.rejects(f.operations.setDrivingDistance(PAIR, "r1", FAST), /^Error: Driving distance failed: Kernel failed; another Plasticity command \(ForeignCommand\) is active and was left alone; its dialog was finished, so a commit may still land; the result is uncertain\. Call plasticity_reconcile before any other edit$/);
   assert.equal(f.seen.cancelled, 0);
   assert.equal(f.executor.active?.command, f.foreign);
-  assert.equal(f.isUncertain(), false);
+  assert.equal(f.isUncertain(), true);
 });
 
 test("an early interruption by a user command reads as interrupted, not as no effect", async () => {

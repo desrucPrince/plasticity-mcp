@@ -285,11 +285,11 @@ test("a commit that fails after finish() reports the failure without an Undo ste
   const f = fixture("commit-fails");
   await assert.rejects(
     f.operations.setDrivingDistance({ bodyId: 5, movingFaceId: "fxp", referenceFaceId: "fxn", distanceMm: 30 }, "r1", FAST),
-    /^Error: Driving distance failed: Kernel failed; the document is unchanged$/,
+    /^Error: Driving distance failed: Kernel failed; its dialog was finished, so a commit may still land; the result is uncertain\. Call plasticity_reconcile before any other edit$/,
   );
   assert.equal(f.seen.cancelled, 0);
   assertCleanEnd(f);
-  assert.equal(f.isUncertain(), false);
+  assert.equal(f.isUncertain(), true);
 });
 
 test("runPickCommand refuses to start while a command is active or the executor is busy", async () => {

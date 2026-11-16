@@ -211,6 +211,8 @@ function fixture(scenario: Scenario = "commit", options: Options = {}) {
 const FAST: PickCommandTimeouts = { dialogMs: 60, finishMs: 80, cancelMs: 60 };
 const PAIR = { bodyId: 5, movingFaceId: "fxp", referenceFaceId: "fxn", distanceMm: 30 };
 const RECONCILE = /the result is uncertain\. Call plasticity_reconcile before any other edit/;
+// Round 4: a determinate mismatch (one clean Undo step, wrong geometry) is a CERTAIN error that names the undo.
+const UNDO_RESTORES = /The document is in a known state at revision \S+: one Undo step was added, and plasticity_undo restores the previous geometry/;
 
 function assertCleanEnd(f: ReturnType<typeof fixture>) {
   assert.equal(f.executor.active, null, "no active command");
@@ -280,10 +282,10 @@ test("swallowing executor: an early rejection carries the native reason after th
 
 test("swallowing executor: a commit that fails after finish() reports that failure, not an Undo count", async () => {
   const f = fixture("commit-fails", { executor: "swallowing" });
-  await assert.rejects(f.operations.setDrivingDistance(PAIR, "r1", FAST), /^Error: Driving distance failed: Kernel failed; the document is unchanged$/);
+  await assert.rejects(f.operations.setDrivingDistance(PAIR, "r1", FAST), /^Error: Driving distance failed: Kernel failed; its dialog was finished, so a commit may still land; the result is uncertain\. Call plasticity_reconcile before any other edit$/);
   assert.equal(f.seen.dialog!.finished, 1);
   assertCleanEnd(f);
-  assert.equal(f.isUncertain(), false);
+  assert.equal(f.isUncertain(), true);
 });
 
 test("swallowing executor: a hang is cancelled and the Cancel error is not read as a failure", async () => {
@@ -317,14 +319,10 @@ test("a commit with no Undo step but a changed body marks the runtime uncertain"
   assert.equal(f.isUncertain(), true);
 });
 
-test("a commit with no Undo step and an unchanged body is a clear no-op", async () => {
+test("a commit with no Undo step and an unchanged body after finish(), without a no-effect rejection, is uncertain (round 4)", async () => {
   const f = fixture("commit-noop", { refDistanceM: 0.012 });
-  const result = await f.operations.setDrivingDistance({ bodyId: 5, movingFaceId: "fz", distanceMm: 12 }, "r1", FAST);
-  assert.equal(result.changed, false);
-  assert.equal(result.undoSteps, 0);
-  assert.equal(result.movedFaceId, null);
-  assert.match(result.message ?? "", /^distance already 12 mm/);
-  assert.equal(f.isUncertain(), false);
+  await assert.rejects(f.operations.setDrivingDistance({ bodyId: 5, movingFaceId: "fz", distanceMm: 12 }, "r1", FAST), RECONCILE);
+  assert.equal(f.isUncertain(), true);
 });
 
 test("single-face mode, equal distance: finish() gives no effect, reported as a no-op, not an error", async () => {
@@ -399,16 +397,16 @@ test("a commit that moves the reference instead of the moving face marks the run
   await assert.rejects(f.operations.setDrivingDistance(PAIR, "r1", FAST), (error: Error) => {
     assert.match(error.message, /read-back does not match: no face moved to 2030 mm/);
     assert.match(error.message, /planes now: fxp@2020, fxn@1990/);
-    assert.match(error.message, RECONCILE);
+    assert.match(error.message, UNDO_RESTORES);
     return true;
   });
-  assert.equal(f.isUncertain(), true);
+  assert.equal(f.isUncertain(), false);
 });
 
 test("a commit after which no plane moved marks the runtime uncertain", async () => {
   const f = fixture("commit-nothing-moves");
   await assert.rejects(f.operations.setDrivingDistance(PAIR, "r1", FAST), /no face moved to 2030 mm/);
-  assert.equal(f.isUncertain(), true);
+  assert.equal(f.isUncertain(), false);
 });
 
 // ---- item 6: only OUR command is ever cancelled
@@ -469,13 +467,21 @@ test("a same-direction pair (stepped faces) is allowed and moves the last select
 
 test("the selection and hits are always clear and no command of ours is active after a certain outcome", async () => {
   const certain: Array<[Scenario, Options]> = [
-    ["commit", {}], ["reject", { executor: "swallowing" }], ["commit-fails", { executor: "swallowing" }],
-    ["drive-throws", {}], ["commit-noop", {}], ["finish-no-effect", { executor: "swallowing", refDistanceM: 0.03 }],
+    ["commit", {}], ["reject", { executor: "swallowing" }],
+    ["drive-throws", {}], ["finish-no-effect", { executor: "swallowing", refDistanceM: 0.03 }],
   ];
   for (const [scenario, options] of certain) {
     const f = fixture(scenario, options);
     await f.operations.setDrivingDistance(PAIR, "r1", FAST).catch(() => undefined);
     assert.equal(f.isUncertain(), false, scenario);
+    assertCleanEnd(f);
+  }
+  // Round 4: after finish(), a failed commit and a commit with no Undo step are uncertain (no no-effect rejection),
+  // but the editor is still cleaned up.
+  for (const [scenario, options] of [["commit-fails", { executor: "swallowing" }], ["commit-noop", {}]] as Array<[Scenario, Options]>) {
+    const f = fixture(scenario, options);
+    await f.operations.setDrivingDistance(PAIR, "r1", FAST).catch(() => undefined);
+    assert.equal(f.isUncertain(), true, scenario);
     assertCleanEnd(f);
   }
   // A hang after finish() is cancelled and cleaned up, but it is uncertain: a commit finish() started may still land.

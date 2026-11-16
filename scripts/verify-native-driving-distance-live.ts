@@ -62,6 +62,9 @@ Live mode takes a baseline, then builds disposable geometry at x >= 2400 mm and 
   - a washer plate (centred through hole, so the top face midpoint lies in the hole): single-face and pair mode;
   - a stepped block: two +z faces that face the same way, the upper one set 8 mm above the lower one;
   - the same stepped block reversed: the UPPER face is the reference and the lower face moves (5 -> 8 mm below it);
+  - the step-deleted case: the lower face set 12 mm below the upper one goes past the bottom and Plasticity removes
+    the low part: a certain "committed but does not match" error naming the removed face and the Undo step, after
+    which one plasticity_undo (no reconcile) restores the body;
   - slot walls that face each other: the slot width 10 -> 14 mm (one wall fixed) and single-face mode on a wall;
   - single-face mode on the flat face of a half cylinder (a cylinder, not a parallel plane, lies behind it):
     Plasticity rejects it, no Undo entry;
@@ -328,6 +331,35 @@ async function main(): Promise<void> {
       const upper = only(faces, (face) => face.planar && face.normal[2] > 0.999 && face.centerMm[2] > 9, "reversed stepped: upper +z");
       const lower = only(faces, (face) => face.planar && face.normal[2] > 0.999 && face.centerMm[2] < 6, "reversed stepped: lower +z");
       await layout("stepped_reversed_upper_reference", high.id, { moving: lower, reference: upper, fixedMm: 10, axis: 2, distanceMm: 8, previousMm: 5, expectedMm: 2 });
+      // The step-deleted case (probe-pair-layouts.json stepped_reversed_lower_moves_5_to_12_past_zero): the lower face
+      // set 12 mm below the upper one would sit at z -2, below the bottom, so Plasticity removes the low part. That is a
+      // determinate change: a certain error, and one plasticity_undo restores the body without a reconcile.
+      const before = await status(client);
+      const bodyBefore = await bodyOf(high.id);
+      const facesBefore = await facesOf(high.id);
+      const upperNow = only(facesBefore, (face) => face.planar && face.normal[2] > 0.999 && face.centerMm[2] > 9, "step deleted: upper +z");
+      const lowerNow = only(facesBefore, (face) => face.planar && face.normal[2] > 0.999 && face.centerMm[2] < 6, "step deleted: lower +z");
+      let message = "";
+      try {
+        await call(client, "plasticity_set_driving_distance", { bodyId: high.id, movingFaceId: lowerNow.id, referenceFaceId: upperNow.id, distanceMm: 12, revision: before.revision, intent: "Acceptance: step deleted" });
+      } catch (error) { message = error instanceof Error ? error.message : String(error); }
+      const after = await status(client);
+      requireCondition(after.undoDepth === before.undoDepth + 1, `step deleted: expected one Undo step, got ${after.undoDepth - before.undoDepth}`);
+      requireCondition(/^Driving distance committed one Undo step, but the read-back does not match: /.test(message), `step deleted: expected a committed-mismatch error, got "${message.slice(0, 300)}"`);
+      requireCondition(message.includes(`the moving face ${high.id}:${lowerNow.id} was removed`), `step deleted: the error must name the removed face ${high.id}:${lowerNow.id}, got "${message.slice(0, 400)}"`);
+      requireCondition(message.includes(`The document is in a known state at revision ${after.revision}: one Undo step was added, and plasticity_undo restores the previous geometry`), `step deleted: the error must name revision ${after.revision} and the Undo step, got "${message.slice(0, 600)}"`);
+      requireCondition(!/uncertain|plasticity_reconcile/.test(message), `step deleted: the error must be certain, got "${message.slice(0, 300)}"`);
+      // No reconcile: the undo is accepted only while the session is certain.
+      await call(client, "plasticity_undo", { revision: after.revision, intent: "Undo acceptance: step deleted" });
+      const undone = await status(client);
+      requireCondition(undone.undoDepth === before.undoDepth, "step deleted: one undo did not return to the checkpoint");
+      const bodyUndone = await bodyOf(high.id);
+      requireCondition(JSON.stringify(bodyUndone.boundsMm) === JSON.stringify(bodyBefore.boundsMm), `step deleted: undo did not restore the bounds ${JSON.stringify(bodyBefore.boundsMm)}, got ${JSON.stringify(bodyUndone.boundsMm)}`);
+      const facesUndone = await facesOf(high.id);
+      requireCondition(facesUndone.length === facesBefore.length, `step deleted: undo restored ${facesUndone.length} faces, expected ${facesBefore.length}`);
+      requireCondition(facesUndone.some((face) => face.planar && face.normal[2] > 0.999 && Math.abs(face.centerMm[2] - 5) < 1e-6), "step deleted: undo did not restore the lower +z face at z 5");
+      checks.step_deleted_certain_mismatch = { message: message.slice(0, 600), undoDepth: [before.undoDepth, after.undoDepth, undone.undoDepth], boundsBefore: bodyBefore.boundsMm, boundsUndone: bodyUndone.boundsMm, clean: await requireClean("step deleted") };
+      console.error("step_deleted_certain_mismatch: ok");
     }
 
     // ---- slot walls that face each other: a 40 x 20 x 10 block with a 10 mm slot (x 3115..3125) 5 mm deep. The
