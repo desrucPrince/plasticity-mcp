@@ -1,0 +1,41 @@
+{
+ "start": {
+  "undo": 0,
+  "bodies": 4
+ },
+ "editorBefore": {
+  "undo": 1,
+  "active": null,
+  "selected": 0,
+  "hits": 0
+ },
+ "elapsedMs": 832,
+ "message": "Driving distance (cancel probe) did not finish within 800 ms (finish phase); Plasticity cancelled it and the document is unchanged",
+ "runtimeUncertain": false,
+ "editorAfter": {
+  "undo": 1,
+  "active": null,
+  "selected": 0,
+  "hits": 0
+ },
+ "undo": [
+  1,
+  1
+ ],
+ "boundsAfter": {
+  "min": [
+   2400.0000000000005,
+   0,
+   0
+  ],
+  "max": [
+   2420,
+   10,
+   5
+  ]
+ },
+ "end": {
+  "undo": 0,
+  "bodies": 4
+ }
+}

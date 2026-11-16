@@ -6436,9 +6436,9 @@ test("MCP returns the face control points next to the state from show and move",
     const shownJson = parseToolJson(show);
     assert.deepEqual(shownJson.controlPoints, points);
     assert.equal(typeof shownJson.revision, "string", "the state fields stay next to controlPoints");
-    const move = await client.callTool({ name: "plasticity_move_face_control_points", arguments: { bodyId: 5, cvIds: [2, 3], deltaMm: [0, 0, 10], revision: "r1" } });
+    const move = await client.callTool({ name: "plasticity_move_face_control_points", arguments: { bodyId: 5, cvIds: ["54c2", "54c3"], deltaMm: [0, 0, 10], revision: "r1" } });
     assert.equal(move.isError, undefined, JSON.stringify(move.content));
-    assert.deepEqual(moved, [5, [2, 3], [0, 0, 10], "r1"]);
+    assert.deepEqual(moved, [5, ["54c2", "54c3"], [0, 0, 10], "r1"]);
     assert.deepEqual((parseToolJson(move).controlPoints as Array<{ positionMm: number[] }>).map((point) => point.positionMm[2]), [23.333, 23.333]);
     shown = undefined;
     moved = undefined;
@@ -6446,8 +6446,8 @@ test("MCP returns the face control points next to the state from show and move",
       const response = await client.callTool({ name: "plasticity_show_face_control_points", arguments: { bodyId: 5, faceIds: ["f1"], revision: "r1", ...bad } });
       assert.equal(response.isError, true, JSON.stringify(bad));
     }
-    for (const bad of [{ cvIds: [] }, { cvIds: [1, 1] }, { cvIds: [-1] }, { deltaMm: [0, 0, 0] }, { deltaMm: [1, 2] }, { faceId: "f1" }]) {
-      const response = await client.callTool({ name: "plasticity_move_face_control_points", arguments: { bodyId: 5, cvIds: [2], deltaMm: [0, 0, 10], revision: "r1", ...bad } });
+    for (const bad of [{ cvIds: [] }, { cvIds: ["54c1", "54c1"] }, { cvIds: [""] }, { deltaMm: [0, 0, 0] }, { deltaMm: [1, 2] }, { faceId: "f1" }]) {
+      const response = await client.callTool({ name: "plasticity_move_face_control_points", arguments: { bodyId: 5, cvIds: ["54c2"], deltaMm: [0, 0, 10], revision: "r1", ...bad } });
       assert.equal(response.isError, true, JSON.stringify(bad));
     }
     assert.equal(shown, undefined);
@@ -6483,7 +6483,7 @@ test("the Upgrades B tools are reachable through plasticity_call and work as bat
   const batch = await client.callTool({ name: "plasticity_batch", arguments: { steps: [
     { toolName: "plasticity_convert_reference_mesh_to_polysplines", arguments: { referenceMeshId: 3 } },
     { toolName: "plasticity_show_face_control_points", arguments: { bodyId: 5, faceIds: ["f1"] } },
-    { toolName: "plasticity_move_face_control_points", arguments: { bodyId: 5, cvIds: [0], deltaMm: [0, 0, 10] } },
+    { toolName: "plasticity_move_face_control_points", arguments: { bodyId: 5, cvIds: ["0c0"], deltaMm: [0, 0, 10] } },
     { toolName: "plasticity_xsided_patch", arguments: { edges: { bodyId: 5, edgeIds: ["e1"] }, continuity: "g1" } },
   ] } });
   assert.equal(batch.isError, undefined, JSON.stringify(batch.content));

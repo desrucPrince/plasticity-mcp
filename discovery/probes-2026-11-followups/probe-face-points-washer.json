@@ -1,0 +1,408 @@
+[
+ {
+  "id": "26f1488",
+  "planar": true,
+  "FindMidpoint": {
+   "position": [
+    2520,
+    19.999999999999996,
+    4.999999999999999
+   ],
+   "normal": [
+    0,
+    0,
+    1
+   ]
+  },
+  "FindMidpointType": "Object",
+  "GetAnyPointOn": {
+   "position": [
+    2505.475182190717,
+    12.762535161404466,
+    5
+   ],
+   "normal": null
+  },
+  "GetAnyPointOnType": "Object",
+  "FindPolygonalMidpoint": {
+   "position": [
+    2520,
+    19.999999999999996,
+    4.999999999999999
+   ],
+   "normal": [
+    0,
+    0,
+    1
+   ]
+  },
+  "FindPolygonalMidpointType": "Object",
+  "FindUVMidpoint": {
+   "position": [
+    2520,
+    20,
+    5
+   ],
+   "normal": [
+    0,
+    0,
+    1
+   ]
+  },
+  "FindUVMidpointType": "Object",
+  "FindPointNearMid": [
+   "u",
+   "v",
+   "exact"
+  ],
+  "FindPointNearType": "Object"
+ },
+ {
+  "id": "26f1483",
+  "planar": true,
+  "FindMidpoint": {
+   "position": [
+    2520,
+    0,
+    2.4999999999999996
+   ],
+   "normal": [
+    0,
+    -1,
+    0
+   ]
+  },
+  "FindMidpointType": "Object",
+  "GetAnyPointOn": {
+   "position": [
+    2522.9429200000004,
+    0,
+    2.132135
+   ],
+   "normal": null
+  },
+  "GetAnyPointOnType": "Object",
+  "FindPolygonalMidpoint": {
+   "position": [
+    2520,
+    0,
+    2.4999999999999996
+   ],
+   "normal": [
+    0,
+    -1,
+    0
+   ]
+  },
+  "FindPolygonalMidpointType": "Object",
+  "FindUVMidpoint": {
+   "position": [
+    2520,
+    0,
+    2.5
+   ],
+   "normal": [
+    0,
+    -1,
+    0
+   ]
+  },
+  "FindUVMidpointType": "Object",
+  "FindPointNearMid": [
+   "u",
+   "v",
+   "exact"
+  ],
+  "FindPointNearType": "Object"
+ },
+ {
+  "id": "26f1478",
+  "planar": true,
+  "FindMidpoint": {
+   "position": [
+    2500,
+    20.000000000000004,
+    2.5000000000000004
+   ],
+   "normal": [
+    -1,
+    0,
+    0
+   ]
+  },
+  "FindMidpointType": "Object",
+  "GetAnyPointOn": {
+   "position": [
+    2500,
+    22.94292,
+    2.867865
+   ],
+   "normal": null
+  },
+  "GetAnyPointOnType": "Object",
+  "FindPolygonalMidpoint": {
+   "position": [
+    2500,
+    20.000000000000004,
+    2.5000000000000004
+   ],
+   "normal": [
+    -1,
+    0,
+    0
+   ]
+  },
+  "FindPolygonalMidpointType": "Object",
+  "FindUVMidpoint": {
+   "position": [
+    2500,
+    20,
+    2.5
+   ],
+   "normal": [
+    -1,
+    0,
+    0
+   ]
+  },
+  "FindUVMidpointType": "Object",
+  "FindPointNearMid": [
+   "u",
+   "v",
+   "exact"
+  ],
+  "FindPointNearType": "Object"
+ },
+ {
+  "id": "26f1473",
+  "planar": true,
+  "FindMidpoint": {
+   "position": [
+    2520,
+    39.99999999999999,
+    2.4999999999999996
+   ],
+   "normal": [
+    0,
+    1,
+    0
+   ]
+  },
+  "FindMidpointType": "Object",
+  "GetAnyPointOn": {
+   "position": [
+    2522.9429200000004,
+    40,
+    2.867865
+   ],
+   "normal": null
+  },
+  "GetAnyPointOnType": "Object",
+  "FindPolygonalMidpoint": {
+   "position": [
+    2520,
+    39.99999999999999,
+    2.4999999999999996
+   ],
+   "normal": [
+    0,
+    1,
+    0
+   ]
+  },
+  "FindPolygonalMidpointType": "Object",
+  "FindUVMidpoint": {
+   "position": [
+    2520,
+    40,
+    2.5
+   ],
+   "normal": [
+    0,
+    1,
+    0
+   ]
+  },
+  "FindUVMidpointType": "Object",
+  "FindPointNearMid": [
+   "u",
+   "v",
+   "exact"
+  ],
+  "FindPointNearType": "Object"
+ },
+ {
+  "id": "26f1439",
+  "planar": true,
+  "FindMidpoint": {
+   "position": [
+    2520,
+    19.999999999999996,
+    0
+   ],
+   "normal": [
+    0,
+    0,
+    -1
+   ]
+  },
+  "FindMidpointType": "Object",
+  "GetAnyPointOn": {
+   "position": [
+    2534.5248178092834,
+    12.762535161404466,
+    0
+   ],
+   "normal": null
+  },
+  "GetAnyPointOnType": "Object",
+  "FindPolygonalMidpoint": {
+   "position": [
+    2520,
+    19.999999999999996,
+    0
+   ],
+   "normal": [
+    0,
+    0,
+    -1
+   ]
+  },
+  "FindPolygonalMidpointType": "Object",
+  "FindUVMidpoint": {
+   "position": [
+    2520,
+    20,
+    0
+   ],
+   "normal": [
+    0,
+    0,
+    -1
+   ]
+  },
+  "FindUVMidpointType": "Object",
+  "FindPointNearMid": [
+   "u",
+   "v",
+   "exact"
+  ],
+  "FindPointNearType": "Object"
+ },
+ {
+  "id": "26f1433",
+  "planar": true,
+  "FindMidpoint": {
+   "position": [
+    2540,
+    20.000000000000004,
+    2.5000000000000004
+   ],
+   "normal": [
+    1,
+    0,
+    0
+   ]
+  },
+  "FindMidpointType": "Object",
+  "GetAnyPointOn": {
+   "position": [
+    2540,
+    22.94292,
+    2.132135
+   ],
+   "normal": null
+  },
+  "GetAnyPointOnType": "Object",
+  "FindPolygonalMidpoint": {
+   "position": [
+    2540,
+    20.000000000000004,
+    2.5000000000000004
+   ],
+   "normal": [
+    1,
+    0,
+    0
+   ]
+  },
+  "FindPolygonalMidpointType": "Object",
+  "FindUVMidpoint": {
+   "position": [
+    2540,
+    20,
+    2.5
+   ],
+   "normal": [
+    1,
+    0,
+    0
+   ]
+  },
+  "FindUVMidpointType": "Object",
+  "FindPointNearMid": [
+   "u",
+   "v",
+   "exact"
+  ],
+  "FindPointNearType": "Object"
+ },
+ {
+  "id": "26f1525",
+  "planar": false,
+  "FindMidpoint": {
+   "position": [
+    2512,
+    20,
+    2.5
+   ],
+   "normal": [
+    1,
+    0,
+    0
+   ]
+  },
+  "FindMidpointType": "Object",
+  "GetAnyPointOn": {
+   "position": [
+    2512.8396705431805,
+    16.43213199938594,
+    2.867865
+   ],
+   "normal": null
+  },
+  "GetAnyPointOnType": "Object",
+  "FindPolygonalMidpoint": {
+   "position": [
+    null,
+    null,
+    null
+   ],
+   "normal": [
+    null,
+    null,
+    null
+   ]
+  },
+  "FindPolygonalMidpointType": "Object",
+  "FindUVMidpoint": {
+   "position": [
+    2512,
+    20,
+    2.5
+   ],
+   "normal": [
+    1,
+    0,
+    0
+   ]
+  },
+  "FindUVMidpointType": "Object",
+  "FindPointNearMid": [
+   "u",
+   "v",
+   "exact"
+  ],
+  "FindPointNearType": "Object"
+ }
+]

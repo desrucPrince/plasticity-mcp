@@ -443,16 +443,135 @@ export const XSIDED_CONTINUITY = { g0: "G0", g1: "G1", g2: "G2" } as const;
 export type XSidedContinuity = keyof typeof XSIDED_CONTINUITY;
 
 export interface FaceControlPoint {
-  cvId: number;
+  /**
+   * The ShellCV versionId ("<body version>c<index>", e.g. "54c10"). Plasticity's own per-body index (ShellCV id)
+   * renumbers when points of another face are shown or hidden (discovery/probes-2026-11-followups/
+   * probe-facepoints-order.json), so a stale index could name a different point. The versionId changes with every
+   * edit of the body (show, hide, move), so a stale cvId is unknown instead of wrong.
+   */
+  cvId: string;
+  /** Current ID of the face the point belongs to (face IDs change with every edit of the body, show included). */
+  faceId: string;
+  /** Index of the point in that face's B-Surface control grid (kernel order). */
+  index: number;
   positionMm: Vector3;
 }
 
-// Native face control points are float32; rounding to a micrometre hides the float noise.
-const FACE_CONTROL_POINT_READ = `const view = find(args.bodyId);
-  return Array.from(view.high?.cvs ?? []).map(cv => ({
-    cvId: Number(cv.id),
-    positionMm: [cv.position.x, cv.position.y, cv.position.z].map(value => Math.round(value * 1000 * 1000) / 1000),
-  }));`;
+export interface FaceControlPointFace {
+  /** The face ID the caller gave. */
+  requestedFaceId: string;
+  /** The same face's ID after the call. */
+  faceId: string;
+  controlPointCount: number;
+}
+
+interface FaceControlPointLayout {
+  /** [faceId, kernel entity id] for every face of the body view. */
+  entities: Array<[string, number | null]>;
+  blocks: Array<{ faceId: string; entityId: number | null; start: number; count: number }>;
+  /** Points with their unrounded position (rawMm), for read-back comparisons; publicPoint() strips it. */
+  points: Array<FaceControlPoint & { rawMm: Vector3 }>;
+}
+
+const publicPoint = ({ rawMm: _raw, ...point }: FaceControlPoint & { rawMm?: Vector3 }): FaceControlPoint => point;
+
+// Reads view.high.cvs and attributes each ShellCV to its face. ShellCV carries no face link (keys: parentItem, id,
+// layers, position, versionId). On 26.1.3 the shown points are laid out face by face in kernel face order, each
+// block in the order of the face's BSurf GetInfo().vertices (probe-facepoints-order.json). Each block is matched
+// against those kernel vertices, so the attribution never relies on the order alone; a block no face matches, or
+// that two faces match, is an error. A one-face body needs no kernel lookup. Native positions are float32;
+// rounding to a micrometre hides the float noise. `this` is the editor; args.bodyId.
+const FACE_CONTROL_POINT_LAYOUT = `
+  let item = null;
+  for (const [versionId, candidate] of nativeApi.geo.geometryModel) if (nativeApi.db.lookupStableId(versionId) === args.bodyId) { item = candidate; break; }
+  if (!item) throw new Error('Unknown body ID: ' + args.bodyId);
+  const view = item.view;
+  const cvs = Array.from(view.high?.cvs ?? []);
+  const faceViews = view.high?.faces;
+  const faceIds = Array.from(faceViews?.versionIds ?? []).map(String);
+  const entities = faceIds.map((id, index) => [id, faceViews.get(index)?.entityId ?? null]);
+  const faceOfEntity = new Map(entities.map(([id, entity]) => [entity, id]));
+  const position = cv => [cv.position.x, cv.position.y, cv.position.z];
+  const blocks = [];
+  if (cvs.length > 0 && faceIds.length === 1) {
+    blocks.push({ faceId: faceIds[0], entityId: entities[0][1], start: 0, count: cvs.length });
+  } else if (cvs.length > 0) {
+    const kernelFaces = item.model?.GetFaces?.();
+    if (!kernelFaces) throw new Error('Native kernel faces are unavailable for body ' + args.bodyId);
+    const grids = [];
+    for (let index = 0; index < kernelFaces.Size(); index += 1) {
+      const face = kernelFaces.Get(index);
+      const faceId = faceOfEntity.get(face.Id());
+      if (faceId === undefined) continue;
+      let info = null;
+      try { const surface = face.GetSurface()?.surface; if (surface?.constructor?.name === 'BSurf') info = surface.GetInfo(); } catch { info = null; }
+      const count = Number(info?.uVertices) * Number(info?.vVertices);
+      const vertices = info?.vertices;
+      if (!vertices || !Number.isInteger(count) || count <= 0 || (vertices.length !== count * 3 && vertices.length !== count * 4)) continue;
+      grids.push({ faceId, entityId: face.Id(), count, stride: vertices.length / count, vertices });
+    }
+    const near = (actual, expected) => Math.abs(actual - expected) <= 1e-6 + 1e-6 * Math.abs(expected);
+    const matches = (grid, start) => {
+      if (start + grid.count > cvs.length) return false;
+      for (let offset = 0; offset < grid.count; offset += 1) {
+        const point = position(cvs[start + offset]);
+        const base = offset * grid.stride;
+        const weight = grid.stride === 4 ? grid.vertices[base + 3] : 1;
+        const raw = point.every((value, axis) => near(value, grid.vertices[base + axis]));
+        const projected = weight !== 0 && point.every((value, axis) => near(value, grid.vertices[base + axis] / weight));
+        if (!raw && !projected) return false;
+      }
+      return true;
+    };
+    const used = new Set();
+    let start = 0;
+    while (start < cvs.length) {
+      const candidates = grids.filter(grid => !used.has(grid) && matches(grid, start));
+      if (candidates.length !== 1) {
+        throw new Error(candidates.length > 1
+          ? 'Face control points of body ' + args.bodyId + ' are ambiguous from index ' + start + ': faces ' + candidates.map(grid => grid.faceId).join(', ') + ' match'
+          : 'Face control points of body ' + args.bodyId + ' from index ' + start + ' match no face control grid');
+      }
+      const grid = candidates[0];
+      used.add(grid);
+      blocks.push({ faceId: grid.faceId, entityId: grid.entityId, start, count: grid.count });
+      start += grid.count;
+    }
+  }
+  const points = blocks.flatMap(block => cvs.slice(block.start, block.start + block.count).map((cv, index) => {
+    if ((typeof cv.versionId !== 'string' && typeof cv.versionId !== 'number') || String(cv.versionId) === '') throw new Error('Face control point ' + cv.id + ' of body ' + args.bodyId + ' has no versionId');
+    return {
+      cvId: String(cv.versionId), faceId: block.faceId, index,
+      positionMm: position(cv).map(value => Math.round(value * 1000 * 1000) / 1000),
+      rawMm: position(cv).map(value => value * 1000),
+    };
+  }));
+  if (new Set(points.map(point => point.cvId)).size !== points.length) throw new Error('Face control point versionIds of body ' + args.bodyId + ' are not unique');
+  return { entities, blocks, points };`;
+
+// Maps the caller's face IDs to the same faces in a later layout: through the kernel entity ids the edit returned,
+// else through the earlier layout's entity map.
+function mapFaceIds(before: FaceControlPointLayout, after: FaceControlPointLayout, faceIds: string[], entities?: Array<number | null>): Map<string, string> {
+  const entityOf = new Map(before.entities);
+  const faceOfEntity = new Map(after.entities.map(([id, entity]) => [entity, id]));
+  return new Map(faceIds.map((id, index) => {
+    const entity = entities?.[index] !== undefined ? entities[index]! : entityOf.get(id) ?? null;
+    const current = faceOfEntity.get(entity);
+    if (current === undefined) throw new Error(`Face ${id} is missing after the control point edit; inspect the body`);
+    return [id, current];
+  }));
+}
+
+function faceControlPointSelection(layout: FaceControlPointLayout, faceIds: string[], current: Map<string, string>): { faces: FaceControlPointFace[]; controlPoints: FaceControlPoint[] } {
+  const wanted = new Set(faceIds.map((id) => current.get(id)!));
+  return {
+    faces: faceIds.map((id) => {
+      const faceId = current.get(id)!;
+      return { requestedFaceId: id, faceId, controlPointCount: layout.blocks.find((block) => block.faceId === faceId)?.count ?? 0 };
+    }),
+    controlPoints: layout.points.filter((point) => wanted.has(point.faceId)).map(publicPoint),
+  };
+}
 
 // Resolves a native enum member by name. A Plasticity build that lacks the member fails loudly instead of
 // handing the factory undefined.
@@ -489,6 +608,12 @@ export interface PickHitSeed {
   item: PickItemReference;
   pointM: Vector3;
   normalM?: Vector3;
+  /**
+   * Face hits only: replace pointM with the kernel's own point on the face (Face.GetAnyPointOn). A face midpoint
+   * can lie off the face (a washer's midpoint sits in its hole), and a hit off the face gives "no effect" in
+   * single-face Dimension mode (discovery/probes-2026-11-followups/probe-washer.json).
+   */
+  onFace?: boolean;
 }
 
 export interface PickCommandTimeouts {
@@ -536,38 +661,56 @@ export interface PickCommandEnd {
 }
 
 interface PickCommandNativeResult {
-  outcome: "committed" | "rejected" | "cancelled" | "cancel-failed" | "failed";
-  phase: "dialog" | "drive" | "finish" | "chained" | null;
+  /** "undetermined": the native function hit an unexpected error after the command started. */
+  outcome: "committed" | "rejected" | "cancelled" | "cancel-failed" | "failed" | "undetermined";
+  phase: "dialog" | "drive" | "finish" | "chained" | "unexpected" | null;
   error: string | null;
   drive: unknown;
+  /** The drive step threw (as opposed to not returning in time). */
+  driveThrew: boolean;
   undoDelta: number;
-  chainedCancelled: boolean;
-  end: PickCommandEnd;
+  /** Our exec() promise settled. */
+  settled: boolean;
+  /** Our command (by identity) is still the executor's active command. */
+  ourActive: boolean;
+  /** Name of a different command that is active at the end; it is never cancelled. */
+  foreignActive: string | null;
+  cancelError: string | null;
+  cleanupError: string | null;
+  end: PickCommandEnd | null;
 }
 
-export interface PickCommandResult<T> {
-  drive: T;
-  undoDelta: number;
-  end: PickCommandEnd;
-}
+export type PickCommandResult<T> =
+  | { committed: true; drive: T; undoDelta: number; end: PickCommandEnd | null; foreignActive: string | null }
+  /** The command ran its dialog to finish() but Plasticity refused the commit; the Undo history is unchanged. */
+  | { committed: false; drive: T; error: string; end: PickCommandEnd | null };
 
 // Generic renderer source for runPickCommand. The drive step is spliced in as the body of an async function, so
-// one source serves every pick command; everything else comes from the bindings and args. Once the command has
-// started it never throws: it returns an outcome, and a returned value proves the in-call cancel ran.
+// one source serves every pick command; everything else comes from the bindings and args.
+// Lifecycle contract: once the command has started, the function never throws. Every path returns an outcome,
+// and a cancel that throws counts as "cancel-failed". The executor swallows errors from execute() and resolves
+// exec() (26.1.3, discovery/probes-2026-11-pick/prove-driving-distance.json trials 9 and 11), so the error is
+// captured inside the wrapped execute(), not only from an exec() rejection. cancel() only ever cancels OUR command
+// (identity check); a different active command is reported, never cancelled.
 function pickCommandSource(drive: string): string {
   return nativeFunction`async function (Command, Dialog, Vector3, args) {
-    ${findView}
     const editor = this;
     const executor = this.executor;
     const selection = this.selection;
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-    const activeName = () => executor.active ? (executor.active.command?.constructor?.name ?? 'unknown') : null;
+    const message = error => String(error?.message ?? error);
+    const commandName = command => command?.constructor?.name ?? 'unknown';
+    const activeName = () => executor.active ? commandName(executor.active.command) : null;
     // isBusy is false while a command awaits its dialog, so the active command is checked too.
     if (executor.isBusy || executor.active) {
       throw new Error('Plasticity is busy' + (activeName() ? ' (' + activeName() + ' is active)' : '') + '; finish or cancel it first');
     }
+    const findItem = id => {
+      for (const [versionId, item] of nativeApi.geo.geometryModel) if (nativeApi.db.lookupStableId(versionId) === id) return item;
+      throw new Error('Unknown body ID: ' + id);
+    };
     const resolveItem = reference => {
-      const view = find(reference.bodyId);
+      const view = findItem(reference.bodyId).view;
       if (reference.kind === 'body') return view;
       const collection = reference.kind === 'face' ? view.high?.faces : reference.kind === 'edge' ? view.high?.edges : undefined;
       if (!collection) throw new Error('Unsupported pick item: ' + reference.kind);
@@ -575,12 +718,25 @@ function pickCommandSource(drive: string): string {
       if (index < 0) throw new Error('Stale or unknown ' + reference.kind + ': ' + reference.bodyId + ':' + reference.id);
       return collection.get(index);
     };
+    // The kernel's own point on a face (Face.GetAnyPointOn); a face midpoint can lie in a hole.
+    const pointOnFace = (reference, faceView) => {
+      const faces = findItem(reference.bodyId).model?.GetFaces?.();
+      for (let index = 0; index < (faces?.Size?.() ?? 0); index += 1) {
+        const face = faces.Get(index);
+        if (face.Id() !== faceView.entityId) continue;
+        const point = face.GetAnyPointOn()?.position;
+        if (![point?.x, point?.y, point?.z].every(Number.isFinite)) break;
+        return [point.x, point.y, point.z];
+      }
+      throw new Error('Plasticity returned no point on face ' + reference.bodyId + ':' + reference.id);
+    };
     const selectItems = args.select.map(resolveItem);
-    const hitSeeds = args.hits.map(hit => ({
-      item: resolveItem(hit.item),
-      point: new Vector3(hit.pointM[0], hit.pointM[1], hit.pointM[2]),
-      normal: hit.normalM ? new Vector3(hit.normalM[0], hit.normalM[1], hit.normalM[2]) : undefined,
-    }));
+    const hitSeeds = args.hits.map(hit => {
+      const item = resolveItem(hit.item);
+      if (hit.onFace && hit.item.kind !== 'face') throw new Error('onFace applies to face hits only');
+      const pointM = hit.onFace ? pointOnFace(hit.item, item) : hit.pointM;
+      return { item, pointM, point: new Vector3(pointM[0], pointM[1], pointM[2]), normal: hit.normalM ? new Vector3(hit.normalM[0], hit.normalM[1], hit.normalM[2]) : undefined };
+    });
     const drive = async (dialog, driveArgs) => { ${drive} };
     const focusedInput = () => typeof document === 'undefined' ? null : document.querySelector('input.z-space-input-focused');
     const selectedCount = () => {
@@ -592,29 +748,41 @@ function pickCommandSource(drive: string): string {
     };
     const clear = () => { selection.selected.removeAll(); selection.hits.clear(); };
     const undoBefore = this.history.undoStack.length;
-    const result = { outcome: 'failed', phase: null, error: null, drive: null, undoDelta: 0, chainedCancelled: false, end: null };
-    let started = false, settled = false, execError = null;
-    // Cancels whatever command is active, then waits until ours has settled and the executor is idle.
+    const result = {
+      outcome: 'undetermined', phase: null, error: null, drive: null, driveThrew: false, undoDelta: 0, settled: false,
+      ourActive: false, foreignActive: null, cancelError: null, cleanupError: null, end: null,
+      hits: hitSeeds.map(seed => seed.pointM),
+    };
+    let started = false, settled = false, execError = null, command = null;
+    const ourActive = () => command !== null && executor.active?.command === command;
+    // Cancels OUR command only, then waits until it has settled and is no longer active. Never throws.
     const cancel = async () => {
-      if (executor.active) executor.cancelActiveCommand();
+      try {
+        if (ourActive()) executor.cancelActiveCommand();
+      } catch (error) {
+        result.cancelError = message(error);
+        return false;
+      }
       const deadline = Date.now() + args.timeouts.cancelMs;
-      while ((!settled || executor.active) && Date.now() < deadline) await sleep(10);
-      return settled && !executor.active;
+      while ((!settled || ourActive()) && Date.now() < deadline) await sleep(10);
+      return settled && !ourActive();
     };
     try {
       clear();
       for (const item of selectItems) selection.selected.add(item);
       for (const seed of hitSeeds) selection.hits.record(seed.item, seed.point, seed.normal);
-      const command = new Command(editor);
+      command = new Command(editor);
       command.remember = false;
       const original = command.execute.bind(command);
       // Clearing the selection before execute() returns stops the executor from chaining the default command
       // for the still-selected items (PushFace, then OffsetFace), which would keep exec() pending.
       command.execute = async function () {
-        try { return await original(); } finally { selection.selected.removeAll(); }
+        try { return await original(); }
+        catch (error) { execError = message(error); throw error; }
+        finally { selection.selected.removeAll(); }
       };
       started = true;
-      editor.exec(command).then(() => { settled = true; }, error => { settled = true; execError = String(error?.message ?? error); });
+      editor.exec(command).then(() => { settled = true; }, error => { settled = true; execError = execError ?? message(error); });
 
       const findDialog = () => {
         let found = null;
@@ -639,10 +807,11 @@ function pickCommandSource(drive: string): string {
       } else {
         const finishDeadline = Date.now() + args.timeouts.finishMs;
         let driveError = null, driveDone = false;
-        drive(dialog, args.driveArgs).then(value => { result.drive = value ?? null; driveDone = true; }, error => { driveError = String(error?.message ?? error); driveDone = true; });
+        drive(dialog, args.driveArgs).then(value => { result.drive = value ?? null; driveDone = true; }, error => { driveError = message(error); driveDone = true; });
         while (!driveDone && Date.now() < finishDeadline) await sleep(10);
         if (driveError !== null || !driveDone) {
           result.phase = 'drive';
+          result.driveThrew = driveError !== null;
           result.error = driveError ?? 'the drive step did not return';
           result.outcome = (await cancel()) ? 'cancelled' : 'cancel-failed';
         } else {
@@ -651,40 +820,71 @@ function pickCommandSource(drive: string): string {
             result.phase = 'finish';
             result.outcome = (await cancel()) ? 'cancelled' : 'cancel-failed';
           } else if (execError !== null) {
+            result.phase = 'finish';
             result.outcome = 'failed';
             result.error = execError;
           } else {
             result.outcome = 'committed';
-            if (executor.active) {
-              result.phase = 'chained';
-              result.chainedCancelled = true;
-              if (!(await cancel())) result.outcome = 'cancel-failed';
-            }
           }
         }
       }
     } catch (error) {
       if (!started) throw error;
-      result.error = String(error?.message ?? error);
-      result.outcome = (settled && !executor.active) || (await cancel()) ? 'failed' : 'cancel-failed';
+      result.phase = 'unexpected';
+      result.error = message(error);
+      result.outcome = settled && !ourActive() ? 'failed' : (await cancel()) ? 'failed' : 'cancel-failed';
     } finally {
-      clear();
-      focusedInput()?.blur?.();
+      try { clear(); focusedInput()?.blur?.(); } catch (error) { result.cleanupError = message(error); }
     }
-    result.undoDelta = this.history.undoStack.length - undoBefore;
-    result.end = { activeCommand: activeName(), selectedCount: selectedCount(), hitCount: selection.hits.hits?.size ?? null, spaceInputFocused: Boolean(focusedInput()) };
+    try {
+      result.undoDelta = this.history.undoStack.length - undoBefore;
+      result.settled = settled;
+      result.ourActive = ourActive();
+      const active = executor.active;
+      result.foreignActive = active && active.command !== command ? commandName(active.command) : null;
+      if (result.outcome === 'committed' && result.foreignActive !== null) result.phase = 'chained';
+      result.end = { activeCommand: activeName(), selectedCount: selectedCount(), hitCount: selection.hits.hits?.size ?? null, spaceInputFocused: Boolean(focusedInput()) };
+    } catch (error) {
+      result.cleanupError = (result.cleanupError ? result.cleanupError + '; ' : '') + message(error);
+    }
     return result;
   }`;
 }
 
 // Driving distance (Dimension tool, FINDINGS probes-2026-11-pick): sets the dialog's distance in meters, finishes
-// it and returns the distance the command measured before the edit (refDistance, meters).
+// it and returns what the command measured before the edit: refDistance (meters) and the reference point `to`.
 const DRIVING_DISTANCE_DRIVE = `
       const params = dialog.params;
       const previous = params.refDistance;
+      const to = params.to;
       params.distance = driveArgs.distanceM;
       dialog.finish();
-      return { previousDistanceM: Number.isFinite(previous) ? previous : null };`;
+      return {
+        previousDistanceM: Number.isFinite(previous) ? previous : null,
+        referencePointM: to && [to.x, to.y, to.z].every(Number.isFinite) ? [to.x, to.y, to.z] : null,
+      };`;
+
+/** Equal-distance and read-back tolerance for plasticity_set_driving_distance. */
+export const DRIVING_DISTANCE_TOLERANCE_MM = 1e-6;
+
+const roundMicro = (value: number) => Math.round(value * 1e6) / 1e6;
+
+export interface DrivingDistanceResult {
+  state: RuntimeState;
+  /** false for a no-op: the distance already matched and nothing ran or nothing changed. */
+  changed: boolean;
+  previousDistanceMm: number | null;
+  distanceMm: number;
+  undoSteps: 0 | 1;
+  /** Face ID of the moved face after the edit (face IDs change with the edit); null when nothing moved. */
+  movedFaceId: string | null;
+  /** Current face ID of the moving face. */
+  movingFaceId: string;
+  /** Signed offset of the moving face's plane along its outward normal, in mm (dot(normal, point on plane)). */
+  planeOffsetMm: number;
+  message?: string;
+  warning?: string;
+}
 
 export interface ExtrudeOptions {
   reverseDistanceMm?: number;
@@ -7519,41 +7719,82 @@ export class PlasticityOperations {
     return await this.state();
   }
 
-  // Shows the control points of Sheet or Solid faces (FINDINGS gap 5). This is a history step. The points then
-  // live in view.high.cvs of the body and stay valid until the next edit of that body.
+  // Shows the control points of Sheet or Solid B-Surface faces (FINDINGS gap 5; probes-2026-11-followups). The
+  // show is a history step and an edit of the body: face IDs change and every cvId of the body may renumber.
+  // Only BSurf faces have points (a Plane or Cylinder face shows none but would still cost a step), so other
+  // surface types are rejected first. Faces whose points are already shown cost no step either: a second show
+  // is a history step that changes nothing (probe-facepoints-sheet.json). Returns only the requested faces' points.
   async showFaceControlPoints(
     bodyId: number,
     faceIds: string[],
     revision: string,
-  ): Promise<{ state: RuntimeState; controlPoints: FaceControlPoint[] }> {
+  ): Promise<{ state: RuntimeState; faces: FaceControlPointFace[]; controlPoints: FaceControlPoint[]; undoSteps: 0 | 1; message?: string }> {
     const state = await this.assertRevision(revision);
-    const body = state.bodies.find((candidate) => candidate.id === bodyId);
-    if (!body || (body.type !== "Sheet" && body.type !== "Solid")) throw new Error(`Face control points need a current Sheet or Solid body: ${bodyId}`);
-    if (faceIds.length === 0 || new Set(faceIds).size !== faceIds.length) throw new Error("Face control point face IDs must be a nonempty unique list");
-    const unknown = faceIds.filter((id) => !body.faceIds.includes(id));
-    if (unknown.length > 0) throw new Error(`Stale or unknown faces: ${unknown.map((id) => `${bodyId}:${id}`).join(", ")}`);
-    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
-      ${findView}
-      ${commandStart("TogglePointsCommand")}
-      const view = find(args.bodyId);
-      factory.faces = args.faceIds.map(faceId => {
-        const index = view.high.faces.versionIds.indexOf(faceId);
-        if (index < 0) throw new Error('Stale or unknown face: ' + args.bodyId + ':' + faceId);
-        return view.high.faces.get(index);
-      });
-      ${commandEnd}
-    }`, ["ShowFacePointsFactory"], [{ bodyId, faceIds }]);
-    return { state: await this.state(), controlPoints: await this.readFaceControlPoints(bodyId) };
+    this.requireFaceControlPointFaces(state, bodyId, faceIds, true);
+    const before = await this.readFaceControlPointLayout(bodyId);
+    const shownBefore = new Set(before.blocks.map((block) => block.faceId));
+    if (faceIds.every((id) => shownBefore.has(id))) {
+      return { state, ...faceControlPointSelection(before, faceIds, mapFaceIds(before, before, faceIds)), undoSteps: 0, message: "control points of these faces are already shown; nothing changed" };
+    }
+    const entities = await this.toggleFaceControlPoints(bodyId, faceIds, true);
+    const { after, current } = await this.afterFaceControlPointEdit("Showing", bodyId, before, faceIds, entities);
+    const selected = faceControlPointSelection(after, faceIds, current);
+    const empty = selected.faces.filter((face) => face.controlPointCount === 0).map((face) => `${bodyId}:${face.requestedFaceId}`);
+    return {
+      state: await this.state(), ...selected, undoSteps: 1,
+      ...(empty.length > 0 ? { message: `${empty.join(", ")} showed no editable control points; the show still took one Undo step` } : {}),
+    };
   }
 
-  // Moves shown face control points by a shared world-space delta (FINDINGS gap 5). The ids come from
-  // showFaceControlPoints; points that are not shown are rejected before any native edit.
+  // Hides shown face control points (ShowFacePointsFactory with show = false; verified live in
+  // probe-facepoints-sheet.json). One history step; the remaining points of the body renumber, so they are returned.
+  // Faces with no shown points cost no step: hiding them would be a history step that changes nothing.
+  async hideFaceControlPoints(
+    bodyId: number,
+    faceIds: string[],
+    revision: string,
+  ): Promise<{ state: RuntimeState; faces: FaceControlPointFace[]; controlPoints: FaceControlPoint[]; undoSteps: 0 | 1; message?: string }> {
+    const state = await this.assertRevision(revision);
+    this.requireFaceControlPointFaces(state, bodyId, faceIds, false);
+    const before = await this.readFaceControlPointLayout(bodyId);
+    const shownBefore = new Set(before.blocks.map((block) => block.faceId));
+    if (!faceIds.some((id) => shownBefore.has(id))) {
+      return { state, faces: faceIds.map((id) => ({ requestedFaceId: id, faceId: id, controlPointCount: 0 })), controlPoints: before.points.map(publicPoint), undoSteps: 0, message: "no control points of these faces are shown; nothing changed" };
+    }
+    const entities = await this.toggleFaceControlPoints(bodyId, faceIds, false);
+    const { after, current } = await this.afterFaceControlPointEdit("Hiding", bodyId, before, faceIds, entities);
+    const remaining = faceControlPointSelection(after, faceIds, current).faces.filter((face) => face.controlPointCount > 0);
+    if (remaining.length > 0) {
+      throw new Error(`Hiding face control points took one Undo step, but points remain on ${remaining.map((face) => `${bodyId}:${face.faceId}`).join(", ")}; inspect the body or undo`);
+    }
+    return {
+      state: await this.state(),
+      faces: faceIds.map((id) => ({ requestedFaceId: id, faceId: current.get(id)!, controlPointCount: 0 })),
+      controlPoints: after.points.map(publicPoint), undoSteps: 1,
+    };
+  }
+
+  // Reads the layout after a show or hide and finds the requested faces again. The step is already in the Undo
+  // history, so a failure here says so instead of reading like an unchanged document.
+  private async afterFaceControlPointEdit(verb: string, bodyId: number, before: FaceControlPointLayout, faceIds: string[], entities: Array<number | null>): Promise<{ after: FaceControlPointLayout; current: Map<string, string> }> {
+    try {
+      const after = await this.readFaceControlPointLayout(bodyId);
+      return { after, current: mapFaceIds(before, after, faceIds, entities) };
+    } catch (error) {
+      throw new Error(`${verb} face control points took one Undo step, but the points could not be read back (${error instanceof Error ? error.message : String(error)}); inspect the body or undo`);
+    }
+  }
+
+  // Moves shown face control points by a shared world-space delta (FINDINGS gap 5). cvIds come from the show tool at
+  // the current revision; unknown IDs are rejected before any native edit. Points of several faces move in one
+  // step. The result is read back: each point must have moved by the delta within 1e-3 mm. 26.1.3 writes
+  // factory.cvs directly; 26.2 face points are not verified (MultiMoveControlPointFactory is aliased there).
   async moveFaceControlPoints(
     bodyId: number,
-    cvIds: number[],
+    cvIds: string[],
     deltaMm: Vector3,
     revision: string,
-  ): Promise<{ state: RuntimeState; controlPoints: FaceControlPoint[] }> {
+  ): Promise<{ state: RuntimeState; controlPoints: FaceControlPoint[]; undoSteps: 1 }> {
     const state = await this.assertRevision(revision);
     const body = state.bodies.find((candidate) => candidate.id === bodyId);
     if (!body || (body.type !== "Sheet" && body.type !== "Solid")) throw new Error(`Face control points need a current Sheet or Solid body: ${bodyId}`);
@@ -7561,9 +7802,15 @@ export class PlasticityOperations {
     if (deltaMm.length !== 3 || deltaMm.some((value) => !Number.isFinite(value)) || Math.hypot(...deltaMm) === 0) {
       throw new Error("Face control point move delta must be a finite nonzero vector");
     }
+    const before = await this.readFaceControlPointLayout(bodyId);
+    const byId = new Map(before.points.map((point) => [point.cvId, point]));
+    const missing = cvIds.filter((id) => !byId.has(id));
+    if (missing.length > 0) {
+      throw new Error(`Unknown face control point IDs on body ${bodyId}: ${missing.join(", ")}. Call plasticity_show_face_control_points first and use the cvId values it returns.`);
+    }
     await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
-      const available = new Map(Array.from(find(args.bodyId).high?.cvs ?? []).map(cv => [Number(cv.id), cv]));
+      const available = new Map(Array.from(find(args.bodyId).high?.cvs ?? []).map(cv => [String(cv.versionId), cv]));
       const missing = args.cvIds.filter(id => !available.has(id));
       if (missing.length > 0) throw new Error('Unknown face control point IDs on body ' + args.bodyId + ': ' + missing.join(', ') + '. Call plasticity_show_face_control_points first and use the cvId values it returns.');
       const cvs = args.cvIds.map(id => available.get(id));
@@ -7572,22 +7819,90 @@ export class PlasticityOperations {
       factory.move.fromArray(args.delta);
       ${commandEnd}
     }`, ["MultiMoveControlPointFactory"], [{ bodyId, cvIds, delta: toMeters(deltaMm) }]);
-    const wanted = new Set(cvIds);
-    const points = (await this.readFaceControlPoints(bodyId)).filter((point) => wanted.has(point.cvId));
-    return { state: await this.state(), controlPoints: points };
+    const after = await this.readFaceControlPointLayout(bodyId).catch((error: unknown) => {
+      throw new Error(`Moving face control points took one Undo step, but the points could not be read back (${error instanceof Error ? error.message : String(error)}); inspect the body or undo`);
+    });
+    const entityOf = new Map(before.entities);
+    const faceOfEntity = new Map(after.entities.map(([id, entity]) => [entity, id]));
+    const blockOf = (faceId: string | undefined) => after.blocks.find((block) => block.faceId === faceId);
+    const problems: string[] = [];
+    const moved = cvIds.map((cvId) => {
+      const old = byId.get(cvId)!;
+      const faceId = faceOfEntity.get(entityOf.get(old.faceId) ?? null);
+      const block = blockOf(faceId);
+      const oldBlock = before.blocks.find((candidate) => candidate.faceId === old.faceId)!;
+      if (!block || block.count !== oldBlock.count) {
+        problems.push(`face ${old.faceId} lost or renumbered its control points`);
+        return undefined;
+      }
+      const point = after.points.find((candidate) => candidate.faceId === faceId && candidate.index === old.index)!;
+      // Unrounded float32 positions: two micrometre roundings could exceed the tolerance on a correct move.
+      const expected = add(old.rawMm, deltaMm);
+      if (Math.hypot(...subtract(point.rawMm, expected)) > 1e-3) {
+        problems.push(`cv ${cvId} is at [${point.positionMm.join(", ")}], expected [${expected.map((value) => Math.round(value * 1000) / 1000).join(", ")}]`);
+      }
+      return publicPoint(point);
+    });
+    if (problems.length > 0) {
+      throw new Error(`Moving face control points took one Undo step, but the read-back does not match: ${problems.join("; ")}; inspect the body or undo`);
+    }
+    return { state: await this.state(), controlPoints: moved as FaceControlPoint[], undoSteps: 1 };
+  }
+
+  // Body, face and surface checks shared by show and hide. A face the read model knows as a non-BSurf surface has
+  // no editable control points (live: Plane and Cylinder show none, probe-facepoints-zero.json).
+  private requireFaceControlPointFaces(state: RuntimeState, bodyId: number, faceIds: string[], requireBSurf: boolean): void {
+    const body = state.bodies.find((candidate) => candidate.id === bodyId);
+    if (!body || (body.type !== "Sheet" && body.type !== "Solid")) throw new Error(`Face control points need a current Sheet or Solid body: ${bodyId}`);
+    if (faceIds.length === 0 || new Set(faceIds).size !== faceIds.length) throw new Error("Face control point face IDs must be a nonempty unique list");
+    const unknown = faceIds.filter((id) => !body.faceIds.includes(id));
+    if (unknown.length > 0) throw new Error(`Stale or unknown faces: ${unknown.map((id) => `${bodyId}:${id}`).join(", ")}`);
+    if (!requireBSurf) return;
+    const analytic = faceIds.flatMap((id) => {
+      const face = body.faces.find((candidate) => candidate.id === id);
+      return face && face.surfaceType !== "BSurf" ? [`${bodyId}:${id} (${face.surfaceType})`] : [];
+    });
+    if (analytic.length > 0) {
+      throw new Error(`These faces have no editable control points: ${analytic.join(", ")}. The tool supports B-Surface (BSurf) faces only (Plane and Cylinder faces show none); nothing was changed`);
+    }
+  }
+
+  // ShowFacePointsFactory with an explicit show flag; returns the kernel entity ids of the requested faces so the
+  // caller can find the same faces after the edit (face version IDs change, entity ids stay; probe-facepoints-move.json).
+  private async toggleFaceControlPoints(bodyId: number, faceIds: string[], show: boolean): Promise<Array<number | null>> {
+    return await this.runtime.mutate<Array<number | null>>(nativeFunction`async function (Factory, args) {
+      ${findView}
+      let entities = [];
+      ${commandStart("TogglePointsCommand")}
+      const view = find(args.bodyId);
+      factory.faces = args.faceIds.map(faceId => {
+        const index = view.high.faces.versionIds.indexOf(faceId);
+        if (index < 0) throw new Error('Stale or unknown face: ' + args.bodyId + ':' + faceId);
+        return view.high.faces.get(index);
+      });
+      entities = factory.faces.map(face => face.entityId ?? null);
+      factory.show = ${show ? "true" : "false"};
+      ${commandEnd}
+      return entities;
+    }`, ["ShowFacePointsFactory"], [{ bodyId, faceIds }]);
+  }
+
+  private async readFaceControlPointLayout(bodyId: number): Promise<FaceControlPointLayout> {
+    return await this.runtime.read<FaceControlPointLayout>(nativeFunction`function (args) {
+      ${FACE_CONTROL_POINT_LAYOUT}
+    }`, [{ bodyId }]);
   }
 
   private async readFaceControlPoints(bodyId: number): Promise<FaceControlPoint[]> {
-    return await this.runtime.read<FaceControlPoint[]>(nativeFunction`function (args) {
-      ${findView}
-      ${FACE_CONTROL_POINT_READ}
-    }`, [{ bodyId }]);
+    return (await this.readFaceControlPointLayout(bodyId)).points.map(publicPoint);
   }
 
   // Runs a native command that reads the selection click point and waits for its own dialog (FINDINGS
   // probes-2026-11-pick). Everything runs inside ONE mutate call whose CDP timeout outlives the internal waits, so
-  // the in-call cancel always runs before Node gives up. A rejected or cancelled command leaves the document
-  // unchanged and the runtime certain; a cancel that fails marks the runtime uncertain for plasticity_reconcile.
+  // the in-call cancel always runs before Node gives up. After any path, either no command of ours is active and
+  // the selection and hits are clear, or the runtime is marked uncertain and the error asks for plasticity_reconcile.
+  // A rejected or cancelled command leaves the document unchanged and the runtime certain. A commit returns its
+  // Undo delta (0 or 1) to the caller; more than one step marks the runtime uncertain.
   private async runPickCommand<T>(spec: PickCommandSpec): Promise<PickCommandResult<T>> {
     const timeouts = spec.timeouts ?? PICK_COMMAND_TIMEOUTS;
     for (const [name, value] of Object.entries(timeouts)) {
@@ -7599,40 +7914,62 @@ export class PlasticityOperations {
       driveArgs: spec.driveArgs ?? null,
       timeouts,
     }], pickCommandCdpTimeoutMs(timeouts));
+    const reconcile = "the result is uncertain. Call plasticity_reconcile before any other edit";
     if (!native || typeof native !== "object" || typeof native.outcome !== "string") {
       this.runtime.markUncertain();
-      throw new Error(`${spec.label} returned no outcome; the result is uncertain. Call plasticity_reconcile before any other edit`);
+      throw new Error(`${spec.label} returned no outcome; ${reconcile}`);
     }
     const detail = native.error ? `: ${native.error}` : "";
+    const still = native.end?.activeCommand ?? (native.ourActive ? spec.command : "unknown");
     if (native.outcome === "cancel-failed") {
       this.runtime.markUncertain();
-      throw new Error(`${spec.label} did not finish and Plasticity could not cancel it (still active: ${native.end?.activeCommand ?? "unknown"}); the result is uncertain. Call plasticity_reconcile before any other edit`);
+      const cancelDetail = native.cancelError ? ` Cancel error: ${native.cancelError}.` : "";
+      throw new Error(`${spec.label} did not finish and Plasticity could not cancel it (still active: ${still}); ${reconcile}.${cancelDetail}`);
+    }
+    // Started but not settled, still active, or cleanup failed: the command may still change the document.
+    if (native.outcome === "undetermined" || native.settled !== true || native.ourActive === true || native.cleanupError) {
+      this.runtime.markUncertain();
+      const why = native.cleanupError ? `cleanup failed: ${native.cleanupError}` : native.ourActive ? `still active: ${still}` : native.settled !== true ? "the command never settled" : `outcome ${native.outcome}${detail}`;
+      throw new Error(`${spec.label} ended in an undetermined state (${why}); ${reconcile}`);
     }
     if (native.outcome !== "committed" && native.undoDelta !== 0) {
       this.runtime.markUncertain();
-      throw new Error(`${spec.label} ended as ${native.outcome} but changed the Undo history by ${native.undoDelta}; the result is uncertain. Call plasticity_reconcile before any other edit`);
+      throw new Error(`${spec.label} ended as ${native.outcome} but changed the Undo history by ${native.undoDelta}; ${reconcile}`);
     }
     if (native.outcome === "rejected") throw new Error(`${spec.rejectedMessage}${detail}`);
     if (native.outcome === "cancelled") {
+      if (native.phase === "drive" && native.driveThrew) {
+        throw new Error(`${spec.label} drive step threw (drive phase)${detail}; Plasticity cancelled it and the document is unchanged`);
+      }
       const limit = native.phase === "dialog" ? timeouts.dialogMs : timeouts.finishMs;
       throw new Error(`${spec.label} did not finish within ${limit} ms (${native.phase ?? "unknown"} phase)${detail}; Plasticity cancelled it and the document is unchanged`);
     }
-    if (native.outcome === "failed") throw new Error(`${spec.label} failed${detail}; the document is unchanged`);
-    if (native.undoDelta !== 1) {
-      throw new Error(`${spec.label} committed ${native.undoDelta} Undo steps instead of 1; inspect the document before continuing`);
+    if (native.outcome === "failed") {
+      if (native.phase === "finish") return { committed: false, drive: native.drive as T, error: native.error ?? "Plasticity refused the commit", end: native.end };
+      throw new Error(`${spec.label} failed${detail}; the document is unchanged`);
     }
-    return { drive: native.drive as T, undoDelta: native.undoDelta, end: native.end };
+    if (native.outcome !== "committed") {
+      this.runtime.markUncertain();
+      throw new Error(`${spec.label} returned an unknown outcome ${String(native.outcome)}; ${reconcile}`);
+    }
+    if (!Number.isInteger(native.undoDelta) || native.undoDelta < 0 || native.undoDelta > 1) {
+      this.runtime.markUncertain();
+      throw new Error(`${spec.label} committed ${native.undoDelta} Undo steps instead of 1; ${reconcile}`);
+    }
+    return { committed: true, drive: native.drive as T, undoDelta: native.undoDelta, end: native.end, foreignActive: native.foreignActive ?? null };
   }
 
   // Sets the distance between a planar face and a reference face by moving movingFaceId, as Plasticity's Dimension
   // tool does (DimensionDistanceCommand; FINDINGS probes-2026-11-pick). Selection order decides which face moves:
-  // the last selected face moves, so the selection is [reference, moving]. The seeded click point sits on the
-  // moving face's center with its outward normal; it never comes from the caller.
+  // the last selected face moves, so the selection is [reference, moving]; the hit location does not decide it
+  // (probes-2026-11-followups/probe-driving.json). The seeded hit is the kernel's own point on the moving face
+  // (a washer's midpoint lies in its hole), with the face's outward normal; it never comes from the caller.
+  // Verified on Plasticity 26.1.3 only.
   async setDrivingDistance(
     input: { bodyId: number; movingFaceId: string; referenceFaceId?: string | undefined; distanceMm: number },
     revision: string,
     timeouts: PickCommandTimeouts = PICK_COMMAND_TIMEOUTS,
-  ): Promise<{ state: RuntimeState; previousDistanceMm: number | null; distanceMm: number; undoSteps: 1 }> {
+  ): Promise<DrivingDistanceResult> {
     const state = await this.assertRevision(revision);
     const { bodyId, movingFaceId, referenceFaceId, distanceMm } = input;
     requirePositiveFinite(distanceMm, "Driving distance");
@@ -7646,35 +7983,105 @@ export class PlasticityOperations {
     };
     const moving = faceOf(movingFaceId, "moving");
     const movingNormal = normalize(moving.normal, "Moving face normal");
+    const movingOffset = dot(movingNormal, moving.centerMm);
+    let referenceOffset: number | undefined;
     if (referenceFaceId !== undefined) {
       if (referenceFaceId === movingFaceId) throw new Error("The reference face must differ from the moving face");
       const reference = faceOf(referenceFaceId, "reference");
       const referenceNormal = normalize(reference.normal, "Reference face normal");
+      // Opposite or same-direction normals are both allowed: Plasticity dimensions a stepped pair (two faces that
+      // face the same way) live (probes-2026-11-followups/probe-driving.json, stepped case).
       if (1 - Math.abs(dot(movingNormal, referenceNormal)) > 1e-9) {
         throw new Error(`The moving and reference faces must be parallel planes: ${bodyId}:${movingFaceId} and ${bodyId}:${referenceFaceId} are not`);
       }
-      if (Math.abs(dot(movingNormal, subtract(reference.centerMm, moving.centerMm))) < 1e-6) {
+      referenceOffset = dot(movingNormal, reference.centerMm);
+      const current = Math.abs(movingOffset - referenceOffset);
+      if (current < 1e-6) {
         throw new Error(`The moving and reference faces lie in the same plane: ${bodyId}:${movingFaceId} and ${bodyId}:${referenceFaceId}`);
+      }
+      // Plasticity commits an Undo step even when the distance does not change, so an equal distance never runs.
+      if (Math.abs(current - distanceMm) <= DRIVING_DISTANCE_TOLERANCE_MM) {
+        return {
+          state, changed: false, previousDistanceMm: roundMicro(current), distanceMm, undoSteps: 0,
+          movedFaceId: null, movingFaceId, planeOffsetMm: roundMicro(movingOffset),
+          message: `distance already ${roundMicro(current)} mm; nothing changed`,
+        };
       }
     }
     const movingRef: PickItemReference = { kind: "face", bodyId, id: movingFaceId };
-    const picked = await this.runPickCommand<{ previousDistanceM: number | null }>({
+    const picked = await this.runPickCommand<{ previousDistanceM: number | null; referencePointM?: Vector3 | null }>({
       command: "DimensionDistanceCommand",
       dialog: "DimensionDistanceSpaceDialog",
       select: referenceFaceId === undefined ? [movingRef] : [{ kind: "face", bodyId, id: referenceFaceId }, movingRef],
-      hits: [{ item: movingRef, pointM: toMeters(moving.centerMm), normalM: movingNormal }],
+      hits: [{ item: movingRef, pointM: toMeters(moving.centerMm), normalM: movingNormal, onFace: true }],
       drive: DRIVING_DISTANCE_DRIVE,
       driveArgs: { distanceM: millimetersToMeters(distanceMm) },
       rejectedMessage: "Plasticity could not dimension these faces (no effect)",
       label: "Driving distance",
       timeouts,
     });
-    const previous = picked.drive?.previousDistanceM;
+    const previousM = picked.drive?.previousDistanceM;
+    const previousDistanceMm = typeof previousM === "number" && Number.isFinite(previousM) ? roundMicro(previousM * 1000) : null;
+    const after = await this.state();
+    const bodyAfter = after.bodies.find((candidate) => candidate.id === bodyId);
+    const bodyUnchanged = bodyAfter !== undefined && bodyAfter.versionId === body.versionId;
+    const sameDistance = previousDistanceMm !== null && Math.abs(previousDistanceMm - distanceMm) <= DRIVING_DISTANCE_TOLERANCE_MM;
+    const noOp = (): DrivingDistanceResult => ({
+      state: after, changed: false, previousDistanceMm, distanceMm, undoSteps: 0, movedFaceId: null, movingFaceId, planeOffsetMm: roundMicro(movingOffset),
+      message: sameDistance ? `distance already ${previousDistanceMm} mm; nothing changed` : "Plasticity made no change and added no Undo step",
+    });
+    if (!picked.committed) {
+      // Single-face mode with an equal distance: the dialog opens, finish() gives "Operation has no effect" and
+      // nothing changes (probes-2026-11-followups/probe-driving.json, equal_single_face_pz_5mm).
+      if (!bodyUnchanged) {
+        this.runtime.markUncertain();
+        throw new Error(`Driving distance failed (${picked.error}) but body ${bodyId} changed; the result is uncertain. Call plasticity_reconcile before any other edit`);
+      }
+      if (sameDistance) return noOp();
+      throw new Error(`Driving distance failed: ${picked.error}; the document is unchanged`);
+    }
+    if (picked.undoDelta === 0) {
+      if (!bodyUnchanged) {
+        this.runtime.markUncertain();
+        throw new Error(`Driving distance committed no Undo step but body ${bodyId} changed; the result is uncertain. Call plasticity_reconcile before any other edit`);
+      }
+      return noOp();
+    }
+    // One Undo step: read the body back. The moving plane must sit at the requested distance from the reference
+    // plane and the reference plane must not move. Face IDs change with the edit, so faces are found by plane.
+    if (!bodyAfter) {
+      this.runtime.markUncertain();
+      throw new Error(`Driving distance committed one Undo step but body ${bodyId} is gone; the result is uncertain. Call plasticity_reconcile before any other edit`);
+    }
+    const referencePoint = picked.drive?.referencePointM;
+    if (referenceOffset === undefined) {
+      if (Array.isArray(referencePoint) && referencePoint.every(Number.isFinite)) referenceOffset = dot(movingNormal, referencePoint.map((value) => value * 1000) as Vector3);
+      else if (previousDistanceMm !== null) referenceOffset = movingOffset - previousDistanceMm;
+    }
+    const planes = bodyAfter.faces
+      .filter((face) => face.planar && 1 - Math.abs(dot(normalize(face.normal, "Face normal"), movingNormal)) <= 1e-9)
+      .map((face) => ({ id: face.id, sameDirection: dot(face.normal, movingNormal) > 0, offset: dot(movingNormal, face.centerMm), centerMm: face.centerMm }));
+    const describe = () => planes.map((plane) => `${plane.id}@${roundMicro(plane.offset)}`).join(", ") || "none";
+    if (referenceOffset === undefined) {
+      this.runtime.markUncertain();
+      throw new Error(`Driving distance committed one Undo step, but Plasticity reported no reference plane to check it against (planes along the normal now: ${describe()}); the result is uncertain. Call plasticity_reconcile before any other edit`);
+    }
+    const side = Math.sign(movingOffset - referenceOffset) || 1;
+    const expected = referenceOffset + side * distanceMm;
+    const near = (value: number, target: number) => Math.abs(value - target) <= DRIVING_DISTANCE_TOLERANCE_MM;
+    const movedCandidates = planes.filter((plane) => plane.sameDirection && near(plane.offset, expected));
+    // The reference plane is checked when the caller named it; in single-face mode Plasticity picks it itself.
+    const referenceStays = referenceFaceId === undefined || planes.some((plane) => near(plane.offset, referenceOffset!));
+    if (movedCandidates.length === 0 || !referenceStays) {
+      this.runtime.markUncertain();
+      const what = movedCandidates.length === 0 ? `no face moved to ${roundMicro(expected)} mm` : `the reference plane at ${roundMicro(referenceOffset)} mm moved`;
+      throw new Error(`Driving distance committed one Undo step, but the read-back does not match: ${what} along [${movingNormal.join(", ")}] (planes now: ${describe()}); the result is uncertain. Call plasticity_reconcile before any other edit`);
+    }
+    const target = add(moving.centerMm, scale(movingNormal, expected - movingOffset));
+    const moved = movedCandidates.reduce((best, plane) => Math.hypot(...subtract(plane.centerMm, target)) < Math.hypot(...subtract(best.centerMm, target)) ? plane : best);
     return {
-      state: await this.state(),
-      previousDistanceMm: typeof previous === "number" && Number.isFinite(previous) ? Math.round(previous * 1000 * 1e6) / 1e6 : null,
-      distanceMm,
-      undoSteps: 1,
+      state: after, changed: true, previousDistanceMm, distanceMm, undoSteps: 1, movedFaceId: moved.id, movingFaceId: moved.id, planeOffsetMm: roundMicro(moved.offset),
+      ...(picked.foreignActive ? { warning: `Another Plasticity command (${picked.foreignActive}) is active; it is not part of this edit and was left alone` } : {}),
     };
   }
 

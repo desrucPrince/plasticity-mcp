@@ -49,7 +49,10 @@ Scripts and raw JSON: `discovery/probes-2026-11-pick/`. Isolated instance 127.0.
 - `executor.isBusy` is **false** while a command is Awaiting its dialog. Guard on `executor.active` (`.command`) instead (seen in stdout).
 - After commit, the faces stay selected. The executor then chains the default selection commands (`PushFaceCommand`, then `OffsetFaceCommand`), and `ed.exec()` stays pending. Clearing the selection in a `finally` around `execute()` stops this (verified: `settled:true, active:null` in every trial).
 - The generic `editor.commands.DimensionCommand` re-execs a fresh DDC with `'interrupt'` and loses the seeded hit, so it gives "no effect". Call the `DimensionDistanceCommand` binding directly.
-- **Which face moves.** The `which_face_hit_on_xNeg_30` trial reversed the selection order and moved the hit to −x. The −x face moved (min x 1989.9999999999995). The test changed both inputs at once, so it does not show which input decides. Recommended: select [reference, moving] and seed the hit on the moving face.
+- **Which face moves: selection order decides; the last selected face moves. The hit location does not decide.** Follow-up probe 2026-11-16 (`../probes-2026-11-followups/probe-driving.json`, box 20 x 10 x 5):
+  - Selection [−x, +x] (+x last), hit on −x: +x moved (max x 2420 → 2430).
+  - Selection [+x, −x] (−x last), hit on +x: −x moved (min x 2400 → 2390).
+  - The original `which_face_hit_on_xNeg_30` trial changed both inputs at once. The tool still selects [reference, moving] and seeds the hit on the moving face.
 - Synthetic click selections add **one undo step per click** (selection history).
 - `editor.selection.selected.removeAll()` does not clear hits. Call `hits.clear()` yourself.
 - The SpaceInput applies typed text through a debounced callback (about 160 ms). Enter applies it immediately. Its text is interpreted in the document display unit; an explicit " mm" suffix also parsed (seen in stdout and in `p1b`/`p1c`).
@@ -119,7 +122,21 @@ Steps: guard on `active`; clear the selection and hits; select and record; run `
 
 ## Risks and not tested
 - The command accepts a hit point on an unselected face. Bad hits change the result silently.
-- Which face moves, when two faces are selected, is decided by selection order and/or the hit. These were not separated.
+- Which face moves: settled by the follow-up (last selected moves).
 - Not tested: non-planar face pairs (for example cylinder walls), faces of a solid in a group or instance, a non-mm display unit with the key path, minimised or hidden windows, and concurrent HUD drawing during a run.
 - `SelectionHitsSession` is internal API. `record(item, point, normal)` was inferred from behaviour (`record.length === 3`). It could change in an app update.
 - Approach C pollutes undo history (one step per click). It also needs camera framing: setting the camera through `OrbitControls` is fragile (`setQuaternionAndTarget` produced NaN here; the smoothing and focal-offset state must be written directly).
+
+## Follow-ups (2026-11-16, review of aff5fb3)
+Scripts and raw JSON: `discovery/probes-2026-11-followups/`. Isolated instance 127.0.0.1:58932 only.
+- **The executor swallows command errors.** `editor.exec()` resolves even when `execute()` throws (trials 9 and 11 here: `execError` set, `execRejected` null). The tool reads the error inside the wrapped `execute()`.
+- **Equal distance, pair mode:** the command commits one Undo step anyway (bounds 2420 → 2420.0000000000005). The tool returns a no-op before running anything.
+- **Equal distance, single-face mode:** the dialog opens (refDistance 0.005), then `finish()` gives "Operation has no effect"; undo delta 0. The tool reports a no-op.
+- **Washer face** (40 x 40 x 5 plate, centred r 8 through hole; `probe-washer.json`):
+  - `Face.FindMidpoint()` of the top face is the hole centre (2520, 20, 5): off the face.
+  - Single-face mode with that hit: "Operation has no effect". With `Face.GetAnyPointOn()` as the hit: it commits.
+  - Pair mode (bottom reference) commits with either hit.
+  - The tool always seeds `GetAnyPointOn()`.
+- **Same-direction pair** (stepped block, +z faces at z 10 and z 5): Plasticity dimensions it. Reference lower, moving upper, 8 mm: the upper face goes to z 13 (refDistance 0.005, `containsRefEntity` true). The tool allows it.
+- **Dialog reference point:** `params.to` lies on the reference plane in both modes (single face +z: to z 0). The tool uses it for the post-commit plane check in single-face mode.
+- Face version IDs keep their suffix across the edit (`16f920` → `17f920`); the tool finds the moved face by plane, not by ID.

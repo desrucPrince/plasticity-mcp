@@ -282,7 +282,7 @@ test("showFaceControlPoints runs TogglePointsCommand and ShowFacePointsFactory o
   const factory = f.created[0]!;
   assert.equal(factory.factory, "ShowFacePointsFactory");
   assert.deepEqual(factory.faces, [{ faceView: "f1" }]);
-  assert.equal(factory.show, undefined, "show keeps its native default of true");
+  assert.equal(factory.show, true, "show is set explicitly to true (review follow-up Part 2 item 2)");
 });
 
 test("showFaceControlPoints returns the eight CVs as rounded millimeter positions", async () => {
@@ -290,7 +290,7 @@ test("showFaceControlPoints returns the eight CVs as rounded millimeter position
   const { controlPoints, state } = await f.operations.showFaceControlPoints(5, ["f1"], "r1");
   assert.equal(state.revision, "r1");
   assert.equal(controlPoints.length, 8);
-  assert.deepEqual(controlPoints.map((point) => point.cvId), [0, 1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(controlPoints.map((point) => point.cvId), ["235c0", "235c1", "235c2", "235c3", "235c4", "235c5", "235c6", "235c7"]);
   assert.deepEqual(controlPoints[0]!.positionMm, [2900, 0, 0]);
   assert.deepEqual(controlPoints[1]!.positionMm, [2900, 20, 0]);
   assert.deepEqual(controlPoints[3]!.positionMm, [2913.333, 20, 13.333]);
@@ -314,11 +314,11 @@ test("moveFaceControlPoints runs MoveControlPointCommand and MultiMoveControlPoi
   await f.operations.showFaceControlPoints(5, ["f1"], "r1");
   const shown = f.sheetView.high.cvs as Fields[];
   f.executed.length = 0;
-  await f.operations.moveFaceControlPoints(5, [2, 3, 4, 5], [0, 0, 10], "r1");
+  await f.operations.moveFaceControlPoints(5, ["235c2", "235c3", "235c4", "235c5"], [0, 0, 10], "r1");
   assert.deepEqual(f.executed, ["MoveControlPointCommand"]);
   const call = mutations(f)[1]!;
   assert.deepEqual(call.bindings, ["MultiMoveControlPointFactory"]);
-  assert.deepEqual(call.values, [{ bodyId: 5, cvIds: [2, 3, 4, 5], delta: [0, 0, 0.01] }]);
+  assert.deepEqual(call.values, [{ bodyId: 5, cvIds: ["235c2", "235c3", "235c4", "235c5"], delta: [0, 0, 0.01] }]);
   const factory = f.created[1]!;
   assert.equal(factory.factory, "MultiMoveControlPointFactory");
   assert.deepEqual(factory.cvs.map((cv: Fields) => cv.id), [2, 3, 4, 5]);
@@ -330,36 +330,36 @@ test("moveFaceControlPoints runs MoveControlPointCommand and MultiMoveControlPoi
 test("moveFaceControlPoints returns the moved points 10 mm higher and leaves the others", async () => {
   const f = fixture();
   const shown = (await f.operations.showFaceControlPoints(5, ["f1"], "r1")).controlPoints;
-  const moved = (await f.operations.moveFaceControlPoints(5, [2, 3, 4, 5], [0, 0, 10], "r1")).controlPoints;
-  assert.deepEqual(moved.map((point) => point.cvId), [2, 3, 4, 5]);
+  const moved = (await f.operations.moveFaceControlPoints(5, ["235c2", "235c3", "235c4", "235c5"], [0, 0, 10], "r1")).controlPoints;
+  assert.deepEqual(moved.map((point) => point.cvId), ["235c2", "235c3", "235c4", "235c5"]);
   for (const point of moved) {
     const before = shown.find((candidate) => candidate.cvId === point.cvId)!;
     assert.ok(Math.abs(point.positionMm[2] - before.positionMm[2] - 10) < 0.01, `cv ${point.cvId}`);
     assert.equal(point.positionMm[0], before.positionMm[0]);
     assert.equal(point.positionMm[1], before.positionMm[1]);
   }
-  const all = await (f.operations as unknown as { readFaceControlPoints(id: number): Promise<Array<{ cvId: number; positionMm: number[] }>> }).readFaceControlPoints(5);
-  assert.deepEqual(all.find((point) => point.cvId === 0)!.positionMm, [2900, 0, 0], "an unmoved point stays");
+  const all = await (f.operations as unknown as { readFaceControlPoints(id: number): Promise<Array<{ cvId: string; positionMm: number[] }>> }).readFaceControlPoints(5);
+  assert.deepEqual(all.find((point) => point.cvId === "235c0")!.positionMm, [2900, 0, 0], "an unmoved point stays");
 });
 
 test("moveFaceControlPoints rejects an unknown cvId and points to the show tool, without a native edit", async () => {
   const f = fixture();
-  await assert.rejects(f.operations.moveFaceControlPoints(5, [0, 1], [0, 0, 10], "r1"), /Unknown face control point IDs on body 5: 0, 1\. Call plasticity_show_face_control_points first/);
+  await assert.rejects(f.operations.moveFaceControlPoints(5, ["235c0", "235c1"], [0, 0, 10], "r1"), /Unknown face control point IDs on body 5: 235c0, 235c1\. Call plasticity_show_face_control_points first/);
   assert.equal(f.created.length, 0);
   assert.deepEqual(f.executed, [], "no command is created when the validation fails");
   await f.operations.showFaceControlPoints(5, ["f1"], "r1");
-  await assert.rejects(f.operations.moveFaceControlPoints(5, [1, 42], [0, 0, 10], "r1"), /Unknown face control point IDs on body 5: 42\. Call plasticity_show_face_control_points first/);
+  await assert.rejects(f.operations.moveFaceControlPoints(5, ["235c1", "235c42"], [0, 0, 10], "r1"), /Unknown face control point IDs on body 5: 235c42\. Call plasticity_show_face_control_points first/);
   assert.equal(f.created.filter((entry) => entry.factory === "MultiMoveControlPointFactory").length, 0);
 });
 
 test("moveFaceControlPoints rejects bad input and a stale revision before any native call", async () => {
   const f = fixture();
-  await assert.rejects(f.operations.moveFaceControlPoints(7, [0], [0, 0, 1], "r1"), /Sheet or Solid body: 7/);
+  await assert.rejects(f.operations.moveFaceControlPoints(7, ["235c0"], [0, 0, 1], "r1"), /Sheet or Solid body: 7/);
   await assert.rejects(f.operations.moveFaceControlPoints(5, [], [0, 0, 1], "r1"), /nonempty unique/);
-  await assert.rejects(f.operations.moveFaceControlPoints(5, [0, 0], [0, 0, 1], "r1"), /nonempty unique/);
-  await assert.rejects(f.operations.moveFaceControlPoints(5, [0], [0, 0, 0], "r1"), /nonzero vector/);
-  await assert.rejects(f.operations.moveFaceControlPoints(5, [0], [0, Number.NaN, 1], "r1"), /nonzero vector/);
-  await assert.rejects(f.operations.moveFaceControlPoints(5, [0], [0, 0, 1], "old"), /Stale reference/);
+  await assert.rejects(f.operations.moveFaceControlPoints(5, ["235c0", "235c0"], [0, 0, 1], "r1"), /nonempty unique/);
+  await assert.rejects(f.operations.moveFaceControlPoints(5, ["235c0"], [0, 0, 0], "r1"), /nonzero vector/);
+  await assert.rejects(f.operations.moveFaceControlPoints(5, ["235c0"], [0, Number.NaN, 1], "r1"), /nonzero vector/);
+  await assert.rejects(f.operations.moveFaceControlPoints(5, ["235c0"], [0, 0, 1], "old"), /Stale reference/);
   assert.equal(f.calls.length, 0);
 });
 

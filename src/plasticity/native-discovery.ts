@@ -41,7 +41,8 @@ export const SELECT_STORE_BINDINGS = `function (editor, roots) {
   const bindings = {};
   const byName = new Map();
   const extras = new Set(['ConstructionPlaneDatabase', 'ConstructionPlaneSnap', 'ImporterExporter',
-    'LineSegmentHelper', 'CurvatureMeasurement', 'Target', 'makeAxisAlignedMeasurementPath', 'cplane2basis', 'evalCurvatureMeasurements', 'evalSurfaceContinuityMeasurements']);
+    'LineSegmentHelper', 'CurvatureMeasurement', 'Target', 'makeAxisAlignedMeasurementPath', 'cplane2basis', 'evalCurvatureMeasurements', 'evalSurfaceContinuityMeasurements',
+    'DimensionDistanceSpaceDialog']);
   for (const fn of this) {
     if (!fn.name || (!extras.has(fn.name) && !/(?:Factory|Command)$/.test(fn.name))) continue;
     if (/^[A-Z]/.test(fn.name) && !fn.prototype) continue;

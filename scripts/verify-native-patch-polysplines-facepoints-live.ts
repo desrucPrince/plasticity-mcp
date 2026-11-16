@@ -52,7 +52,11 @@ Live mode takes a baseline, then builds disposable geometry at x >= 2300 mm and 
 type, topology counts, bounds and control points back through plasticity_status and the tool results:
   - plasticity_xsided_patch: 4, 3 and 5 boundary curves, an open cylinder edge with g0 and g1, and a guide curve.
   - plasticity_convert_reference_mesh_to_polysplines: a 10 mm quad cube OBJ written to the output directory.
+    It also converts an open 3 x 3 quad grid (default, interpolateBoundary, mergePatches false) and a triangle cube.
+  - plasticity_xsided_patch on Solid edges: a through-hole rim (default and g1) and a face loop with a guide.
   - plasticity_show_face_control_points and plasticity_move_face_control_points on an extruded arc Sheet.
+  - a two-face Sheet: per-face show, renumbering, a free second show, a move across both faces, hide, a free
+    second hide; Plane and Cylinder faces are refused before any edit.
 It undoes back to the baseline Undo depth, body count and reference-mesh count and never saves the document.
 Run it only against an isolated Plasticity instance.`;
 
@@ -72,10 +76,11 @@ async function main(): Promise<void> {
     const windows = await call(client, "plasticity_list_windows", {});
     requireCondition(windows.some((window: { targetId: string }) => window.targetId === options.target), "Explicit Plasticity target was not found");
     await call(client, "plasticity_connect", { targetId: options.target });
-    baseline = await status(client);
-    evidence.baseline = summary(baseline);
+    const baselineState = await status(client);
     const baselineMeshes = (await call(client, "plasticity_list_reference_meshes", {})).referenceMeshes.length;
-    baseline.referenceMeshCount = baselineMeshes;
+    // The reference-mesh count is part of the baseline before recover() can ever run.
+    baseline = { ...baselineState, referenceMeshCount: baselineMeshes };
+    evidence.baseline = { ...summary(baseline), referenceMeshCount: baselineMeshes };
     const known = new Set<number>(baseline.bodies.map((body: { id: number }) => body.id));
     const checks: Record<string, unknown> = {};
 
@@ -94,7 +99,7 @@ async function main(): Promise<void> {
       return added;
     };
     const undoTo = async (depth: number): Promise<void> => {
-      for (let count = 0; count < 40; count += 1) {
+      for (let count = 0; count < 200; count += 1) {
         const current = await status(client);
         if (current.undoDepth <= depth) return;
         await call(client, "plasticity_undo", { intent: "Return to the acceptance checkpoint", revision: current.revision });
@@ -161,12 +166,12 @@ async function main(): Promise<void> {
     const rim = (sheetInfo.body.edges as any[]).find((edge) => edge.faceIds.length === 1);
     requireCondition(rim, "The open rim edge of the cylinder Sheet was not found");
     const edgeArgs = { edges: { bodyId: openSheet.id, edgeIds: [rim.id] } };
-    const g0 = await patchVariant("cylinder_edge_g0", edgeArgs, 1, 1, 1);
-    const g0Default = await patchVariant("cylinder_edge_default", { ...edgeArgs, continuity: "g0" }, 1, 1, 1);
+    const g0Default = await patchVariant("cylinder_edge_default", edgeArgs, 1, 1, 1);
+    const g0 = await patchVariant("cylinder_edge_g0", { ...edgeArgs, continuity: "g0" }, 1, 1, 1);
     const g1 = await patchVariant("cylinder_edge_g1", { ...edgeArgs, continuity: "g1" }, 1, 1, 1);
     const g2 = await patchVariant("cylinder_edge_g2", { ...edgeArgs, continuity: "g2" }, 1, 1, 1);
     const zRange = (entry: any) => entry.boundsMm.max[2] - entry.boundsMm.min[2];
-    requireCondition(zRange(g0) < 0.1 && zRange(g0Default) < 0.1, `g0 must stay flat, z range ${zRange(g0)}`);
+    requireCondition(zRange(g0) < 0.1 && zRange(g0Default) < 0.1, `g0 and the default must stay flat, z range ${zRange(g0)} and ${zRange(g0Default)}`);
     requireCondition(zRange(g1) > 3, `g1 must bulge off the rim, z range ${zRange(g1)}`);
     requireCondition(zRange(g2) > 3, `g2 must bulge off the rim, z range ${zRange(g2)}`);
     checks.xsided_continuity_z_range = { g0: zRange(g0), g1: zRange(g1), g2: zRange(g2) };
@@ -179,6 +184,26 @@ async function main(): Promise<void> {
     const plainPatch = await patchVariant("guide_quad_no_guide", { curveIds: guideQuad.map((curve) => curve.id) }, 1, 4, 4);
     const guided = await patchVariant("guide_quad_with_guide", { curveIds: guideQuad.map((curve) => curve.id), guideIds: [guide.id] }, 1, 4, 4);
     requireCondition(guided.boundsMm.max[2] > plainPatch.boundsMm.max[2] + 5, `The guide must raise the patch: ${guided.boundsMm.max[2]} vs ${plainPatch.boundsMm.max[2]}`);
+
+    // Edges of a Solid: a through-hole rim (one circular edge, its two faces both on the Solid) and a box's top
+    // face loop with an interior guide (guides work with edges too).
+    const [plate] = await add("plasticity_create_box", { originMm: [3500, 0, 0], sizeMm: [30, 30, 5] });
+    const [holeTool] = await add("plasticity_create_cylinder", { centerMm: [3515, 15, -1], radiusMm: 6, heightMm: 7 });
+    await mutate("plasticity_boolean", { targetIds: [plate.id], toolIds: [holeTool.id], operation: "difference" });
+    known.delete(holeTool.id);
+    const plateInfo = await call(client, "plasticity_body_info", { id: plate.id });
+    const holeRims = (plateInfo.body.edges as any[]).filter((edge) => edge.circle && Math.abs(edge.centerMm[2] - 5) < 0.01);
+    requireCondition(holeRims.length === 1 && holeRims[0].faceIds.length === 2, `Expected one top hole rim with two faces, got ${holeRims.length}`);
+    const holeFlat = await patchVariant("solid_hole_rim_default", { edges: { bodyId: plate.id, edgeIds: [holeRims[0].id] } }, 1, 1, 1);
+    const holeG1 = await patchVariant("solid_hole_rim_g1", { edges: { bodyId: plate.id, edgeIds: [holeRims[0].id] }, continuity: "g1" }, 1, 1, 1);
+    requireCondition(zRange(holeFlat) < 0.1 && zRange(holeG1) > 3, `Solid hole rim: default must be flat and g1 must bulge (${zRange(holeFlat)}, ${zRange(holeG1)})`);
+    const [loopBox] = await add("plasticity_create_box", { originMm: [3700, 0, 0], sizeMm: [20, 20, 10] });
+    const loopTop = ((await call(client, "plasticity_body_info", { id: loopBox.id })).body.faces as any[]).find((face) => face.normal[2] > 0.999);
+    const [loopGuide] = await add("plasticity_create_nurbs_curve", { pointsMm: [[3700, 10, 10], [3710, 10, 18], [3720, 10, 10]] });
+    const loopPlain = await patchVariant("solid_face_loop", { edges: { bodyId: loopBox.id, edgeIds: loopTop.edgeIds } }, 1, 4, 4);
+    const loopGuided = await patchVariant("solid_face_loop_with_guide", { edges: { bodyId: loopBox.id, edgeIds: loopTop.edgeIds }, guideIds: [loopGuide.id] }, 1, 4, 4);
+    requireCondition(loopGuided.boundsMm.max[2] > loopPlain.boundsMm.max[2] + 5, `The guide must raise the Solid-loop patch: ${loopGuided.boundsMm.max[2]} vs ${loopPlain.boundsMm.max[2]}`);
+    checks.xsided_solid_edges = { holeRimZRange: { default: zRange(holeFlat), g1: zRange(holeG1) }, faceLoopMaxZ: { plain: loopPlain.boundsMm.max[2], guided: loopGuided.boundsMm.max[2] } };
 
     const rejectCheckpoint = (await status(client)).undoDepth;
     await rejects("plasticity_xsided_patch", { curveIds: quad.map((curve) => curve.id), edges: edgeArgs.edges }, /exactly one/i, "curveIds and edges together");
@@ -213,6 +238,33 @@ async function main(): Promise<void> {
     checks.polysplines_cube = { type: solid.type, faces: solid.faceCount, edges: solid.edgeCount, vertices: solid.vertexCount, boundsMm: solid.boundsMm, referenceMeshesAfter: meshesAfter.length };
     await undoTo(polyCheckpoint);
     requireCondition((await call(client, "plasticity_list_reference_meshes", {})).referenceMeshes.length === baselineMeshes, "Undo did not restore the reference mesh count");
+    // Open 3 x 3 quad grid (interpolateBoundary changes the face count) and a triangle-only cube (it converts).
+    const convertFile = async (label: string, file: string, options: Record<string, unknown>) => {
+      const checkpoint = (await status(client)).undoDepth;
+      await mutate("plasticity_import_reference_mesh", { path: file, sourceUnit: "millimeter" });
+      const list = (await call(client, "plasticity_list_reference_meshes", {})).referenceMeshes as Array<{ id: number }>;
+      const before = await status(client);
+      const after = await mutate("plasticity_convert_reference_mesh_to_polysplines", { referenceMeshId: list[list.length - 1]!.id, ...options });
+      const created = after.bodies.filter((body: any) => !before.bodies.some((old: any) => old.id === body.id));
+      requireCondition(created.length === 1, `${label}: expected one new body, got ${created.length}`);
+      const result = { type: created[0].type, faces: created[0].faceCount, edges: created[0].edgeCount, vertices: created[0].vertexCount, boundsMm: created[0].boundsMm };
+      checks[`polysplines_${label}`] = { options, ...result };
+      await undoTo(checkpoint);
+      return result;
+    };
+    const gridObj = join(output, "quad-grid-3x3.obj");
+    await writeFile(gridObj, gridObjText(3200), { flag: "wx", mode: 0o600 });
+    const gridDefault = await convertFile("grid_default", gridObj, {});
+    const gridInterpolated = await convertFile("grid_interpolate_boundary", gridObj, { interpolateBoundary: true });
+    const gridSeparate = await convertFile("grid_merge_false", gridObj, { mergePatches: false });
+    requireCondition(gridDefault.type === "Sheet" && gridDefault.faces === 9, `Open grid default: expected a 9-face Sheet, got ${gridDefault.type} ${gridDefault.faces}F`);
+    requireCondition(gridInterpolated.faces === 21, `Open grid interpolateBoundary: expected 21 faces, got ${gridInterpolated.faces}`);
+    requireCondition(gridSeparate.faces === gridDefault.faces, `Open grid mergePatches false: expected no change, got ${gridSeparate.faces}F`);
+    const triangleObj = join(output, "triangle-cube.obj");
+    await writeFile(triangleObj, triangleCubeObjText(3300), { flag: "wx", mode: 0o600 });
+    const triangles = await convertFile("triangle_cube", triangleObj, {});
+    requireCondition(triangles.type === "Solid" && triangles.faces === 36, `Triangle cube: expected a 36-face Solid, got ${triangles.type} ${triangles.faces}F`);
+    requireCondition((await call(client, "plasticity_list_reference_meshes", {})).referenceMeshes.length === baselineMeshes, "Undo did not restore the reference mesh count after the grid and triangle cases");
 
     // ---- plasticity_show_face_control_points and plasticity_move_face_control_points (FINDINGS gap 5)
     const [arch] = await add("plasticity_create_nurbs_curve", { pointsMm: [[2900, 0, 0], [2920, 0, 10], [2940, 0, 0]] });
@@ -225,11 +277,11 @@ async function main(): Promise<void> {
     const bSpline = structure.surfaces[0].bSpline;
     const structureCount = bSpline.uControlPointCount * bSpline.vControlPointCount;
     const faceCheckpoint = (await status(client)).undoDepth;
-    await rejects("plasticity_move_face_control_points", { bodyId: sheet.id, cvIds: [0], deltaMm: [0, 0, 1] }, /plasticity_show_face_control_points/, "move before show");
+    await rejects("plasticity_move_face_control_points", { bodyId: sheet.id, cvIds: ["0c0"], deltaMm: [0, 0, 1] }, /plasticity_show_face_control_points/, "move before show");
     const showRevision = (await status(client)).revision;
     const shown = await call(client, "plasticity_show_face_control_points", { bodyId: sheet.id, faceIds: [faceId], revision: showRevision });
     requireCondition((await status(client)).undoDepth === faceCheckpoint + 1, "Showing face control points must add exactly one Undo entry");
-    const points = shown.controlPoints as Array<{ cvId: number; positionMm: [number, number, number] }>;
+    const points = shown.controlPoints as Array<{ cvId: string; faceId: string; index: number; positionMm: [number, number, number] }>;
     requireCondition(points.length === 8 && points.length === structureCount, `Expected 8 control points matching the 4x2 structure (${structureCount}), got ${points.length}`);
     requireCondition(bSpline.uControlPointCount === 4 && bSpline.vControlPointCount === 2, `Surface structure must be 4x2, got ${bSpline.uControlPointCount}x${bSpline.vControlPointCount}`);
     const highest = Math.max(...points.map((point) => point.positionMm[2]));
@@ -243,10 +295,11 @@ async function main(): Promise<void> {
     const movedSheet = after.bodies.find((body: any) => body.id === sheet.id) ?? after.bodies.find((body: any) => body.type === "Sheet" && body.boundsMm.min[0] > 2890 && body.boundsMm.max[0] < 2950);
     requireCondition(movedSheet, "The moved Sheet was not found");
     requireNear(movedSheet.boundsMm.max[2], 15, "Sheet max z after moving the top control point 10 mm", 0.1);
-    const movedPoints = moved.controlPoints as Array<{ cvId: number; positionMm: [number, number, number] }>;
-    requireCondition(movedPoints.length === moveIds.length && movedPoints[0]!.cvId === moveIds[0], `The move must return the ${moveIds.length} moved point, got ${movedPoints.length}`);
+    const movedPoints = moved.controlPoints as Array<{ cvId: string; faceId: string; index: number; positionMm: [number, number, number] }>;
+    requireCondition(movedPoints.length === moveIds.length && movedPoints[0]!.index === topRow[0]!.index, `The move must return the ${moveIds.length} moved point, got ${movedPoints.length}`);
+    requireCondition(movedPoints[0]!.cvId !== moveIds[0], `The move must return the new cvId (versionId), got the old ${movedPoints[0]!.cvId}`);
     for (const point of movedPoints) {
-      const original = points.find((candidate) => candidate.cvId === point.cvId)!;
+      const original = points.find((candidate) => candidate.index === point.index)!;
       requireNear(point.positionMm[2] - original.positionMm[2], 10, `cv ${point.cvId} z delta`, 0.01);
       requireNear(point.positionMm[0], original.positionMm[0], `cv ${point.cvId} x`, 0.01);
       requireNear(point.positionMm[1], original.positionMm[1], `cv ${point.cvId} y`, 0.01);
@@ -256,19 +309,82 @@ async function main(): Promise<void> {
       shown: points.length,
       maxZBefore: sheet.boundsMm.max[2],
       maxZAfter: movedSheet.boundsMm.max[2],
-      moved: movedPoints.map((point) => ({ cvId: point.cvId, deltaZ: point.positionMm[2] - points.find((candidate) => candidate.cvId === point.cvId)!.positionMm[2] })),
+      moved: movedPoints.map((point) => ({ cvIdBefore: moveIds[0], cvId: point.cvId, index: point.index, deltaZ: point.positionMm[2] - points.find((candidate) => candidate.index === point.index)!.positionMm[2] })),
     };
-    await rejects("plasticity_move_face_control_points", { bodyId: sheet.id, cvIds: [9999], deltaMm: [0, 0, 1] }, /plasticity_show_face_control_points/, "unknown cvId");
+    await rejects("plasticity_move_face_control_points", { bodyId: sheet.id, cvIds: ["9999c9999"], deltaMm: [0, 0, 1] }, /plasticity_show_face_control_points/, "unknown cvId");
+    // The pre-move cvId is stale after the move, even at the current revision: rejected, never re-targeted.
+    await rejects("plasticity_move_face_control_points", { bodyId: sheet.id, cvIds: [moveIds[0]], deltaMm: [0, 0, 1] }, /Unknown face control point IDs/, "pre-move cvId after the move");
     const staleRevision = (await status(client)).revision;
-    await mutate("plasticity_move_face_control_points", { bodyId: sheet.id, cvIds: [topRow[0]!.cvId], deltaMm: [0, 0, 1] });
-    await rejects("plasticity_move_face_control_points", { bodyId: sheet.id, cvIds: [topRow[0]!.cvId], deltaMm: [0, 0, 1], revision: staleRevision }, /stale/i, "stale revision");
+    await mutate("plasticity_move_face_control_points", { bodyId: sheet.id, cvIds: [movedPoints[0]!.cvId], deltaMm: [0, 0, 1] });
+    await rejects("plasticity_move_face_control_points", { bodyId: sheet.id, cvIds: [movedPoints[0]!.cvId], deltaMm: [0, 0, 1], revision: staleRevision }, /stale/i, "stale revision");
     await rejects("plasticity_show_face_control_points", { bodyId: sheet.id, faceIds: ["nope"] }, /face/i, "unknown face");
+
+    // ---- multi-face body: a Sheet joined from two arc Sheets has two BSurf faces. Points of both faces are
+    // numbered together, face by face; showing or hiding one face renumbers the other's points.
+    {
+      const [arcA] = await add("plasticity_create_nurbs_curve", { pointsMm: [[3800, 0, 0], [3810, 0, 8], [3820, 0, 0]] });
+      const [arcB] = await add("plasticity_create_nurbs_curve", { pointsMm: [[3820, 0, 0], [3830, 0, 8], [3840, 0, 0]] });
+      const sheetA = (await add("plasticity_extrude_curves", { ids: [arcA.id], distanceMm: 20, direction: [0, 1, 0] })).find((body: any) => body.type === "Sheet");
+      const sheetB = (await add("plasticity_extrude_curves", { ids: [arcB.id], distanceMm: 20, direction: [0, 1, 0] })).find((body: any) => body.type === "Sheet");
+      const [joined] = await add("plasticity_join_sheets", { ids: [sheetA.id, sheetB.id] });
+      const two = joined ?? (await status(client)).bodies.find((body: any) => body.type === "Sheet" && body.faceCount === 2 && body.boundsMm.min[0] > 3790);
+      requireCondition(two && two.faceCount === 2, `Expected one two-face Sheet, got ${JSON.stringify(two && { type: two.type, faces: two.faceCount })}`);
+      const faces = (await call(client, "plasticity_body_info", { id: two.id })).body.faces as any[];
+      const faceA = faces.find((face) => face.centerMm[0] < 3820).id;
+      const faceB = faces.find((face) => face.centerMm[0] > 3820).id;
+      const multiCheckpoint = (await status(client)).undoDepth;
+      const showB = await call(client, "plasticity_show_face_control_points", { bodyId: two.id, faceIds: [faceB], revision: (await status(client)).revision });
+      requireCondition(showB.undoSteps === 1 && showB.controlPoints.length === 8, `show B: expected 8 points in one step, got ${showB.controlPoints.length}`);
+      const bIdsAlone = showB.controlPoints.map((point: any) => point.cvId);
+      const faceBNow = showB.faces[0].faceId;
+      requireCondition(faceBNow !== faceB && showB.controlPoints.every((point: any) => point.faceId === faceBNow), "show B: the points must carry B's new face ID");
+      const faceANow = (await call(client, "plasticity_body_info", { id: two.id })).body.faces.find((face: any) => face.centerMm[0] < 3820).id;
+      const showA = await call(client, "plasticity_show_face_control_points", { bodyId: two.id, faceIds: [faceANow], revision: (await status(client)).revision });
+      requireCondition(showA.controlPoints.length === 8 && showA.controlPoints.every((point: any) => point.faceId === showA.faces[0].faceId), "show A: only A's 8 points must be returned");
+      const both = await call(client, "plasticity_show_face_control_points", { bodyId: two.id, faceIds: [showA.faces[0].faceId], revision: (await status(client)).revision });
+      requireCondition(both.undoSteps === 0, "a second show of a shown face must cost no Undo step");
+      requireCondition((await status(client)).undoDepth === multiCheckpoint + 2, "show B + show A + second show must be exactly two Undo steps");
+      const bodyFaces = (await call(client, "plasticity_body_info", { id: two.id })).body.faces as any[];
+      const bNow = bodyFaces.find((face) => face.centerMm[0] > 3820).id;
+      const readAll = await call(client, "plasticity_show_face_control_points", { bodyId: two.id, faceIds: [bNow], revision: (await status(client)).revision });
+      const bIdsAfter = readAll.controlPoints.map((point: any) => point.cvId);
+      const aIds = showA.controlPoints.map((point: any) => point.cvId);
+      requireCondition(new Set([...aIds, ...bIdsAfter]).size === 16, `cvIds must be unique across the body: A ${aIds} B ${bIdsAfter}`);
+      // B's cvId from before A was shown names a renumbered point; it must be rejected at the current revision.
+      await rejects("plasticity_move_face_control_points", { bodyId: two.id, cvIds: [bIdsAlone[2]], deltaMm: [0, 0, 1] }, /Unknown face control point IDs/, "stale cvId of face B after showing A");
+      checks.face_points_multi_face = { bIdsAlone, aIds, bIdsAfterA: bIdsAfter, bChanged: JSON.stringify(bIdsAlone) !== JSON.stringify(bIdsAfter) };
+      // Move one point of each face in one step; the read-back checks the delta.
+      const pickA = showA.controlPoints[2], pickB = readAll.controlPoints[4];
+      const movedBoth = await call(client, "plasticity_move_face_control_points", { bodyId: two.id, cvIds: [pickA.cvId, pickB.cvId], deltaMm: [0, 0, 5], revision: (await status(client)).revision });
+      requireCondition(movedBoth.undoSteps === 1 && movedBoth.controlPoints.length === 2, "multi-face move: expected two points in one step");
+      for (const [point, before] of [[movedBoth.controlPoints[0], pickA], [movedBoth.controlPoints[1], pickB]]) {
+        requireNear(point.positionMm[2] - before.positionMm[2], 5, `multi-face move cv ${before.cvId} z delta`, 1e-3);
+        requireCondition(point.index === before.index, `multi-face move cv ${before.cvId}: grid index changed`);
+      }
+      // Hide A: one step; B's points renumber and come back in the result.
+      const hideFaceA = (await call(client, "plasticity_body_info", { id: two.id })).body.faces.find((face: any) => face.centerMm[0] < 3820).id;
+      const hidden = await call(client, "plasticity_hide_face_control_points", { bodyId: two.id, faceIds: [hideFaceA], revision: (await status(client)).revision });
+      requireCondition(hidden.undoSteps === 1 && hidden.faces[0].controlPointCount === 0, "hide A: expected one step and no points left on A");
+      requireCondition(hidden.controlPoints.length === 8 && JSON.stringify(hidden.controlPoints.map((point: any) => point.index)) === JSON.stringify([0, 1, 2, 3, 4, 5, 6, 7]), `hide A: expected B's 8 points, got ${hidden.controlPoints.map((point: any) => point.cvId)}`);
+      requireCondition(hidden.controlPoints.every((point: any) => !bIdsAfter.includes(point.cvId)), "hide A: B's cvIds must change with the edit");
+      const hiddenAgain = await call(client, "plasticity_hide_face_control_points", { bodyId: two.id, faceIds: [hidden.faces[0].faceId], revision: (await status(client)).revision });
+      requireCondition(hiddenAgain.undoSteps === 0, "a hide of a face with no shown points must cost no Undo step");
+      checks.face_points_multi_face_move_hide = { moved: movedBoth.controlPoints, hiddenRemaining: hidden.controlPoints.length, hiddenRemainingIds: hidden.controlPoints.map((point: any) => point.cvId), undoDepth: [multiCheckpoint, (await status(client)).undoDepth] };
+      // Zero-CV faces are refused before any edit: a Plane face and a Cylinder face.
+      const [zeroBox] = await add("plasticity_create_box", { originMm: [3900, 0, 0], sizeMm: [10, 10, 10] });
+      const [zeroCylinder] = await add("plasticity_create_cylinder", { centerMm: [3950, 0, 0], radiusMm: 5, heightMm: 10 });
+      const planeFace = ((await call(client, "plasticity_body_info", { id: zeroBox.id })).body.faces as any[]).find((face) => face.normal[2] > 0.999).id;
+      const cylinderFace = ((await call(client, "plasticity_body_info", { id: zeroCylinder.id })).body.faces as any[]).find((face) => !face.planar).id;
+      await rejects("plasticity_show_face_control_points", { bodyId: zeroBox.id, faceIds: [planeFace] }, /no editable control points.*\(Plane\)/, "Plane face");
+      await rejects("plasticity_show_face_control_points", { bodyId: zeroCylinder.id, faceIds: [cylinderFace] }, /no editable control points.*\(Cylinder\)/, "Cylinder face");
+      console.error(`face_points_multi_face: ok ${JSON.stringify(checks.face_points_multi_face)}`);
+    }
 
     // ---- restore the baseline
     await undoTo(baseline.undoDepth);
     const restored = await status(client);
     evidence.checks = checks;
-    evidence.restored = summary(restored);
+    evidence.restored = { ...summary(restored), referenceMeshCount: (await call(client, "plasticity_list_reference_meshes", {})).referenceMeshes.length };
     requireCondition(restored.documentToken === baseline.documentToken, "The document changed during acceptance");
     requireCondition(restored.undoDepth === baseline.undoDepth, `Undo depth is ${restored.undoDepth}, baseline was ${baseline.undoDepth}`);
     requireCondition(restored.bodies.length === baseline.bodies.length, `Body count is ${restored.bodies.length}, baseline was ${baseline.bodies.length}`);
@@ -296,6 +412,23 @@ function cubeObjText(x: number): string {
   const vertices = [[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0], [0, 0, 10], [10, 0, 10], [10, 10, 10], [0, 10, 10]];
   const faces = [[1, 4, 3, 2], [5, 6, 7, 8], [1, 2, 6, 5], [3, 4, 8, 7], [1, 5, 8, 4], [2, 3, 7, 6]];
   return `${vertices.map(([vx, vy, vz]) => `v ${x + vx!} ${vy} ${vz}`).join("\n")}\n${faces.map((face) => `f ${face.join(" ")}`).join("\n")}\n`;
+}
+
+// An open 4 x 4 vertex, 3 x 3 quad grid, 30 mm square, with the four inner vertices raised 6 mm.
+function gridObjText(x: number): string {
+  const vertices: string[] = [];
+  const faces: string[] = [];
+  for (let j = 0; j < 4; j += 1) for (let i = 0; i < 4; i += 1) vertices.push(`v ${x + i * 10} ${j * 10} ${(i === 1 || i === 2) && (j === 1 || j === 2) ? 6 : 0}`);
+  for (let j = 0; j < 3; j += 1) for (let i = 0; i < 3; i += 1) { const a = j * 4 + i + 1; faces.push(`f ${a} ${a + 1} ${a + 5} ${a + 4}`); }
+  return `${vertices.join("\n")}\n${faces.join("\n")}\n`;
+}
+
+// A 10 mm cube of 12 triangles (each quad split along a diagonal).
+function triangleCubeObjText(x: number): string {
+  const vertices = [[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0], [0, 0, 10], [10, 0, 10], [10, 10, 10], [0, 10, 10]];
+  const quads = [[1, 4, 3, 2], [5, 6, 7, 8], [1, 2, 6, 5], [3, 4, 8, 7], [1, 5, 8, 4], [2, 3, 7, 6]];
+  const faces = quads.flatMap(([a, b, c, d]) => [`f ${a} ${b} ${c}`, `f ${a} ${c} ${d}`]);
+  return `${vertices.map(([vx, vy, vz]) => `v ${x + vx!} ${vy} ${vz}`).join("\n")}\n${faces.join("\n")}\n`;
 }
 
 async function startMcp(stderr: string[]): Promise<LiveMcp> {
@@ -335,12 +468,14 @@ function toolText(response: unknown): string {
 }
 
 async function recover(client: Client, initial: any): Promise<Record<string, unknown>> {
-  for (let count = 0; count < 40; count += 1) {
+  for (let count = 0; count < 200; count += 1) {
     const current = await status(client);
     if (current.documentToken !== initial.documentToken) return { restored: false, reason: "document-changed" };
     if (current.undoDepth <= initial.undoDepth) {
       const referenceMeshCount = (await call(client, "plasticity_list_reference_meshes", {})).referenceMeshes.length;
-      return { restored: current.bodies.length === initial.bodies.length && (initial.referenceMeshCount === undefined || referenceMeshCount === initial.referenceMeshCount), bodyCount: current.bodies.length, referenceMeshCount };
+      const bodiesRestored = current.bodies.length === initial.bodies.length;
+      const meshesRestored = referenceMeshCount === initial.referenceMeshCount;
+      return { restored: bodiesRestored && meshesRestored, ...(meshesRestored ? {} : { reason: "reference-mesh-count" }), bodyCount: current.bodies.length, referenceMeshCount, baselineReferenceMeshCount: initial.referenceMeshCount };
     }
     await call(client, "plasticity_undo", { intent: "Recover patch/polysplines/face-points acceptance", revision: current.revision });
   }
