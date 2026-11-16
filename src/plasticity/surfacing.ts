@@ -462,7 +462,7 @@ export const SCREENSHOT_FRAME_MAX_BODIES = 64;
 /** Largest camera deviation (metres, radians-ish quaternion components, zoom ratio) that still counts as an exact restore. */
 export const CAMERA_RESTORE_TOLERANCE = 1e-9;
 
-export interface ScreenshotViewApplied { undoDepth: number; previousShader: string | null; shader: string | null; framed: boolean; cameraBefore: CameraPose | null }
+export interface ScreenshotViewApplied { undoDepth: number; previousShader: string | null; shader: string | null; framed: boolean; cameraBefore: CameraPose | null; cameraSettle?: { settled: boolean; waitedMs: number } | null }
 export interface ScreenshotViewRestored { restored: boolean; undoDepth: number; shader: string | null; cameraAfter: CameraPose | null; cameraDeviation: number | null }
 export interface CameraPose { position: Vector3; target: Vector3; quaternion: [number, number, number, number]; zoom: number }
 
@@ -485,10 +485,28 @@ export const SCREENSHOT_VIEW_SOURCE = nativeFunction`async function (name2shader
     if (typeof controls.wantsSnap === 'boolean') out.wantsSnap = controls.wantsSnap;
     return out;
   };
+  const frame = () => new Promise(resolve => { let done = false; const finish = () => { if (!done) { done = true; resolve(); } };
+    try { requestAnimationFrame(finish); } catch { finish(); } setTimeout(finish, 250); });
+  // A camera set a moment ago (plasticity_set_view, an orbit with inertia) is still easing toward its end pose. A pose
+  // saved mid-motion cannot be restored: the controls keep moving afterwards. Wait until the pose holds still for two
+  // frames (or the budget runs out) and save that one.
+  const settleCamera = async () => {
+    const limit = args.cameraSettleMs ?? 2000, started = Date.now();
+    const moved = (a, b) => Math.max(...a.position.map((v, i) => Math.abs(v - b.position[i])), ...a.target.map((v, i) => Math.abs(v - b.target[i])),
+      ...a.quaternion.map((v, i) => Math.abs(v - b.quaternion[i])), Math.abs(a.zoom / b.zoom - 1));
+    let previous = pose(), still = 0;
+    while (Date.now() - started < limit) {
+      viewport.setNeedsRender();
+      await frame();
+      const now = pose();
+      still = moved(now, previous) <= 1e-11 ? still + 1 : 0;
+      previous = now;
+      if (still >= 2) return { settled: true, waitedMs: Date.now() - started };
+    }
+    return { settled: false, waitedMs: Date.now() - started };
+  };
   const settle = async () => {
     viewport.setNeedsRender();
-    const frame = () => new Promise(resolve => { let done = false; const finish = () => { if (!done) { done = true; resolve(); } };
-      try { requestAnimationFrame(finish); } catch { finish(); } setTimeout(finish, 250); });
     // Six frames: a framed capture after three frames differed from a later one in about 3,000 scattered model pixels
     // (mean abs diff 0.07) in one live run; the extra frames are cheap (about 100 ms).
     for (let index = 0; index < (args.settleFrames ?? 6); index += 1) await frame();
@@ -563,6 +581,7 @@ export const SCREENSHOT_VIEW_SOURCE = nativeFunction`async function (name2shader
     }
     box = { min, max };
   }
+  const cameraSettle = box ? await settleCamera() : null;
   globalThis[key] = {
     shading: args.shader ? memento : null,
     camera: box ? { pose: pose(), position: camera.position.toArray(), target: camera.target.toArray(), zoom: Number(camera.zoom), controls: controlsSnapshot() } : null,
@@ -597,7 +616,7 @@ export const SCREENSHOT_VIEW_SOURCE = nativeFunction`async function (name2shader
     await restore();
     throw error;
   }
-  return { undoDepth, previousShader: shaderName(memento), shader: material ? shaderName(shading.saveToMemento()) : null, framed: Boolean(box), cameraBefore };
+  return { undoDepth, previousShader: shaderName(memento), shader: material ? shaderName(shading.saveToMemento()) : null, framed: Boolean(box), cameraBefore, cameraSettle };
 }`;
 
 export interface ScreenshotViewOptions { shader?: ScreenshotShader | undefined; frame?: { bodyIds: number[] } | undefined }
@@ -619,9 +638,10 @@ export function validateScreenshotView(options: ScreenshotViewOptions, state: Ru
 
 /**
  * Apply the shader and/or framing, run the capture, and always restore (also when the capture fails). View only: the
- * Undo depth must not change, and the camera must come back within CAMERA_RESTORE_TOLERANCE, or the call fails.
+ * Undo depth must not change, or the call fails. The camera is saved once it holds still and must come back within
+ * CAMERA_RESTORE_TOLERANCE; when it does not, the written image is kept and the reply says cameraRestored false with the deviation.
  */
-export async function withScreenshotView<T extends object>(runtime: PlasticityRuntime, options: ScreenshotViewOptions, capture: () => Promise<T>): Promise<T & { view: { shader?: { mode: string; previous: string | null; restored: string | null }; frame?: { bodyIds: number[]; cameraRestored: true; cameraDeviation: number } } }> {
+export async function withScreenshotView<T extends object>(runtime: PlasticityRuntime, options: ScreenshotViewOptions, capture: () => Promise<T>): Promise<T & { view: { shader?: { mode: string; previous: string | null; restored: string | null }; frame?: { bodyIds: number[]; cameraRestored: boolean; cameraDeviation: number; cameraSettled?: boolean; cameraSettleWaitMs?: number } } }> {
   const args = { op: "apply", ...(options.shader ? { shader: options.shader } : {}), ...(options.frame ? { frame: { bodyIds: options.frame.bodyIds } } : {}) };
   const applied = await runtime.readNative<ScreenshotViewApplied>(SCREENSHOT_VIEW_SOURCE, ["name2shader"], [{ ...args, tolerance: CAMERA_RESTORE_TOLERANCE }], 15_000);
   let captured: T | undefined;
@@ -646,14 +666,18 @@ export async function withScreenshotView<T extends object>(runtime: PlasticityRu
   if (!restored?.restored) throw new Error("The screenshot view change was not found to restore; another call may have restored it");
   if (restored.undoDepth !== applied.undoDepth) throw new Error(`The screenshot view changed the Undo depth (${applied.undoDepth} -> ${restored.undoDepth}); reconcile before continuing`);
   if (options.shader && restored.shader !== applied.previousShader) throw new Error(`The previous shader did not come back (${String(applied.previousShader)} -> ${String(restored.shader)})`);
-  if (options.frame && !(restored.cameraDeviation !== null && restored.cameraDeviation <= CAMERA_RESTORE_TOLERANCE)) {
-    throw new Error(`The camera did not come back exactly after framing (deviation ${String(restored.cameraDeviation)})`);
-  }
+  // The image is already written: a camera that did not come back exactly is reported, never turned into an error.
+  if (options.frame && restored.cameraDeviation === null) throw new Error("The camera read after framing is missing; the screenshot view could not be verified");
   return {
     ...captured!,
     view: {
       ...(options.shader ? { shader: { mode: options.shader, previous: applied.previousShader, restored: restored.shader } } : {}),
-      ...(options.frame ? { frame: { bodyIds: options.frame.bodyIds, cameraRestored: true as const, cameraDeviation: restored.cameraDeviation! } } : {}),
+      ...(options.frame ? { frame: {
+        bodyIds: options.frame.bodyIds,
+        cameraRestored: restored.cameraDeviation! <= CAMERA_RESTORE_TOLERANCE,
+        cameraDeviation: restored.cameraDeviation!,
+        ...(applied.cameraSettle ? { cameraSettled: applied.cameraSettle.settled, cameraSettleWaitMs: applied.cameraSettle.waitedMs } : {}),
+      } } : {}),
     },
   };
 }

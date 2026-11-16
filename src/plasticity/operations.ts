@@ -2,7 +2,7 @@ import { requireWholeHelixTurns } from "./helix-turns.ts";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { copyFile, mkdir, mkdtemp, open, readFile, realpath, rm, rmdir, stat, writeFile } from "node:fs/promises";
-import { dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 
 import { NATIVE_VIEWPORT_CAPTURE } from "./viewport-capture.ts";
 import { boundsExactness, exactBounds, explainXNurbsError, probeSurface, SURFACE_ALIGN_CONTINUITY, SURFACE_ALIGN_COINCIDENCE_MM, SURFACE_ALIGN_DRIVE, SURFACE_ALIGN_FALLBACK_WAIT_MS, SURFACE_ALIGN_READBACK_SOURCE, SURFACE_ALIGN_READY_MS, SURFACE_ALIGN_TIMEOUTS, type AlignReadBackNative, type SurfaceAlignContinuity, readSupportBounds, supportBounds, validateScreenshotView, withScreenshotView, type ExactBoundsEvidence, type ProbeSurfaceEvidence, type ProbeSurfaceRequest, type ScreenshotViewOptions } from "./surfacing.ts";
@@ -2525,6 +2525,18 @@ export class PlasticityOperations {
       this.shading.section = null;
       for (const viewport of this.viewports ?? []) viewport.setNeedsRender();
     }`, [], [{ id }]);
+    return await this.state();
+  }
+
+  // Clears the active section plane without needing its ID. Plasticity keeps one section plane, but the list
+  // read is the authority: with nothing listed nothing runs and no revision changes.
+  async deleteAllSectionAnalyses(revision: string): Promise<RuntimeState> {
+    const state = await this.assertRevision(revision);
+    if ((state.sectionAnalyses ?? []).length === 0) return state;
+    await this.runtime.mutate(`function () {
+      this.shading.section = null;
+      for (const viewport of this.viewports ?? []) viewport.setNeedsRender();
+    }`, [], []);
     return await this.state();
   }
 
@@ -6040,6 +6052,36 @@ export class PlasticityOperations {
   async boolean(targetIds: number[], toolIds: number[], operation: "union" | "difference" | "intersection", keepTools: boolean, revision: string): Promise<RuntimeState> {
     await this.assertRevision(revision);
     if (targetIds.some((id) => toolIds.includes(id))) throw new Error("Target and tool IDs must not overlap");
+    if (operation === "intersection" && new Set(toolIds).size > 1) {
+      // The kernel's intersection takes target AND (tool 1 OR tool 2 ...) when given several tools, so each tool
+      // is intersected in turn inside one native command: the result is target AND tool 1 AND tool 2 ...
+      await this.runtime.mutate(nativeFunction`async function (Factory, args) {
+        ${findView}
+        if (this.executor.isBusy) throw new Error('Plasticity is busy');
+        const editor = this;
+        let failure;
+        const command = new this.commands.BooleanCommand(this);
+        command.remember = false;
+        command.execute = async function () {
+          try {
+            for (const toolId of args.toolIds) {
+              const factory = new Factory(editor).resource(this);
+              factory.targets = args.targetIds.map(find);
+              factory.tools = [find(toolId)];
+              factory.operationType = 15901;
+              factory.keepTools = args.keepTools;
+              await factory.commit();
+            }
+          } catch (error) {
+            failure = error;
+            throw error;
+          }
+        };
+        await this.exec(command);
+        if (failure) throw failure;
+      }`, ["BooleanFactory"], [{ targetIds, toolIds: [...new Set(toolIds)], keepTools }]);
+      return await this.state();
+    }
     await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("BooleanCommand")}
@@ -6253,7 +6295,15 @@ export class PlasticityOperations {
   }
 
   async chamfer(id: number, edgeIds: string[], distanceMm: number, revision: string): Promise<RuntimeState> {
-    await this.assertRevision(revision);
+    const before = await this.assertRevision(revision);
+    // An arc edge whose radius is smaller than the distance: the chamfer there has no exact offset. Plasticity answers OK
+    // but can drop the chamfer face of that arc (live: 7.41 mm on a loop of 4 lines and 4 R7 arcs gave 4 new faces for
+    // 8 edges and 71.6 mm3 more volume than the hand calculation). The result is read back below for exactly this case.
+    const beforeBody = before.bodies.find((body) => body.id === id);
+    const collapsing = beforeBody === undefined ? [] : [...new Set(edgeIds)].flatMap((edgeId) => {
+      const radiusMm = beforeBody.edges.find((edge) => edge.id === edgeId)?.circleGeometry?.radiusMm;
+      return radiusMm !== undefined && radiusMm < distanceMm - 1e-9 ? [{ edgeId, radiusMm }] : [];
+    });
     await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("FilletShellCommand")}
@@ -6268,7 +6318,16 @@ export class PlasticityOperations {
       factory.distance = args.distance;
       ${commandEnd}
     }`, ["FilletShellFactory"], [{ id, edgeIds, distance: -millimetersToMeters(distanceMm) }]);
-    return await this.state();
+    const after = await this.state();
+    if (collapsing.length > 0 && beforeBody) {
+      const afterBody = after.bodies.find((body) => body.id === id);
+      const wanted = new Set(edgeIds).size;
+      const added = afterBody === undefined ? 0 : afterBody.faceIds.length - beforeBody.faceIds.length;
+      if (added < wanted) {
+        throw new Error(`Chamfer ${distanceMm} mm is larger than the radius of arc edge ${collapsing.map((entry) => `${entry.edgeId} (R${Number(entry.radiusMm.toFixed(6))} mm)`).join(", ")}. Plasticity reported OK but made ${added} chamfer face${added === 1 ? "" : "s"} for ${wanted} edge${wanted === 1 ? "" : "s"}: the arcs were not chamfered by the requested distance. The result is committed as one Undo step at revision ${after.revision}; plasticity_undo restores the body. Use a distance of at most the smallest arc radius (${Math.min(...collapsing.map((entry) => entry.radiusMm))} mm).`);
+      }
+    }
+    return after;
   }
 
   async removeFillets(ids: number[], revision: string): Promise<RuntimeState> {
@@ -10937,6 +10996,7 @@ export class PlasticityOperations {
         factory.filePath = args.path;
         await factory.commit();
       }`, ["ExportCadFactory"], [{ ids, path: temporary }]);
+      await sanitizeCadExport(temporary, staging, "step", basename(output));
       const text = await readFile(temporary, "utf8");
       if (!text.startsWith("ISO-10303-21;") || !text.includes("END-ISO-10303-21;")) throw new Error("Plasticity produced an invalid STEP file");
       await copyFile(temporary, output, constants.COPYFILE_EXCL);
@@ -10972,6 +11032,7 @@ export class PlasticityOperations {
         factory.filePath = args.path;
         await factory.commit();
       }`, ["ExportCadFactory"], [{ ids, path: temporary }]);
+      await sanitizeCadExport(temporary, staging, "parasolid", basename(output));
       const bytes = await validateParasolidPath(temporary, "Plasticity Parasolid output");
       await copyFile(temporary, output, constants.COPYFILE_EXCL);
       return {
@@ -11006,6 +11067,7 @@ export class PlasticityOperations {
         factory.filePath = args.path;
         await factory.commit();
       }`, ["ExportCadFactory"], [{ ids, path: temporary }]);
+      await sanitizeCadExport(temporary, staging, "iges", basename(output));
       const bytes = await validateIgesPath(temporary, "Plasticity IGES output");
       await copyFile(temporary, output, constants.COPYFILE_EXCL);
       return { path: output, bytes };
@@ -12541,6 +12603,156 @@ async function readFirstLine(path: string, label: string, format: string): Promi
   } finally {
     await handle.close();
   }
+}
+
+// ---- CAD export header privacy. The native exporters stamp the staging path and the OS user name into the file
+// header. Each rewrite below touches the header only; the model data after it stays byte-identical.
+
+// A STEP string literal: ' doubles to '', \ doubles to \\, characters outside ASCII use \X2\....\X0\.
+function stepString(value: string): string {
+  let out = "";
+  for (const char of value) {
+    const code = char.codePointAt(0)!;
+    if (char === "'") out += "''";
+    else if (char === "\\") out += "\\\\";
+    else if (code >= 0x20 && code < 0x7f) out += char;
+    else if (code <= 0xffff) out += `\\X2\\${code.toString(16).toUpperCase().padStart(4, "0")}\\X0\\`;
+    else out += `\\X4\\${code.toString(16).toUpperCase().padStart(8, "0")}\\X0\\`;
+  }
+  return `'${out}'`;
+}
+
+// Rewrites FILE_NAME(name, time, (author), (organisation), ...) in the STEP header: the name becomes the output
+// file's base name; author and organisation become empty strings. Text from DATA; on is returned unchanged.
+export function sanitizeStepHeader(text: string, outputBaseName: string): string {
+  const headerStart = text.indexOf("HEADER;");
+  const headerEnd = text.indexOf("ENDSEC;", headerStart < 0 ? 0 : headerStart);
+  if (headerStart < 0 || headerEnd < 0) return text;
+  const header = text.slice(headerStart, headerEnd);
+  const open = /\bFILE_NAME\s*\(/u.exec(header);
+  if (!open) return text;
+  const argsStart = open.index + open[0].length;
+  const args: Array<{ start: number; end: number }> = [];
+  let depth = 0;
+  let quoted = false;
+  let from = argsStart;
+  let close = -1;
+  for (let index = argsStart; index < header.length; index += 1) {
+    const char = header[index]!;
+    if (quoted) { if (char === "'") quoted = false; continue; }
+    if (char === "'") quoted = true;
+    else if (char === "(") depth += 1;
+    else if (char === ")") {
+      if (depth === 0) { args.push({ start: from, end: index }); close = index; break; }
+      depth -= 1;
+    } else if (char === "," && depth === 0) { args.push({ start: from, end: index }); from = index + 1; }
+  }
+  if (close < 0 || args.length < 4) return text; // not a FILE_NAME this can rewrite; sanitizeCadExport still refuses a leaked staging path
+  const replacements = new Map([[0, stepString(outputBaseName)], [2, "('')"], [3, "('')"]]);
+  let rewritten = "";
+  let cursor = argsStart;
+  args.forEach((arg, index) => {
+    const replacement = replacements.get(index);
+    if (replacement === undefined) return;
+    const raw = header.slice(arg.start, arg.end);
+    const lead = raw.length - raw.trimStart().length;
+    const trail = raw.length - raw.trimEnd().length;
+    rewritten += header.slice(cursor, arg.start + lead) + replacement;
+    cursor = arg.end - trail;
+  });
+  rewritten += header.slice(cursor);
+  return text.slice(0, headerStart) + header.slice(0, argsStart) + rewritten + text.slice(headerEnd);
+}
+
+// IGES: the Global section's parameter 4 is the file name Plasticity filled with the staging path. It is replaced by
+// the output file's base name, the Global lines are re-wrapped to 72 columns and the Terminate record's G count is
+// updated. Start, Directory and Parameter lines are returned unchanged.
+export function sanitizeIgesGlobal(text: string, outputBaseName: string): string {
+  const newline = text.includes("\r\n") ? "\r\n" : "\n";
+  const lines = text.split(newline);
+  const globalIndexes = lines.flatMap((line, index) => line.length >= 73 && line[72] === "G" ? [index] : []);
+  if (globalIndexes.length === 0) return text;
+  const first = globalIndexes[0]!;
+  const last = globalIndexes[globalIndexes.length - 1]!;
+  if (last - first + 1 !== globalIndexes.length) return text;
+  const stream = globalIndexes.map((index) => lines[index]!.slice(0, 72)).join("");
+  // Parameters 1 and 2 are the delimiters (1H, and 1H; by default); parameter 4 is the file name.
+  const fields: string[] = [];
+  let position = 0;
+  const isTerminator = (char: string | undefined) => char === ";";
+  const readField = (): void => {
+    const hollerith = /^(\d+)H/u.exec(stream.slice(position));
+    if (hollerith) {
+      const length = Number(hollerith[1]);
+      const end = position + hollerith[0].length + length;
+      fields.push(stream.slice(position, end));
+      position = end;
+    } else {
+      let end = position;
+      while (end < stream.length && stream[end] !== "," && !isTerminator(stream[end])) end += 1;
+      fields.push(stream.slice(position, end));
+      position = end;
+    }
+  };
+  // The delimiter fields are fixed by the format's defaults; Plasticity writes those.
+  if (!stream.startsWith("1H,,1H;,")) return text; // custom delimiters: left alone, the staging-path guard still applies
+  fields.push("1H,", "1H;");
+  position = "1H,,1H;,".length;
+  while (position < stream.length && !isTerminator(stream[position])) {
+    readField();
+    if (stream[position] === ",") position += 1;
+    else break;
+  }
+  if (!isTerminator(stream[position]) || fields.length < 4) return text;
+  const name = outputBaseName.replace(/[^\x20-\x7e]/gu, "_");
+  fields[3] = `${name.length}H${name}`;
+  const rebuilt = `${fields.join(",")};`;
+  const chunks: string[] = [];
+  for (let offset = 0; offset < rebuilt.length; offset += 72) chunks.push(rebuilt.slice(offset, offset + 72));
+  const globalLines = chunks.map((chunk, index) => `${chunk.padEnd(72, " ")}G${String(index + 1).padStart(7, " ")}`);
+  const terminate = lines.findIndex((line) => line.length >= 73 && line[72] === "T");
+  const result = [...lines.slice(0, first), ...globalLines, ...lines.slice(last + 1)];
+  if (terminate >= 0) {
+    const shifted = terminate - globalIndexes.length + globalLines.length;
+    const record = result[shifted]!;
+    const counts = record.slice(0, 72).replace(/G\s*\d+/u, `G${String(globalLines.length).padStart(7, " ")}`);
+    result[shifted] = `${counts.slice(0, 72).padEnd(72, " ")}${record.slice(72)}`;
+  }
+  return result.join(newline);
+}
+
+// Parasolid text and binary files carry a text header ending at **END_OF_HEADER. KEY= and FILE= hold the staging
+// path; they become the output name. Everything from **END_OF_HEADER on is returned unchanged.
+export function sanitizeParasolidHeader(content: Buffer, outputBaseName: string): Buffer {
+  const marker = content.indexOf("**END_OF_HEADER");
+  if (marker < 0) return content;
+  const header = content.subarray(0, marker).toString("latin1");
+  const name = outputBaseName.replace(/[^\x20-\x7e]|;/gu, "_");
+  const stem = name.replace(/\.[^.]*$/u, "");
+  const rewritten = header
+    .replace(/^KEY=[^\r\n]*$/mu, () => `KEY=${stem};`)
+    .replace(/^FILE=[^\r\n]*$/mu, () => `FILE=${name};`);
+  return Buffer.concat([Buffer.from(rewritten, "latin1"), content.subarray(marker)]);
+}
+
+export type CadExportFormat = "step" | "iges" | "parasolid";
+
+// Rewrites the staged file's header in place, then refuses a file that still names the staging folder.
+async function sanitizeCadExport(temporary: string, staging: string, format: CadExportFormat, outputBaseName: string): Promise<void> {
+  let original: Buffer;
+  try {
+    original = await readFile(temporary);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return; // the format check that follows names the missing file
+    throw error;
+  }
+  const cleaned = format === "parasolid"
+    ? sanitizeParasolidHeader(original, outputBaseName)
+    : Buffer.from((format === "step" ? sanitizeStepHeader : sanitizeIgesGlobal)(original.toString("latin1"), outputBaseName), "latin1");
+  // IGES wraps the Global section at column 72, so a path can be split by the line ends: test the unwrapped text too.
+  const unwrapped = format === "iges" ? cleaned.toString("latin1").split(/\r?\n/u).map((line) => line.slice(0, 72)).join("") : "";
+  if (cleaned.includes(Buffer.from(staging, "latin1")) || unwrapped.includes(staging)) throw new Error(`The ${format} export still names its staging folder; the export was not written`);
+  if (!cleaned.equals(original)) await writeFile(temporary, cleaned);
 }
 
 // IGES fixed-format lines are 80 columns wide; column 73 holds the section letter and the first line is in the Start section.
