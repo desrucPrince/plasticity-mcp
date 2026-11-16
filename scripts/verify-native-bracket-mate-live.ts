@@ -1,0 +1,383 @@
+#!/usr/bin/env node
+// Live acceptance for plasticity_create_bracket, plasticity_place_body and plasticity_transfer_holes.
+//
+// Every check reads the built geometry independently: plasticity_find_faces / plasticity_find_edges (limit 1000),
+// plasticity_validate_bodies, plasticity_check_interference, plasticity_measure_parallel_planar_face_clearance and the
+// status bounds. plasticity_describe_body is never used. Each case restores the document by Undo to the baseline Undo
+// depth and body list, and the script checks that it did. It never saves, opens or closes a document.
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+
+import { isolatedAcceptanceEnvironment } from "./native-live-environment.ts";
+
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+type Vec = [number, number, number];
+type Check = { case: string; check: string; ok: boolean; detail?: unknown };
+const CASES = ["1", "2", "3", "4"] as const;
+const HAND_BATCH_BYTES = 2_308; // the audit's hand-written L-bracket batch (discovery/speed-2026-11, part b)
+const X0 = 2000; // every case builds at x >= 2000 mm, away from the document's own bodies
+
+interface Options { help: boolean; target?: string; output?: string; allowDisposableMutations: boolean; cases: string[] }
+
+export function parseBracketMateArgs(argv: string[]): Options {
+  const options: Options = { help: argv.length === 0, allowDisposableMutations: false, cases: [...CASES] };
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === "--help") options.help = true;
+    else if (argument === "--allow-disposable-mutations") options.allowDisposableMutations = true;
+    else if (argument === "--target" || argument === "--output" || argument === "--case") {
+      const value = argv[++index];
+      if (!value || value.startsWith("--")) throw new Error(`${argument} requires a value`);
+      if (argument === "--target") options.target = value;
+      else if (argument === "--output") options.output = value;
+      else {
+        const picked = value.split(",");
+        if (picked.some((item) => !(CASES as readonly string[]).includes(item))) throw new Error(`--case takes ${CASES.join(", ")} (comma-separated)`);
+        options.cases = picked;
+      }
+    } else throw new Error(`Unknown argument: ${String(argument)}`);
+  }
+  if (options.help) return options;
+  if (!options.target) throw new Error("Live bracket-mate acceptance requires --target with an explicit Plasticity window ID");
+  if (!options.allowDisposableMutations) throw new Error("Live bracket-mate acceptance requires --allow-disposable-mutations");
+  if (!options.output) throw new Error("Live bracket-mate acceptance requires --output with a new directory");
+  return options;
+}
+
+const HELP = `Usage:
+  PLASTICITY_CDP_URL=http://127.0.0.1:PORT node scripts/verify-native-bracket-mate-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY [--case 1,2,3,4]
+
+Cases: 1 audit L-bracket in one call; 2 U bracket with a slotted pair and Z bracket with a 2x2 grid; 3 block + bracket
+mate chain (direct calls, then one lean batch); 4 live rejections. Builds at x >= ${X0} mm in an isolated instance,
+restores the Undo depth and body list after every case, and writes evidence.json to the new output directory.`;
+
+// ---------- small geometry helpers ----------
+const sub = (a: Vec, b: Vec): Vec => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const add = (a: Vec, b: Vec): Vec => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const mul = (a: Vec, k: number): Vec => [a[0] * k, a[1] * k, a[2] * k];
+const dot = (a: Vec, b: Vec) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a: Vec, b: Vec): Vec => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const norm = (a: Vec) => Math.hypot(a[0], a[1], a[2]);
+const unit = (a: Vec): Vec => mul(a, 1 / norm(a));
+const near = (a: Vec, b: Vec, tolerance = 1e-6) => norm(sub(a, b)) <= tolerance;
+/** Distance between two lines when parallel (sine <= 1e-9), else Infinity. */
+function coaxial(pointA: Vec, dirA: Vec, pointB: Vec, dirB: Vec): number {
+  if (norm(cross(unit(dirA), unit(dirB))) > 1e-9) return Number.POSITIVE_INFINITY;
+  return norm(cross(sub(pointB, pointA), unit(dirA)));
+}
+const boundsNear = (a: { min: Vec; max: Vec }, b: { min: Vec; max: Vec }, tolerance = 1e-6) => near(a.min, b.min, tolerance) && near(a.max, b.max, tolerance);
+
+// ---------- MCP plumbing ----------
+async function startMcp(storeRoot: string): Promise<Client> {
+  const env = { ...isolatedAcceptanceEnvironment(storeRoot, process.env), PLASTICITY_AUTO_LAUNCH: "0", PLASTICITY_HUD: "0", PLASTICITY_TIMING: "1" };
+  const transport = new StdioClientTransport({ command: process.execPath, args: [join(projectRoot, "scripts", "run-server.ts")], cwd: projectRoot, env, stderr: "pipe" });
+  const client = new Client({ name: "plasticity-bracket-mate-live", version: "1.0.0" });
+  await client.connect(transport);
+  return client;
+}
+function toolText(response: unknown): string {
+  const content = (response as { content?: Array<{ type: string; text?: string }> }).content;
+  const item = content?.find((entry) => entry.type === "text" && typeof entry.text === "string");
+  if (!item) throw new Error("MCP tool returned no text result");
+  return item.text!;
+}
+
+class Live {
+  readonly client: Client;
+  readonly checks: Check[] = [];
+  readonly evidence: Record<string, unknown> = {};
+  baseline!: { undoDepth: number; bodyIds: number[]; revision: string };
+  constructor(client: Client) { this.client = client; }
+  async call(name: string, args: Record<string, unknown>): Promise<any> {
+    const response = await this.client.callTool({ name, arguments: args });
+    const text = toolText(response);
+    if ((response as { isError?: boolean }).isError) throw new Error(text);
+    return JSON.parse(text);
+  }
+  /** A call that must fail: returns its error text. */
+  async refused(name: string, args: Record<string, unknown>): Promise<string> {
+    const response = await this.client.callTool({ name, arguments: args });
+    const text = toolText(response);
+    if (!(response as { isError?: boolean }).isError) throw new Error(`${name} was expected to fail but returned ${text.slice(0, 400)}`);
+    return text;
+  }
+  async status(): Promise<any> { return await this.call("plasticity_status", {}); }
+  async bodyBounds(id: number): Promise<{ min: Vec; max: Vec } | undefined> {
+    const status = await this.status();
+    return status.bodies.find((body: { id: number }) => body.id === id)?.boundsMm;
+  }
+  async faces(query: Record<string, unknown>): Promise<any[]> {
+    const status = await this.status();
+    return (await this.call("plasticity_find_faces", { revision: status.revision, query, limit: 1000 })).matches;
+  }
+  async edges(query: Record<string, unknown>): Promise<any[]> {
+    const status = await this.status();
+    return (await this.call("plasticity_find_edges", { revision: status.revision, query, limit: 1000 })).matches;
+  }
+  check(caseName: string, check: string, ok: boolean, detail?: unknown): boolean {
+    this.checks.push({ case: caseName, check, ok, ...(detail === undefined ? {} : { detail }) });
+    return ok;
+  }
+  /** Runs one mutating call and checks that its undoSteps equals the measured Undo depth change. */
+  async mutate(caseName: string, name: string, args: Record<string, unknown>): Promise<{ result: any; ms: number; bytes: number }> {
+    const before = await this.status();
+    const payload = { ...args, revision: before.revision };
+    const started = performance.now();
+    const result = await this.call(name, payload);
+    const ms = Math.round(performance.now() - started);
+    const after = await this.status();
+    const measured = after.undoDepth - before.undoDepth;
+    if (typeof result?.undoSteps === "number") this.check(caseName, `${name} undoSteps ${result.undoSteps} equals the measured Undo depth change`, result.undoSteps === measured, { reported: result.undoSteps, measured });
+    return { result, ms, bytes: Buffer.byteLength(JSON.stringify(args)) };
+  }
+  async restore(caseName: string): Promise<void> {
+    for (let guard = 0; guard < 200; guard += 1) {
+      const status = await this.status();
+      if (status.undoDepth <= this.baseline.undoDepth) break;
+      await this.call("plasticity_undo", { revision: status.revision });
+    }
+    const status = await this.status();
+    const ids = status.bodies.map((body: { id: number }) => body.id).sort((a: number, b: number) => a - b);
+    this.check(caseName, "document restored: Undo depth and body list equal the baseline", status.undoDepth === this.baseline.undoDepth && JSON.stringify(ids) === JSON.stringify(this.baseline.bodyIds), { undoDepth: status.undoDepth, bodies: ids.length });
+  }
+}
+
+// ---------- shared verification of a bracket's derived values against the built body ----------
+async function verifyBracket(live: Live, caseName: string, label: string, reply: any, input: { widthMm: number; thicknessMm: number }): Promise<void> {
+  const id = reply.bodyId as number;
+  const derived = reply.derived;
+  const W = input.widthMm;
+  const t = input.thicknessMm;
+  const validation = await live.call("plasticity_validate_bodies", { ids: [id], revision: (await live.status()).revision });
+  const body = validation.bodies[0];
+  live.check(caseName, `${label}: valid closed Solid (native Check)`, body.type === "Solid" && body.closed && body.nativeValid && body.printableSolid, { faceCount: body.faceCount, nativeCheckCodes: body.nativeCheckCodes });
+  const bounds = await live.bodyBounds(id);
+  live.check(caseName, `${label}: derived.boundsMm equals the body bounds (1e-6)`, !!bounds && boundsNear(bounds, derived.boundsMm), { derived: derived.boundsMm, read: bounds });
+
+  const planar = await live.faces({ bodyIds: [id], planar: true });
+  const lines = await live.edges({ bodyIds: [id], line: true });
+  const endpoints = (edge: any): Vec[] => { const half = mul(edge.tangent, edge.lengthMm / 2); return [sub(edge.centerMm, half), add(edge.centerMm, half)]; };
+  const parallel = (a: Vec, b: Vec) => norm(cross(unit(a), unit(b))) <= 1e-9;
+  for (const [legName, leg] of Object.entries<any>(derived.legs)) {
+    const k = leg.planeNormal.findIndex((value: number) => value !== 0);
+    const outer = planar.filter((face) => near(face.normal, leg.planeNormal, 1e-9) && Math.abs(face.centerMm[k] - leg.outerFaceOffsetMm) <= 1e-6);
+    live.check(caseName, `${label} ${legName}: planeNormal + outerFaceOffsetMm name a planar face of the body`, outer.length >= 1, { planeNormal: leg.planeNormal, outerFaceOffsetMm: leg.outerFaceOffsetMm, faces: outer.map((face) => face.id) });
+    const atOrigin = lines.filter((edge) => endpoints(edge).some((point) => near(point, leg.frameOriginMm)));
+    live.check(caseName, `${label} ${legName}: frameOriginMm is a body vertex (line edges end there)`, atOrigin.length >= 2, { frameOriginMm: leg.frameOriginMm, edges: atOrigin.length });
+    // Signs too: the edge's far end lies at a positive distance along alongAxis, and exactly W along acrossAxis.
+    const farEnd = (edge: any): Vec => endpoints(edge).find((point) => !near(point, leg.frameOriginMm))!;
+    const alongEdge = atOrigin.find((edge) => { const step = sub(farEnd(edge), leg.frameOriginMm); return parallel(edge.tangent, leg.alongAxis) && dot(step, leg.alongAxis) > 1e-6 && norm(cross(step, leg.alongAxis)) <= 1e-6; });
+    live.check(caseName, `${label} ${legName}: alongAxis runs from the frame origin along a line edge, in its sign`, !!alongEdge, { alongAxis: leg.alongAxis, edgeLengthMm: alongEdge?.lengthMm });
+    live.check(caseName, `${label} ${legName}: acrossAxis runs from the frame origin to frameOriginMm + ${W} x acrossAxis along a line edge`, atOrigin.some((edge) => near(farEnd(edge), add(leg.frameOriginMm, mul(leg.acrossAxis, W)))), { acrossAxis: leg.acrossAxis });
+    // A flat-span end or lengthMm sits on a line edge across the leg (a bend tangent or the free end) on either face.
+    const acrossEdgeAt = (along: number) => lines.some((edge) => parallel(edge.tangent, leg.acrossAxis) && [0, t].some((depth) =>
+      Math.abs(dot(sub(edge.centerMm, add(add(leg.frameOriginMm, mul(leg.alongAxis, along)), mul(leg.planeNormal, -depth))), leg.alongAxis)) <= 1e-6
+      && Math.abs(dot(sub(edge.centerMm, add(add(leg.frameOriginMm, mul(leg.alongAxis, along)), mul(leg.planeNormal, -depth))), leg.planeNormal)) <= 1e-6));
+    for (const [index, along] of leg.flatSpanMm.entries()) live.check(caseName, `${label} ${legName}: flatSpanMm[${index}] = ${along} sits on a line edge across the leg`, acrossEdgeAt(along));
+    const axisIndex = leg.alongAxis.findIndex((value: number) => value !== 0);
+    const spansBounds = bounds && Math.abs((bounds.max[axisIndex]! - bounds.min[axisIndex]!) - leg.lengthMm) <= 1e-6;
+    live.check(caseName, `${label} ${legName}: lengthMm = ${leg.lengthMm} (an across edge at its end, or the bounds extent along the leg)`, acrossEdgeAt(leg.lengthMm) || !!spansBounds);
+  }
+  const cylinders = await live.faces({ bodyIds: [id], surfaceTypes: ["Cylinder"] });
+  const cylinderOn = (radius: number, point: Vec, axis: Vec) => cylinders.filter((face) => face.radiusMm !== null && Math.abs(face.radiusMm - radius) <= 1e-6 && face.axisOriginMm && coaxial(point, axis, face.axisOriginMm, face.axisDirection) <= 1e-6);
+  for (const [index, hole] of derived.holeAxesMm.entries()) {
+    if (hole.slot) {
+      const half = (hole.slot.lengthMm - hole.diameterMm) / 2;
+      const ends = [-1, 1].map((sign) => cylinderOn(hole.diameterMm / 2, add(hole.pointMm, mul(hole.slot.directionAxis, sign * half)), hole.axis).length);
+      live.check(caseName, `${label}: holeAxesMm[${index}] slot ends (r ${hole.diameterMm / 2}) on their axes (1e-6)`, ends.every((count) => count >= 1), { pointMm: hole.pointMm, ends });
+    } else {
+      const found = cylinderOn(hole.diameterMm / 2, hole.pointMm, hole.axis);
+      live.check(caseName, `${label}: holeAxesMm[${index}] Ø${hole.diameterMm} hole coaxial (1e-6)`, found.length >= 1, { pointMm: hole.pointMm, offsetMm: found.map((face) => coaxial(hole.pointMm, hole.axis, face.axisOriginMm, face.axisDirection)) });
+      if (hole.countersunk) {
+        const cones = await live.faces({ bodyIds: [id], surfaceTypes: ["Cone"] });
+        live.check(caseName, `${label}: holeAxesMm[${index}] countersink cone on the axis, opening on the inner face`, cones.some((face) => face.axisOriginMm && coaxial(hole.pointMm, hole.axis, face.axisOriginMm, face.axisDirection) <= 1e-6 && dot(sub(face.centerMm, hole.pointMm), hole.axis) > t / 2));
+      }
+    }
+  }
+  for (const [index, bend] of (derived.bendAxesMm ?? []).entries()) {
+    const found = cylinderOn(bend.radiusMm, bend.pointMm, bend.axis);
+    live.check(caseName, `${label}: bendAxesMm[${index}] inner bend radius ${bend.radiusMm} on its axis (1e-6)`, found.length >= 1 && found.every((face) => Math.abs((face.blendRadiusMm ?? face.radiusMm) - bend.radiusMm) <= 1e-6), { faces: found.length });
+  }
+  for (const [index, corner] of (derived.cornerAxesMm ?? []).entries()) {
+    const found = cylinderOn(corner.radiusMm, corner.pointMm, corner.axis);
+    live.check(caseName, `${label}: cornerAxesMm[${index}] corner radius ${corner.radiusMm} on its axis (1e-6)`, found.length === 1, { pointMm: corner.pointMm });
+  }
+  for (const [index, gusset] of (derived.gussetBoundsMm ?? []).entries()) {
+    const sides = [gusset.min[1], gusset.max[1]].map((y: number) => planar.filter((face) => parallel(face.normal, [0, 1, 0]) && Math.abs(face.centerMm[1] - y) <= 1e-6).length);
+    const hypotenuse = (gusset.max[0] + gusset.min[2]); // x + z = (x0 + t + size) + (z0 + t) on the slanted face
+    const slanted = planar.filter((face) => near(face.normal, unit([1, 0, 1]), 1e-9) && Math.abs(face.centerMm[0] + face.centerMm[2] - hypotenuse) <= 1e-6);
+    const centred = Math.abs((gusset.min[1] + gusset.max[1]) / 2 - (derived.boundsMm.min[1] + derived.boundsMm.max[1]) / 2) <= 1e-9;
+    live.check(caseName, `${label}: gussetBoundsMm[${index}] side faces at y ${gusset.min[1]} and ${gusset.max[1]}, slanted face x + z = ${hypotenuse}${centred ? ", centred on the width" : ""}`, sides.every((count) => count >= 1) && slanted.length === 1, { sides, slanted: slanted.length, centred });
+  }
+}
+
+// ---------- cases ----------
+const AUDIT_ARGS = {
+  originMm: [X0, 0, 0], profile: "L", widthMm: 30, thicknessMm: 4, legs: { baseMm: 40, uprightMm: 40 }, innerBendRadiusMm: 5, cornerRadiusMm: 3,
+  holes: [{ leg: "base", diameterMm: 4.5, count: 2, layout: "explicit", positionsMm: [[26, 7.5], [26, 22.5]] }, { leg: "upright", diameterMm: 4.5, count: 2, layout: "explicit", positionsMm: [[26, 7.5], [26, 22.5]] }],
+  gussets: { count: 1, thicknessMm: 4, sizeMm: 25 }, name: "audit-l-bracket",
+};
+
+async function case1(live: Live): Promise<void> {
+  const { result, ms, bytes } = await live.mutate("1", "plasticity_create_bracket", AUDIT_ARGS);
+  live.evidence.case1 = { requestBytes: bytes, handBatchBytes: HAND_BATCH_BYTES, clientMs: ms, serverMs: result.timing?.totalMs, timing: result.timing, undoSteps: result.undoSteps, bodyId: result.bodyId, derived: result.derived, faceIds: result.faceIds, steps: result.steps.map((step: { operation: string }) => step.operation) };
+  live.check("1", `one create_bracket call: ${bytes} B request vs ${HAND_BATCH_BYTES} B hand batch; ${result.timing?.totalMs} ms server, ${ms} ms round trip`, bytes < HAND_BATCH_BYTES, { bytes, serverMs: result.timing?.totalMs, clientMs: ms });
+  await verifyBracket(live, "1", "audit L", result, AUDIT_ARGS);
+}
+
+async function case2(live: Live): Promise<void> {
+  const uArgs = { originMm: [X0 + 100, 0, 0], profile: "U", widthMm: 30, thicknessMm: 3, legs: { baseMm: 50, leftMm: 30, rightMm: 25 }, innerBendRadiusMm: 2, cornerRadiusMm: 2,
+    holes: [{ leg: "base", diameterMm: 4, count: 2, layout: "line-along", pitchMm: 20, slot: { lengthMm: 10, direction: "across" } }], name: "u-bracket" };
+  const u = await live.mutate("2", "plasticity_create_bracket", uArgs);
+  await verifyBracket(live, "2", "U slotted", u.result, uArgs);
+  const zArgs = { originMm: [X0 + 200, 0, 0], profile: "Z", widthMm: 30, thicknessMm: 3, legs: { lowerMm: 30, webMm: 30, upperMm: 30 }, innerBendRadiusMm: 2, cornerRadiusMm: 2,
+    holes: [{ leg: "web", diameterMm: 3.4, count: 4, layout: "grid", marginMm: 8 }], name: "z-bracket" };
+  const z = await live.mutate("2", "plasticity_create_bracket", zArgs);
+  await verifyBracket(live, "2", "Z grid", z.result, zArgs);
+  live.evidence.case2 = { u: { bodyId: u.result.bodyId, undoSteps: u.result.undoSteps, holeAxesMm: u.result.derived.holeAxesMm, serverMs: u.result.timing?.totalMs }, z: { bodyId: z.result.bodyId, undoSteps: z.result.undoSteps, holeAxesMm: z.result.derived.holeAxesMm, serverMs: z.result.timing?.totalMs } };
+}
+
+const BX = X0 + 300; // the mate block
+const PILOTS: Vec[] = [[BX + 22, 12, 0], [BX + 38, 12, 0], [BX + 22, 28, 0], [BX + 38, 28, 0]];
+const CHAIN_BRACKET = { originMm: [BX + 100, 0, 0], profile: "L", widthMm: 30, thicknessMm: 4, legs: { baseMm: 40, uprightMm: 40 }, innerBendRadiusMm: 5, cornerRadiusMm: 3, name: "mate-bracket" };
+const BLOCK_BOTTOM = { planar: true, normal: { vector: [0, 0, -1], toleranceDeg: 0.000001 }, center: { pointMm: [BX + 30, 20, 0], toleranceMm: 0.000001 } };
+
+async function verifyChain(live: Live, label: string, blockId: number, bracketId: number): Promise<void> {
+  const pilots = await live.faces({ bodyIds: [blockId], surfaceTypes: ["Cylinder"], radiusMm: { value: 1.5, tolerance: 1e-6 } });
+  const holes = await live.faces({ bodyIds: [bracketId], surfaceTypes: ["Cylinder"], radiusMm: { value: 1.7, tolerance: 1e-6 } });
+  const offsets = pilots.map((pilot) => Math.min(...holes.map((hole) => coaxial(pilot.axisOriginMm, pilot.axisDirection, hole.axisOriginMm, hole.axisDirection))));
+  live.check("3", `${label}: each of the 4 Ø3 pilots has a coaxial Ø3.4 bracket hole (max offset ${Math.max(...offsets)} mm <= 1e-6)`, pilots.length === 4 && holes.length >= 4 && offsets.every((offset) => offset <= 1e-6), { pilots: pilots.length, holes: holes.length, offsets });
+  const revision = (await live.status()).revision;
+  const interference = await live.call("plasticity_check_interference", { pairs: [{ firstBodyId: blockId, secondBodyId: bracketId }], revision });
+  live.check("3", `${label}: no volumetric interference between block and bracket`, interference.pairs[0].status === "no-volumetric-interference", interference.pairs[0]);
+  const bottom = (await live.faces({ bodyIds: [blockId], ...BLOCK_BOTTOM }))[0];
+  const top = (await live.faces({ bodyIds: [bracketId], planar: true, normal: { vector: [0, 0, 1], toleranceDeg: 0.000001 } })).filter((face: any) => Math.abs(face.centerMm[2]) <= 1e-6);
+  const clearance = top.length === 1 && bottom ? await live.call("plasticity_measure_parallel_planar_face_clearance", { first: { bodyId: blockId, faceId: bottom.id }, second: { bodyId: bracketId, faceId: top[0].id }, revision }) : undefined;
+  live.check("3", `${label}: block bottom and bracket top face touch (clearance ${clearance?.minimumDistanceMm} mm, 0 ± 1e-6)`, !!clearance && Math.abs(clearance.minimumDistanceMm) <= 1e-6 && Math.abs(clearance.parallelPlaneGapMm) <= 1e-6, clearance && { minimumDistanceMm: clearance.minimumDistanceMm, parallelPlaneGapMm: clearance.parallelPlaneGapMm, inPlaneClearanceMm: clearance.inPlaneClearanceMm });
+  const validation = await live.call("plasticity_validate_bodies", { ids: [blockId, bracketId], revision });
+  live.check("3", `${label}: block and bracket are valid closed Solids`, validation.bodies.every((body: any) => body.closed && body.nativeValid && body.printableSolid));
+}
+
+async function case3(live: Live): Promise<void> {
+  // (a) direct calls
+  const block = await live.mutate("3", "plasticity_create_box", { originMm: [BX, 0, 0], sizeMm: [60, 40, 20], name: "mate-block" });
+  const blockId = block.result.change.added[0].id as number;
+  await live.mutate("3", "plasticity_create_blind_hole_pattern", { targetId: blockId, entryCentersMm: PILOTS, axis: [0, 0, 1], holeDiameterMm: 3, holeDepthMm: 8, materialDepthMm: 20, overshootMm: 0.5 });
+  const bracket = await live.mutate("3", "plasticity_create_bracket", CHAIN_BRACKET);
+  const bracketId = bracket.result.bodyId as number;
+  const bottom = (await live.faces({ bodyIds: [blockId], ...BLOCK_BOTTOM }))[0];
+  // The bracket's base outer face, after a half turn about x, is the base leg's top face; the upright then hangs away from the block.
+  const place = await live.mutate("3", "plasticity_place_body", { id: bracketId, anchor: { faceId: bracket.result.faceIds.base.outerFaceId }, to: { bodyId: blockId, faceId: bottom.id }, rotate: { axis: "x", quarterTurns: 2 }, gapMm: 0 });
+  live.check("3", "place_body: mating faces, half turn about x, anchor on the block bottom centre", place.result.relation === "mating" && near(place.result.anchorMm, bottom.centerMm), { deltaMm: place.result.deltaMm, anchorMm: place.result.anchorMm, boundsMm: place.result.boundsMm, undoSteps: place.result.undoSteps });
+  const transfer = await live.mutate("3", "plasticity_transfer_holes", { sourceId: blockId, targetId: bracketId, select: { radiusMm: 1.5, axis: "z", kind: "hole" }, hole: { diameterMm: 3.4, through: true } });
+  live.check("3", `transfer_holes: ${transfer.result.targetHoleCount} holes, read-back max coaxial offset ${transfer.result.maxCoaxialOffsetMm} mm`, transfer.result.targetHoleCount === 4 && transfer.result.maxCoaxialOffsetMm <= 1e-6);
+  await verifyChain(live, "direct calls", blockId, bracketId);
+  live.evidence.case3direct = { place: { deltaMm: place.result.deltaMm, anchorMm: place.result.anchorMm, boundsMm: place.result.boundsMm, ms: place.ms, serverMs: place.result.timing?.totalMs }, transfer: { axesMm: transfer.result.axesMm, ms: transfer.ms, serverMs: transfer.result.timing?.totalMs } };
+  await live.restore("3");
+
+  // (b) the same chain as one lean batch with $n references
+  const steps = [
+    { toolName: "plasticity_create_box", arguments: { originMm: [BX, 0, 0], sizeMm: [60, 40, 20], name: "mate-block" }, return: ["timing.totalMs"] },
+    { toolName: "plasticity_create_blind_hole_pattern", arguments: { targetId: "$0.added[0]", entryCentersMm: PILOTS, axis: [0, 0, 1], holeDiameterMm: 3, holeDepthMm: 8, materialDepthMm: 20, overshootMm: 0.5 }, return: ["holeCount", "timing.totalMs"] },
+    { toolName: "plasticity_create_bracket", arguments: CHAIN_BRACKET, return: ["bodyId", "timing.totalMs"] },
+    { toolName: "plasticity_find_faces", arguments: { query: { bodyIds: ["$0.added[0]"], ...BLOCK_BOTTOM }, limit: 1000 }, return: ["matches[*].id"] },
+    { toolName: "plasticity_place_body", arguments: { id: "$2.result.bodyId", anchor: { faceId: "$2.result.faceIds.base.outerFaceId" }, to: { bodyId: "$0.added[0]", faceId: "$3.result.matches[0].id" }, rotate: { axis: "x", quarterTurns: 2 }, gapMm: 0 }, return: ["relation", "deltaMm", "undoSteps", "timing.totalMs"] },
+    { toolName: "plasticity_transfer_holes", arguments: { sourceId: "$0.added[0]", targetId: "$2.result.bodyId", select: { radiusMm: 1.5, axis: "z", kind: "hole" }, hole: { diameterMm: 3.4, through: true } }, return: ["targetHoleCount", "maxCoaxialOffsetMm", "undoSteps", "timing.totalMs"] },
+  ];
+  const before = await live.status();
+  const batchArgs = { detail: "lean", steps };
+  const started = performance.now();
+  const out = await live.call("plasticity_batch", batchArgs);
+  const ms = Math.round(performance.now() - started);
+  const after = await live.status();
+  const bytes = Buffer.byteLength(JSON.stringify(batchArgs));
+  const blockAdded = out.summary.added.find((body: { name: string }) => body.name === "mate-block");
+  const bracketAdded = out.summary.added.find((body: { name: string }) => body.name === "mate-bracket");
+  live.check("3", `one lean batch: ${bytes} B request, ${ms} ms round trip, ${out.summary.undoSteps} Undo steps (measured ${after.undoDepth - before.undoDepth})`, out.summary.undoSteps === after.undoDepth - before.undoDepth && out.steps[5].result.targetHoleCount === 4 && out.steps[4].result.relation === "mating", { steps: out.steps.map((step: any) => step.result) });
+  const serverMsSteps = out.steps.map((step: any) => step.result?.["timing.totalMs"]).filter((value: unknown) => typeof value === "number");
+  live.evidence.case3batch = { requestBytes: bytes, clientMs: ms, replyBytes: Buffer.byteLength(JSON.stringify(out)), undoSteps: out.summary.undoSteps, stepResults: out.steps.map((step: any) => step.result), serverMsSteps, serverMsSum: Math.round(serverMsSteps.reduce((sum: number, value: number) => sum + value, 0) * 10) / 10, note: "serverMsSum adds the journaled totalMs of the five mutating steps; the find_faces read step has no journal timing" };
+  live.check("3", `one lean batch timing: ${serverMsSteps.length} mutating steps carry server timing (sum ${live.evidence.case3batch && (live.evidence.case3batch as any).serverMsSum} ms)`, serverMsSteps.length === 5);
+  await verifyChain(live, "one batch", blockAdded.id, bracketAdded.id);
+}
+
+async function case4(live: Live): Promise<void> {
+  const block = await live.mutate("4", "plasticity_create_box", { originMm: [BX, 0, 0], sizeMm: [60, 40, 20], name: "mate-block" });
+  const blockId = block.result.change.added[0].id as number;
+  await live.mutate("4", "plasticity_create_blind_hole_pattern", { targetId: blockId, entryCentersMm: PILOTS, axis: [0, 0, 1], holeDiameterMm: 3, holeDepthMm: 8, materialDepthMm: 20, overshootMm: 0.5 });
+  const bracket = await live.mutate("4", "plasticity_create_bracket", CHAIN_BRACKET);
+  const bracketId = bracket.result.bodyId as number;
+  const side = (await live.faces({ bodyIds: [blockId], planar: true, normal: { vector: [1, 0, 0], toleranceDeg: 0.000001 } }))[0];
+  const unchanged = async (label: string, run: () => Promise<string>, pattern: RegExp) => {
+    const before = await live.status();
+    const message = await run();
+    const after = await live.status();
+    live.check("4", `${label}: refused (${message.slice(0, 160)}...)`, pattern.test(message) && after.revision === before.revision && after.undoDepth === before.undoDepth, { message: message.slice(0, 600) });
+  };
+  await unchanged("place_body with non-parallel faces", async () => live.refused("plasticity_place_body", { id: bracketId, anchor: { faceId: bracket.result.faceIds.base.outerFaceId }, to: { bodyId: blockId, faceId: side.id }, gapMm: 0, revision: (await live.status()).revision }), /neither mating nor parallel.*\[0,0,-1\].*\[1,0,0\]/);
+  await unchanged("transfer_holes select that matches nothing", async () => live.refused("plasticity_transfer_holes", { sourceId: blockId, targetId: bracketId, select: { radiusMm: 9 }, hole: { diameterMm: 3.4, through: true }, revision: (await live.status()).revision }), /matched no full-turn cylinder axis.*"radiusMm":1\.5,"kind":"hole","axes":4/);
+  await unchanged("transfer_holes axis that misses the target", async () => live.refused("plasticity_transfer_holes", { sourceId: blockId, targetId: bracketId, axesMm: [{ pointMm: [BX + 900, 0, 0], axis: [0, 0, 1] }], hole: { diameterMm: 3.4, through: true }, revision: (await live.status()).revision }), /axis 0 \(point \[\d+,0,0\], direction \[0,0,1\]\) misses the target body/);
+
+  // The quarter-turn direction, shown by a face anchor (bounds alone cannot show it): after +90 degrees about z (right-hand
+  // rule) the upright's outer face (normal -X) faces -Y, so it mates the block's +Y face. A turn the other way would face +Y
+  // and the tool's own face read-back would fail.
+  const plusY = (await live.faces({ bodyIds: [blockId], planar: true, normal: { vector: [0, 1, 0], toleranceDeg: 0.000001 } }))[0];
+  const turn = await live.mutate("4", "plasticity_place_body", { id: bracketId, anchor: { faceId: bracket.result.faceIds.upright.outerFaceId }, to: { bodyId: blockId, faceId: plusY.id }, rotate: { axis: "z", quarterTurns: 1 }, gapMm: 0 });
+  const facing = (await live.faces({ bodyIds: [bracketId], planar: true, normal: { vector: [0, -1, 0], toleranceDeg: 0.000001 } })).filter((face: any) => near(face.centerMm, plusY.centerMm));
+  const turnedBounds = await live.bodyBounds(bracketId);
+  live.check("4", "quarter turn +90 about z: the upright's outer face (was -X) faces -Y on the block's +Y face centre, the bracket lies at y >= 40", turn.result.relation === "mating" && facing.length === 1 && !!turnedBounds && Math.abs(turnedBounds.min[1] - 40) <= 1e-6, { deltaMm: turn.result.deltaMm, boundsMm: turnedBounds, movedFaceId: turn.result.movedFaceId, facing: facing.map((face: any) => face.id) });
+  const interference = await live.call("plasticity_check_interference", { pairs: [{ firstBodyId: blockId, secondBodyId: bracketId }], revision: (await live.status()).revision });
+  live.check("4", "quarter turn: no volumetric interference with the block", interference.pairs[0].status === "no-volumetric-interference");
+  live.evidence.case4turn = { deltaMm: turn.result.deltaMm, boundsMm: turnedBounds, rotation: turn.result.rotation, undoSteps: turn.result.undoSteps };
+}
+
+async function main(): Promise<void> {
+  const options = parseBracketMateArgs(process.argv.slice(2));
+  if (options.help) { console.log(HELP); return; }
+  const endpoint = process.env.PLASTICITY_CDP_URL;
+  if (!endpoint) throw new Error("PLASTICITY_CDP_URL is required (an isolated instance, e.g. from npm run start:plasticity-isolated); refusing to create anything");
+  const host = new URL(endpoint).hostname;
+  if (host !== "127.0.0.1" && host !== "localhost") throw new Error(`PLASTICITY_CDP_URL must be loopback, not ${host}`);
+  const output = resolve(options.output!);
+  await mkdir(output, { recursive: false, mode: 0o700 });
+  const client = await startMcp(join(output, "store"));
+  const live = new Live(client);
+  live.evidence.startedAt = new Date().toISOString();
+  live.evidence.endpoint = endpoint;
+  live.evidence.targetId = options.target;
+  try {
+    const windows = await live.call("plasticity_list_windows", {});
+    if (!windows.some((window: { targetId: string }) => window.targetId === options.target)) throw new Error("The explicit Plasticity target was not found");
+    await live.call("plasticity_connect", { targetId: options.target });
+    const status = await live.status();
+    live.baseline = { undoDepth: status.undoDepth, bodyIds: status.bodies.map((body: { id: number }) => body.id).sort((a: number, b: number) => a - b), revision: status.revision };
+    live.evidence.baseline = live.baseline;
+    for (const name of options.cases) {
+      try {
+        if (name === "1") await case1(live);
+        if (name === "2") await case2(live);
+        if (name === "3") await case3(live);
+        if (name === "4") await case4(live);
+      } catch (error) {
+        live.check(name, "case ran to the end", false, error instanceof Error ? error.message.slice(0, 2000) : String(error));
+      } finally {
+        await live.restore(name);
+      }
+    }
+  } finally {
+    try { await live.restore("final"); } catch (error) { live.check("final", "final restore", false, String(error)); }
+    live.evidence.checks = live.checks;
+    live.evidence.finishedAt = new Date().toISOString();
+    await writeFile(join(output, "evidence.json"), `${JSON.stringify(live.evidence, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+    await client.close();
+  }
+  const failed = live.checks.filter((check) => !check.ok);
+  for (const check of live.checks) console.log(`${check.ok ? "PASS" : "FAIL"}  [${check.case}] ${check.check}`);
+  console.log(`\n${live.checks.length - failed.length}/${live.checks.length} checks passed; evidence: ${join(output, "evidence.json")}`);
+  if (failed.length > 0) process.exitCode = 1;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main().catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; });

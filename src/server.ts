@@ -3782,6 +3782,97 @@ function createServerWithCatalog(
     await journaled("recipe-screw-boss-pattern", purpose, input, () => new PlasticityRecipes(session.get()).createScrewBossPattern(input)));
   tool("plasticity_create_rib", "Create an exact rib from a closed coplanar world-space profile, extrude it by a signed thickness, and join it to one existing Solid. Positive thickness runs along the profile's right-hand normal (points counter-clockwise seen from it): the rib fills [plane, plane + thickness]. side centered splits |thickness| about the plane; positive or negative pick the side and ignore the sign of thickness. The reply has ribBoundsMm (in a lean batch, return it). The profile Wire stays unless keepProfile is false (one more history step; the delete clears the current selection, and if it fails the reply is still completed, with a warning). Three native history steps.", ribInputSchema, async ({ intent: purpose, ...input }) =>
     await journaled("recipe-rib", purpose, input, () => new PlasticityRecipes(session.get()).createRib(input)));
+  // ---- Bracket recipe and two mate helpers (src/plasticity/bracket-recipe.ts, src/plasticity/mate.ts) ----
+  const mateMm = z.number().finite().positive();
+  const bracketHoleSchema = z.object({
+    leg: z.enum(["base", "upright", "left", "right", "lower", "web", "upper", "flat"]),
+    diameterMm: mateMm,
+    count: z.number().int().min(1).max(12),
+    layout: z.enum(["line-across", "line-along", "grid", "explicit"]),
+    marginMm: mateMm.optional(),
+    pitchMm: mateMm.optional(),
+    positionsMm: z.array(z.tuple([z.number().finite(), z.number().finite()])).min(1).max(12).optional(),
+    slot: z.object({ lengthMm: mateMm, direction: z.enum(["along", "across"]) }).strict().optional(),
+    countersunk: z.object({ headDiameterMm: mateMm }).strict().optional(),
+  }).strict();
+  const bracketFields = {
+    originMm: vector,
+    name: z.string().trim().min(1).max(120).optional(),
+    widthMm: mateMm,
+    thicknessMm: mateMm,
+    innerBendRadiusMm: z.number().finite().nonnegative().optional(),
+    cornerRadiusMm: z.number().finite().nonnegative().optional(),
+    holes: z.array(bracketHoleSchema).max(16).optional(),
+    allowEdgeHoles: z.boolean().optional(),
+    intent,
+    revision,
+  };
+  const bracketInputSchema = z.discriminatedUnion("profile", [
+    z.object({
+      ...bracketFields, profile: z.literal("L"), legs: z.object({ baseMm: mateMm, uprightMm: mateMm }).strict(),
+      gussets: z.object({ count: z.union([z.literal(1), z.literal(2)]), thicknessMm: mateMm, sizeMm: mateMm, positions: z.enum(["centered", "edges"]).optional() }).strict().optional(),
+    }).strict(),
+    z.object({ ...bracketFields, profile: z.literal("U"), legs: z.object({ baseMm: mateMm, leftMm: mateMm, rightMm: mateMm }).strict() }).strict(),
+    z.object({ ...bracketFields, profile: z.literal("Z"), legs: z.object({ lowerMm: mateMm, webMm: mateMm, upperMm: mateMm }).strict() }).strict(),
+    z.object({ ...bracketFields, profile: z.literal("flat"), legs: z.object({ lengthMm: mateMm }).strict() }).strict(),
+  ]);
+  tool("plasticity_create_bracket", "Build an L, U, Z or flat sheet-style bracket as one Solid in one call, in mm. originMm is the bounds minimum; width runs along +Y, the profile lies in XZ; legs are outer sizes. Holes sit in a leg frame [along, across] from the leg's outer-face corner at the bend; derived gives each leg's planeNormal, frameOriginMm, alongAxis, acrossAxis and flatSpanMm, the hole, bend and corner axes and gusset bounds, computed from the inputs and read back. Gussets (L only) use rib side centered. Inputs are checked before any native call; a failed step is undone; undoSteps is measured.", bracketInputSchema, async ({ intent: purpose, ...input }) => {
+    const { createBracket } = await import("./plasticity/bracket-recipe.ts");
+    return await journaled("recipe-bracket", purpose, input, () => createBracket(session.get(), input));
+  });
+  const mateAnchorFields = {
+    point: z.enum(["min", "max", "center", "bottom-center", "top-center", "x--center", "x+-center", "y--center", "y+-center", "z--center", "z+-center"]).optional(),
+    faceId: z.string().trim().min(1).max(64).optional(),
+  };
+  const oneAnchor = (value: { point?: unknown; faceId?: unknown }) => (value.point === undefined) !== (value.faceId === undefined);
+  const placeBodySchema = z.object({
+    id: z.number().int().positive(),
+    anchor: z.object(mateAnchorFields).strict().refine(oneAnchor, "anchor needs exactly one of point or faceId"),
+    to: z.object({ bodyId: z.number().int().positive(), ...mateAnchorFields }).strict().refine(oneAnchor, "to needs exactly one of point or faceId"),
+    offsetMm: vector.optional(),
+    gapMm: z.number().finite().optional(),
+    rotate: z.object({ axis: z.enum(["x", "y", "z"]), quarterTurns: z.union([z.literal(1), z.literal(2), z.literal(3)]) }).strict().optional(),
+    copy: z.boolean().optional(),
+    intent,
+    revision,
+  }).strict();
+  tool("plasticity_place_body", "Move one body (or a copy) so an anchor on it lands on an anchor of another body. An anchor is a bounds point (min, max, center, bottom-center, top-center, x--center ... z+-center) or an explicit planar faceId: its kernel midpoint, the centerMm find_faces reports. rotate first turns the body in quarter turns about its bounds centre. Two faces must be mating or parallel after that; it never turns a body to make faces mate. gapMm runs along the fixed face normal (positive = apart); offsetMm is added last. The result is read back; a mismatch is a certain error that undo restores.", placeBodySchema, async ({ intent: purpose, ...input }) => {
+    const { placeBody } = await import("./plasticity/mate.ts");
+    return await journaled("place-body", purpose, input, () => placeBody(session.get(), input));
+  });
+  const transferHolesSchema = z.object({
+    sourceId: z.number().int().positive(),
+    targetId: z.number().int().positive(),
+    select: z.object({
+      radiusMm: mateMm,
+      toleranceMm: z.number().finite().nonnegative().max(1).optional(),
+      axis: z.union([z.enum(["x", "y", "z"]), vector]).optional(),
+      kind: z.enum(["hole", "boss"]).optional(),
+      withinMm: z.object({ min: vector, max: vector }).strict().optional(),
+    }).strict().optional(),
+    // leg, diameterMm, slot and countersunk are accepted (and ignored) so derived.holeAxesMm items pass as they are.
+    axesMm: z.array(z.object({
+      pointMm: vector, axis: vector,
+      leg: z.string().trim().min(1).max(32).optional(), diameterMm: mateMm.optional(),
+      slot: z.object({ lengthMm: mateMm, directionAxis: vector }).strict().optional(),
+      countersunk: z.object({ headDiameterMm: mateMm, side: z.literal("inner") }).strict().optional(),
+    }).strict()).min(1).max(64).optional(),
+    hole: z.object({
+      diameterMm: mateMm,
+      depthMm: mateMm.optional(),
+      through: z.literal(true).optional(),
+      countersunk: z.object({ headDiameterMm: mateMm }).strict().optional(),
+      counterbore: z.object({ diameterMm: mateMm, depthMm: mateMm }).strict().optional(),
+    }).strict(),
+    intent,
+    revision,
+  }).strict()
+    .refine((value) => (value.select === undefined) !== (value.axesMm === undefined), "give exactly one of select or axesMm")
+    .refine((value) => (value.hole.depthMm === undefined) !== (value.hole.through === undefined), "hole needs exactly one of depthMm or through: true");
+  tool("plasticity_transfer_holes", "Cut holes into a target that line up with cylinder axes of a source. select picks full-turn cylinder faces by exact radius (axis, kind and a box optional; arcs and blends never), or give axesMm. The drill runs from the source side into the target; the entry is the first planar target face normal to the axis, and the rim must fit in it. through cuts to the far target bounds; depthMm is blind; countersunk and counterbore are through. Existing hole recipes cut. Each hole is read back coaxial within 1e-6 mm; a mismatch is a certain error that undo restores. No match lists the source radii.", transferHolesSchema, async ({ intent: purpose, ...input }) => {
+    const { transferHoles } = await import("./plasticity/mate.ts");
+    return await journaled("transfer-holes", purpose, input, () => transferHoles(session.get(), input));
+  });
   tool("plasticity_create_round_vent_array", "Cut an exact rectangular array of round through-vents into one Solid. The first center lies on the entry surface, the axis points into it, and both array directions lie in that surface plane. One seed cylinder, one native rectangular pattern, and one Boolean produce up to 400 holes in three history steps.", roundVentArrayInputSchema, async ({ intent: purpose, ...input }) =>
     await journaled("recipe-round-vent-array", purpose, input, () => new PlasticityRecipes(session.get()).createRoundVentArray(input)));
   tool("plasticity_create_cantilever_snap_fit", "Create an exact cantilever snap-fit beam with an integral end hook and join it to one Solid. The base point lies on the support, beam and thickness directions define the profile plane, and width is centered across its normal. The editable profile remains in the document and the recipe uses three native history steps.", cantileverSnapFitInputSchema, async ({ intent: purpose, ...input }) =>

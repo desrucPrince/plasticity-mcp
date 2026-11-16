@@ -367,6 +367,159 @@ the cylinder extends `heightMm` along `axis`.
 Benchmark: `node discovery/speed-2026-11/parts.ts --tier1 a1 a2 b c d e`
 (writes `part-<name>-tier1.json`).
 
+### Brackets and mating parts
+
+Three tools for custom brackets and multi-part assemblies, all in the compact
+list, all strict, all in millimetres. Nothing is recognised by heuristics:
+`plasticity_place_body` uses only bounds points or face ids you name, and
+`plasticity_transfer_holes` uses only full-turn cylinder faces picked by exact
+radius and axis, or axes you give. Each tool reads its result back from a
+fresh state read. When the read-back does not hold, the call fails with a
+certain error that gives the new revision and the number of Undo steps that
+restore the document ("undo restores"). When a native step fails, every step
+the call took is undone (measured from the Undo depth); when the outcome is
+uncertain (a CDP timeout), nothing is undone and the error says to call
+`plasticity_reconcile`. `undoSteps` is always the measured Undo depth change.
+
+**`plasticity_create_bracket`** builds an L, U, Z or flat sheet-style bracket
+as one Solid in one call. `originMm` is the minimum corner of the bracket's
+bounds. The width (`widthMm`) runs along +Y; the profile lies in the XZ plane.
+`legs` are outer sizes: L `{ baseMm, uprightMm }`, U `{ baseMm, leftMm,
+rightMm }`, Z `{ lowerMm, webMm, upperMm }`, flat `{ lengthMm }`. 40 x 40 x 30
+wide, 4 thick is the audit L-bracket. Native steps: one box per leg and one
+union; one fillet of the inner bends (`innerBendRadiusMm`; the outer corner of
+a bend stays sharp, as in the audit bracket); one fillet of the free outer
+corners (`cornerRadiusMm`, rounded in the leg's plane); one
+`plasticity_create_rib` per gusset with `side: "centered"`, so its place does
+not depend on point order; one hole recipe per hole item; one delete of the
+construction Wires the rib, slot and countersink recipes leave. The reply
+holds `bodyId`, `derived` (computed from the inputs before any native call and
+checked against the built body) and `faceIds` (read back: each leg's
+`outerFaceId` and `innerFaceId`, given only when exactly one planar face
+matches; a gusset splits the inner face, so it is left out then).
+
+Leg frames. "Outer face" is the face on the convex side of the bend;
+`planeNormal` points out of it and `outerFaceOffsetMm` is its coordinate on
+that axis. `frameOriginMm` is the outer face's corner at the bend end, at the
+minimum-width side. `alongAxis` points from the bend toward the free end;
+`acrossAxis` is +Y for every leg. A hole position is `[along, across]` from the
+frame origin. `flatSpanMm` is the along range clear of bends: the hole region.
+o is `originMm`, t the thickness, r the inner bend radius.
+
+| Profile | Leg | planeNormal | frameOriginMm | alongAxis | flatSpanMm |
+| --- | --- | --- | --- | --- | --- |
+| L | base | -Z | o | +X | [t+r, base] |
+| L | upright | -X | o | +Z | [t+r, upright] |
+| U | base | -Z | o | +X | [t+r, base-t-r] |
+| U | left | -X | o | +Z | [t+r, left] |
+| U | right | +X | o + (base, 0, 0) | +Z | [t+r, right] |
+| Z | lower | -Z | o + (lower, 0, 0) | -X | [t+r, lower] |
+| Z | web | +X | o + (lower, 0, 0) | +Z | [t+r, web-t-r] |
+| Z | upper | +Z | o + (lower-t, 0, web) | +X | [t+r, upper] |
+| flat | flat | -Z | o | +X | [0, length] |
+
+`derived` also gives `boundsMm`, `holeAxesMm` (`{ leg, pointMm, axis,
+diameterMm, slot?, countersunk? }`: `pointMm` lies on the outer face and
+`axis` points into the leg), `bendAxesMm`, `cornerAxesMm` and
+`gussetBoundsMm` (one entry per gusset, the visible gusset from the inner
+faces). Hole layouts: `explicit` takes `positionsMm`; `line-across` puts the
+holes at the middle of the flat span, across the width, spaced by `pitchMm`
+(centred) or spread from `marginMm` to `marginMm` from the side edges;
+`line-along` puts them on the width centre line, spaced by `pitchMm` (centred
+in the flat span) or spread from `marginMm` past each end of the flat span;
+`grid` (even count) makes two rows `marginMm` from the side edges, with
+`count/2` columns placed like `line-along`. `slot: { lengthMm, direction }` is
+an overall slot length with its long axis `along` or `across` the leg (its
+world direction is in `holeAxesMm[*].slot.directionAxis`).
+`countersunk: { headDiameterMm }` is a 90 degree countersink that opens on the
+inner face (the screw head sits inside the bend); a slot cannot be countersunk.
+A gusset (L only) is a triangle whose sides meet the inner faces `sizeMm` from
+the inner corner: one gusset is centred on the width; two sit flush with the
+side faces (`positions: "edges"`, the default) or centred in each half
+(`"centered"`).
+
+Validation before any native call, naming the offending item: positive sizes;
+legs longer than t (U base and Z web longer than 2t); a bend radius less than
+the shorter adjacent leg minus t, and less than half the inner base or web
+when two bends share it; a corner radius less than half the width and than
+the flat span; every hole footprint (the head for a countersink, the full
+slot) at least one diameter from the flat region's edges, the bends and the
+rounded corners (`allowEdgeHoles: true` only asks it to stay inside), clear of
+the gusset footprints and of other holes; a countersink less deep than t;
+gussets larger than the bend radius and at most the shorter leg minus t and
+the corner radius.
+
+**`plasticity_place_body`** moves one body (or, with `copy: true`, a copy) so
+that `anchor` on it lands on `to` on another body. An anchor is exactly one of
+`point` (a bounds point: `min`, `max`, `center`, `bottom-center`,
+`top-center`, `x--center`, `x+-center`, `y--center`, `y+-center`, `z--center`,
+`z+-center`) or `faceId` (an explicit planar face; its point is the kernel's
+own face midpoint, the `centerMm` that `plasticity_find_faces` reports, which
+is not the area centroid on a face with rounded corners). `rotate: { axis,
+quarterTurns }` first turns the body in 90 degree steps about its bounds centre
+(right-hand rule). With two faces, the faces after the rotation must be mating
+(opposed normals) or parallel, else the call is refused with both normals and
+the angle; the tool never turns a body to make faces mate. `gapMm` (two faces
+only) runs along the fixed face's outward normal: positive moves the faces
+apart. `offsetMm` is added last. The whole transform is computed first, then
+applied with the existing duplicate, rotate and move operations (one, two or
+three Undo steps). The read-back requires the new bounds to equal the rotated
+and moved bounds within 1e-6 mm, the anchor (a bounds point from the fresh
+bounds, or exactly one planar face with the expected normal at the expected
+centre) to land within 1e-6 mm, and the fixed body (and a copied original) to
+be unchanged. The reply gives `deltaMm`, `anchorMm`, `boundsMm`, `relation`,
+`rotation`, `movedFaceId` and `undoSteps`. Limit: with bounds anchors only, a
+quarter turn and its opposite give the same bounds, so the read-back cannot
+see the turn direction; a face anchor can (the live script checks +90 degrees
+about z this way).
+
+**`plasticity_transfer_holes`** cuts holes in `targetId` that line up with
+axes of `sourceId`. `select: { radiusMm, toleranceMm? (0.01), axis? ("x", "y",
+"z" or a vector, either sign), kind? ("hole" or "boss"), withinMm? }` picks the
+source's full-turn cylinder faces: a Cylinder face that is not a blend and
+whose circle edges at one end sweep 360 degrees, every circle edge measured
+(an arc, a blend, or a face whose circle edges carry no geometry is never
+used); `withinMm` filters by the face centre projected onto its axis; coaxial
+faces are one axis. Or `axesMm: [{ pointMm, axis }]` gives the axes
+(`derived.holeAxesMm` items pass as they are). When `select` matches nothing
+the call is refused with the selection and every full-turn radius on the
+source (`[{ radiusMm, kind, axes }]`).
+
+Entry side. The axis sign is ignored. The reference point is the source
+face's axis point (its centre projected onto the axis), or `pointMm`. The
+planar target faces normal to the axis that the line crosses inside the face
+(tested exactly on the face's line and circle edges, or on its bounds when it
+has other edges) are found on both sides of that point. If they lie on both
+sides, the point is between target faces and the call is refused. The drill
+runs toward the side with the target. The entry is the first such face met
+going away from the reference point (a face through the point itself counts,
+so a part touching the source face works); its outward normal must face the
+drill, else the axis enters through a non-planar face and the call is refused.
+The hole rim (counterbore or countersink head included) must lie inside the
+entry face. An axis that misses the target's bounds, or crosses no planar
+face normal to it, is refused by name (oblique entries are not supported).
+`hole: { diameterMm, through: true | depthMm, countersunk?: { headDiameterMm },
+counterbore?: { diameterMm, depthMm } }`: `through` cuts from the entry to the
+far side of the target's bounds (every wall on the line); `depthMm` is a blind
+hole and must stop before the far bounds; countersunk (90 degrees) and
+counterbore holes are through holes. The existing through, blind, countersink
+and counterbore recipes (single or pattern, one call per drill direction) do
+the cut. The read-back requires, for every axis, a full-turn hole face of the
+diameter coaxial with the source axis within 1e-6 mm, an entry circle centred
+on the entry point bordering a planar face in the entry plane, and for a blind
+hole a flat floor at the depth. The reply gives `axesMm` (with `entryPointMm`
+and `entryFaceId`), `targetHoleCount`, `holes` with their read-back axes and
+`maxCoaxialOffsetMm`.
+
+Live acceptance: `PLASTICITY_CDP_URL=http://127.0.0.1:PORT npm run
+accept:native-bracket-mate -- --target ID --allow-disposable-mutations
+--output NEW_DIR` (the audit L-bracket in one call, a U bracket with a slotted
+pair, a Z bracket with a 2 x 2 grid, a block + bracket mate chain as direct
+calls and as one lean batch, and live rejections; every check reads the
+geometry with `plasticity_find_faces`/`plasticity_find_edges` (limit 1000),
+`plasticity_validate_bodies`, `plasticity_check_interference` and
+`plasticity_measure_parallel_planar_face_clearance`).
+
 ## Tools
 
 - Connection: diagnose, list windows, connect, status, capabilities, reconcile
