@@ -56,7 +56,10 @@ type, topology counts, bounds and control points back through plasticity_status 
   - plasticity_xsided_patch on Solid edges: a through-hole rim (default and g1) and a face loop with a guide.
   - plasticity_show_face_control_points and plasticity_move_face_control_points on an extruded arc Sheet.
   - a two-face Sheet: per-face show, renumbering, a free second show, a move across both faces, hide, a free
-    second hide; Plane and Cylinder faces are refused before any edit.
+    second hide; Plane and Cylinder faces are refused before any edit; grid shapes and the renumbered flag.
+  - a coincident point on the edge two faces share: moved alone it is reported (one Undo step, read-back
+    fails and names the separation); moved together with its twin it succeeds.
+  - a Sheet knife-split at its apex (two faces on one B-Surface): the show is refused before any edit.
 It undoes back to the baseline Undo depth, body count and reference-mesh count and never saves the document.
 Run it only against an isolated Plasticity instance.`;
 
@@ -335,12 +338,15 @@ async function main(): Promise<void> {
       const multiCheckpoint = (await status(client)).undoDepth;
       const showB = await call(client, "plasticity_show_face_control_points", { bodyId: two.id, faceIds: [faceB], revision: (await status(client)).revision });
       requireCondition(showB.undoSteps === 1 && showB.controlPoints.length === 8, `show B: expected 8 points in one step, got ${showB.controlPoints.length}`);
+      requireCondition(JSON.stringify(showB.grids) === JSON.stringify([{ faceId: showB.faces[0].faceId, u: 4, v: 2 }]), `show B: expected grids [{ u 4, v 2 }], got ${JSON.stringify(showB.grids)}`);
+      requireCondition(showB.renumbered === false, "show B: no other face had shown points, so renumbered must be false");
       const bIdsAlone = showB.controlPoints.map((point: any) => point.cvId);
       const faceBNow = showB.faces[0].faceId;
       requireCondition(faceBNow !== faceB && showB.controlPoints.every((point: any) => point.faceId === faceBNow), "show B: the points must carry B's new face ID");
       const faceANow = (await call(client, "plasticity_body_info", { id: two.id })).body.faces.find((face: any) => face.centerMm[0] < 3820).id;
       const showA = await call(client, "plasticity_show_face_control_points", { bodyId: two.id, faceIds: [faceANow], revision: (await status(client)).revision });
       requireCondition(showA.controlPoints.length === 8 && showA.controlPoints.every((point: any) => point.faceId === showA.faces[0].faceId), "show A: only A's 8 points must be returned");
+      requireCondition(showA.renumbered === true && /renumbered/.test(showA.message ?? ""), `show A: B's points were renumbered, expected renumbered true, got ${String(showA.renumbered)}`);
       const both = await call(client, "plasticity_show_face_control_points", { bodyId: two.id, faceIds: [showA.faces[0].faceId], revision: (await status(client)).revision });
       requireCondition(both.undoSteps === 0, "a second show of a shown face must cost no Undo step");
       requireCondition((await status(client)).undoDepth === multiCheckpoint + 2, "show B + show A + second show must be exactly two Undo steps");
@@ -378,6 +384,55 @@ async function main(): Promise<void> {
       await rejects("plasticity_show_face_control_points", { bodyId: zeroBox.id, faceIds: [planeFace] }, /no editable control points.*\(Plane\)/, "Plane face");
       await rejects("plasticity_show_face_control_points", { bodyId: zeroCylinder.id, faceIds: [cylinderFace] }, /no editable control points.*\(Cylinder\)/, "Cylinder face");
       console.error(`face_points_multi_face: ok ${JSON.stringify(checks.face_points_multi_face)}`);
+    }
+
+    // ---- coincident points on the edge two faces share (probe-coincident-point.json). Moved alone, Plasticity leaves
+    // the twin point in place and reshapes the moved face's surface; the body stays valid, the read-back fails and
+    // names the separation, and the step stays in the Undo history. Moved together, both points move and read back.
+    {
+      const [arcA] = await add("plasticity_create_nurbs_curve", { pointsMm: [[4000, 0, 0], [4010, 0, 8], [4020, 0, 0]] });
+      const [arcB] = await add("plasticity_create_nurbs_curve", { pointsMm: [[4020, 0, 0], [4030, 0, 8], [4040, 0, 0]] });
+      const sheetA = (await add("plasticity_extrude_curves", { ids: [arcA.id], distanceMm: 20, direction: [0, 1, 0] })).find((body: any) => body.type === "Sheet");
+      const sheetB = (await add("plasticity_extrude_curves", { ids: [arcB.id], distanceMm: 20, direction: [0, 1, 0] })).find((body: any) => body.type === "Sheet");
+      const [joined] = await add("plasticity_join_sheets", { ids: [sheetA.id, sheetB.id] });
+      const two = joined ?? (await status(client)).bodies.find((body: any) => body.type === "Sheet" && body.faceCount === 2 && body.boundsMm.min[0] > 3990);
+      requireCondition(two && two.faceCount === 2, "coincident: expected one two-face Sheet");
+      const faces = (await call(client, "plasticity_body_info", { id: two.id })).body.faces as any[];
+      const shownBoth = await call(client, "plasticity_show_face_control_points", { bodyId: two.id, faceIds: faces.map((face) => face.id), revision: (await status(client)).revision });
+      const [fa, fb] = shownBoth.faces.map((face: any) => face.faceId);
+      const at = (point: any) => point.positionMm.join(",");
+      const aEdge = shownBoth.controlPoints.find((point: any) => point.faceId === fa && shownBoth.controlPoints.some((other: any) => other.faceId === fb && at(other) === at(point)));
+      const bEdge = shownBoth.controlPoints.find((point: any) => point.faceId === fb && aEdge && at(point) === at(aEdge));
+      requireCondition(aEdge && bEdge, "coincident: no shared-edge point pair found");
+      const checkpoint = (await status(client)).undoDepth;
+      let message = "";
+      try {
+        await call(client, "plasticity_move_face_control_points", { bodyId: two.id, cvIds: [aEdge.cvId], deltaMm: [0, 0, 5], revision: (await status(client)).revision });
+      } catch (error) { message = error instanceof Error ? error.message : String(error); }
+      requireCondition(/separated coincident points of two faces/.test(message) && /include both cvIds/.test(message), `coincident: expected the separation to be reported, got "${message.slice(0, 300)}"`);
+      requireCondition((await status(client)).undoDepth === checkpoint + 1, "coincident: the lone move must stay one step in the Undo history");
+      requireCondition((await status(client)).bodies.some((body: any) => body.id === two.id && body.faceCount === 2), "coincident: the body must survive the lone move");
+      await undoTo(checkpoint);
+      const together = await call(client, "plasticity_move_face_control_points", { bodyId: two.id, cvIds: [aEdge.cvId, bEdge.cvId], deltaMm: [0, 0, 5], revision: (await status(client)).revision });
+      requireCondition(together.undoSteps === 1 && together.controlPoints.length === 2, "coincident: both points must move in one step");
+      for (const point of together.controlPoints) requireNear(point.positionMm[2], aEdge.positionMm[2] + 5, `coincident: cv ${point.cvId} z`, 1e-3);
+      checks.face_points_coincident = { pair: [aEdge.cvId, bEdge.cvId], positionMm: aEdge.positionMm, aloneError: message.slice(0, 400), together: together.controlPoints };
+      console.error("face_points_coincident: ok");
+    }
+
+    // ---- a face split on one B-Surface: a knife cut along y at the apex of an extruded arc gives two faces with
+    // identical control grids. Their shown points could never be attributed, so the show is refused before any edit.
+    {
+      const [arch] = await add("plasticity_create_nurbs_curve", { pointsMm: [[4100, 0, 0], [4120, 0, 10], [4140, 0, 0]] });
+      const split = (await add("plasticity_extrude_curves", { ids: [arch.id], distanceMm: 20, direction: [0, 1, 0] })).find((body: any) => body.type === "Sheet");
+      const apex = split.boundsMm.max[2];
+      await mutate("plasticity_knife_curve", { targetId: split.id, pointsMm: [[4120, -1, apex], [4120, 21, apex]] });
+      const halves = (await call(client, "plasticity_body_info", { id: split.id })).body.faces as any[];
+      requireCondition(halves.length === 2 && halves.every((face) => face.surfaceType === "BSurf"), `split: expected two BSurf faces, got ${halves.map((face) => face.surfaceType)}`);
+      await rejects("plasticity_show_face_control_points", { bodyId: split.id, faceIds: [halves[0].id] }, /share one control grid \(faces split on one B-Surface\).*nothing was changed/, "split face show");
+      await rejects("plasticity_show_face_control_points", { bodyId: split.id, faceIds: halves.map((face) => face.id) }, /share one control grid/, "split faces show both");
+      checks.face_points_split_face_refused = { faces: halves.map((face) => face.id) };
+      console.error("face_points_split_face_refused: ok");
     }
 
     // ---- restore the baseline

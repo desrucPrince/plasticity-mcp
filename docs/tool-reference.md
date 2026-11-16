@@ -1518,8 +1518,10 @@ faces. Read the new cylindrical radius from the returned B-Rep state.
 faces of one Solid or Sheet, as Plasticity's Dimension tool does:
 `{ bodyId, movingFaceId, referenceFaceId?, distanceMm, revision }`.
 `movingFaceId` moves with the geometry attached to it; `referenceFaceId` stays
-fixed. The faces may face opposite ways (a box's two ends) or the same way (the
-two top faces of a stepped block; verified live). Without `referenceFaceId`,
+fixed. The faces may face opposite ways (a box's two ends), face each other
+(the two walls of a slot: the slot width), or face the same way (the two top
+faces of a stepped block, with either face as the reference; all verified live).
+Without `referenceFaceId`,
 Plasticity finds the opposite face itself. Use it to resize a part to an exact
 overall dimension (a 20 mm box to 30 mm, a cylinder to 16 mm tall) without
 computing an offset; `plasticity_extrude_faces` and `plasticity_move` take a
@@ -1529,10 +1531,23 @@ delta instead. Verified on Plasticity 26.1.3 only.
   Plasticity measured before), `distanceMm`, `undoSteps`, `movedFaceId` (the
   moved face's new ID; face IDs change with the edit) and `planeOffsetMm` (the
   moved plane's offset along its outward normal) to the usual compact change.
-- After a commit the tool reads the body back. The moving plane must sit at
-  `distanceMm` from the reference plane and a given reference plane must not
-  move, within 1e-6 mm. Otherwise the session is marked uncertain and the error
-  says what moved.
+- After a commit the tool reads the body back. It counts the planes parallel to
+  the moving face (same direction) per offset, before and after. The edit is
+  confirmed when the moving face's own plane changed: its old offset lost a face
+  or the target offset gained one (a face that merges into a coplanar face at
+  the target, "make flush", only loses one), the body version changed, the plane
+  at the target lies `distanceMm` from the reference plane within 1e-6 mm, and a
+  given reference plane did not move. Either side of the reference is accepted;
+  live, Plasticity kept the moving face on its side in every case. A face that
+  already sat at the target does not count, and another face that moved there
+  while the moving face stayed is reported as "a different face moved".
+  Otherwise the session is marked uncertain and the error says what moved. A
+  stepped face moved past the bottom of its block (5 mm below the upper face set
+  to 12 mm) is removed by Plasticity; the tool reports that the moving face is
+  not at either distance and asks for `plasticity_reconcile`.
+- If Plasticity commits nothing (no Undo step, the body unchanged) although the
+  distance differs from `distanceMm`, the call fails with "Plasticity made no
+  change: distance is still X mm, requested Y mm"; the session stays certain.
 - If the distance already equals `distanceMm` within 1e-6 mm, nothing changes:
   `changed: false`, `undoSteps: 0` and a "distance already X mm" message. With a
   reference face the tool checks this before running anything, because
@@ -1550,15 +1565,33 @@ delta instead. Verified on Plasticity 26.1.3 only.
   (verified live both ways). So the tool selects `[reference, moving]`.
 - A pair Plasticity cannot dimension, such as a chamfer face with no parallel
   opposite, fails with "Plasticity could not dimension these faces (no effect)"
-  plus Plasticity's reason, and changes nothing.
+  plus Plasticity's reason, and changes nothing. So does single-face mode on a
+  face whose opposite surface is not a parallel plane (the flat face of a half
+  cylinder; verified live). A command that another (user) command interrupts
+  before its dialog opens reads as "interrupted", naming that command. A build
+  without `Face.GetAnyPointOn` fails before anything starts with "not supported
+  on this Plasticity build".
 - Lifecycle: everything runs in one native call. Plasticity's executor swallows
-  command errors, so the tool reads the error inside the command. If the dialog
-  does not finish in time, the tool cancels its own command (never another
-  command) inside the same call, and the document is unchanged. A cancel that
-  fails or throws, a command that never settles, a cleanup that fails, or a
-  commit of more than one Undo step marks the session uncertain for
-  `plasticity_reconcile`. A different command that is active at the end is left
-  alone and named in `warning`.
+  command errors, so the tool reads the error inside the command. The tool
+  records when its drive step calls the dialog's `finish()`. Three outcomes:
+  - committed: the commit is read back (above);
+  - cancelled before `finish()` (the dialog did not open, or the drive step did
+    not reach `finish()` in time) or rejected: the tool cancels its own command
+    (never another command) in the same call, and the document is unchanged;
+  - a timeout after `finish()`: undetermined. The tool cancels its own command,
+    then watches the Undo stack for a short window (250 ms, never past the
+    cancel budget). A commit seen to land in that window is read back as a
+    normal commit. Otherwise the session is marked uncertain for
+    `plasticity_reconcile`: a cancel cannot prove that a commit `finish()`
+    started will not land. Live on 26.1.3, a commit lands about 9 ms after
+    `finish()`, and a cancel 0-10 ms after `finish()` discarded the commit in
+    every trial ("Invalid state transition" or `PK_ERROR_aborted`;
+    `discovery/probes-2026-11-followups/probe-late-commit.json`). That is one
+    build, so the outcome stays undetermined.
+  A cancel that fails or throws, a command that never settles, a cleanup that
+  fails, or a commit of more than one Undo step also marks the session
+  uncertain. A different command that is active at the end is left alone: it is
+  named in `warning` after a commit and in the error after any other outcome.
 - The tool clears the current Plasticity selection. Works as a
   `plasticity_batch` step (for example after `plasticity_create_box` and
   `plasticity_find_faces`). Live check: `npm run accept:native-driving-distance`.
@@ -1976,10 +2009,15 @@ that direction from display geometry.
 B-Surface faces of a Sheet or Solid. It returns the requested faces' points as
 `controlPoints: [{ cvId, faceId, index, positionMm }]` (millimeters, rounded to a
 micrometer because Plasticity stores float32) and
-`faces: [{ requestedFaceId, faceId, controlPointCount }]`. Verified on Plasticity
-26.1.3 only:
-- Showing is a history step (`undoSteps: 1`) and an edit of the body: face IDs
-  change, so use the returned `faceId`.
+`faces: [{ requestedFaceId, faceId, controlPointCount }]`, plus
+`grids: [{ faceId, u, v }]` (the shape of each requested face's control grid; a
+point's `index` is `uIndex * v + vIndex`) and `renumbered`. Verified on
+Plasticity 26.1.3 only:
+- Showing is a history step (`undoSteps` is the measured Undo depth change,
+  normally 1) and an edit of the body: face IDs change, so use the returned
+  `faceId`.
+- `renumbered: true` (with a message) says the shown points of other faces of
+  the body got new `cvId`s with this show; read them again before moving them.
 - `cvId` is a string: Plasticity's control point `versionId` (for example
   `54c10`, body version plus point index). Plasticity numbers the shown points
   of all faces together, face by face, so showing or hiding another face
@@ -1991,6 +2029,9 @@ micrometer because Plasticity stores float32) and
   point.
 - The tool attributes each point to its face by matching it against the face's
   kernel control grid. Points that match no grid, or two grids, are an error.
+- Faces split on one B-Surface (for example by a knife cut) carry identical
+  control grids, so their shown points could never be attributed. The show
+  refuses such faces before any edit (no Undo step; verified live).
 - A face whose points are already shown costs no step (`undoSteps: 0`).
 - The tool supports BSurf faces only. Plane and Cylinder faces show no points
   but would still cost a step (other surface types are untested), so the tool
@@ -2001,8 +2042,12 @@ micrometer because Plasticity stores float32) and
 `plasticity_hide_face_control_points` `{ bodyId, faceIds, revision }` hides shown
 points (Plasticity's Toggle Points with `show` off). It is one history step that
 edits the body; the `cvId`s of the body's remaining shown points change, so the
-result returns those points as `controlPoints`. Faces with no shown points cost no step. Undo also
-removes a show step.
+result returns those points as `controlPoints`. `undoSteps` is the measured Undo
+depth change. Faces with no shown points cost no step. Hiding works by face and
+needs no per-point attribution, so it also works when the shown points cannot be
+attributed (twin faces shown in the Plasticity UI; verified live); remaining
+points that still cannot be attributed are named in `message`, and show and move
+ask for a hide first. Undo also removes a show step.
 
 `plasticity_move_face_control_points` moves shown points by one shared
 world-space millimeter `deltaMm` in one history step and returns the moved points
@@ -2010,9 +2055,17 @@ with their new `cvId`, `faceId` and grid `index` (the move is an edit, so both I
 change). Points of several faces of
 one body can move together. It rejects any `cvId` that is not currently shown and
 asks for `plasticity_show_face_control_points` first. It reads the points back:
-each must have moved by `deltaMm` within 1e-3 mm (compared unrounded), else the
-call reports what happened (the step stays in the Undo history). A show or hide
-whose read-back fails says so too and names the Undo step it took. On 26.1.3 the move writes
+on each axis each point must have moved by `deltaMm` within
+max(1e-3 mm, |coordinate| x 2e-7 x 4) (compared unrounded; positions are float32,
+so the tolerance is 0.032 mm at 40 m and 0.096 mm at 120 m), else the call
+reports what happened and the tolerance it used (the step stays in the Undo
+history). A show or hide whose read-back fails says so too and names the Undo
+steps it took. Moving one of two coincident points on the edge two faces share
+leaves the other in place; Plasticity then reshapes the moved face's surface (its
+grid grew from 4 x 2 to 7 x 2), the kernel still reports the body valid, and the
+read-back fails and names the separation (verified live,
+`probe-coincident-point.json`). Move both `cvId`s together to move a shared edge
+point. On 26.1.3 the move writes
 `factory.cvs`; the 26.2 control-point adapter (which writes `controlPoints` for
 Wire handles) is not used for face points because it is not verified there.
 Re-read exact B-Rep geometry afterward.

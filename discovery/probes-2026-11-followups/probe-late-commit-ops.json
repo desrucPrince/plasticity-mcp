@@ -1,0 +1,134 @@
+{
+ "start": {
+  "undo": 7,
+  "bodies": 4
+ },
+ "trials": [
+  {
+   "label": "finishMs_1",
+   "timeouts": {
+    "dialogMs": 3000,
+    "finishMs": 1,
+    "cancelMs": 3000
+   },
+   "elapsedMs": 29,
+   "error": null,
+   "result": {
+    "changed": true,
+    "previousDistanceMm": 20,
+    "distanceMm": 30,
+    "undoSteps": 1,
+    "movedFaceId": "2388f291859",
+    "movingFaceId": "2388f291859",
+    "planeOffsetMm": 2430
+   },
+   "uncertain": false,
+   "undoDeltaNow": 1,
+   "undoDelta2sLater": 1,
+   "maxXMmLater": 2430
+  },
+  {
+   "label": "finishMs_1_again",
+   "timeouts": {
+    "dialogMs": 3000,
+    "finishMs": 1,
+    "cancelMs": 3000
+   },
+   "elapsedMs": 26,
+   "error": null,
+   "result": {
+    "changed": true,
+    "previousDistanceMm": 20,
+    "distanceMm": 30,
+    "undoSteps": 1,
+    "movedFaceId": "2389f291859",
+    "movingFaceId": "2389f291859",
+    "planeOffsetMm": 2430
+   },
+   "uncertain": false,
+   "undoDeltaNow": 1,
+   "undoDelta2sLater": 1,
+   "maxXMmLater": 2430
+  },
+  {
+   "label": "finishMs_3",
+   "timeouts": {
+    "dialogMs": 3000,
+    "finishMs": 3,
+    "cancelMs": 3000
+   },
+   "elapsedMs": 26,
+   "error": null,
+   "result": {
+    "changed": true,
+    "previousDistanceMm": 20,
+    "distanceMm": 30,
+    "undoSteps": 1,
+    "movedFaceId": "2390f291859",
+    "movingFaceId": "2390f291859",
+    "planeOffsetMm": 2430
+   },
+   "uncertain": false,
+   "undoDeltaNow": 1,
+   "undoDelta2sLater": 1,
+   "maxXMmLater": 2430
+  },
+  {
+   "label": "control_default",
+   "timeouts": {
+    "dialogMs": 3000,
+    "finishMs": 8000,
+    "cancelMs": 3000
+   },
+   "elapsedMs": 30,
+   "error": null,
+   "result": {
+    "changed": true,
+    "previousDistanceMm": 20,
+    "distanceMm": 30,
+    "undoSteps": 1,
+    "movedFaceId": "2391f291859",
+    "movingFaceId": "2391f291859",
+    "planeOffsetMm": 2430
+   },
+   "uncertain": false,
+   "undoDeltaNow": 1,
+   "undoDelta2sLater": 1,
+   "maxXMmLater": 2430
+  },
+  {
+   "label": "runPick_finish_at_5ms_then_hang",
+   "timeouts": {
+    "dialogMs": 3000,
+    "finishMs": 1,
+    "cancelMs": 3000
+   },
+   "elapsedMs": 300,
+   "error": "Driving distance (late-commit probe) did not finish within 1 ms after its dialog was finished (drive phase): the drive step did not return; Plasticity cancelled it, but a commit that finish() started may still land; the result is uncertain. Call plasticity_reconcile before any other edit",
+   "result": null,
+   "uncertain": true,
+   "undoDeltaNow": 0,
+   "undoDelta2sLater": 0,
+   "maxXMmLater": 2420
+  },
+  {
+   "label": "runPick_finish_at_5ms_then_hang_again",
+   "timeouts": {
+    "dialogMs": 3000,
+    "finishMs": 1,
+    "cancelMs": 3000
+   },
+   "elapsedMs": 295,
+   "error": "Driving distance (late-commit probe) did not finish within 1 ms after its dialog was finished (drive phase): the drive step did not return; Plasticity cancelled it, but a commit that finish() started may still land; the result is uncertain. Call plasticity_reconcile before any other edit",
+   "result": null,
+   "uncertain": true,
+   "undoDeltaNow": 0,
+   "undoDelta2sLater": 0,
+   "maxXMmLater": 2420
+  }
+ ],
+ "end": {
+  "undo": 7,
+  "bodies": 4
+ }
+}

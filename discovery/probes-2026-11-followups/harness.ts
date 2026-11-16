@@ -6,16 +6,19 @@ import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const CDP = "http://127.0.0.1:58932";
-export const TARGET = "5F15375426D6021495B912B6ABDAE45F";
+// The endpoint and target come from the environment (see env.sh). Only a 127.0.0.1 endpoint is accepted.
+export const CDP = process.env.PLASTICITY_CDP_URL ?? "";
+export const TARGET = process.env.PLASTICITY_TARGET_ID ?? "";
 export const HERE = dirname(fileURLToPath(import.meta.url));
-if (process.env.PLASTICITY_CDP_URL !== CDP) throw new Error(`Refusing: PLASTICITY_CDP_URL must be ${CDP}`);
+const endpoint = (() => { try { return new URL(CDP); } catch { return undefined; } })();
+if (!endpoint || endpoint.protocol !== "http:" || endpoint.hostname !== "127.0.0.1" || !endpoint.port) throw new Error(`Refusing: PLASTICITY_CDP_URL must be http://127.0.0.1:PORT (got "${CDP}")`);
+if (!/^[0-9A-F]{32}$/i.test(TARGET)) throw new Error("Refusing: PLASTICITY_TARGET_ID must name the isolated window (32 hex characters)");
 
 export async function connect() {
   const targets = await discoverPlasticityTargets(CDP);
   const target = targets.find((t: any) => t.id === TARGET || t.targetId === TARGET);
   if (!target) throw new Error(`Isolated target ${TARGET} not found`);
-  if (!String((target as any).webSocketDebuggerUrl).includes("127.0.0.1:58932")) throw new Error("wrong ws endpoint");
+  if (!String((target as any).webSocketDebuggerUrl).includes(`127.0.0.1:${endpoint!.port}/`)) throw new Error("wrong ws endpoint");
   return await PlasticityRuntime.connect(target as any);
 }
 

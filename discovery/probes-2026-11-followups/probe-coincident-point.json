@@ -1,0 +1,1070 @@
+{
+ "start": {
+  "undo": 7,
+  "bodies": 4
+ },
+ "coincidentPairs": [
+  {
+   "a": {
+    "cvId": "2379c6",
+    "faceId": "2379f291455",
+    "index": 6,
+    "positionMm": [
+     2920,
+     0,
+     0
+    ]
+   },
+   "b": {
+    "cvId": "2379c8",
+    "faceId": "2379f291552",
+    "index": 0,
+    "positionMm": [
+     2920,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "a": {
+    "cvId": "2379c7",
+    "faceId": "2379f291455",
+    "index": 7,
+    "positionMm": [
+     2920,
+     20,
+     0
+    ]
+   },
+   "b": {
+    "cvId": "2379c9",
+    "faceId": "2379f291552",
+    "index": 1,
+    "positionMm": [
+     2920,
+     20,
+     0
+    ]
+   }
+  }
+ ],
+ "beforeMove": {
+  "exists": true,
+  "type": "Sheet",
+  "checkCodes": [],
+  "faceCount": 2,
+  "edgeCount": 7,
+  "cvs": [
+   [
+    2900,
+    0,
+    0
+   ],
+   [
+    2900,
+    20,
+    0
+   ],
+   [
+    2906.667,
+    0,
+    10.667
+   ],
+   [
+    2906.667,
+    20,
+    10.667
+   ],
+   [
+    2913.333,
+    0,
+    10.667
+   ],
+   [
+    2913.333,
+    20,
+    10.667
+   ],
+   [
+    2920,
+    0,
+    0
+   ],
+   [
+    2920,
+    20,
+    0
+   ],
+   [
+    2920,
+    0,
+    0
+   ],
+   [
+    2920,
+    20,
+    0
+   ],
+   [
+    2926.667,
+    0,
+    10.667
+   ],
+   [
+    2926.667,
+    20,
+    10.667
+   ],
+   [
+    2933.333,
+    0,
+    10.667
+   ],
+   [
+    2933.333,
+    20,
+    10.667
+   ],
+   [
+    2940,
+    0,
+    0
+   ],
+   [
+    2940,
+    20,
+    0
+   ]
+  ],
+  "grids": [
+   {
+    "entity": 291455,
+    "u": 4,
+    "v": 2,
+    "stride": 3,
+    "vertices": [
+     [
+      2900,
+      0,
+      0
+     ],
+     [
+      2900,
+      20,
+      0
+     ],
+     [
+      2906.667,
+      0,
+      10.667
+     ],
+     [
+      2906.667,
+      20,
+      10.667
+     ],
+     [
+      2913.333,
+      0,
+      10.667
+     ],
+     [
+      2913.333,
+      20,
+      10.667
+     ],
+     [
+      2920,
+      0,
+      0
+     ],
+     [
+      2920,
+      20,
+      0
+     ]
+    ],
+    "error": null
+   },
+   {
+    "entity": 291552,
+    "u": 4,
+    "v": 2,
+    "stride": 3,
+    "vertices": [
+     [
+      2920,
+      0,
+      0
+     ],
+     [
+      2920,
+      20,
+      0
+     ],
+     [
+      2926.667,
+      0,
+      10.667
+     ],
+     [
+      2926.667,
+      20,
+      10.667
+     ],
+     [
+      2933.333,
+      0,
+      10.667
+     ],
+     [
+      2933.333,
+      20,
+      10.667
+     ],
+     [
+      2940,
+      0,
+      0
+     ],
+     [
+      2940,
+      20,
+      0
+     ]
+    ],
+    "error": null
+   }
+  ],
+  "faceViews": [
+   "2379f291552",
+   "2379f291455"
+  ]
+ },
+ "moveOne": {
+  "result": {
+   "error": "Moving face control points took one Undo step, but the points could not be read back (Plasticity command failed: Error: Face control points of body 1412 from index 0 match no face control grid\n    at Editor.<anonymous> (<anonymous>:307:15)\n    at Editor.<anonymous> (<anonymous>:327:8)); inspect the body or undo"
+  },
+  "undoDelta": 1,
+  "native": {
+   "exists": true,
+   "type": "Sheet",
+   "checkCodes": [],
+   "faceCount": 2,
+   "edgeCount": 7,
+   "cvs": [
+    [
+     2900,
+     0,
+     0
+    ],
+    [
+     2900,
+     20,
+     0
+    ],
+    [
+     2906.667,
+     0,
+     10.667
+    ],
+    [
+     2906.667,
+     20,
+     10.667
+    ],
+    [
+     2913.333,
+     0,
+     10.667
+    ],
+    [
+     2913.333,
+     20,
+     10.667
+    ],
+    [
+     2920,
+     0,
+     5
+    ],
+    [
+     2920,
+     20,
+     0
+    ],
+    [
+     2920,
+     0,
+     0
+    ],
+    [
+     2920,
+     20,
+     0
+    ],
+    [
+     2926.667,
+     0,
+     10.667
+    ],
+    [
+     2926.667,
+     20,
+     10.667
+    ],
+    [
+     2933.333,
+     0,
+     10.667
+    ],
+    [
+     2933.333,
+     20,
+     10.667
+    ],
+    [
+     2940,
+     0,
+     0
+    ],
+    [
+     2940,
+     20,
+     0
+    ]
+   ],
+   "grids": [
+    {
+     "entity": 291455,
+     "u": 7,
+     "v": 2,
+     "stride": 3,
+     "vertices": [
+      [
+       2900,
+       0,
+       0
+      ],
+      [
+       2900,
+       20,
+       0
+      ],
+      [
+       2906.667,
+       0,
+       10.667
+      ],
+      [
+       2906.667,
+       20,
+       10.667
+      ],
+      [
+       2913.333,
+       0,
+       10.667
+      ],
+      [
+       2913.333,
+       20,
+       10.667
+      ],
+      [
+       2920,
+       0,
+       5
+      ],
+      [
+       2920,
+       20,
+       0
+      ],
+      [
+       2920.733,
+       0,
+       4.377
+      ],
+      [
+       2920.733,
+       20,
+       -1.173
+      ],
+      [
+       2921.466,
+       0,
+       3.754
+      ],
+      [
+       2921.466,
+       20,
+       -2.345
+      ],
+      [
+       2922.199,
+       0,
+       3.131
+      ],
+      [
+       2922.199,
+       20,
+       -3.518
+      ]
+     ],
+     "error": null
+    },
+    {
+     "entity": 291552,
+     "u": 4,
+     "v": 2,
+     "stride": 3,
+     "vertices": [
+      [
+       2920,
+       0,
+       0
+      ],
+      [
+       2920,
+       20,
+       0
+      ],
+      [
+       2926.667,
+       0,
+       10.667
+      ],
+      [
+       2926.667,
+       20,
+       10.667
+      ],
+      [
+       2933.333,
+       0,
+       10.667
+      ],
+      [
+       2933.333,
+       20,
+       10.667
+      ],
+      [
+       2940,
+       0,
+       0
+      ],
+      [
+       2940,
+       20,
+       0
+      ]
+     ],
+     "error": null
+    }
+   ],
+   "faceViews": [
+    "2380f291455",
+    "2380f291552"
+   ]
+  },
+  "bodies": [
+   {
+    "id": 1410,
+    "type": "Wire",
+    "faces": 0,
+    "bounds": {
+     "min": [
+      2900,
+      0,
+      0
+     ],
+     "max": [
+      2920,
+      0,
+      10.666666666666666
+     ]
+    }
+   },
+   {
+    "id": 1411,
+    "type": "Wire",
+    "faces": 0,
+    "bounds": {
+     "min": [
+      2920,
+      0,
+      0
+     ],
+     "max": [
+      2940,
+      0,
+      10.666666666666666
+     ]
+    }
+   },
+   {
+    "id": 1412,
+    "type": "Sheet",
+    "faces": 2,
+    "bounds": {
+     "min": [
+      2900,
+      0,
+      -1.1102230246251565e-15
+     ],
+     "max": [
+      2940,
+      20.000000000000004,
+      10.666666666666666
+     ]
+    }
+   }
+  ],
+  "bPointStillAtOld": true,
+  "pointsAtNew": 1
+ },
+ "moveBoth": {
+  "result": {
+   "targetId": "EDEF123AC89B15D2277092367F48F3AC",
+   "title": "Untitled - Plasticity",
+   "documentToken": "01a1e50b-82f6-7c36-a2c6-9e2e7e4ff8b3",
+   "revision": "r14.da016b4e9c3d6002",
+   "dbVersion": 6204,
+   "undoDepth": 14,
+   "redoDepth": 0,
+   "materials": [],
+   "measurements": [],
+   "sectionAnalyses": [],
+   "instances": [],
+   "referenceMeshes": [],
+   "activeGroupId": 0,
+   "groups": [
+    {
+     "id": 0,
+     "name": "Scene",
+     "parentId": null,
+     "childGroupIds": [],
+     "bodyIds": [
+      1,
+      3,
+      4,
+      5,
+      1410,
+      1411,
+      1412
+     ],
+     "instanceIds": [],
+     "referenceMeshIds": [],
+     "otherNodeKeys": [],
+     "visible": true,
+     "hidden": false,
+     "locked": false
+    }
+   ],
+   "construction": {
+    "planes": [],
+    "activePlaneId": "standard:top",
+    "planeStateToken": "planes:50b2ca886dad7e7f",
+    "viewStateToken": "workplane:standard:top:0.00000000000,0.00000000000,0.00000000000,0.00000000000,0.00000000000,1.00000000000,1.00000000000,0.00000000000,0.00000000000,0.00000000000,1.00000000000,0.00000000000",
+    "standardPlaneIds": [
+     "standard:back",
+     "standard:bottom",
+     "standard:front",
+     "standard:left",
+     "standard:right",
+     "standard:top"
+    ]
+   },
+   "regions": [],
+   "bodies": [
+    {
+     "id": 1,
+     "versionId": 4,
+     "type": "Solid",
+     "name": "test-block",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       0,
+       0,
+       0
+      ],
+      "max": [
+       40.00000000000001,
+       30,
+       10
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 11,
+     "edgeCount": 26,
+     "vertexCount": 16
+    },
+    {
+     "id": 3,
+     "versionId": 5,
+     "type": "Wire",
+     "name": "Curve.001",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       60.00000000000001,
+       0,
+       0
+      ],
+      "max": [
+       80.00000000000001,
+       5,
+       0
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 4,
+     "versionId": 7,
+     "type": "Wire",
+     "name": "Curve.002",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       60,
+       0,
+       0
+      ],
+      "max": [
+       60,
+       0,
+       30
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 5,
+     "versionId": 10,
+     "type": "Sheet",
+     "name": "Swept.001",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       60,
+       0,
+       0
+      ],
+      "max": [
+       80.00000000000001,
+       5,
+       30
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    },
+    {
+     "id": 1410,
+     "versionId": 2371,
+     "type": "Wire",
+     "name": "Curve.003",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       2900,
+       0,
+       0
+      ],
+      "max": [
+       2920,
+       0,
+       10.666666666666666
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 1411,
+     "versionId": 2373,
+     "type": "Wire",
+     "name": "Curve.004",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       2920,
+       0,
+       0
+      ],
+      "max": [
+       2940,
+       0,
+       10.666666666666666
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 1412,
+     "versionId": 2381,
+     "type": "Sheet",
+     "name": "Extruded.001",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       2900,
+       -0.000005,
+       -0.000005
+      ],
+      "max": [
+       2940,
+       20.000005,
+       10.666666666666666
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 2,
+     "edgeCount": 7,
+     "vertexCount": 6
+    }
+   ],
+   "bodyPagination": {
+    "offset": 0,
+    "limit": 20,
+    "total": 7,
+    "nextOffset": null
+   },
+   "change": {
+    "sceneChanged": true,
+    "revisionChanged": true,
+    "changed": true,
+    "documentChanged": false,
+    "added": [],
+    "removed": [],
+    "modified": [
+     {
+      "id": 1412,
+      "renamed": false,
+      "geometryChanged": true,
+      "appearanceChanged": false,
+      "visibilityChanged": false,
+      "before": {
+       "id": 1412,
+       "versionId": 2379,
+       "type": "Sheet",
+       "name": "Extruded.001",
+       "boundsMm": {
+        "min": [
+         2900,
+         0,
+         0
+        ],
+        "max": [
+         2940,
+         20,
+         10.666666666666666
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 2,
+       "edgeCount": 7,
+       "vertexCount": 6
+      },
+      "after": {
+       "id": 1412,
+       "versionId": 2381,
+       "type": "Sheet",
+       "name": "Extruded.001",
+       "boundsMm": {
+        "min": [
+         2900,
+         -0.000005,
+         -0.000005
+        ],
+        "max": [
+         2940,
+         20.000005,
+         10.666666666666666
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 2,
+       "edgeCount": 7,
+       "vertexCount": 6
+      }
+     }
+    ],
+    "regionsAdded": [],
+    "regionsRemoved": [],
+    "regionsModified": [],
+    "constructionPlanesAdded": [],
+    "constructionPlanesRemoved": [],
+    "constructionPlanesModified": [],
+    "activeWorkplaneChanged": null,
+    "materialsChanged": false,
+    "measurementsChanged": false,
+    "sectionAnalysesChanged": false,
+    "instancesChanged": false,
+    "referenceMeshesChanged": false,
+    "groupsChanged": false
+   },
+   "controlPoints": [
+    {
+     "cvId": "2381c6",
+     "faceId": "2381f291455",
+     "index": 6,
+     "positionMm": [
+      2920,
+      0,
+      5
+     ]
+    },
+    {
+     "cvId": "2381c8",
+     "faceId": "2381f291552",
+     "index": 0,
+     "positionMm": [
+      2920,
+      0,
+      5
+     ]
+    }
+   ],
+   "undoSteps": 1
+  },
+  "undoDelta": 1,
+  "native": {
+   "exists": true,
+   "type": "Sheet",
+   "checkCodes": [],
+   "faceCount": 2,
+   "edgeCount": 7,
+   "cvs": [
+    [
+     2900,
+     0,
+     0
+    ],
+    [
+     2900,
+     20,
+     0
+    ],
+    [
+     2906.667,
+     0,
+     10.667
+    ],
+    [
+     2906.667,
+     20,
+     10.667
+    ],
+    [
+     2913.333,
+     0,
+     10.667
+    ],
+    [
+     2913.333,
+     20,
+     10.667
+    ],
+    [
+     2920,
+     0,
+     5
+    ],
+    [
+     2920,
+     20,
+     0
+    ],
+    [
+     2920,
+     0,
+     5
+    ],
+    [
+     2920,
+     20,
+     0
+    ],
+    [
+     2926.667,
+     0,
+     10.667
+    ],
+    [
+     2926.667,
+     20,
+     10.667
+    ],
+    [
+     2933.333,
+     0,
+     10.667
+    ],
+    [
+     2933.333,
+     20,
+     10.667
+    ],
+    [
+     2940,
+     0,
+     0
+    ],
+    [
+     2940,
+     20,
+     0
+    ]
+   ],
+   "grids": [
+    {
+     "entity": 291455,
+     "u": 4,
+     "v": 2,
+     "stride": 3,
+     "vertices": [
+      [
+       2900,
+       0,
+       0
+      ],
+      [
+       2900,
+       20,
+       0
+      ],
+      [
+       2906.667,
+       0,
+       10.667
+      ],
+      [
+       2906.667,
+       20,
+       10.667
+      ],
+      [
+       2913.333,
+       0,
+       10.667
+      ],
+      [
+       2913.333,
+       20,
+       10.667
+      ],
+      [
+       2920,
+       0,
+       5
+      ],
+      [
+       2920,
+       20,
+       0
+      ]
+     ],
+     "error": null
+    },
+    {
+     "entity": 291552,
+     "u": 4,
+     "v": 2,
+     "stride": 3,
+     "vertices": [
+      [
+       2920,
+       0,
+       5
+      ],
+      [
+       2920,
+       20,
+       0
+      ],
+      [
+       2926.667,
+       0,
+       10.667
+      ],
+      [
+       2926.667,
+       20,
+       10.667
+      ],
+      [
+       2933.333,
+       0,
+       10.667
+      ],
+      [
+       2933.333,
+       20,
+       10.667
+      ],
+      [
+       2940,
+       0,
+       0
+      ],
+      [
+       2940,
+       20,
+       0
+      ]
+     ],
+     "error": null
+    }
+   ],
+   "faceViews": [
+    "2381f291455",
+    "2381f291552"
+   ]
+  },
+  "pointsAtNew": 2
+ },
+ "end": {
+  "undo": 7,
+  "bodies": 4
+ }
+}
