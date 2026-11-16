@@ -1255,6 +1255,28 @@ to one current cylindrical B-Rep face. It changes the recognized cylinder or
 hole radius in one Undo step and rejects noncylindrical or stale face IDs. It
 does not edit fillets; use `plasticity_refillet_faces` for recognized blend
 faces. Read the new cylindrical radius from the returned B-Rep state.
+`plasticity_set_driving_distance` sets the distance between two parallel planar
+faces of one Solid or Sheet, as Plasticity's Dimension tool does:
+`{ bodyId, movingFaceId, referenceFaceId?, distanceMm, revision }`.
+`movingFaceId` moves with the geometry attached to it; `referenceFaceId` stays
+fixed. Without `referenceFaceId`, Plasticity finds the opposite face itself.
+Use it to resize a part to an exact overall dimension (a 20 mm box to 30 mm, a
+cylinder to 16 mm tall) without computing an offset; `plasticity_extrude_faces`
+and `plasticity_move` take a delta instead. The edit is one Undo step, and the
+result adds `previousDistanceMm` (what Plasticity measured before),
+`distanceMm` and `undoSteps: 1` to the usual compact change. The tool checks the
+revision, that both faces belong to the body and are planar, and that a given
+reference is a different, parallel, non-coplanar face; it computes the click
+point itself (the moving face center and outward normal). Plasticity's last
+selected face moves, so the tool selects `[reference, moving]` (verified live in
+both directions). A pair Plasticity cannot dimension, such as a chamfer face
+with no parallel opposite, fails with "Plasticity could not dimension these
+faces (no effect)" and changes nothing. If the dialog does not finish in time,
+the command is cancelled inside the same call and the document is unchanged;
+only a cancel that fails marks the session uncertain for `plasticity_reconcile`.
+The tool clears the selection. Face IDs change with the edit, so re-read them.
+Works as a `plasticity_batch` step (for example after `plasticity_create_box`
+and `plasticity_find_faces`). Live check: `npm run accept:native-driving-distance`.
 `plasticity_set_rectangle_dimensions` changes the native local width and
 length of one closed planar Wire that Plasticity recognizes as a rectangle.
 The profile stays centered, remains an editable Wire, and its Region is updated

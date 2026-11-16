@@ -6501,3 +6501,127 @@ test("plasticity_move_measurement_label says it clears the selection and takes a
     assert.equal(offset?.maxItems, 2);
   });
 });
+
+test("MCP registers plasticity_set_driving_distance once with a strict schema and only the exposed inputs", async () => {
+  await withOperationsClient({}, async (client) => {
+    const tools = (await client.listTools()).tools;
+    const matches = tools.filter((entry) => entry.name === "plasticity_set_driving_distance");
+    assert.equal(matches.length, 1);
+    const schema = matches[0]!.inputSchema as { additionalProperties?: unknown; properties?: Record<string, unknown>; required?: string[] };
+    assert.equal(schema.additionalProperties, false, "rejects unknown keys");
+    assert.deepEqual(Object.keys(schema.properties ?? {}).sort(), ["bodyId", "distanceMm", "intent", "movingFaceId", "referenceFaceId", "revision"]);
+    assert.deepEqual([...(schema.required ?? [])].sort(), ["bodyId", "distanceMm", "movingFaceId", "revision"]);
+    const description = matches[0]!.description ?? "";
+    assert.match(description, /plasticity_extrude_faces/);
+    assert.match(description, /plasticity_move\b/);
+    assert.match(description, /exact overall dimension/);
+    assert.match(description, /One Plasticity history step/);
+  });
+});
+
+test("MCP forwards plasticity_set_driving_distance and returns the compact change plus the distances", async () => {
+  let received: unknown[] | undefined;
+  await withOperationsClient({
+    async setDrivingDistance(...args: unknown[]) { received = args; return { state: { ...emptyState(), revision: "r2", undoDepth: 1 }, previousDistanceMm: 20, distanceMm: 30, undoSteps: 1 }; },
+    async state() { return emptyState(); },
+  }, async (client) => {
+    const response = await client.callTool({ name: "plasticity_set_driving_distance", arguments: { bodyId: 5, movingFaceId: "fxp", referenceFaceId: "fxn", distanceMm: 30, revision: "r1" } });
+    assert.equal(response.isError, undefined, JSON.stringify(response.content));
+    assert.deepEqual(received, [{ bodyId: 5, movingFaceId: "fxp", referenceFaceId: "fxn", distanceMm: 30 }, "r1"]);
+    const output = parseToolJson(response);
+    assert.equal(output.previousDistanceMm, 20);
+    assert.equal(output.distanceMm, 30);
+    assert.equal(output.undoSteps, 1);
+    assert.equal(typeof output.revision, "string", "the compact mutation result stays next to the distances");
+    const single = await client.callTool({ name: "plasticity_set_driving_distance", arguments: { bodyId: 5, movingFaceId: "fz", distanceMm: 16, revision: "r1" } });
+    assert.equal(single.isError, undefined, JSON.stringify(single.content));
+    assert.deepEqual(received, [{ bodyId: 5, movingFaceId: "fz", referenceFaceId: undefined, distanceMm: 16 }, "r1"]);
+    received = undefined;
+    for (const bad of [
+      { distanceMm: 0 },
+      { distanceMm: -1 },
+      { distanceMm: "30" },
+      { distanceMm: null },
+      { referenceFaceId: "fxp" },
+      { referenceFaceId: "" },
+      { movingFaceId: "" },
+      { bodyId: 0 },
+      { bodyId: 1.5 },
+      { hitPointMm: [0, 0, 0] },
+      { faceIds: ["fxp"] },
+    ]) {
+      const response = await client.callTool({ name: "plasticity_set_driving_distance", arguments: { bodyId: 5, movingFaceId: "fxp", distanceMm: 30, revision: "r1", ...bad } });
+      assert.equal(response.isError, true, JSON.stringify(bad));
+    }
+    const missingRevision = await client.callTool({ name: "plasticity_set_driving_distance", arguments: { bodyId: 5, movingFaceId: "fxp", distanceMm: 30 } });
+    assert.equal(missingRevision.isError, true);
+    assert.equal(received, undefined, "a rejected call must not reach the operation");
+  });
+});
+
+test("MCP reports a driving distance the operation rejects as a tool error", async () => {
+  await withOperationsClient({
+    async setDrivingDistance() { throw new Error("Plasticity could not dimension these faces (no effect): Operation has no effect"); },
+    async state() { return emptyState(); },
+  }, async (client) => {
+    const response = await client.callTool({ name: "plasticity_set_driving_distance", arguments: { bodyId: 5, movingFaceId: "fxp", referenceFaceId: "fxn", distanceMm: 30, revision: "r1" } });
+    assert.equal(response.isError, true);
+    assert.match(JSON.stringify(response.content), /could not dimension these faces \(no effect\)/);
+  });
+});
+
+test("plasticity_set_driving_distance is reachable through plasticity_call and works as a batch step with revision auto-fill and $n references", async () => {
+  let state: RuntimeState = emptyState();
+  let version = 1;
+  const calls: Array<{ op: string; args: unknown[] }> = [];
+  const commit = (bodies: RuntimeState["bodies"]) => { version += 1; state = { ...state, bodies, revision: `r${version}`, undoDepth: state.undoDepth + 1 }; return state; };
+  const box = (id: number, maxX: number): RuntimeState["bodies"][number] => ({
+    id, versionId: id * 10 + version, type: "Solid", name: "box", boundsMm: { min: [2000, 0, 0], max: [maxX, 10, 5] },
+    faceIds: [`px${version}`, `nx${version}`], edgeIds: [],
+    faces: [
+      { id: `px${version}`, surfaceType: "Plane", planar: true, centerMm: [maxX, 5, 2.5], normal: [1, 0, 0], radiusMm: null, blendRadiusMm: null, axisOriginMm: null, axisDirection: null, boundsMm: { min: [maxX, 0, 0], max: [maxX, 10, 5] }, edgeIds: [] },
+      { id: `nx${version}`, surfaceType: "Plane", planar: true, centerMm: [2000, 5, 2.5], normal: [-1, 0, 0], radiusMm: null, blendRadiusMm: null, axisOriginMm: null, axisDirection: null, boundsMm: { min: [2000, 0, 0], max: [2000, 10, 5] }, edgeIds: [] },
+    ],
+    edges: [],
+  });
+  const operations = {
+    async state() { return state; },
+    async createBox(...args: unknown[]) { calls.push({ op: "createBox", args }); return commit([...state.bodies, box(40, 2020)]); },
+    async setDrivingDistance(...args: unknown[]) {
+      calls.push({ op: "setDrivingDistance", args });
+      const [input, revision] = args as [{ bodyId: number; distanceMm: number }, string];
+      if (revision !== state.revision) throw new Error(`Stale reference: ${revision}`);
+      const next = commit(state.bodies.map((body) => body.id === input.bodyId ? box(body.id, 2000 + input.distanceMm) : body));
+      return { state: next, previousDistanceMm: 20, distanceMm: input.distanceMm, undoSteps: 1 };
+    },
+  } as unknown as PlasticityOperations;
+  const fake = {
+    async windows() { return []; }, async connect() { return state; }, get() { return operations; },
+    capabilities() { return { bindings: [], operations: unavailableConstruction() }; },
+    async captureSnapshot() { return {}; }, async changesSince() { return {}; }, async waitForChange() { return {}; },
+  } satisfies SessionLike;
+  const { client, close } = await batchClient(fake);
+  try {
+    const batch = await client.callTool({ name: "plasticity_batch", arguments: { steps: [
+      { toolName: "plasticity_create_box", arguments: { originMm: [2000, 0, 0], sizeMm: [20, 10, 5] } },
+      { toolName: "plasticity_find_faces", arguments: { query: { bodyIds: ["$0.added[0]"], normal: { vector: [1, 0, 0] } } } },
+      { toolName: "plasticity_find_faces", arguments: { query: { bodyIds: ["$0.added[0]"], normal: { vector: [-1, 0, 0] } } } },
+      { toolName: "plasticity_set_driving_distance", arguments: { bodyId: "$0.added[0]", movingFaceId: "$1.result.matches[0].id", referenceFaceId: "$2.result.matches[0].id", distanceMm: 30 } },
+    ] } });
+    assert.equal(batch.isError, undefined, JSON.stringify(batch.content));
+    const output = parseToolJson(batch);
+    assert.equal(output.undoSteps, 2);
+    assert.deepEqual(calls.map((entry) => entry.op), ["createBox", "setDrivingDistance"]);
+    assert.deepEqual(calls[1]!.args, [{ bodyId: 40, movingFaceId: "px1", referenceFaceId: "nx1", distanceMm: 30 }, "r2"], "the step takes the revision and ids the previous steps left");
+    assert.deepEqual(output.change.added[0].boundsMm.max, [2030, 10, 5]);
+
+    const direct = await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_set_driving_distance", arguments: { bodyId: 40, movingFaceId: "px2", distanceMm: 25, revision: "r3" } } });
+    assert.equal(direct.isError, undefined, JSON.stringify(direct.content));
+    assert.deepEqual(calls[2], { op: "setDrivingDistance", args: [{ bodyId: 40, movingFaceId: "px2", referenceFaceId: undefined, distanceMm: 25 }, "r3"] });
+    const viaCall = parseToolJson(direct);
+    assert.equal(viaCall.distanceMm, 25);
+    assert.equal(viaCall.undoSteps, 1);
+  } finally {
+    await close();
+  }
+});
