@@ -162,7 +162,7 @@ other query makes that extra read.
 A direct `plasticity_find_faces` or `plasticity_find_edges` call without
 `limit` never returns more than 8,000 bytes. When the full reply would be
 larger, it carries the matches that fit (in the usual order), `count` (the
-total), `truncated: true` and `hint: "add limit/sortBy or narrow the query"`. Only `limit` lifts the cut;
+total), `truncated: true` and `hint: "add limit (sortBy picks which matches) or narrow the query"`. Only `limit` lifts the cut;
 `sortBy` without `limit` is still cut (it chooses which matches stay). The
 `next` text says "add limit (e.g. 20) with sortBy".
 A reply of 8,000 bytes or less is unchanged, an explicit `limit` is always

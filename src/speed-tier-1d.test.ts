@@ -494,7 +494,7 @@ test("a cut direct find reply starts with a concrete next move; the older hint s
   assert.equal(Object.keys(reply)[0], "next", "first in the reply");
   assert.equal(reply.next, "200 matches; add limit (e.g. 20) with sortBy, or use plasticity_describe_body for hole, boss and plane positions");
   assert.equal(reply.truncated, true);
-  assert.equal(reply.hint, "add limit/sortBy or narrow the query");
+  assert.equal(reply.hint, "add limit (sortBy picks which matches) or narrow the query");
   assert.ok(size(reply) <= 8_000);
   const edges = open(stateOf([{ ...manyFaces(3), edges: Array.from({ length: 150 }, (_, index) => line(`g${index}`, [1, 0, 0], [index, 0, 0], index + 1, ["f1"])) }]));
   const second = await connect(edges.fake);
@@ -597,7 +597,7 @@ test("tool descriptions and instructions name edgeQuery, describe_body without a
   }
   assert.match(tools.find((candidate) => candidate.name === "plasticity_describe_body")!.description ?? "", /Includes hole and boss axis positions: no face search needed for those/);
   assert.match(PLASTICITY_MCP_INSTRUCTIONS, /edgeQuery/);
-  assert.match(PLASTICITY_MCP_INSTRUCTIONS, /plasticity_describe_body, with no id, as the first and last read/);
+  assert.match(PLASTICITY_MCP_INSTRUCTIONS, /End the build batch with a plasticity_describe_body step to verify; call it first \(no id\) only to fit existing bodies or find free space/);
   // The tier 1c instructions were 4,349 bytes; the 1d paragraph may grow by 250 characters at most.
   assert.ok(Buffer.byteLength(PLASTICITY_MCP_INSTRUCTIONS) - 4_349 <= 250, `grew by ${Buffer.byteLength(PLASTICITY_MCP_INSTRUCTIONS) - 4_349}`);
   await close();

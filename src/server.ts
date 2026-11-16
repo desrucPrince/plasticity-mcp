@@ -2338,7 +2338,7 @@ function pickFacesByQuery(state: RuntimeState, id: number, rawQuery: unknown, so
 }
 const DESCRIBE_ALL_BODIES = 8;
 const DIRECT_FIND_REPLY_BYTES = 8_000;
-const DIRECT_FIND_HINT = "add limit/sortBy or narrow the query";
+const DIRECT_FIND_HINT = "add limit (sortBy picks which matches) or narrow the query";
 const BODY_INFO_HINT_BYTES = 20_000;
 const COORDINATE_AXIS: Record<string, number> = { x: 0, y: 1, z: 2 };
 // plasticity_measure_face_properties measures at most 256 faces per call (MAX_FACES in plasticity/face-properties.ts).

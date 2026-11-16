@@ -238,7 +238,7 @@ test("a direct find_faces reply over 8,000 bytes keeps the matches that fit, wit
   const reply = json(await client.callTool({ name: "plasticity_find_faces", arguments: { revision: "r1", query: { bodyIds: [1] } } }));
   assert.equal(reply.count, 200);
   assert.equal(reply.truncated, true);
-  assert.equal(reply.hint, "add limit/sortBy or narrow the query");
+  assert.equal(reply.hint, "add limit (sortBy picks which matches) or narrow the query");
   assert.ok(reply.matches.length > 0 && reply.matches.length < 200);
   assert.deepEqual(reply.matches.map((match: { id: string }) => match.id), Array.from({ length: reply.matches.length }, (_, index) => `f${index}`), "existing order, from the start");
   assert.ok(size(reply) <= 8_000, `size ${size(reply)}`);
