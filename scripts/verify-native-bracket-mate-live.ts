@@ -18,7 +18,8 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 type Vec = [number, number, number];
 type Check = { case: string; check: string; ok: boolean; detail?: unknown };
 // 1-4: the original acceptance. d1-d11: one case per defect of the review (d45 covers defects 4 and 5).
-const CASES = ["1", "2", "3", "4", "d1", "d2", "d3", "d45", "d6", "d7", "d8", "d9", "d10", "d11"] as const;
+// r2b1, r2b2, r2t: round 2 (recessed entries, countersink and counterbore breakout, ray time).
+const CASES = ["1", "2", "3", "4", "d1", "d2", "d3", "d45", "d6", "d7", "d8", "d9", "d10", "d11", "r2b1", "r2b2", "r2t"] as const;
 const HAND_BATCH_BYTES = 2_308; // the audit's hand-written L-bracket batch (discovery/speed-2026-11, part b)
 const X0 = 2000; // every case builds at x >= 2000 mm, away from the document's own bodies
 
@@ -414,7 +415,7 @@ async function caseD2(live: Live): Promise<void> {
   const source = await make(live, "d2", "plasticity_create_box", { originMm: [2500, 100, 0], sizeMm: [5, 5, 5], name: "d2-source" });
   // p7 C1: the axis on the stem's side wall; C1b: 2 mm outside it, the rim grazes the stem.
   for (const [label, x] of [["C1 axis on the stem side wall", 2512], ["C1b rim grazing the stem", 2514]] as const) {
-    await live.refusedUnchanged("d2", `${label}: side breakout`, "plasticity_transfer_holes", { sourceId: source, targetId: step, axesMm: [{ pointMm: [x, 20, 30], axis: [0, 0, -1] }], hole: { diameterMm: 5, through: true } }, /the document is unchanged.*axis 0: the bore breaks out of a side wall of the target/);
+    await live.refusedUnchanged("d2", `${label}: side breakout`, "plasticity_transfer_holes", { sourceId: source, targetId: step, axesMm: [{ pointMm: [x, 20, 30], axis: [0, 0, -1] }], hole: { diameterMm: 5, through: true } }, /axis 0( \(point [^)]*\))?: the bore breaks out of a side wall of the target/);
     live.check("d2", `${label}: no Ø5 bore left on the target`, (await cylindersOf(live, step, 2.5)).length === 0);
   }
 }
@@ -525,6 +526,115 @@ async function caseD11(live: Live): Promise<void> {
   live.check("d11", "the completed bracket and the transferred plate are closed, natively valid Solids", await validClosed(live, built.result.bodyId) && await validClosed(live, transfer.result.targetId) && transfer.result.holeCount === 2);
 }
 
+// ---------- round 2: entry, wall and breakout from exact rays ----------
+
+/** Every Ø(2r) bore face on the axis, measured independently: coaxial within 1e-6, every circle edge a full turn, no other edge on another face. */
+async function boresOn(live: Live, id: number, radius: number, point: Vec, axis: Vec): Promise<{ count: number; whole: boolean }> {
+  const faces = (await cylindersOf(live, id, radius)).filter((face: any) => coaxial(point, axis, face.axisOriginMm, face.axisDirection) <= 1e-6);
+  const edges = new Map((await live.edges({ bodyIds: [id] })).map((edge: any) => [edge.id, edge]));
+  const whole = faces.every((face: any) => face.edgeIds.every((edgeId: string) => {
+    const edge: any = edges.get(edgeId);
+    if (!edge) return false;
+    if (edge.circle) return Math.abs(edge.lengthMm - 2 * Math.PI * radius) <= 1e-6;
+    return edge.faceIds.every((other: string) => other === face.id);
+  }));
+  return { count: faces.length, whole };
+}
+async function difference(live: Live, caseName: string, target: number, tool: number, name: string): Promise<number> {
+  await live.call("plasticity_boolean", { targetIds: [target], toolIds: [tool], operation: "difference", revision: (await live.status()).revision });
+  return (await live.status()).bodies.find((body: { name: string | null }) => body.name === name)!.id;
+}
+/** One transfer that must cut: completed, then measured; undone afterwards. */
+async function cutAndMeasure(live: Live, caseName: string, label: string, sourceId: number, targetId: number, axes: Array<{ pointMm: Vec; axis: Vec }> | undefined, select: Record<string, unknown> | undefined, hole: Record<string, unknown>, radius: number): Promise<void> {
+  const before = (await live.status()).undoDepth;
+  const response = await live.client.callTool({ name: "plasticity_transfer_holes", arguments: { sourceId, targetId, ...(axes ? { axesMm: axes } : { select }), hole, revision: (await live.status()).revision } });
+  const text = toolText(response);
+  if ((response as { isError?: boolean }).isError) { live.check(caseName, `${label}: cut`, false, text.slice(0, 1200)); return; }
+  const result = JSON.parse(text);
+  const measured = await Promise.all(result.axesMm.map((entry: any) => boresOn(live, result.targetId, radius, entry.entryPointMm, entry.axis)));
+  live.check(caseName, `${label}: cut at ${JSON.stringify(result.axesMm.map((entry: any) => entry.entryPointMm))}; each axis has ${JSON.stringify(measured.map((entry) => entry.count))} coaxial Ø${2 * radius} bore face(s), every one with full circles; closed and valid (probe ${result.probe.rays} rays, ${result.probe.ms} ms)`,
+    measured.every((entry) => entry.count >= 1 && entry.whole) && await validClosed(live, result.targetId), { axesMm: result.axesMm, measured });
+  await live.undoTo(before);
+}
+
+async function caseR2B1(live: Live): Promise<void> {
+  const source = await make(live, "r2b1", "plasticity_create_box", { originMm: [2000, 300, 0], sizeMm: [5, 5, 5], name: "r2-source" });
+  const T3 = { diameterMm: 3, through: true };
+  // q5 pocket: 60 x 40 x 15 with a 40 x 24 pocket, floor 5.
+  const block = await make(live, "r2b1", "plasticity_create_box", { originMm: [2000, 0, 0], sizeMm: [60, 40, 15], name: "r2-pocket" });
+  const pocket = await make(live, "r2b1", "plasticity_create_box", { originMm: [2010, 8, 5], sizeMm: [40, 24, 20] });
+  let target = await difference(live, "r2b1", block, pocket, "r2-pocket");
+  await cutAndMeasure(live, "r2b1", "pocket centre, Ø3 through the floor", source, target, [{ pointMm: [2030, 20, 50], axis: [0, 0, -1] }], undefined, T3, 1.5);
+  await cutAndMeasure(live, "r2b1", "pocket floor, blind Ø3 x 4", source, target, [{ pointMm: [2030, 20, 50], axis: [0, 0, -1] }], undefined, { diameterMm: 3, depthMm: 4 }, 1.5);
+  // The pocket with its four vertical corners filleted r5: a hole on a fillet's axis (the fillet ends at the floor).
+  const filleted = (await live.mutate("r2b1", "plasticity_fillet", { id: target, edgeIds: (await live.edges({ bodyIds: [target], line: true })).filter((edge: any) => Math.abs(edge.tangent[2]) > 0.99 && Math.abs(edge.centerMm[2] - 10) < 1e-6 && edge.centerMm[0] > 2005 && edge.centerMm[0] < 2055 && edge.centerMm[1] > 5 && edge.centerMm[1] < 35).map((edge: any) => edge.id), radiusMm: 5 }));
+  const pocketId = (await live.status()).bodies.find((body: { name: string | null }) => body.name === "r2-pocket")!.id;
+  live.check("r2b1", "pocket corners filleted", !!filleted && pocketId > 0);
+  await cutAndMeasure(live, "r2b1", "Ø3 on the axis of a pocket-corner fillet r5", source, pocketId, [{ pointMm: [2015, 13, 50], axis: [0, 0, -1] }], undefined, T3, 1.5);
+  await live.undoTo((await live.status()).undoDepth - 1);
+  await live.call("plasticity_rotate", { ids: [target], pivotMm: [2030, 20, 0], axis: [0, 0, 1], degrees: 30, revision: (await live.status()).revision });
+  const c = Math.cos(Math.PI / 6), sn = Math.sin(Math.PI / 6);
+  for (const [u, v] of [[0, 0], [15, 8]] as const) await cutAndMeasure(live, "r2b1", `pocket turned 30 degrees, offset [${u},${v}]`, source, target, [{ pointMm: [2030 + u * c - v * sn, 20 + u * sn + v * c, 50], axis: [0, 0, -1] }], undefined, T3, 1.5);
+  await live.undoTo(live.baseline.undoDepth + 1);
+  // q6 enclosure: an L bracket on the floor of an open 80 x 60 x 30 box, select its base holes.
+  const outer = await make(live, "r2b1", "plasticity_create_box", { originMm: [2000, 0, 0], sizeMm: [80, 60, 30], name: "r2-enclosure" });
+  const inner = await make(live, "r2b1", "plasticity_create_box", { originMm: [2003, 3, 3], sizeMm: [74, 54, 40] });
+  target = await difference(live, "r2b1", outer, inner, "r2-enclosure");
+  const bracket = (await live.mutate("r2b1", "plasticity_create_bracket", { originMm: [2020, 15, 3], profile: "L", widthMm: 30, thicknessMm: 3, legs: { baseMm: 30, uprightMm: 20 }, holes: [{ leg: "base", diameterMm: 3.4, count: 2, layout: "line-across", marginMm: 7 }], name: "r2-bracket" })).result;
+  await cutAndMeasure(live, "r2b1", "enclosure floor, select the bracket's base holes, blind Ø2.5 x 2", bracket.bodyId, target, undefined, { radiusMm: 1.7, axis: "z" }, { diameterMm: 2.5, depthMm: 2 }, 1.25);
+  await cutAndMeasure(live, "r2b1", "enclosure floor, select, through Ø3.4", bracket.bodyId, target, undefined, { radiusMm: 1.7, axis: "z" }, { diameterMm: 3.4, through: true }, 1.7);
+  // A bracket upright against an inside wall: the far wall lies past the other end of its holes; select drills the near one.
+  const upright = (await live.mutate("r2b1", "plasticity_create_bracket", { originMm: [2003, 15, 3], profile: "L", widthMm: 30, thicknessMm: 3, legs: { baseMm: 30, uprightMm: 20 }, holes: [{ leg: "upright", diameterMm: 3.4, count: 2, layout: "line-across", marginMm: 7 }], name: "r2-upright" })).result;
+  await cutAndMeasure(live, "r2b1", "upright against the enclosure's inside wall, select, blind Ø2.5 x 2 into the near wall", upright.bodyId, target, undefined, { radiusMm: 1.7, axis: "x" }, { diameterMm: 2.5, depthMm: 2 }, 1.25);
+  await live.undoTo(live.baseline.undoDepth + 1);
+  // q7 tray with a 5 mm lip.
+  const tray = await make(live, "r2b1", "plasticity_create_box", { originMm: [2900, 0, 0], sizeMm: [60, 40, 8], name: "r2-tray" });
+  const well = await make(live, "r2b1", "plasticity_create_box", { originMm: [2902, 2, 3], sizeMm: [56, 36, 10] });
+  target = await difference(live, "r2b1", tray, well, "r2-tray");
+  await cutAndMeasure(live, "r2b1", "tray floor centre, Ø3 through", source, target, [{ pointMm: [2930, 20, 50], axis: [0, 0, -1] }], undefined, T3, 1.5);
+  await live.undoTo(live.baseline.undoDepth + 1);
+  // q5 round recess Ø12 x 3 in a plate, and a cup.
+  const plate = await make(live, "r2b1", "plasticity_create_box", { originMm: [2100, 0, 0], sizeMm: [80, 60, 6], name: "r2-plate" });
+  const recess = await make(live, "r2b1", "plasticity_create_cylinder", { centerMm: [2120, 30, 3], radiusMm: 6, heightMm: 10 });
+  target = await difference(live, "r2b1", plate, recess, "r2-plate");
+  await cutAndMeasure(live, "r2b1", "pilot Ø3 at the centre of a Ø12 recess", source, target, [{ pointMm: [2120, 30, 50], axis: [0, 0, -1] }], undefined, T3, 1.5);
+  await cutAndMeasure(live, "r2b1", "Ø3 in the Ø12 recess floor, 2.5 mm off centre", source, target, [{ pointMm: [2122.5, 30, 50], axis: [0, 0, -1] }], undefined, T3, 1.5);
+  const cup = await make(live, "r2b1", "plasticity_create_cylinder", { centerMm: [2030, 30, 0], radiusMm: 30, heightMm: 20, name: "r2-cup" });
+  const hollow = await make(live, "r2b1", "plasticity_create_cylinder", { centerMm: [2030, 30, 5], radiusMm: 25, heightMm: 30 });
+  const cupId = await difference(live, "r2b1", cup, hollow, "r2-cup");
+  await cutAndMeasure(live, "r2b1", "cup floor centre, Ø3 through", source, cupId, [{ pointMm: [2030, 30, 50], axis: [0, 0, -1] }], undefined, T3, 1.5);
+  await cutAndMeasure(live, "r2b1", "cup floor 10 mm off centre, Ø3 through", source, cupId, [{ pointMm: [2040, 30, 50], axis: [0, 0, -1] }], undefined, T3, 1.5);
+  await live.undoTo(live.baseline.undoDepth + 1);
+  // q5 a 45 degree rib on a plate: a Ø5 hole 15 mm from it.
+  const ribPlate = await make(live, "r2b1", "plasticity_create_box", { originMm: [2000, 0, 0], sizeMm: [80, 80, 5], name: "r2-ribplate" });
+  const rib = await make(live, "r2b1", "plasticity_create_box", { originMm: [2010, 38.5, 5], sizeMm: [60, 3, 10] });
+  await live.call("plasticity_rotate", { ids: [rib], pivotMm: [2040, 40, 5], axis: [0, 0, 1], degrees: 45, revision: (await live.status()).revision });
+  target = await union(live, ribPlate, rib, "r2-ribplate");
+  await cutAndMeasure(live, "r2b1", "Ø5 through 15 mm from a 45 degree rib", source, target, [{ pointMm: [2050.607, 29.393, 50], axis: [0, 0, -1] }], undefined, { diameterMm: 5, through: true }, 2.5);
+}
+
+async function caseR2B2(live: Live): Promise<void> {
+  // q5 thin step: a 2 mm flange over a 12 mm stem; the axis 3.5 mm inside the stem wall.
+  const flange = await make(live, "r2b2", "plasticity_create_box", { originMm: [2300, 0, 10], sizeMm: [40, 40, 2], name: "r2-thinstep" });
+  const stem = await make(live, "r2b2", "plasticity_create_box", { originMm: [2300, 0, 0], sizeMm: [12, 40, 10] });
+  const target = await union(live, flange, stem, "r2-thinstep");
+  const source = await make(live, "r2b2", "plasticity_create_box", { originMm: [2300, 300, 0], sizeMm: [5, 5, 5], name: "r2-source" });
+  const axis = [{ pointMm: [2308.5, 20, 30], axis: [0, 0, -1] }];
+  await live.refusedUnchanged("r2b2", "countersink Ø12 head, the cone leaves the 2 mm flange", "plasticity_transfer_holes", { sourceId: source, targetId: target, axesMm: axis, hole: { diameterMm: 4, through: true, countersunk: { headDiameterMm: 12 } } }, /the countersink cone (breaks out of a side wall|exits through an oblique face|crosses a curved face) of the target.*|the document is unchanged.*the countersink cone/);
+  await live.refusedUnchanged("r2b2", "counterbore Ø12 x 4 through the 2 mm flange", "plasticity_transfer_holes", { sourceId: source, targetId: target, axesMm: axis, hole: { diameterMm: 4, through: true, counterbore: { diameterMm: 12, depthMm: 4 } } }, /counterbore depth 4 reaches the far side of the wall/);
+  live.check("r2b2", "no cone or Ø4 bore left on the thin step", (await live.faces({ bodyIds: [target], surfaceTypes: ["Cone"] })).length === 0 && (await cylindersOf(live, target, 2)).length === 0);
+}
+
+async function caseR2T(live: Live): Promise<void> {
+  // 12 axes: a flat plate with a 2 x 6 grid of Ø3.4 holes over a plate.
+  const holes = (await live.mutate("r2t", "plasticity_create_bracket", { originMm: [2000, 0, 6], profile: "flat", widthMm: 40, thicknessMm: 4, legs: { lengthMm: 120 }, holes: [{ leg: "flat", diameterMm: 3.4, count: 12, layout: "grid", marginMm: 8 }], name: "r2-grid" })).result;
+  const plate = await make(live, "r2t", "plasticity_create_box", { originMm: [1990, -10, 0], sizeMm: [140, 60, 6], name: "r2-plate" });
+  const transfer = await live.mutate("r2t", "plasticity_transfer_holes", { sourceId: holes.bodyId, targetId: plate, select: { radiusMm: 1.7, axis: "z" }, hole: { diameterMm: 3.4, through: true } });
+  const probe = transfer.result.probe;
+  live.evidence.r2t = { axes: transfer.result.axisCount, probe, clientMs: transfer.ms, serverMs: transfer.result.timing?.totalMs, perAxisMs: Math.round((probe.ms / transfer.result.axisCount) * 100) / 100 };
+  live.check("r2t", `12-axis transfer: the ray probe took ${probe.ms} ms (${probe.rays} rays, ${probe.calls} calls; ${Math.round((probe.ms / 12) * 100) / 100} ms per axis), ${transfer.ms} ms round trip; 12 holes`, transfer.result.axisCount === 12 && transfer.result.holeCount === 12 && probe.ms < 2000, live.evidence.r2t);
+}
+
 async function main(): Promise<void> {
   const options = parseBracketMateArgs(process.argv.slice(2));
   if (options.help) { console.log(HELP); return; }
@@ -552,7 +662,7 @@ async function main(): Promise<void> {
         if (name === "2") await case2(live);
         if (name === "3") await case3(live);
         if (name === "4") await case4(live);
-        const review: Record<string, (live: Live) => Promise<void>> = { d1: caseD1, d2: caseD2, d3: caseD3, d45: caseD45, d6: caseD6, d7: caseD7, d8: caseD8, d9: caseD9, d10: caseD10, d11: caseD11 };
+        const review: Record<string, (live: Live) => Promise<void>> = { d1: caseD1, d2: caseD2, d3: caseD3, d45: caseD45, d6: caseD6, d7: caseD7, d8: caseD8, d9: caseD9, d10: caseD10, d11: caseD11, r2b1: caseR2B1, r2b2: caseR2B2, r2t: caseR2T };
         if (review[name]) await review[name]!(live);
       } catch (error) {
         live.check(name, "case ran to the end", false, error instanceof Error ? error.message.slice(0, 2000) : String(error));

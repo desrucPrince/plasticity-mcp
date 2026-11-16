@@ -374,15 +374,23 @@ list, all strict, all in millimetres. Nothing is recognised by heuristics:
 `plasticity_place_body` uses only bounds points or face ids you name, and
 `plasticity_transfer_holes` uses only full-turn cylinder faces picked by
 radius (within `toleranceMm`, default 0.01) and axis, or axes you give. The
-rule is "provable or refused". Anything that can be predicted from the inputs
-is refused before the first native call, with the document unchanged. After
-the native steps each tool reads its result back from a fresh state read;
+rule is "provable or refused". What the inputs (and, for a transfer, exact
+ray probes of the target) can predict is refused before the first native call,
+with the document unchanged. Some outcomes are only caught by the read-back
+after the native steps: a native step that fails; an edge shorter than 0.05 mm
+or an invalid body that the planning rules below did not predict; a bracket
+hole cut that changes another leg's faces; a transfer cut that is not whole
+(a breakout between the probe rays, a countersink cone or counterbore that
+leaves its wall). Each tool reads its result back from a fresh state read;
 when the read-back does not prove the request, the tool undoes its own steps
 (counted from the Undo depth) and the error says the document is unchanged.
-A native step that fails is undone the same way. Only when the undo itself is
-uncertain (a CDP timeout, an Undo that does not lower the Undo depth) does the
-error say how many of its steps may remain and to call
-`plasticity_reconcile`. `undoSteps` is always the measured Undo depth change.
+The undone steps then sit on Plasticity's redo stack until the next edit
+clears it (no operation clears it sooner): do not call `plasticity_redo` after
+such an error, since it would replay the first rejected step (for example a
+stray cutter body); the error says so. Only when the undo itself is uncertain
+(a CDP timeout, an Undo that does not lower the Undo depth) does the error say
+how many of its steps may remain and to call `plasticity_reconcile`.
+`undoSteps` is always the measured Undo depth change.
 
 **`plasticity_create_bracket`** builds an L, U, Z or flat sheet-style bracket
 as one Solid in one call. `originMm` is the minimum corner of the bracket's
@@ -472,8 +480,10 @@ span, leaving straight sides of at least 0.05 mm; every hole footprint (the
 head for a countersink, the full slot) at least one diameter from the flat
 region's edges, the bends and the rounded corners (`allowEdgeHoles: true` only
 asks it to stay inside), clear of the gusset footprints and of other holes; a
-countersink less deep than t; gussets larger than the bend radius and within
-the gusset limit above. The read-back after the build checks the bounds, the
+countersink less deep than t; gussets larger than the bend radius by at least
+0.05 mm and within the gusset limit above; a gusset thickness that leaves at
+least 0.05 mm of inner face beside each gusset (to a side face, or between two
+gussets). The read-back after the build checks the bounds, the
 bend, corner and hole cylinders, the countersink cones, the gusset faces, that
 no edge is shorter than 0.05 mm (a sliver), and that the body is a closed,
 natively valid Solid (the check `plasticity_validate_bodies` runs); a failure
@@ -533,31 +543,36 @@ refused with the selection and every full-turn radius on the source
 diameter (the counterbore or countersink head diameter when there is one) are
 refused: the holes would overlap.
 
-Entry side. The axis sign is ignored. The reference point is the source
-face's axis point (its centre projected onto the axis), or `pointMm`. The
-planar target faces normal to the axis that the line crosses inside the face
-(tested exactly on the face's line and circle edges, or on its bounds when it
-has other edges) are found on both sides of that point. If they lie on both
-sides, the point is between target faces and the call is refused. The drill
-runs toward the side with the target. The entry is the first such face met
-going away from the reference point (a face through the point itself counts,
-so a part touching the source face works); its outward normal must face the
-drill, else the axis enters through a non-planar face and the call is refused.
-The hole rim (counterbore or countersink head included) must lie inside the
-entry face. The entry must be the first material on the axis: when any other
-target face can lie on the bore before the entry plane (decided
-conservatively in the drill's frame from the face's line and circle edges for
-a planar face, from its bounds otherwise: it starts before the plane and comes
-within the rim radius of the axis), the call is refused ("material precedes
-the first planar face"). This
-can refuse a valid case; it never skips material. Each refusal has its own
-message: the target already has a hole on the axis (an inward-facing
-cylinder or cone; the tool cuts new holes only and never re-cuts or enlarges
-one; an outward face such as a rod or boss drilled down its middle is no hole,
-and a coaxial face whose facing cannot be proven is refused); the
-axis misses the target (its bounds, or every face); the axis meets the target
-only through non-planar, oblique or tangent faces (a non-planar or oblique
-entry is not supported). `onMiss: "skip"` passes over axes that miss the
+Entry side, from exact rays. Each axis is judged by exact ray hits on the
+target from the kernel (the operation behind `plasticity_probe_surface`), not
+by face bounds. The rays run parallel to the axis: the axis ray and 8 rays on
+the bore radius, plus 8 on the head radius with a countersink or counterbore,
+cast both ways. For `select` they start at the two ends of the source hole
+(along +axis from its upper end, along -axis from its lower end); for `axesMm`
+they start at `pointMm`. A face a ray starts on and leaves is ignored, so a
+part touching the source face works. With `axesMm`, rays that hit the target
+on both sides mean the point lies between target faces (refused); with
+`select`, the drill runs toward the side where the target is nearer to the
+hole's end (a bracket against one wall of an enclosure drills that wall, not
+the far one) and only a tie is refused. No hit at all is a miss. The drill
+runs toward the side with hits. The entry is the axis ray's
+first hit: it must be a planar face normal to the axis that faces the source,
+and every rim ray must meet that face's plane first, at the same distance. So
+a recessed entry face works: the floor of a pocket, a tray or an enclosure, a
+round recess or a cup, a face beside a rib, at any rotation about the axis,
+as long as nothing else lies over the bore. It is refused when material comes
+first (a rim ray meets another face before the entry plane, for example a
+pocket wall within the rim: "material precedes the first planar face"), when
+the rim runs over an edge (a rim ray finds no material or meets the material
+deeper), and when the first hit is curved or oblique (a non-planar or oblique
+entry is not supported). The rim must also lie inside the entry face by its
+own line and circle edges, inner loops included. An existing hole is refused
+with its own message: the axis finds no material where the rim rays meet the
+entry plane, or an inward-facing coaxial cylinder or cone (a bore, a
+countersink) lies on the part of the axis the cut reaches; a coaxial recess or
+cup wall that ends at the entry plane is not a hole, nor is an outward face
+such as a rod or boss drilled down its middle, and a coaxial face whose facing
+cannot be proven is refused. `onMiss: "skip"` passes over axes that miss the
 target and lists them in `skipped: [{ axisIndex, pointMm, axis, reason }]`;
 the rest are cut. Other refusals still refuse the call, and so does a call in
 which every axis misses. The default is `onMiss: "error"`.
@@ -565,34 +580,39 @@ which every axis misses. The default is `onMiss: "error"`.
 `hole: { diameterMm, through: true | depthMm, countersunk?: { headDiameterMm },
 counterbore?: { diameterMm, depthMm } }`: `through` cuts from the entry to the
 far side of the target's bounds, so every wall after the entry on the line is
-drilled (nothing lies before the entry, as above); `depthMm` is a blind hole
-and is checked against the local wall: the distance from the entry to the next
-planar target face on the axis must leave at least 0.05 mm under the floor (a
-counterbore or countersink must also stay in that wall). When a curved or
-oblique face may lie in the wall the thickness is not proven: the hole is cut,
-its flat floor is read back, and a missing floor undoes the cut. Countersunk
-(90 degrees) and counterbore holes are through holes; a countersink opens on
-the entry face (the face toward the source). The existing through, blind,
-countersink and counterbore recipes (single or pattern, one call per drill
-direction) do the cut. The read-back requires, for every axis, a full-turn
-hole face of the diameter coaxial with the source axis within 1e-6 mm, an
-entry circle centred on the entry point bordering a planar face in the entry
-plane, every cylinder face on the axis whole (every circle end a full turn and
-no edge on a side wall: a partial circle means the bore breaks out of a side
-wall, and the error names the axis), for a blind hole a flat floor at the
-depth, and a closed, natively valid target; a failure undoes the cut. The
-reply gives `axesMm` (with `entryPointMm`, `entryFaceId` and `kind`),
-`axisCount` (axes cut), `holeCount` (separate bores proven by read-back: one
-axis through both walls of a U is 2), `targetHoleCount` (equal to
-`holeCount`), `holes` with their read-back axes and `bores`, `skipped` (with
-`onMiss: "skip"`) and `maxCoaxialOffsetMm`.
+drilled. Before the edit all bore rays must meet the same crossings after the
+entry (the same count at the same distances); otherwise the cut is refused and
+the message says what the bore runs into: a side wall or step, an oblique face
+(a chamfer or slope), or a curved face (a cross hole or a fillet). `depthMm` is
+a blind hole and is checked against the local wall: the least distance, over
+the bore rays, from the entry to the next crossing must leave at least 0.05 mm
+under the floor. A countersink's depth must stay in the bore rays' wall and a
+counterbore's depth in the bore and head rays' wall. Countersunk (90 degrees)
+and counterbore holes are through holes; a countersink opens on the entry face
+(the face toward the source). The existing through, blind, countersink and
+counterbore recipes (single or pattern, one call per drill direction) do the
+cut; a transfer adds `ceil(rays / 64)` probe calls (18 rays per axis, 34 with
+a head), a few milliseconds each. The read-back requires, for every axis, a
+full-turn hole face of the diameter coaxial with the source axis within
+1e-6 mm, an entry circle centred on the entry point bordering a planar face in
+the entry plane, every face the cut made whole (each bore cylinder, the
+countersink cone, the counterbore wall and floor: every circle edge a full
+turn and no other edge shared with another face; the error names the axis and
+what the cut ran into), for a blind hole a flat floor at the depth, and a
+closed, natively valid target; a failure undoes the cut. The reply gives
+`axesMm` (with `entryPointMm`, `entryFaceId` and `kind`), `axisCount` (axes
+cut), `holeCount` (separate bores proven by read-back: one axis through both
+walls of a U is 2), `targetHoleCount` (equal to `holeCount`), `holes` with
+their read-back axes and `bores`, `skipped` (with `onMiss: "skip"`),
+`maxCoaxialOffsetMm` and `probe` (`{ rays, calls, ms }`).
 
 Live acceptance: `PLASTICITY_CDP_URL=http://127.0.0.1:PORT npm run
 accept:native-bracket-mate -- --target ID --allow-disposable-mutations
 --output NEW_DIR` (the audit L-bracket in one call, a U bracket with a slotted
 pair, a Z bracket with a 2 x 2 grid, a block + bracket mate chain as direct
-calls and as one lean batch, live rejections, and cases `d1`-`d11` with the
-review's failing inputs, one per defect; every check reads the geometry with
+calls and as one lean batch, live rejections, cases `d1`-`d11` with the
+review's failing inputs, one per defect, and cases `r2b1` (recessed entries),
+`r2b2` (countersink and counterbore breakout) and `r2t` (ray time); every check reads the geometry with
 `plasticity_find_faces`/`plasticity_find_edges` (limit 1000),
 `plasticity_validate_bodies`, `plasticity_check_interference` and
 `plasticity_measure_parallel_planar_face_clearance`; every refusal checks

@@ -289,6 +289,12 @@ export function planBracket(input: BracketInput): BracketPlan {
     if (g.count === 1 ? tg >= W : tg >= W / 2) throw new Error(`gussets.thicknessMm ${tg} does not fit ${g.count} gusset(s) on the ${W} mm width`);
     const [B, H] = [legs[0]!.lengthMm, legs[1]!.lengthMm];
     if (S <= r) throw new Error(`gussets.sizeMm must be larger than innerBendRadiusMm (${r} mm)`);
+    // Gaps that would leave sliver faces: the inner flat between the bend round and the gusset, and the strips of the
+    // inner faces beside a gusset (to a side face or to the other gusset).
+    if (r > 0 && S - r < MIN_FEATURE_MM - 1e-9) throw new Error(`gussets.sizeMm ${S} leaves ${r6(S - r)} mm of flat between the ${r} mm bend round and the gusset, less than ${MIN_FEATURE_MM} mm (a sliver); the smallest allowed gussets.sizeMm here is ${r6(r + MIN_FEATURE_MM)} mm`);
+    const strip = g.count === 1 ? (W - tg) / 2 : positions === "edges" ? W - 2 * tg : W / 4 - tg / 2;
+    const largest = g.count === 1 ? W - 2 * MIN_FEATURE_MM : positions === "edges" ? (W - MIN_FEATURE_MM) / 2 : W / 2 - 2 * MIN_FEATURE_MM;
+    if (strip < MIN_FEATURE_MM - 1e-9) throw new Error(`gussets.thicknessMm ${tg} leaves a ${r6(strip)} mm strip of the inner face ${g.count === 1 ? "on each side of the gusset" : positions === "edges" ? "between the two gussets" : "beside each gusset"}, less than ${MIN_FEATURE_MM} mm (a sliver); the largest allowed gussets.thicknessMm here is ${r6(largest)} mm`);
     const centres = g.count === 1 ? [W / 2] : positions === "edges" ? [tg / 2, W - tg / 2] : [W / 4, (3 * W) / 4];
     const e = Math.min(0.5, t / 4);
     const limit = gussetSizeLimit({ B, H, W, t, rc, e, spans: centres.map((gy) => [gy - tg / 2, gy + tg / 2] as [number, number]) });

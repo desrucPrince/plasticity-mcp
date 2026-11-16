@@ -439,3 +439,15 @@ test("defect 11: a built bracket that the native Check finds invalid is rolled b
     (error: unknown) => error instanceof GuardedRunError && error.restored && error.undoneSteps === 5 && /body 1 is not a closed, natively valid Solid/.test(error.message));
   assert.equal(fake.state().bodies.length, 0);
 });
+
+test("round 2 (B3): gusset inputs that leave a sliver strip are refused in the plan, naming the limit", async () => {
+  const L = (gussets: BracketInput["gussets"], extra: Partial<BracketInput> = {}) => input({ originMm: [0, 0, 0], legs: { baseMm: 40, uprightMm: 40 }, innerBendRadiusMm: 0, cornerRadiusMm: 0, gussets, ...extra });
+  assert.throws(() => planBracket(L({ count: 1, thicknessMm: 29.96, sizeMm: 20 })), /gussets.thicknessMm 29.96 leaves a 0.02 mm strip of the inner face on each side of the gusset, less than 0.05 mm \(a sliver\); the largest allowed gussets.thicknessMm here is 29.9 mm/);
+  assert.throws(() => planBracket(L({ count: 1, thicknessMm: 4, sizeMm: 5.01 }, { innerBendRadiusMm: 5 })), /gussets.sizeMm 5.01 leaves 0.01 mm of flat between the 5 mm bend round and the gusset.*the smallest allowed gussets.sizeMm here is 5.05 mm/);
+  assert.throws(() => planBracket(L({ count: 2, thicknessMm: 14.98, sizeMm: 20, positions: "centered" })), /gussets.thicknessMm 14.98 leaves a 0.01 mm strip of the inner face beside each gusset.*the largest allowed gussets.thicknessMm here is 14.9 mm/);
+  assert.throws(() => planBracket(L({ count: 2, thicknessMm: 14.98, sizeMm: 20, positions: "edges" })), /leaves a 0.04 mm strip of the inner face between the two gussets.*14.975 mm/);
+  for (const ok of [L({ count: 1, thicknessMm: 29.9, sizeMm: 20 }), L({ count: 1, thicknessMm: 4, sizeMm: 5.05 }, { innerBendRadiusMm: 5 }), L({ count: 2, thicknessMm: 14.9, sizeMm: 20, positions: "centered" })]) assert.doesNotThrow(() => planBracket(ok));
+  const fake = scriptedFake();
+  await assert.rejects(createBracket(fake.operations, L({ count: 1, thicknessMm: 29.96, sizeMm: 20 })), /a sliver/);
+  assert.deepEqual(fake.calls, []);
+});

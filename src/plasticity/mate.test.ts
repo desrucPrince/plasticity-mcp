@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { CommittedChangeError } from "./operations.ts";
 import type { RuntimeState } from "./runtime.ts";
 import {
-  ANCHOR_POINTS, AxisRefusal, boundsAnchor, circleSweepDeg, cylinderRadiiSummary, fullTurnCylinders, GuardedRunError, lineBoxSpan, placeBody, planEntry, planPlacement, planTransfer,
+  ANCHOR_POINTS, AxisRefusal, axisRays, boundsAnchor, circleSweepDeg, cylinderRadiiSummary, fullTurnCylinders, GuardedRunError, lineBoxSpan, placeBody, planEntry, planPlacement, planTransfer,
   pointInPlanarFace, quarterTurnMatrix, rotateBounds, runGuarded, selectSourceAxes, transferHoles, type Vector3,
 } from "./mate.ts";
 
@@ -17,7 +17,8 @@ type Edge = Body["edges"][number];
 interface Hole { origin: Vec; dir: Vec; radius: number; from: number; to: number; blind: boolean; cone?: number }
 // A pin is an outward cylinder face on a body (a boss, facing 1) or one whose normal runs along its axis (facing 0: its
 // kind cannot be proven). Pins are faces only; they do not change the body's bounds.
-interface Pin { origin: Vec; dir: Vec; radius: number; from: number; to: number; facing: 1 | 0 }
+// facing -1 with quarter: an inward quarter round (a pocket-corner fillet) whose circle edges are 90 degree arcs.
+interface Pin { origin: Vec; dir: Vec; radius: number; from: number; to: number; facing: 1 | 0 | -1; quarter?: boolean }
 interface KBody { id: number; type: string; name: string | null; min: Vec; max: Vec; holes: Hole[]; pins?: Pin[]; cutter?: { center: Vec; radius: number; height: number; axis: Vec; cone?: number }; points?: Vec[] }
 
 const add = (a: Vec, b: Vec): Vec => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -37,7 +38,7 @@ function kernel() {
   const calls: Array<{ op: string; args: unknown[] }> = [];
   // halfExit: the exit circle of a through hole reads as a half arc; sideLine: the bore face also has a line edge on the
   // body's +X face (a side breakout); splitBore: a through bore reads as two separate cylinder faces (two walls).
-  const control: { failOn?: string | undefined; uncertainOn?: string | undefined; tamper?: ((bodies: KBody[]) => void) | undefined; halfEntry?: boolean | undefined; invalid?: boolean | undefined; halfExit?: boolean | undefined; sideLine?: boolean | undefined; splitBore?: boolean | undefined } = {};
+  const control: { failOn?: string | undefined; uncertainOn?: string | undefined; tamper?: ((bodies: KBody[]) => void) | undefined; halfEntry?: boolean | undefined; invalid?: boolean | undefined; halfExit?: boolean | undefined; sideLine?: boolean | undefined; splitBore?: boolean | undefined; coneHalf?: boolean | undefined; floorLine?: boolean | undefined } = {};
   const find = (id: number) => { const body = bodies.find((candidate) => candidate.id === id); if (!body) throw new Error(`no body ${id}`); return body; };
 
   const faceId = (id: number, k: number, side: number) => `${id}:p${"xyz"[k]}${side > 0 ? "+" : "-"}`;
@@ -109,20 +110,37 @@ function kernel() {
         }
         faces.push(bore(id, hole.from, hole.to, own));
       }
-      if (floor) faces.push(floor);
+      if (floor) {
+        if (control.floorLine === true) {
+          const side = { id: `${body.id}:fl${n}line`, curveType: "Line", line: true, circle: false, lengthMm: hole.radius, centerMm: floor.centerMm, tangent: perp(hole.dir), boundsMm: { min: floor.centerMm, max: floor.centerMm }, faceIds: [floor.id, faceId(body.id, 0, 1)], vertexIds: [] } as Edge;
+          edges.push(side);
+          floor.edgeIds.push(side.id);
+        }
+        faces.push(floor);
+      }
       if (hole.cone !== undefined) {
         const coneId = `${body.id}:k${n}`;
         const major = circle(hole.from, hole.cone, "k", coneId, entryFace);
-        faces.push({ id: coneId, surfaceType: "Cone", planar: false, centerMm: add(hole.origin, mul(hole.dir, hole.from)), normal: mul(p, -1), radiusMm: null, blendRadiusMm: null, axisOriginMm: add(hole.origin, mul(hole.dir, hole.from)), axisDirection: hole.dir, boundsMm: { min: hole.origin, max: hole.origin }, edgeIds: [major.id] } as Face);
+        // The cone's small end: the bore radius, (head - bore) radius deep for 90 degrees.
+        const minor = circle(hole.from + (hole.cone - hole.radius), hole.radius, "j", coneId);
+        if (control.coneHalf) {
+          const g = major.circleGeometry!;
+          const q: Vec = [hole.dir[1] * p[2] - hole.dir[2] * p[1], hole.dir[2] * p[0] - hole.dir[0] * p[2], hole.dir[0] * p[1] - hole.dir[1] * p[0]];
+          major.circleGeometry = { ...g, midpointMm: add(g.centerMm, mul(q, hole.cone)), endMm: sub(g.centerMm, mul(p, hole.cone)) };
+        }
+        faces.push({ id: coneId, surfaceType: "Cone", planar: false, centerMm: add(add(hole.origin, mul(hole.dir, hole.from + (hole.cone - hole.radius) / 2)), mul(p, (hole.cone + hole.radius) / 2)), normal: unitv(sub(mul(p, -1), hole.dir)), radiusMm: null, blendRadiusMm: null, axisOriginMm: add(hole.origin, mul(hole.dir, hole.from)), axisDirection: hole.dir, boundsMm: { min: hole.origin, max: hole.origin }, edgeIds: [major.id, minor.id] } as Face);
       }
     });
     (body.pins ?? []).forEach((pin, n) => {
       const p = perp(pin.dir);
       const id = `${body.id}:pin${n}`;
+      const q: Vec = [pin.dir[1] * p[2] - pin.dir[2] * p[1], pin.dir[2] * p[0] - pin.dir[0] * p[2], pin.dir[0] * p[1] - pin.dir[1] * p[0]];
       const ring = (s: number, tag: string): Edge => {
         const c = add(pin.origin, mul(pin.dir, s));
         const edge = { id: `${id}${tag}`, curveType: "Circle", line: false, circle: true, lengthMm: 2 * Math.PI * pin.radius, centerMm: add(c, mul(p, pin.radius)), tangent: [0, 0, 1], boundsMm: { min: c, max: c }, faceIds: [id], vertexIds: [],
-          circleGeometry: { centerMm: c, radiusMm: pin.radius, normal: pin.dir, reference: p, startMm: add(c, mul(p, pin.radius)), midpointMm: sub(c, mul(p, pin.radius)), endMm: add(c, mul(p, pin.radius)) } } as Edge;
+          circleGeometry: pin.quarter
+            ? { centerMm: c, radiusMm: pin.radius, normal: pin.dir, reference: p, startMm: add(c, mul(p, pin.radius)), midpointMm: add(c, mul(unitv(add(p, q)), pin.radius)), endMm: add(c, mul(q, pin.radius)) }
+            : { centerMm: c, radiusMm: pin.radius, normal: pin.dir, reference: p, startMm: add(c, mul(p, pin.radius)), midpointMm: sub(c, mul(p, pin.radius)), endMm: add(c, mul(p, pin.radius)) } } as Edge;
         edges.push(edge);
         return edge;
       };
@@ -130,7 +148,7 @@ function kernel() {
       const spread = [0, 1, 2].map((i) => pin.radius * Math.sqrt(Math.max(0, 1 - pin.dir[i]! ** 2)));
       const boundsMm = { min: [0, 1, 2].map((i) => Math.min(...ends.map((end) => end[i]!)) - spread[i]!) as Vec, max: [0, 1, 2].map((i) => Math.max(...ends.map((end) => end[i]!)) + spread[i]!) as Vec };
       const edgeIds = [ring(pin.from, "a").id, ring(pin.to, "b").id];
-      faces.push({ id, surfaceType: "Cylinder", planar: false, centerMm: add(add(pin.origin, mul(pin.dir, (pin.from + pin.to) / 2)), mul(p, pin.radius)), normal: pin.facing === 1 ? p : pin.dir, radiusMm: pin.radius, blendRadiusMm: null, axisOriginMm: add(pin.origin, mul(pin.dir, pin.from)), axisDirection: pin.dir, boundsMm, edgeIds } as Face);
+      faces.push({ id, surfaceType: "Cylinder", planar: false, centerMm: add(add(pin.origin, mul(pin.dir, (pin.from + pin.to) / 2)), mul(p, pin.radius)), normal: pin.facing === 1 ? p : pin.facing === -1 ? mul(p, -1) : pin.dir, radiusMm: pin.radius, blendRadiusMm: null, axisOriginMm: add(pin.origin, mul(pin.dir, pin.from)), axisDirection: pin.dir, boundsMm, edgeIds } as Face);
     });
     return { id: body.id, versionId: body.id, type: body.type, name: body.name, boundsMm: { min: [...body.min], max: [...body.max] }, faceIds: faces.map((face) => face.id), edgeIds: edges.map((edge) => edge.id), faces, edges } as unknown as Body;
   }
@@ -156,6 +174,11 @@ function kernel() {
     async validateBodies(ids: number[], revision: string) {
       if (revision !== `r${rev}`) throw new Error(`Stale reference: expected revision ${revision}, current revision is r${rev}`);
       return { documentToken: "doc", revision, measurementSource: "native-brep", bodies: ids.map((id) => ({ id, versionId: id, type: find(id).type, name: find(id).name, measurementSource: "native-brep", faceCount: 0, edgeCount: 0, boundaryEdgeIds: [], closed: !control.invalid, nativeCheckCodes: control.invalid ? [7] : [], nativeValid: !control.invalid, printableSolid: !control.invalid })) };
+    },
+    // The ray probe (read-only, not recorded in calls): exact hits on the read model.
+    async probeSurface(request: { id: number; rays?: CastRay[] }, revision: string) {
+      if (revision !== `r${rev}`) throw new Error(`Stale reference: expected revision ${revision}, current revision is r${rev}`);
+      return await probeOf(() => state().bodies)(request);
     },
     async undo() {
       calls.push({ op: "undo", args: [] });
@@ -238,6 +261,89 @@ function kernel() {
   const addPin = (id: number, pin: Pin) => { const body = find(id); body.pins = [...(body.pins ?? []), pin]; };
   return { operations: operations as unknown as Parameters<typeof transferHoles>[0] & Parameters<typeof placeBody>[0], calls, control, state, rev: () => `r${rev}`, bodies: () => bodies, addPin };
 }
+
+// ---------- an exact ray caster on the read model (the test stand-in for plasticity_probe_surface) ----------
+// Planar faces are trimmed by their own edges (lines and circles, inner loops included, through pointInPlanarFace) or,
+// for a hand-built face with other edges, by its polygon; cylinders by the axial span of their circle edges (or, without
+// two measured circles, by the face bounds, exact for these test faces). Cones are not cast (no test casts through one).
+type CastRay = { originMm: Vec; direction: Vec };
+function castRays(body: Body, rays: CastRay[]) {
+  const edgeById = new Map(body.edges.map((edge) => [edge.id, edge]));
+  return rays.map((ray) => {
+    const o = ray.originMm;
+    const d = unitv(ray.direction);
+    const hits: Array<{ t: number; faceId: string; normal: Vec }> = [];
+    for (const face of body.faces) {
+      if (face.planar) {
+        const n = unitv(face.normal);
+        const den = dotv(n, d);
+        if (Math.abs(den) < 1e-12) continue;
+        const t = dotv(sub(face.centerMm, o), n) / den;
+        if (t < -1e-9) continue;
+        const p = add(o, mul(d, t));
+        const exact = pointInPlanarFace(body, face, p);
+        const polygon = (face as Face & { points?: Vec[] }).points;
+        const inside = exact ? exact.inside || exact.boundaryDistanceMm <= 1e-9 : polygon ? insidePolygon(polygon, n, p) : false;
+        if (inside) hits.push({ t: Math.max(0, t), faceId: face.id, normal: n });
+      } else if (face.surfaceType === "Cylinder" && face.radiusMm !== null && face.axisOriginMm && face.axisDirection) {
+        const e = unitv(face.axisDirection);
+        const w = sub(o, face.axisOriginMm);
+        const dp = sub(d, mul(e, dotv(d, e)));
+        const wp = sub(w, mul(e, dotv(w, e)));
+        const a = dotv(dp, dp);
+        if (a < 1e-15) continue;
+        const b = 2 * dotv(dp, wp);
+        const c = dotv(wp, wp) - face.radiusMm ** 2;
+        const disc = b * b - 4 * a * c;
+        if (disc < 0) continue;
+        const circles = face.edgeIds.map((id) => edgeById.get(id)).filter((edge): edge is Edge => !!edge?.circleGeometry).map((edge) => dotv(sub(edge.circleGeometry!.centerMm, face.axisOriginMm!), e));
+        const radialOut = dotv(face.normal, sub(face.centerMm, add(face.axisOriginMm, mul(e, dotv(sub(face.centerMm, face.axisOriginMm), e))))) > 0;
+        for (const t of [(-b - Math.sqrt(disc)) / (2 * a), (-b + Math.sqrt(disc)) / (2 * a)]) {
+          if (t < -1e-9) continue;
+          const p = add(o, mul(d, t));
+          const s = dotv(sub(p, face.axisOriginMm), e);
+          const within = circles.length >= 2 ? s >= Math.min(...circles) - 1e-9 && s <= Math.max(...circles) + 1e-9
+            : [0, 1, 2].every((i) => p[i]! >= face.boundsMm.min[i]! - 1e-9 && p[i]! <= face.boundsMm.max[i]! + 1e-9);
+          if (!within) continue;
+          const radial = unitv(sub(p, add(face.axisOriginMm, mul(e, s))));
+          hits.push({ t: Math.max(0, t), faceId: face.id, normal: radialOut ? radial : mul(radial, -1) });
+        }
+      }
+    }
+    hits.sort((x, y) => x.t - y.t);
+    const merged: Array<{ pointMm: Vec; faceId: string; otherFaceIds?: string[]; normal: Vec; distanceMm: number; residualMm: number }> = [];
+    for (const hit of hits) {
+      const last = merged.at(-1);
+      if (last && Math.abs(last.distanceMm - hit.t) <= 1e-6) { last.otherFaceIds = [...(last.otherFaceIds ?? []), hit.faceId]; continue; }
+      merged.push({ pointMm: add(o, mul(d, hit.t)), faceId: hit.faceId, normal: hit.normal, distanceMm: hit.t, residualMm: 0 });
+    }
+    return { originMm: o, direction: d, hits: merged.length, intersections: merged };
+  });
+}
+function insidePolygon(points: Vec[], normal: Vec, p: Vec): boolean {
+  const u = perp(normal);
+  const v: Vec = [normal[1] * u[2] - normal[2] * u[1], normal[2] * u[0] - normal[0] * u[2], normal[0] * u[1] - normal[1] * u[0]];
+  const q = [dotv(p, u), dotv(p, v)];
+  const poly = points.map((point) => [dotv(point, u), dotv(point, v)]);
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i]!; const [xj, yj] = poly[j]!;
+    if ((yi! > q[1]!) !== (yj! > q[1]!) && q[0]! < ((xj! - xi!) * (q[1]! - yi!)) / (yj! - yi!) + xi!) inside = !inside;
+  }
+  return inside;
+}
+const probeOf = (bodies: () => Body[]) => async (request: { id: number; rays?: CastRay[] }) => {
+  const body = bodies().find((candidate) => candidate.id === request.id)!;
+  return { id: body.id, bodyType: body.type, revision: "r", source: "native-brep-ray-newton", acceptResidualMm: 1e-6, rays: castRays(body, request.rays ?? []), note: "test caster" };
+};
+/** planEntry with the test caster: the rays planTransfer would cast, cast on this body. */
+function entryOf(body: Body, axis: Parameters<typeof planEntry>[1], index: number, radius: number | number[]) {
+  const radii = Array.isArray(radius) ? radius : [radius];
+  const rays = axisRays(axis, radii);
+  return planEntry(body, axis, index, radii, { plus: castRays(body, rays.plus) as never, minus: castRays(body, rays.minus) as never });
+}
+/** planTransfer against a fixed state, cast with the test caster. */
+const planTransferOn = (state: RuntimeState, input: Parameters<typeof planTransfer>[2]) => planTransfer({ probeSurface: probeOf(() => state.bodies) as never }, state, input);
 
 async function build(k: ReturnType<typeof kernel>, steps: Array<(revision: string) => Promise<RuntimeState>>) {
   for (const step of steps) await step(k.rev());
@@ -477,7 +583,7 @@ test("entry side: the drill runs from the source toward the target, the entry is
   const [axis] = selectSourceAxes(state.bodies[0]!, { radiusMm: 1.5, axis: "z", kind: "hole" });
   assert.deepEqual(axis!.pointMm, [22, 12, 4], "the pilot's axis point is mid-face");
   assert.deepEqual(axis!.direction, [0, 0, 1], "the source axis points up, away from the plate");
-  const entry = planEntry(state.bodies.find((body) => body.id === plate)!, axis!, 0, 1.7);
+  const entry = entryOf(state.bodies.find((body) => body.id === plate)!, axis!, 0, 1.7);
   assert.deepEqual(entry.direction, [0, 0, -1], "the sign is ignored: the drill points to where the target is");
   assert.deepEqual(entry.entryPointMm, [22, 12, 0]);
   assert.equal(entry.entryFaceId, `${plate}:pz+`);
@@ -542,11 +648,11 @@ test("a reference point on the target's own face (a touching part) makes that fa
   const body = k.state().bodies.find((candidate) => candidate.id === plate)!;
   // On the plate's top face, axis given either way: the plate is below, so the drill points down from the top face.
   for (const direction of [[0, 0, 1], [0, 0, -1]] as Vec[]) {
-    const entry = planEntry(body, { pointMm: [30, 20, 0], direction, faceIds: [] }, 0, 1.7);
+    const entry = entryOf(body, { pointMm: [30, 20, 0], direction, faceIds: [] }, 0, 1.7);
     assert.deepEqual([entry.direction, entry.entryPointMm, entry.entryFaceId, entry.farDistanceMm], [[0, 0, -1], [30, 20, 0], `${plate}:pz+`, 4], JSON.stringify(direction));
   }
   // On the plate's bottom face, pointing up into it: the bottom face is the entry.
-  const up = planEntry(body, { pointMm: [30, 20, -4], direction: [0, 0, 1], faceIds: [] }, 0, 1.7);
+  const up = entryOf(body, { pointMm: [30, 20, -4], direction: [0, 0, 1], faceIds: [] }, 0, 1.7);
   assert.deepEqual([up.direction, up.entryFaceId], [[0, 0, 1], `${plate}:pz-`]);
 });
 
@@ -557,7 +663,7 @@ test("an entry through a non-planar face is rejected: the first planar face alon
     faces: [{ id: "bottom", surfaceType: "Plane", planar: true, centerMm: [5, 5, 0], normal: [0, 0, -1], radiusMm: null, blendRadiusMm: null, axisOriginMm: null, axisDirection: null, boundsMm: { min: [0, 0, 0], max: [10, 10, 0] }, edgeIds: ["l1", "l2", "l3", "l4"] }],
     edges: [[5, 0, 0, 1, 0], [10, 5, 0, 0, 1], [5, 10, 0, 1, 0], [0, 5, 0, 0, 1]].map(([x, y, z, tx, ty], i) => ({ id: `l${i + 1}`, curveType: "Line", line: true, circle: false, lengthMm: 10, centerMm: [x, y, z], tangent: [tx, ty, 0], boundsMm: { min: [x, y, z], max: [x, y, z] }, faceIds: ["bottom"], vertexIds: [] })) } as unknown as Body;
   void k;
-  assert.throws(() => planEntry(exitOnly, { pointMm: [5, 5, 20], direction: [0, 0, -1], faceIds: [] }, 0, 1), /faces away from the source, so the axis enters the target through a non-planar face/);
+  assert.throws(() => entryOf(exitOnly, { pointMm: [5, 5, 20], direction: [0, 0, -1], faceIds: [] }, 0, 1), /faces away from the source, so the axis enters the target through a non-planar face/);
 });
 
 test("transfer read-back: a hole that is not coaxial within 1e-6 mm is rolled back (both steps undone); the document is unchanged", async () => {
@@ -606,22 +712,32 @@ test("runGuarded passes a committed mismatch through untouched and reports an un
 // ---------- review fixes (defects 1-13 of the bracket-mate review) ----------
 
 // Hand-built planar bodies for the pure entry rules: a face is a polygon with line edges.
-function polyBody(id: number, specs: Array<{ id: string; normal: Vec; points: Vec[] }>, extra: Face[] = []): Body {
+// A face spec: an outer polygon, optional inner polygons (holes) and full circles (round inner loops); curve marks the
+// outer loop's first edge as another curve type (so the face's edges cannot be used exactly, only its polygon).
+type FaceSpec = { id: string; normal: Vec; points: Vec[]; holes?: Vec[][]; circles?: Array<{ center: Vec; radius: number }>; curve?: string };
+function circleEdgeOf(id: string, faceIds: string[], center: Vec, radius: number, normal: Vec): Edge {
+  const p = perp(normal);
+  return { id, curveType: "Circle", line: false, circle: true, lengthMm: 2 * Math.PI * radius, centerMm: add(center, mul(p, radius)), tangent: [0, 0, 1], boundsMm: { min: center, max: center }, faceIds, vertexIds: [],
+    circleGeometry: { centerMm: center, radiusMm: radius, normal, reference: p, startMm: add(center, mul(p, radius)), midpointMm: sub(center, mul(p, radius)), endMm: add(center, mul(p, radius)) } } as Edge;
+}
+function polyBody(id: number, specs: FaceSpec[], extra: Face[] = [], extraEdges: Edge[] = []): Body {
   const faces: Face[] = [];
-  const edges: Edge[] = [];
+  const edges: Edge[] = [...extraEdges];
   for (const spec of specs) {
     const edgeIds: string[] = [];
-    spec.points.forEach((point, i) => {
-      const next = spec.points[(i + 1) % spec.points.length]!;
+    [spec.points, ...(spec.holes ?? [])].forEach((loop, l) => loop.forEach((point, i) => {
+      const next = loop[(i + 1) % loop.length]!;
       const lengthMm = Math.hypot(...sub(next, point));
-      const edge = { id: `${spec.id}:e${i}`, curveType: "Line", line: true, circle: false, lengthMm, centerMm: mul(add(point, next), 0.5), tangent: unitv(sub(next, point)), boundsMm: { min: point, max: next }, faceIds: [spec.id], vertexIds: [] } as Edge;
+      const other = l === 0 && i === 0 && spec.curve;
+      const edge = { id: `${spec.id}:e${l === 0 ? "" : `h${l}.`}${i}`, curveType: other || "Line", line: !other, circle: false, lengthMm, centerMm: mul(add(point, next), 0.5), tangent: unitv(sub(next, point)), boundsMm: { min: point, max: next }, faceIds: [spec.id], vertexIds: [] } as Edge;
       edges.push(edge);
       edgeIds.push(edge.id);
-    });
+    }));
+    (spec.circles ?? []).forEach((circle, i) => { const edge = circleEdgeOf(`${spec.id}:c${i}`, [spec.id], circle.center, circle.radius, spec.normal); edges.push(edge); edgeIds.push(edge.id); });
     const center = mul(spec.points.reduce((sum, point) => add(sum, point), [0, 0, 0] as Vec), 1 / spec.points.length);
     const min = [0, 1, 2].map((i) => Math.min(...spec.points.map((point) => point[i]!))) as Vec;
     const max = [0, 1, 2].map((i) => Math.max(...spec.points.map((point) => point[i]!))) as Vec;
-    faces.push({ id: spec.id, surfaceType: "Plane", planar: true, centerMm: center, normal: spec.normal, radiusMm: null, blendRadiusMm: null, axisOriginMm: null, axisDirection: null, boundsMm: { min, max }, edgeIds } as Face);
+    faces.push({ id: spec.id, surfaceType: "Plane", planar: true, centerMm: center, normal: spec.normal, radiusMm: null, blendRadiusMm: null, axisOriginMm: null, axisDirection: null, boundsMm: { min, max }, edgeIds, points: spec.points } as Face);
   }
   faces.push(...extra);
   const all = faces.flatMap((face) => [face.boundsMm.min, face.boundsMm.max]);
@@ -696,23 +812,23 @@ test("defect 3: a curved target face on the axis before the first planar face is
   assert.equal(cut.holeCount, 1);
 });
 
-test("defect 7: blind depth is checked against the local wall (the next target face on the axis), not the bounds", () => {
+test("defect 7: blind depth is checked against the local wall (the next target face on the axis), not the bounds", async () => {
   const target = steppedBody();
   const state = stateOf(sourceStub(), target);
   const base = { sourceId: 1, targetId: 2, axesMm: [{ pointMm: [30, 20, 30] as Vec, axis: [0, 0, -1] as Vec }], revision: "r1" };
-  const entry = planEntry(target, { pointMm: [30, 20, 30], direction: [0, 0, -1], faceIds: [] }, 0, 2.5);
+  const entry = entryOf(target, { pointMm: [30, 20, 30], direction: [0, 0, -1], faceIds: [] }, 0, 2.5);
   assert.deepEqual([entry.entryFaceId, entry.farDistanceMm, entry.nextFaceMm, entry.wallMm], ["top", 15, 5, 5], "the flange is 5 mm; the bounds are 15");
-  assert.throws(() => planTransfer(state, { ...base, hole: { diameterMm: 5, depthMm: 7 } }), /depthMm 7 reaches the far side of the wall: the next target face on the axis is 5\.0000 mm from the entry \(the local wall thickness\)/);
-  assert.throws(() => planTransfer(state, { ...base, hole: { diameterMm: 5, depthMm: 4.96 } }), /at least 0\.05 mm must stay under the floor/);
-  assert.doesNotThrow(() => planTransfer(state, { ...base, hole: { diameterMm: 5, depthMm: 4 } }));
-  assert.throws(() => planTransfer(state, { ...base, hole: { diameterMm: 3, through: true, counterbore: { diameterMm: 6, depthMm: 6 } } }), /counterbore depth 6 reaches the far side of the wall/);
+  await assert.rejects(planTransferOn(state, { ...base, hole: { diameterMm: 5, depthMm: 7 } }), /depthMm 7 reaches the far side of the wall: the next target face on the axis is 5\.0000 mm from the entry \(the local wall thickness\)/);
+  await assert.rejects(planTransferOn(state, { ...base, hole: { diameterMm: 5, depthMm: 4.96 } }), /at least 0\.05 mm must stay under the floor/);
+  await assert.doesNotReject(planTransferOn(state, { ...base, hole: { diameterMm: 5, depthMm: 4 } }));
+  await assert.rejects(planTransferOn(state, { ...base, hole: { diameterMm: 3, through: true, counterbore: { diameterMm: 6, depthMm: 6 } } }), /counterbore depth 6 reaches the far side of the wall/);
 });
 
-test("defect 7: a curved face inside the wall leaves the thickness unproven (no wallMm): the cut goes ahead and its floor is read back", () => {
+test("defect 7: a cross hole inside the wall is found by the rays: the local wall ends at it", () => {
   const crossHole = { id: "cross", surfaceType: "Cylinder", planar: false, centerMm: [30, 20, 11.5], normal: [0, 0, -1], radiusMm: 1, blendRadiusMm: null, axisOriginMm: [30, 0, 12.5], axisDirection: [0, 1, 0], boundsMm: { min: [29, 0, 11.5], max: [31, 40, 13.5] }, edgeIds: [] } as unknown as Face;
-  const entry = planEntry(steppedBody(2, [crossHole]), { pointMm: [30, 20, 30], direction: [0, 0, -1], faceIds: [] }, 0, 2.5);
-  assert.equal(entry.nextFaceMm, 5);
-  assert.equal(entry.wallMm, undefined);
+  const entry = entryOf(steppedBody(2, [crossHole]), { pointMm: [30, 20, 30], direction: [0, 0, -1], faceIds: [] }, 0, 2.5);
+  assert.equal(entry.nextFaceMm, 1.5, "the axis ray meets the cross hole at z 13.5, 1.5 mm under the entry");
+  assert.equal(entry.wallMm, 1.5);
 });
 
 test("defect 8: place_body refuses same-facing faces unless relation aligned, and says to flip the body", async () => {
@@ -804,16 +920,16 @@ test("defect 12: inside the bounds but off every face is a miss; only curved or 
     { id: "lt", normal: [0, 0, 1], points: notch.map((p) => [p[0], p[1], 5] as Vec) }, { id: "lb", normal: [0, 0, -1], points: notch },
     ...notch.map((p, i) => { const q = notch[(i + 1) % notch.length]!; const n = unitv([q[1] - p[1], p[0] - q[0], 0]); return rect(`ls${i}`, n, p, q, [q[0], q[1], 5], [p[0], p[1], 5]); }),
   ]);
-  assert.throws(() => planEntry(lPlate, { pointMm: [30, 30, 20], direction: [0, 0, -1], faceIds: [] }, 0, 1), (error: unknown) => error instanceof AxisRefusal && error.code === "miss" && /misses the target body 2 \(no face of it lies on the axis\)/.test(error.message));
+  assert.throws(() => entryOf(lPlate, { pointMm: [30, 30, 20], direction: [0, 0, -1], faceIds: [] }, 0, 1), (error: unknown) => error instanceof AxisRefusal && error.code === "miss" && /misses the target body 2 \(no face of it lies on the axis\)/.test(error.message));
   // A rod: a radial axis meets only its curved side.
   const side = { id: "side", surfaceType: "Cylinder", planar: false, centerMm: [20, 0, 15], normal: [1, 0, 0], radiusMm: 20, blendRadiusMm: null, axisOriginMm: [0, 0, 0], axisDirection: [0, 0, 1], boundsMm: { min: [-20, -20, 0], max: [20, 20, 30] }, edgeIds: [] } as unknown as Face;
   const rod = polyBody(3, [rect("cap", [0, 0, 1], [-20, -20, 30], [20, -20, 30], [20, 20, 30], [-20, 20, 30]), rect("foot", [0, 0, -1], [-20, -20, 0], [20, -20, 0], [20, 20, 0], [-20, 20, 0])], [side]);
-  assert.throws(() => planEntry(rod, { pointMm: [50, 0, 15], direction: [-1, 0, 0], faceIds: [] }, 0, 2.5),
+  assert.throws(() => entryOf(rod, { pointMm: [50, 0, 15], direction: [-1, 0, 0], faceIds: [] }, 0, 2.5),
     (error: unknown) => error instanceof AxisRefusal && error.code === "non-planar" && /crosses no planar face of the target normal to the axis: it meets the target only through non-planar, oblique or tangent faces \(side Cylinder\)/.test(error.message));
   // A tilted plate: its faces are oblique to the axis.
   const tilt = unitv([0.17, 0, 0.98]);
   const oblique = polyBody(4, [{ id: "slope", normal: tilt, points: [[0, 0, 0], [10, 0, -1.7347], [10, 10, -1.7347], [0, 10, 0]] }]);
-  assert.throws(() => planEntry(oblique, { pointMm: [5, 5, 20], direction: [0, 0, -1], faceIds: [] }, 0, 1), (error: unknown) => error instanceof AxisRefusal && error.code === "non-planar" && /slope Plane/.test(error.message));
+  assert.throws(() => entryOf(oblique, { pointMm: [5, 5, 20], direction: [0, 0, -1], faceIds: [] }, 0, 1), (error: unknown) => error instanceof AxisRefusal && error.code === "non-planar" && /slope Plane/.test(error.message));
 });
 
 test("defect 13: onMiss skip lists the axes that miss and cuts the rest; the default refuses; all missing is refused", async () => {
@@ -871,7 +987,7 @@ test("defects 3 and 12: an oblique plate is entered (its faces are bounded by th
   };
   const plate = polyBody(2, box([0, 0, 0], [40, 40, 5]));
   const normal = turn([0, 0, 1]);
-  const entry = planEntry(plate, { pointMm: add(turn([20, 20, 5]), mul(normal, 20)), direction: mul(normal, -1), faceIds: [] }, 0, 2);
+  const entry = entryOf(plate, { pointMm: add(turn([20, 20, 5]), mul(normal, 20)), direction: mul(normal, -1), faceIds: [] }, 0, 2);
   assert.equal(entry.entryFaceId, "top");
   assert.ok(Math.abs(entry.wallMm! - 5) < 1e-9, `wall ${entry.wallMm}`);
   // A plate whose (0, 0) corner is rounded 10 mm: an axis at (2, 2) lies outside the round, so it misses the plate.
@@ -889,6 +1005,244 @@ test("defects 3 and 12: an oblique plate is entered (its faces are bounded by th
     rounded.edges.push(edge);
     face.edgeIds.push(edge.id);
   }
-  assert.throws(() => planEntry(rounded, { pointMm: [2, 2, 20], direction: [0, 0, -1], faceIds: [] }, 0, 1), (error: unknown) => error instanceof AxisRefusal && error.code === "miss" && /no face of it lies on the axis/.test(error.message));
-  assert.equal(planEntry(rounded, { pointMm: [5, 5, 20], direction: [0, 0, -1], faceIds: [] }, 0, 0.5).entryFaceId, "rt", "inside the round it enters the top face");
+  assert.throws(() => entryOf(rounded, { pointMm: [2, 2, 20], direction: [0, 0, -1], faceIds: [] }, 0, 1), (error: unknown) => error instanceof AxisRefusal && error.code === "miss" && /no face of it lies on the axis/.test(error.message));
+  assert.equal(entryOf(rounded, { pointMm: [5, 5, 20], direction: [0, 0, -1], faceIds: [] }, 0, 0.5).entryFaceId, "rt", "inside the round it enters the top face");
+});
+
+// ---------- round 2: entry, local wall, existing hole and breakout from exact rays ----------
+
+function cylinderFaceOf(id: string, origin: Vec, dir: Vec, radius: number, s0: number, s1: number, inward: boolean): { face: Face; edges: Edge[] } {
+  const e = unitv(dir);
+  const p = perp(e);
+  const ends = [add(origin, mul(e, s0)), add(origin, mul(e, s1))];
+  const edges = ends.map((center, i) => circleEdgeOf(`${id}:${i ? "b" : "a"}`, [id], center, radius, e));
+  const spread = [0, 1, 2].map((i) => radius * Math.sqrt(Math.max(0, 1 - e[i]! ** 2)));
+  const boundsMm = { min: [0, 1, 2].map((i) => Math.min(ends[0]![i]!, ends[1]![i]!) - spread[i]!) as Vec, max: [0, 1, 2].map((i) => Math.max(ends[0]![i]!, ends[1]![i]!) + spread[i]!) as Vec };
+  const face = { id, surfaceType: "Cylinder", planar: false, centerMm: add(mul(add(ends[0]!, ends[1]!), 0.5), mul(p, radius)), normal: inward ? mul(p, -1) : p, radiusMm: radius, blendRadiusMm: null, axisOriginMm: ends[0], axisDirection: e, boundsMm, edgeIds: edges.map((edge) => edge.id) } as unknown as Face;
+  return { face, edges };
+}
+const box6 = (prefix: string, lo: Vec, hi: Vec, skip: string[] = []): FaceSpec[] => {
+  const P = (x: number, y: number, z: number): Vec => [[lo[0], hi[0]][x]!, [lo[1], hi[1]][y]!, [lo[2], hi[2]][z]!];
+  return [
+    rect(`${prefix}z+`, [0, 0, 1], P(0, 0, 1), P(1, 0, 1), P(1, 1, 1), P(0, 1, 1)), rect(`${prefix}z-`, [0, 0, -1], P(0, 0, 0), P(0, 1, 0), P(1, 1, 0), P(1, 0, 0)),
+    rect(`${prefix}x-`, [-1, 0, 0], P(0, 0, 0), P(0, 0, 1), P(0, 1, 1), P(0, 1, 0)), rect(`${prefix}x+`, [1, 0, 0], P(1, 0, 0), P(1, 1, 0), P(1, 1, 1), P(1, 0, 1)),
+    rect(`${prefix}y-`, [0, -1, 0], P(0, 0, 0), P(1, 0, 0), P(1, 0, 1), P(0, 0, 1)), rect(`${prefix}y+`, [0, 1, 0], P(0, 1, 0), P(0, 1, 1), P(1, 1, 1), P(1, 1, 0)),
+  ].filter((spec) => !skip.includes(spec.id));
+};
+/** Operations on fixed bodies that stop at the first native cut: a refusal stays a refusal, a planned cut throws "reached the cut". */
+function polyOps(...bodies: Body[]) {
+  const calls: Array<{ op: string; args: unknown[] }> = [];
+  const stop = (op: string) => async (...args: unknown[]) => { calls.push({ op, args }); throw new Error(`reached the cut (${op})`); };
+  const operations = {
+    async state() { return stateOf(...bodies); }, async undo() { return stateOf(...bodies); }, probeSurface: probeOf(() => bodies),
+    async validateBodies() { throw new Error("not reached"); },
+    createCylinder: stop("createCylinder"), createPolyline: stop("createPolyline"), revolveProfile: stop("revolveProfile"), boolean: stop("boolean"), remove: stop("remove"),
+    createBox: stop("createBox"), fillet: stop("fillet"), extrudeRegions: stop("extrudeRegions"), rectangularPattern: stop("rectangularPattern"), createPipes: stop("createPipes"),
+  };
+  return { calls, operations: operations as unknown as Parameters<typeof transferHoles>[0] };
+}
+const turnZ = (deg: number, about: Vec) => (point: Vec): Vec => { const c = Math.cos((deg * Math.PI) / 180), sn = Math.sin((deg * Math.PI) / 180); const x = point[0] - about[0], y = point[1] - about[1]; return [about[0] + c * x - sn * y, about[1] + sn * x + c * y, point[2]]; };
+const turnSpecs = (specs: FaceSpec[], turn: (p: Vec) => Vec): FaceSpec[] => specs.map((spec) => ({ ...spec, normal: sub(turn(spec.normal), turn([0, 0, 0])), points: spec.points.map(turn), ...(spec.holes ? { holes: spec.holes.map((loop) => loop.map(turn)) } : {}) }));
+// The review's pocket: a 60 x 40 x 15 block with a 40 x 24 pocket 10 deep (floor 5 thick).
+function pocketSpecs(): FaceSpec[] {
+  const ring = (z: number): Vec[] => [[10, 8, z], [50, 8, z], [50, 32, z], [10, 32, z]];
+  return [
+    { id: "top", normal: [0, 0, 1], points: [[0, 0, 15], [60, 0, 15], [60, 40, 15], [0, 40, 15]], holes: [ring(15)] },
+    rect("floor", [0, 0, 1], ...(ring(5) as [Vec, Vec, Vec, Vec])),
+    rect("wx-", [1, 0, 0], [10, 8, 5], [10, 32, 5], [10, 32, 15], [10, 8, 15]), rect("wx+", [-1, 0, 0], [50, 8, 5], [50, 8, 15], [50, 32, 15], [50, 32, 5]),
+    rect("wy-", [0, 1, 0], [10, 8, 5], [10, 8, 15], [50, 8, 15], [50, 8, 5]), rect("wy+", [0, -1, 0], [10, 32, 5], [50, 32, 5], [50, 32, 15], [10, 32, 15]),
+    ...box6("o", [0, 0, 0], [60, 40, 15], ["oz+"]),
+  ];
+}
+const T3 = { diameterMm: 3, through: true as const };
+const cutStart = (calls: Array<{ op: string; args: unknown[] }>) => calls.find((call) => call.op === "createCylinder")!.args as [Vec, number, number, string | undefined, string, Vec];
+const near6 = (a: Vec, b: Vec) => Math.hypot(...sub(a, b)) <= 1e-6;
+
+test("round 2 (B1): a hole in the floor of a pocket (through and blind) is cut; material beside the rim is not on the bore", async () => {
+  for (const hole of [T3, { diameterMm: 3, depthMm: 4 }]) {
+    const { calls, operations } = polyOps(sourceStub(), polyBody(2, pocketSpecs()));
+    await assert.rejects(transferHoles(operations, { sourceId: 1, targetId: 2, axesMm: [{ pointMm: [30, 20, 50], axis: [0, 0, -1] }], hole, revision: "r1" }), /reached the cut/);
+    const [start, radius, height, , , axis] = cutStart(calls);
+    assert.ok(near6(start, [30, 20, 5.5]) && radius === 1.5 && near6(axis, [0, 0, -1]), JSON.stringify(calls[0]));
+    assert.equal(height, "through" in hole ? 6 : 4.5, "through to the bottom, or the blind depth");
+  }
+  // 1 mm from the pocket wall the rim runs into the wall (the top face, 10 mm above the floor): refused.
+  const { operations } = polyOps(sourceStub(), polyBody(2, pocketSpecs()));
+  await assert.rejects(transferHoles(operations, { sourceId: 1, targetId: 2, axesMm: [{ pointMm: [11, 20, 50], axis: [0, 0, -1] }], hole: T3, revision: "r1" }), /does not fit inside the entry face floor|material precedes the first planar face/);
+});
+
+test("round 2 (B1): the same pocket turned 30 degrees is cut at its centre and 4 mm from a wall", async () => {
+  const turn = turnZ(30, [30, 20, 0]);
+  for (const [u, v] of [[0, 0], [15, 8]] as const) {
+    const at = turn([30 + u, 20 + v, 50]);
+    const { calls, operations } = polyOps(sourceStub(), polyBody(2, turnSpecs(pocketSpecs(), turn)));
+    await assert.rejects(transferHoles(operations, { sourceId: 1, targetId: 2, axesMm: [{ pointMm: at, axis: [0, 0, -1] }], hole: T3, revision: "r1" }), /reached the cut/, `offset ${u},${v}`);
+    assert.ok(near6(cutStart(calls)[0], [at[0], at[1], 5.5]));
+  }
+});
+
+test("round 2 (B1): select transfers an L bracket's base holes onto the floor of an open enclosure", async () => {
+  const enclosure = polyBody(2, [
+    { id: "rim", normal: [0, 0, 1], points: [[0, 0, 30], [80, 0, 30], [80, 60, 30], [0, 60, 30]], holes: [[[3, 3, 30], [77, 3, 30], [77, 57, 30], [3, 57, 30]]] },
+    rect("floor", [0, 0, 1], [3, 3, 3], [77, 3, 3], [77, 57, 3], [3, 57, 3]),
+    rect("ix-", [1, 0, 0], [3, 3, 3], [3, 57, 3], [3, 57, 30], [3, 3, 30]), rect("ix+", [-1, 0, 0], [77, 3, 3], [77, 3, 30], [77, 57, 30], [77, 57, 3]),
+    rect("iy-", [0, 1, 0], [3, 3, 3], [3, 3, 30], [77, 3, 30], [77, 3, 3]), rect("iy+", [0, -1, 0], [3, 57, 3], [77, 57, 3], [77, 57, 30], [3, 57, 30]),
+    ...box6("o", [0, 0, 0], [80, 60, 30], ["oz+"]),
+  ]);
+  const holes = [[36.5, 22], [36.5, 38]].map(([x, y], i) => cylinderFaceOf(`bh${i}`, [x!, y!, 3], [0, 0, 1], 1.7, 0, 3, true));
+  const bracket = polyBody(1, box6("b", [20, 15, 3], [50, 45, 6]), holes.map((hole) => hole.face), holes.flatMap((hole) => hole.edges));
+  const { calls, operations } = polyOps(bracket, enclosure);
+  await assert.rejects(transferHoles(operations, { sourceId: 1, targetId: 2, select: { radiusMm: 1.7, axis: "z" }, hole: { diameterMm: 2.5, depthMm: 2 }, revision: "r1" }), /reached the cut/);
+  const [start, radius, height, , , axis] = cutStart(calls);
+  assert.ok(start[2] === 3.5 && radius === 1.25 && height === 2.5 && near6(axis, [0, 0, -1]), JSON.stringify(calls[0]!.args));
+});
+
+test("round 2 (B1): a pilot at the centre of a round recess is cut (the recess wall ends at the floor, it is no existing hole)", async () => {
+  const wall = cylinderFaceOf("rwall", [20, 30, 3], [0, 0, 1], 6, 0, 3, true);
+  const floorCircle = circleEdgeOf("rfloor:c", ["rfloor"], [20, 30, 3], 6, [0, 0, 1]);
+  const floor = { id: "rfloor", surfaceType: "Plane", planar: true, centerMm: [20, 30, 3], normal: [0, 0, 1], radiusMm: null, blendRadiusMm: null, axisOriginMm: null, axisDirection: null, boundsMm: { min: [14, 24, 3], max: [26, 36, 3] }, edgeIds: [floorCircle.id] } as unknown as Face;
+  const plate = polyBody(2, [{ id: "top", normal: [0, 0, 1], points: [[0, 0, 6], [80, 0, 6], [80, 60, 6], [0, 60, 6]], circles: [{ center: [20, 30, 6], radius: 6 }] }, ...box6("o", [0, 0, 0], [80, 60, 6], ["oz+"])], [wall.face, floor], [...wall.edges, floorCircle]);
+  const { calls, operations } = polyOps(sourceStub(), plate);
+  await assert.rejects(transferHoles(operations, { sourceId: 1, targetId: 2, axesMm: [{ pointMm: [20, 30, 50], axis: [0, 0, -1] }], hole: T3, revision: "r1" }), /reached the cut/);
+  assert.ok(near6(cutStart(calls)[0], [20, 30, 3.5]));
+});
+
+test("round 2 (B1): a hole 15 mm from a 45 degree rib is cut", async () => {
+  const turn = turnZ(45, [40, 40, 0]);
+  const foot = ([[10, 38.5, 0], [70, 38.5, 0], [70, 41.5, 0], [10, 41.5, 0]] as Vec[]).map(turn);
+  const at = (z: number) => foot.map((p): Vec => [p[0], p[1], z]);
+  const ribSides = foot.map((p, i) => { const q = foot[(i + 1) % 4]!; const n = unitv([q[1] - p[1], p[0] - q[0], 0]); return rect(`rib${i}`, n, [p[0], p[1], 5], [q[0], q[1], 5], [q[0], q[1], 15], [p[0], p[1], 15]); });
+  const plate = polyBody(2, [
+    { id: "top", normal: [0, 0, 1], points: [[0, 0, 5], [80, 0, 5], [80, 80, 5], [0, 80, 5]], holes: [at(5)] },
+    { id: "ribtop", normal: [0, 0, 1], points: at(15) }, ...ribSides, ...box6("o", [0, 0, 0], [80, 80, 5], ["oz+"]),
+  ]);
+  const { calls, operations } = polyOps(sourceStub(), plate);
+  await assert.rejects(transferHoles(operations, { sourceId: 1, targetId: 2, axesMm: [{ pointMm: [50.607, 29.393, 50], axis: [0, 0, -1] }], hole: { diameterMm: 5, through: true }, revision: "r1" }), /reached the cut/);
+  assert.ok(near6(cutStart(calls)[0], [50.607, 29.393, 5.5]));
+});
+
+test("round 2 (B1): a rim ray that finds no material is 'the rim runs over an edge', where the entry face's own edges cannot say", async () => {
+  // An L-shaped plate whose top face has a non-line edge: the exact edge test cannot run, the rim rays decide.
+  const L: Vec[] = [[0, 0, 0], [40, 0, 0], [40, 20, 0], [20, 20, 0], [20, 40, 0], [0, 40, 0]];
+  const plate = polyBody(2, [
+    { id: "lt", normal: [0, 0, 1], points: L.map((p): Vec => [p[0], p[1], 5]), curve: "Ellipse" }, { id: "lb", normal: [0, 0, -1], points: L },
+    ...L.map((p, i) => { const q = L[(i + 1) % L.length]!; return rect(`ls${i}`, unitv([q[1] - p[1], p[0] - q[0], 0]), p, q, [q[0], q[1], 5], [p[0], p[1], 5]); }),
+  ]);
+  const { calls, operations } = polyOps(sourceStub(), plate);
+  await assert.rejects(transferHoles(operations, { sourceId: 1, targetId: 2, axesMm: [{ pointMm: [19, 19, 30], axis: [0, 0, -1] }], hole: { diameterMm: 4, through: true }, revision: "r1" }),
+    (error: unknown) => error instanceof AxisRefusal && error.code === "rim" && /the rim runs over an edge of the entry face lt: the rim ray at radius 2 mm, \d+ degrees finds no material/.test(error.message));
+  assert.deepEqual(calls, []);
+});
+
+test("round 2 (B1): an axis that finds no material where the rim does is an existing hole, though no face of it is coaxial", async () => {
+  const k = kernel();
+  const plate = await blockAndPlate(k, [[22, 12, 0]]);
+  const first = await transferHoles(k.operations, { sourceId: 1, targetId: plate, axesMm: [{ pointMm: [30.5, 20, 10], axis: [0, 0, -1] }], hole: { diameterMm: 2, through: true }, revision: k.rev() });
+  k.calls.length = 0;
+  await assert.rejects(transferHoles(k.operations, { sourceId: 1, targetId: first.targetId, axesMm: [{ pointMm: [30, 20, 10], axis: [0, 0, -1] }], hole: { diameterMm: 4, through: true }, revision: k.rev() }),
+    (error: unknown) => error instanceof AxisRefusal && error.code === "existing-hole" && /the axis finds no material where the bore would start/.test(error.message));
+  assert.deepEqual(k.calls, []);
+});
+
+test("round 2 (B2): a countersink cone that breaks out is rolled back", async () => {
+  const k = kernel();
+  const plate = await blockAndPlate(k, [[22, 12, 0]]);
+  const before = k.state();
+  k.control.coneHalf = true;
+  await assert.rejects(transferHoles(k.operations, { sourceId: 1, targetId: plate, select: { radiusMm: 1.5 }, hole: { diameterMm: 3.4, through: true, countersunk: { headDiameterMm: 6.5 } }, revision: k.rev() }),
+    (error: unknown) => error instanceof GuardedRunError && error.restored && /axis 0: the countersink cone breaks out of a side wall of the target \(face \S+:k0 ends in a partial circle \(180\.0 degrees\)/.test(error.message) && /do not call plasticity_redo/.test(error.message));
+  assert.equal(k.state().undoDepth, before.undoDepth);
+});
+
+test("round 2 (B2): a counterbore that reaches through a thin wall is refused before the edit; a counterbore floor that breaks out is rolled back", async () => {
+  // The review's thin step: a 2 mm flange (z 10..12) on a 12 mm stem; the axis 3.5 mm inside the stem wall.
+  const thin = polyBody(2, [
+    rect("top", [0, 0, 1], [0, 0, 12], [40, 0, 12], [40, 40, 12], [0, 40, 12]), rect("under", [0, 0, -1], [12, 0, 10], [40, 0, 10], [40, 40, 10], [12, 40, 10]),
+    rect("foot", [0, 0, -1], [0, 0, 0], [12, 0, 0], [12, 40, 0], [0, 40, 0]), rect("stemside", [1, 0, 0], [12, 0, 0], [12, 40, 0], [12, 40, 10], [12, 0, 10]),
+    rect("back", [-1, 0, 0], [0, 0, 0], [0, 40, 0], [0, 40, 12], [0, 0, 12]), rect("end", [1, 0, 0], [40, 0, 10], [40, 40, 10], [40, 40, 12], [40, 0, 12]),
+    { id: "front", normal: [0, -1, 0], points: [[0, 0, 0], [12, 0, 0], [12, 0, 10], [40, 0, 10], [40, 0, 12], [0, 0, 12]] },
+    { id: "rear", normal: [0, 1, 0], points: [[0, 40, 0], [12, 40, 0], [12, 40, 10], [40, 40, 10], [40, 40, 12], [0, 40, 12]] },
+  ]);
+  const { calls, operations } = polyOps(sourceStub(), thin);
+  await assert.rejects(transferHoles(operations, { sourceId: 1, targetId: 2, axesMm: [{ pointMm: [8.5, 20, 30], axis: [0, 0, -1] }], hole: { diameterMm: 4, through: true, counterbore: { diameterMm: 12, depthMm: 4 } }, revision: "r1" }),
+    /counterbore depth 4 reaches the far side of the wall: the next target face is 2\.0000 mm from the entry within the counterbore radius/);
+  assert.deepEqual(calls, []);
+  const k = kernel();
+  const plate = await blockAndPlate(k, [[22, 12, 0]]);
+  k.control.floorLine = true;
+  await assert.rejects(transferHoles(k.operations, { sourceId: 1, targetId: plate, select: { radiusMm: 1.5 }, hole: { diameterMm: 3.4, through: true, counterbore: { diameterMm: 6, depthMm: 1.5 } }, revision: k.rev() }),
+    (error: unknown) => error instanceof GuardedRunError && error.restored && /axis 0: the counterbore floor breaks out of a side wall of the target/.test(error.message));
+});
+
+test("round 2 (B3): a through hole that leaves by a chamfer is refused before the edit, and the message says so", async () => {
+  const block = polyBody(2, [
+    rect("top", [0, 0, 1], [0, 0, 15], [40, 0, 15], [40, 40, 15], [0, 40, 15]), rect("bottom", [0, 0, -1], [0, 0, 0], [0, 40, 0], [30, 40, 0], [30, 0, 0]),
+    rect("end", [1, 0, 0], [40, 0, 10], [40, 40, 10], [40, 40, 15], [40, 0, 15]), rect("chamfer", unitv([1, 0, -1]), [30, 0, 0], [30, 40, 0], [40, 40, 10], [40, 0, 10]),
+    rect("back", [-1, 0, 0], [0, 0, 0], [0, 0, 15], [0, 40, 15], [0, 40, 0]),
+    { id: "front", normal: [0, -1, 0], points: [[0, 0, 0], [30, 0, 0], [40, 0, 10], [40, 0, 15], [0, 0, 15]] },
+    { id: "rear", normal: [0, 1, 0], points: [[0, 40, 0], [0, 40, 15], [40, 40, 15], [40, 40, 10], [30, 40, 0]] },
+  ]);
+  const { calls, operations } = polyOps(sourceStub(), block);
+  await assert.rejects(transferHoles(operations, { sourceId: 1, targetId: 2, axesMm: [{ pointMm: [35, 20, 50], axis: [0, 0, -1] }], hole: { diameterMm: 4, through: true }, revision: "r1" }),
+    (error: unknown) => error instanceof AxisRefusal && error.code === "breakout" && /axis 0 .*: the bore exits through an oblique face of the target \(face chamfer: a chamfer or slope\)/.test(error.message) && !/side wall/.test(error.message));
+  assert.deepEqual(calls, []);
+  // Away from the chamfer the same hole is cut.
+  const away = polyOps(sourceStub(), block);
+  await assert.rejects(transferHoles(away.operations, { sourceId: 1, targetId: 2, axesMm: [{ pointMm: [15, 20, 50], axis: [0, 0, -1] }], hole: { diameterMm: 4, through: true }, revision: "r1" }), /reached the cut/);
+});
+
+test("round 2 (B3): a through hole that crosses a cross hole is refused before the edit, and the message says so", async () => {
+  const cross = cylinderFaceOf("xhole", [0, 20, 10], [1, 0, 0], 3, 0, 40, true);
+  const block = polyBody(2, [
+    ...box6("o", [0, 0, 0], [40, 40, 20], ["ox-", "ox+"]),
+    { id: "ox-", normal: [-1, 0, 0], points: [[0, 0, 0], [0, 0, 20], [0, 40, 20], [0, 40, 0]], circles: [{ center: [0, 20, 10], radius: 3 }] },
+    { id: "ox+", normal: [1, 0, 0], points: [[40, 0, 0], [40, 40, 0], [40, 40, 20], [40, 0, 20]], circles: [{ center: [40, 20, 10], radius: 3 }] },
+  ], [cross.face], cross.edges);
+  const { calls, operations } = polyOps(sourceStub(), block);
+  await assert.rejects(transferHoles(operations, { sourceId: 1, targetId: 2, axesMm: [{ pointMm: [20, 20, 50], axis: [0, 0, -1] }], hole: { diameterMm: 4, through: true }, revision: "r1" }),
+    (error: unknown) => error instanceof AxisRefusal && error.code === "breakout" && /the bore crosses a curved face of the target \(face xhole Cylinder: a cross hole or a fillet\)/.test(error.message));
+  assert.deepEqual(calls, []);
+  // A blind hole that stops above the cross hole is cut; one that reaches it is refused by the local wall.
+  const blind = polyOps(sourceStub(), block);
+  await assert.rejects(transferHoles(blind.operations, { sourceId: 1, targetId: 2, axesMm: [{ pointMm: [20, 20, 50], axis: [0, 0, -1] }], hole: { diameterMm: 4, depthMm: 6 }, revision: "r1" }), /reached the cut/);
+  await assert.rejects(transferHoles(blind.operations, { sourceId: 1, targetId: 2, axesMm: [{ pointMm: [20, 20, 50], axis: [0, 0, -1] }], hole: { diameterMm: 4, depthMm: 7 }, revision: "r1" }), /depthMm 7 reaches the far side of the wall: the next target face on the axis is 7\.0000 mm/);
+});
+
+test("round 2: a blind hole in the near wall of a U whose far wall is drilled on the same axis is cut; a through hole there is an existing hole", async () => {
+  // Near wall x 0..3, far wall x 37..40 with a Ø4 hole on the axis.
+  const farHole = cylinderFaceOf("far", [37, 15, 20], [1, 0, 0], 2, 0, 3, true);
+  const u = polyBody(2, [...box6("n", [0, 0, 0], [3, 30, 30]), ...box6("f", [37, 0, 0], [40, 30, 30])], [farHole.face], farHole.edges);
+  const blind = polyOps(sourceStub(), u);
+  await assert.rejects(transferHoles(blind.operations, { sourceId: 1, targetId: 2, axesMm: [{ pointMm: [-10, 15, 20], axis: [1, 0, 0] }], hole: { diameterMm: 4, depthMm: 2.9 }, revision: "r1" }), /reached the cut/);
+  const through = polyOps(sourceStub(), u);
+  await assert.rejects(transferHoles(through.operations, { sourceId: 1, targetId: 2, axesMm: [{ pointMm: [-10, 15, 20], axis: [1, 0, 0] }], hole: { diameterMm: 4, through: true }, revision: "r1" }), /already has a hole on this axis \(face far, radius 2 mm\)/);
+});
+
+test("round 2: a pocket-corner fillet coaxial with the hole ends at the entry plane: it is no existing hole and no part of the cut", async () => {
+  const k = kernel();
+  const plate = await blockAndPlate(k, [[22, 12, 0]]);
+  // An inward quarter round of radius 5 standing on the plate's top face (z 0..10), on the hole's axis.
+  k.addPin(plate, { origin: [30, 20, 0], dir: [0, 0, 1], radius: 5, from: 0, to: 10, facing: -1, quarter: true });
+  const cut = await transferHoles(k.operations, { sourceId: 1, targetId: plate, axesMm: [{ pointMm: [30, 20, 10], axis: [0, 0, -1] }], hole: { diameterMm: 3, through: true }, revision: k.rev() });
+  assert.deepEqual([cut.axisCount, cut.holeCount, cut.axesMm[0]!.entryPointMm], [1, 1, [30, 20, 0]]);
+});
+
+test("round 2: select drills toward the nearer target side when the target lies past both ends of the source hole", async () => {
+  // A source hole z 3..6 between two slabs of one target: one touching below (z 0..3), one 14 mm above (z 20..25).
+  const hole = cylinderFaceOf("sh", [30, 20, 3], [0, 0, 1], 1.7, 0, 3, true);
+  const source = polyBody(1, box6("s", [20, 10, 3], [40, 30, 6]), [hole.face], hole.edges);
+  const target = polyBody(2, [...box6("lo", [0, 0, 0], [60, 40, 3]), ...box6("hi", [0, 0, 20], [60, 40, 25])]);
+  const { calls, operations } = polyOps(source, target);
+  await assert.rejects(transferHoles(operations, { sourceId: 1, targetId: 2, select: { radiusMm: 1.7 }, hole: { diameterMm: 3.4, through: true }, revision: "r1" }), /reached the cut/);
+  const [start, , , , , axis] = cutStart(calls);
+  assert.ok(near6(start, [30, 20, 3.5]) && near6(axis, [0, 0, -1]), JSON.stringify(calls[0]!.args));
+});
+
+test("round 2: a blind hole on the axis of a hole past its floor is cut and read back alone (the far hole is not part of the cut)", async () => {
+  const k = kernel();
+  const plate = await blockAndPlate(k, [[22, 12, 0]]);
+  // An inward bore of the same radius on the axis, 10 to 14 mm under the plate's top face (past a 2 mm blind floor).
+  k.addPin(plate, { origin: [30, 20, -10], dir: [0, 0, -1], radius: 1.5, from: 0, to: 4, facing: -1 });
+  const cut = await transferHoles(k.operations, { sourceId: 1, targetId: plate, axesMm: [{ pointMm: [30, 20, 10], axis: [0, 0, -1] }], hole: { diameterMm: 3, depthMm: 2 }, revision: k.rev() });
+  assert.deepEqual([cut.axisCount, cut.holeCount, cut.holes[0]!.holeFaceId.includes("pin")], [1, 1, false]);
 });

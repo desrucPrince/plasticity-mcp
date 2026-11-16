@@ -7,7 +7,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createCompactServer, type SessionLike } from "./server.ts";
 import type { PlasticityOperations } from "./plasticity/operations.ts";
 import type { RuntimeState } from "./plasticity/runtime.ts";
-import { lineBoxSpan, type Vector3 } from "./plasticity/mate.ts";
+import { lineBoxSpan, pointInPlanarFace, type Vector3 } from "./plasticity/mate.ts";
 
 // plasticity_create_bracket, plasticity_place_body and plasticity_transfer_holes through the MCP server: registration,
 // strict schemas, plasticity_call dispatch and one lean batch chained with $n references, on a small box kernel.
@@ -25,6 +25,76 @@ const sub = (a: Vec, b: Vec): Vec => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const mul = (a: Vec, k: number): Vec => [a[0] * k, a[1] * k, a[2] * k];
 const unitv = (a: Vec): Vec => mul(a, 1 / Math.hypot(...a));
 const perp = (d: Vec): Vec => { const h: Vec = Math.abs(d[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]; return unitv([d[1] * h[2] - d[2] * h[1], d[2] * h[0] - d[0] * h[2], d[0] * h[1] - d[1] * h[0]]); };
+
+const dotv = (a: Vec, b: Vec) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+// An exact ray caster on the read model, the stand-in for plasticity_probe_surface (the same one as mate.test.ts).
+type CastRay = { originMm: Vec; direction: Vec };
+function castRays(body: Body, rays: CastRay[]) {
+  const edgeById = new Map(body.edges.map((edge) => [edge.id, edge]));
+  return rays.map((ray) => {
+    const o = ray.originMm;
+    const d = unitv(ray.direction);
+    const hits: Array<{ t: number; faceId: string; normal: Vec }> = [];
+    for (const face of body.faces) {
+      if (face.planar) {
+        const n = unitv(face.normal);
+        const den = dotv(n, d);
+        if (Math.abs(den) < 1e-12) continue;
+        const t = dotv(sub(face.centerMm, o), n) / den;
+        if (t < -1e-9) continue;
+        const p = add(o, mul(d, t));
+        const exact = pointInPlanarFace(body, face, p);
+        const polygon = (face as Face & { points?: Vec[] }).points;
+        const inside = exact ? exact.inside || exact.boundaryDistanceMm <= 1e-9 : polygon ? insidePolygon(polygon, n, p) : false;
+        if (inside) hits.push({ t: Math.max(0, t), faceId: face.id, normal: n });
+      } else if (face.surfaceType === "Cylinder" && face.radiusMm !== null && face.axisOriginMm && face.axisDirection) {
+        const e = unitv(face.axisDirection);
+        const w = sub(o, face.axisOriginMm);
+        const dp = sub(d, mul(e, dotv(d, e)));
+        const wp = sub(w, mul(e, dotv(w, e)));
+        const a = dotv(dp, dp);
+        if (a < 1e-15) continue;
+        const b = 2 * dotv(dp, wp);
+        const c = dotv(wp, wp) - face.radiusMm ** 2;
+        const disc = b * b - 4 * a * c;
+        if (disc < 0) continue;
+        const circles = face.edgeIds.map((id) => edgeById.get(id)).filter((edge): edge is Edge => !!edge?.circleGeometry).map((edge) => dotv(sub(edge.circleGeometry!.centerMm, face.axisOriginMm!), e));
+        const radialOut = dotv(face.normal, sub(face.centerMm, add(face.axisOriginMm, mul(e, dotv(sub(face.centerMm, face.axisOriginMm), e))))) > 0;
+        for (const t of [(-b - Math.sqrt(disc)) / (2 * a), (-b + Math.sqrt(disc)) / (2 * a)]) {
+          if (t < -1e-9) continue;
+          const p = add(o, mul(d, t));
+          const s = dotv(sub(p, face.axisOriginMm), e);
+          const within = circles.length >= 2 ? s >= Math.min(...circles) - 1e-9 && s <= Math.max(...circles) + 1e-9
+            : [0, 1, 2].every((i) => p[i]! >= face.boundsMm.min[i]! - 1e-9 && p[i]! <= face.boundsMm.max[i]! + 1e-9);
+          if (!within) continue;
+          const radial = unitv(sub(p, add(face.axisOriginMm, mul(e, s))));
+          hits.push({ t: Math.max(0, t), faceId: face.id, normal: radialOut ? radial : mul(radial, -1) });
+        }
+      }
+    }
+    hits.sort((x, y) => x.t - y.t);
+    const merged: Array<{ pointMm: Vec; faceId: string; otherFaceIds?: string[]; normal: Vec; distanceMm: number; residualMm: number }> = [];
+    for (const hit of hits) {
+      const last = merged.at(-1);
+      if (last && Math.abs(last.distanceMm - hit.t) <= 1e-6) { last.otherFaceIds = [...(last.otherFaceIds ?? []), hit.faceId]; continue; }
+      merged.push({ pointMm: add(o, mul(d, hit.t)), faceId: hit.faceId, normal: hit.normal, distanceMm: hit.t, residualMm: 0 });
+    }
+    return { originMm: o, direction: d, hits: merged.length, intersections: merged };
+  });
+}
+function insidePolygon(points: Vec[], normal: Vec, p: Vec): boolean {
+  const u = perp(normal);
+  const v: Vec = [normal[1] * u[2] - normal[2] * u[1], normal[2] * u[0] - normal[0] * u[2], normal[0] * u[1] - normal[1] * u[0]];
+  const q = [dotv(p, u), dotv(p, v)];
+  const poly = points.map((point) => [dotv(point, u), dotv(point, v)]);
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i]!; const [xj, yj] = poly[j]!;
+    if ((yi! > q[1]!) !== (yj! > q[1]!) && q[0]! < ((xj! - xi!) * (q[1]! - yi!)) / (yj! - yi!) + xi!) inside = !inside;
+  }
+  return inside;
+}
 
 function boxKernel() {
   let bodies: KBody[] = [];
@@ -95,6 +165,11 @@ function boxKernel() {
     // The native B-Rep Check (read-only, not recorded in calls): every box-kernel body is a closed, valid Solid.
     async validateBodies(ids: number[], revision: string) {
       return { documentToken: "doc-1", revision, measurementSource: "native-brep", bodies: ids.map((id) => ({ id, versionId: id, type: find(id).type, name: find(id).name, measurementSource: "native-brep", faceCount: 0, edgeCount: 0, boundaryEdgeIds: [], closed: true, nativeCheckCodes: [], nativeValid: true, printableSolid: true })) };
+    },
+    // The ray probe (read-only, not recorded in calls).
+    async probeSurface(request: { id: number; rays?: CastRay[] }, revision: string) {
+      const body = state().bodies.find((candidate) => candidate.id === request.id)!;
+      return { id: body.id, bodyType: body.type, revision, source: "native-brep-ray-newton", acceptResidualMm: 1e-6, rays: castRays(body, request.rays ?? []), note: "test caster" };
     },
     async undo() { calls.push("undo"); ({ bodies, next } = JSON.parse(history.pop()!)); rev += 1; undoDepth -= 1; return state(); },
     async createBox(origin: Vec, size: Vec, name: string | undefined, revision: string) {

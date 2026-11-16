@@ -15,6 +15,7 @@
 import { CommittedChangeError, type PlasticityOperations } from "./operations.ts";
 import { PlasticityRecipes, type RecipeOperations } from "./recipes.ts";
 import { mutationOutcomeIsUncertain, type RuntimeState } from "./runtime.ts";
+import type { ProbeRay, ProbeRayResult } from "./surfacing.ts";
 
 export type Vector3 = [number, number, number];
 export type Bounds = { min: Vector3; max: Vector3 };
@@ -142,7 +143,7 @@ export async function runGuarded<T>(operations: UndoCapable, label: string, init
     }
     const restored = !stuck && current.documentToken === initial.documentToken && current.undoDepth === initial.undoDepth && sameBodyIds(current, initial);
     const where = restored
-      ? `the document is unchanged (back to its ${initial.bodies.length} bodies at Undo depth ${initial.undoDepth}, revision ${current.revision})`
+      ? `the document is unchanged (back to its ${initial.bodies.length} bodies at Undo depth ${initial.undoDepth}, revision ${current.revision}${undone > 0 ? "; the undone steps sit on the redo stack until the next edit, so do not call plasticity_redo: it would replay the first rejected step, such as a stray cutter body" : ""})`
       : `but the document is not back at the start: ${stuck ?? `Undo depth ${current.undoDepth} (was ${initial.undoDepth}), ${current.bodies.length} bodies (was ${initial.bodies.length})`}, so ${Math.max(0, current.undoDepth - initial.undoDepth)} of its step(s) may remain; call plasticity_reconcile`;
     throw new GuardedRunError(`${label} failed; ${undone} Undo step(s) were undone and ${where}: ${detail}`, { uncertain: false, undoneSteps: undone, restored, cause: error });
   }
@@ -504,21 +505,25 @@ export interface TransferHolesInput {
   onMiss?: "error" | "skip" | undefined;
   revision: string;
 }
-export interface SourceAxis { pointMm: Vector3; direction: Vector3; faceIds: string[]; radiusMm?: number; kind?: "hole" | "boss" }
+// endsMm: the two ends of a selected source hole along its axis (lower, upper along direction); rays start there.
+export interface SourceAxis { pointMm: Vector3; direction: Vector3; faceIds: string[]; radiusMm?: number; kind?: "hole" | "boss"; endsMm?: [Vector3, Vector3] }
 export interface PlannedHole {
   index: number;
   source: SourceAxis;
   entryPointMm: Vector3; // on the target's entry face
   direction: Vector3; // the drill direction, into the target
   entryFaceId: string;
-  entryProof: "edges" | "bounds";
-  farDistanceMm: number; // from the entry point to where the axis leaves the target bounds
-  nextFaceMm?: number; // from the entry point to the next planar target face normal to the axis (the far side of the wall)
-  wallMm?: number; // nextFaceMm when no other target face can lie on the axis before it: the proven local wall thickness
+  entryProof: "edges" | "rays"; // the rim checked on the entry face's own edges, or by the rim rays only
+  farDistanceMm: number; // from the entry point to where the axis leaves the target bounds (the through cutter's length)
+  nextFaceMm?: number; // the least distance, over the bore rays, from the entry to the next target face: the local wall
+  wallMm?: number; // nextFaceMm when every ray was resolved (no unresolved crossing, an even hit count)
+  headWallMm?: number; // the same over the head rays (countersink or counterbore)
+  agree: boolean; // every bore ray meets the same faces at the same distances after the entry
+  disagreement?: string; // why they do not, in words (a side wall, an oblique face, a curved face)
 }
 /** A per-axis refusal. code "miss" is the only one onMiss: "skip" passes over. */
 export class AxisRefusal extends Error {
-  readonly code: "miss" | "existing-hole" | "non-planar" | "between" | "rim" | "precedes";
+  readonly code: "miss" | "existing-hole" | "non-planar" | "between" | "rim" | "precedes" | "breakout";
   constructor(code: AxisRefusal["code"], message: string) { super(message); this.code = code; }
 }
 export interface TransferHolesResult {
@@ -536,10 +541,11 @@ export interface TransferHolesResult {
   holes: Array<{ axisIndex: number; holeFaceId: string; axisOriginMm: Vector3; axisDirection: Vector3; coaxialOffsetMm: number; bores: number }>;
   skipped?: Array<{ axisIndex: number; pointMm: Vector3; axis: Vector3; reason: string }>;
   maxCoaxialOffsetMm: number;
+  probe: { rays: number; calls: number; ms: number }; // the exact ray probe that planned the cut
   undoSteps: number;
   steps: MateStep[];
 }
-export type TransferOperations = RecipeOperations & UndoCapable & { validateBodies: PlasticityOperations["validateBodies"] };
+export type TransferOperations = RecipeOperations & UndoCapable & { validateBodies: PlasticityOperations["validateBodies"]; probeSurface: PlasticityOperations["probeSurface"] };
 
 /** Distinct full-turn cylinder radii of a body (for the no-match error), with kind and the number of distinct axes. */
 export function cylinderRadiiSummary(body: Body): Array<{ radiusMm: number; kind: "hole" | "boss"; axes: number }> {
@@ -566,6 +572,13 @@ export function selectSourceAxes(body: Body, select: TransferSelect): SourceAxis
     const known = picked.find((axis) => coaxialOffset(axis.pointMm, axis.direction, cylinder.originMm, cylinder.direction) <= COINCIDENT_MM);
     if (known) known.faceIds.push(cylinder.faceId);
     else picked.push({ pointMm: cylinder.originMm, direction: cylinder.direction, faceIds: [cylinder.faceId], radiusMm: cylinder.radiusMm, kind: cylinder.kind });
+    const axis = known ?? picked.at(-1)!;
+    // The hole's ends along its axis, from its circle edges (merged over coaxial faces).
+    const at = (s: number) => add(cylinder.originMm, scale(cylinder.direction, s - dot(cylinder.originMm, cylinder.direction)));
+    const span = [cylinder.extentMm[0], cylinder.extentMm[1]].map((s) => dot(sub(at(s), axis.pointMm), axis.direction));
+    const known0 = axis.endsMm ? [dot(sub(axis.endsMm[0], axis.pointMm), axis.direction), dot(sub(axis.endsMm[1], axis.pointMm), axis.direction)] : [];
+    const low = Math.min(...span, ...known0), high = Math.max(...span, ...known0);
+    axis.endsMm = [add(axis.pointMm, scale(axis.direction, low)), add(axis.pointMm, scale(axis.direction, high))];
   }
   return picked;
 }
@@ -656,124 +669,167 @@ export function lineBoxSpan(point: Vector3, direction: Vector3, bounds: Bounds):
 
 const describeAxis = (index: number, axis: SourceAxis) => `axis ${index} (point ${JSON.stringify(round6(axis.pointMm))}, direction ${JSON.stringify(round6(axis.direction))})`;
 
+// ---------- the ray probe of one axis ----------
+//
+// Every axis is judged by exact kernel ray hits on the target (plasticity_probe_surface's operation), never by face
+// bounds. Rays run parallel to the axis: the axis itself and RIM_RAYS on the bore radius (and RIM_RAYS on the head
+// radius for a countersink or counterbore), in both directions. A selected source hole casts from its two ends (the
+// +direction rays from its upper end, the -direction rays from its lower end); an axesMm axis casts from pointMm.
+
+/** Rays on each probed radius. */
+export const RIM_RAYS = 8;
+/** Two ray hits closer than this along the axis are at the same distance. */
+const RAY_AGREE_MM = 1e-5;
+
+export interface AxisRayResults { plus: ProbeRayResult[]; minus: ProbeRayResult[] }
+
+/** Pure: the rays of one axis, as { plus, minus }, each [axis ray, then RIM_RAYS per radius in radii order]. */
+export function axisRays(axis: SourceAxis, radii: number[]): { plus: ProbeRay[]; minus: ProbeRay[] } {
+  const d = unit(axis.direction, "axis");
+  const u = perpendicular(d);
+  const v = cross(d, u);
+  const [lower, upper] = axis.endsMm ?? [axis.pointMm, axis.pointMm];
+  const around = (origin: Vector3, direction: Vector3): ProbeRay[] => [
+    { originMm: [...origin] as Vector3, direction },
+    ...radii.flatMap((radius) => Array.from({ length: RIM_RAYS }, (_, k) => {
+      const angle = (2 * Math.PI * k) / RIM_RAYS;
+      return { originMm: add(origin, add(scale(u, radius * Math.cos(angle)), scale(v, radius * Math.sin(angle)))), direction };
+    })),
+  ];
+  return { plus: around(upper, d), minus: around(lower, scale(d, -1)) };
+}
+
+/** Hits along one ray, without a face the ray starts on and leaves (distance 0, outward normal along the ray). */
+function entering(ray: ProbeRayResult, direction: Vector3): ProbeRayResult["intersections"] {
+  return ray.intersections.filter((hit, index) => !(index === 0 && hit.distanceMm <= COINCIDENT_MM && dot(hit.normal, direction) > 0));
+}
+
+const normalToAxis = (face: Face | undefined, direction: Vector3) => !!face && face.planar && parallelSine(face.normal, direction) <= PARALLEL_SINE;
+
 /**
- * Pure: the entry of one axis into the target. The axis sign is ignored: the drill runs from the reference point (the
- * source face's axis point, or pointMm) toward the side where the target is. The entry is the first planar target face,
- * normal to the axis, that the line crosses going away from the reference point; its outward normal must face the
- * reference point and the hole rim (entryRadiusMm) must lie inside it.
+ * Pure: the entry of one axis into the target from its ray hits. The side with hits is the drill direction (hits on
+ * both sides: the reference lies between target faces; none: a miss). The entry is the first hit of the axis ray: a
+ * planar face normal to the axis facing the source, and every rim ray must meet that face at the same distance first.
  */
-export function planEntry(target: Body, axis: SourceAxis, index: number, entryRadiusMm: number): PlannedHole {
+export function planEntry(target: Body, axis: SourceAxis, index: number, radii: number[], probed: AxisRayResults, reachMm = Number.POSITIVE_INFINITY): PlannedHole {
   if (!target.boundsMm) throw new Error(`Target body ${target.id} has no bounds`);
   const d = unit(axis.direction, "axis");
   const label = describeAxis(index, axis);
-  // An existing hole on this axis (an inward-facing cylinder or cone, such as a bore or a countersink): the tool cuts new
-  // holes only, it never re-cuts or enlarges one. An outward face on the axis (a rod, a boss, a round corner) is no hole;
-  // a coaxial face whose facing cannot be proven is refused too, since it might be one.
-  for (const face of target.faces) {
-    if ((face.surfaceType !== "Cylinder" && face.surfaceType !== "Cone") || !face.axisOriginMm || !face.axisDirection) continue;
-    if (parallelSine(face.axisDirection, d) > MATE_PARALLEL_SINE || length(cross(sub(face.axisOriginMm, axis.pointMm), d)) > 1e-3) continue;
-    const facing = surfaceFacing(face);
-    if (facing === "boss") continue;
-    const where = `(face ${face.id}${face.radiusMm !== null ? `, radius ${round6([face.radiusMm, 0, 0])[0]} mm` : ""})`;
-    if (facing === "hole") throw new AxisRefusal("existing-hole", `${label}: the target already has a hole on this axis ${where}; transfer_holes cuts new holes only and does not re-cut or enlarge an existing one`);
-    throw new AxisRefusal("existing-hole", `${label}: the target has a ${face.surfaceType.toLowerCase()} face on this axis ${where} whose facing cannot be proven, so it may be an existing hole; transfer_holes cuts new holes only`);
-  }
-  const span = lineBoxSpan(axis.pointMm, d, target.boundsMm);
-  if (!span || span[1] - span[0] <= COINCIDENT_MM) throw new AxisRefusal("miss", `${label} misses the target body ${target.id} (its bounds)`);
-  const all = planarCrossings(target, axis.pointMm, d);
-  if (all.length === 0) {
-    const touched = target.faces.filter((face) => lineMayTouchFace(target, face, axis.pointMm, d));
-    if (touched.length === 0) throw new AxisRefusal("miss", `${label} misses the target body ${target.id} (no face of it lies on the axis)`);
-    throw new AxisRefusal("non-planar", `${label} crosses no planar face of the target normal to the axis: it meets the target only through non-planar, oblique or tangent faces (${touched.slice(0, 4).map((face) => `${face.id} ${face.surfaceType}`).join(", ")}), and a non-planar or oblique entry is not supported`);
-  }
-  const ahead = all.filter((crossing) => crossing.s > COINCIDENT_MM);
-  const behind = all.filter((crossing) => crossing.s < -COINCIDENT_MM);
-  // A target face through the reference point itself (a part touching the source face the point lies on) is the entry
-  // when the rest of the target lies on one side.
-  const onPoint = all.filter((crossing) => Math.abs(crossing.s) <= COINCIDENT_MM);
-  if (ahead.length > 0 && behind.length > 0) {
-    throw new AxisRefusal("between", `${label}: the reference point lies between target faces (the target is on both sides of it along the axis); give axesMm with a point outside the target on the entry side`);
-  }
-  const sign = behind.length > 0 ? -1 : ahead.length > 0 ? 1 : onPoint.length > 0 && dot(onPoint[0]!.face.normal, d) > 0 ? -1 : 1;
-  const direction = clean(scale(d, sign));
-  const crossings = [...onPoint.map((crossing) => ({ ...crossing, s: 0 })), ...(sign > 0 ? ahead : behind).map((crossing) => ({ ...crossing, s: crossing.s * sign }))].sort((a, b) => a.s - b.s);
-  const first = crossings[0]!;
-  if (dot(first.face.normal, direction) >= 0) throw new AxisRefusal("non-planar", `${label}: the first planar target face along the axis (${first.face.id}) faces away from the source, so the axis enters the target through a non-planar face: a non-planar or oblique entry is not supported`);
-  if (first.boundary < entryRadiusMm + 1e-3) throw new AxisRefusal("rim", `${label}: the hole rim (radius ${entryRadiusMm} mm) does not fit inside the entry face ${first.face.id} (${first.boundary.toFixed(4)} mm to its edge)`);
-  const entryPointMm = add(axis.pointMm, scale(direction, first.s));
-  // The entry must be the first material on the axis: no other target face may lie on the bore before the entry plane.
-  // Decided conservatively in the drill's frame: the face's extent (from its line and circle edges for a planar face,
-  // from its bounds otherwise) starts before the plane and reaches within the rim radius of the axis.
-  for (const face of target.faces) {
-    if (face.id === first.face.id) continue;
-    const extent = faceExtentAlong(target, face, entryPointMm, direction);
-    if (extent.sMin >= -1e-3 || extent.lateralMm > entryRadiusMm + 1e-3) continue;
-    throw new AxisRefusal("precedes", `${label}: target face ${face.id} (${face.surfaceType}) may lie on the bore before the entry face ${first.face.id} (it starts ${round6([-extent.sMin, 0, 0])[0]} mm before the entry plane): material precedes the first planar face, and the hole would skip it`);
-  }
-  const exit = lineBoxSpan(entryPointMm, direction, target.boundsMm)!;
-  // The far side of the wall: the next planar face normal to the axis. It is the proven wall thickness only when no
-  // other face (curved, oblique, a plane through the axis, or a face known only by its bounds) can lie on the axis first.
-  const next = crossings.find((crossing) => crossing.s > first.s + COINCIDENT_MM);
-  const nextFaceMm = next ? next.s - first.s : undefined;
-  const reach = nextFaceMm ?? exit[1];
-  const crossingIds = new Set(crossings.filter((crossing) => crossing.proof === "edges").map((crossing) => crossing.face.id));
-  const unproven = target.faces.some((face) => {
-    if (face.id === first.face.id || crossingIds.has(face.id)) return false;
-    if (face.planar && parallelSine(face.normal, direction) <= PARALLEL_SINE && pointInPlanarFace(target, face, add(entryPointMm, scale(direction, dot(sub(face.centerMm, entryPointMm), direction))))) return false;
-    if (face.planar && Math.abs(dot(unit(face.normal), direction)) <= PARALLEL_SINE && Math.abs(dot(sub(entryPointMm, face.centerMm), unit(face.normal))) > COINCIDENT_MM) return false;
-    const hit = lineBoxSpan(entryPointMm, direction, grow(face.boundsMm, 1e-3));
-    return !!hit && hit[1] > COINCIDENT_MM && hit[0] < reach - COINCIDENT_MM;
-  });
-  return {
-    index, source: axis, entryPointMm, direction, entryFaceId: first.face.id, entryProof: first.proof, farDistanceMm: exit[1],
-    ...(nextFaceMm !== undefined ? { nextFaceMm } : {}),
-    ...(nextFaceMm !== undefined && !unproven && next!.proof === "edges" ? { wallMm: nextFaceMm } : {}),
-  };
-}
-
-/**
- * A conservative extent of a face in the frame of a line (origin, unit direction): the least position along the line and
- * the distance from the line to the face's box across it. A planar face lies in the hull of its edges, so its line and
- * measured circle edges bound it; any other face (or a planar one with other edges) is bounded by its bounds box.
- */
-function faceExtentAlong(body: Body, face: Face, origin: Vector3, direction: Vector3): { sMin: number; lateralMm: number } {
-  const u = perpendicular(direction);
-  const v = cross(direction, u);
-  const frame = [direction, u, v];
-  const low = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
-  const high = [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY];
-  const take = (point: Vector3, spread: (axis: Vector3) => number = () => 0) => frame.forEach((axis, i) => {
-    const at = dot(sub(point, origin), axis);
-    const by = spread(axis);
-    low[i] = Math.min(low[i]!, at - by);
-    high[i] = Math.max(high[i]!, at + by);
-  });
-  const edgeById = new Map(body.edges.map((edge) => [edge.id, edge]));
-  const edges = face.edgeIds.map((id) => edgeById.get(id));
-  const fromEdges = face.planar && edges.length > 0 && edges.every((edge) => !!edge && (edge.line || (edge.circle && !!edge.circleGeometry)));
-  if (fromEdges) {
-    for (const edge of edges as Edge[]) {
-      if (edge.line) {
-        const half = scale(unit(edge.tangent, "edge tangent"), edge.lengthMm / 2);
-        take(sub(edge.centerMm, half));
-        take(add(edge.centerMm, half));
-      } else {
-        const g = edge.circleGeometry!;
-        const normal = unit(g.normal, "circle normal");
-        take(g.centerMm, (axis) => g.radiusMm * Math.sqrt(Math.max(0, 1 - dot(normal, axis) ** 2)));
+  const faceById = new Map(target.faces.map((face) => [face.id, face]));
+  const edgeById = new Map(target.edges.map((edge) => [edge.id, edge]));
+  const hitsPlus = probed.plus.map((ray) => entering(ray, d));
+  const hitsMinus = probed.minus.map((ray) => entering(ray, scale(d, -1)));
+  const anyPlus = hitsPlus.some((hits) => hits.length > 0);
+  const anyMinus = hitsMinus.some((hits) => hits.length > 0);
+  // Coaxial inward cylinders and cones of the target (bores, countersinks, a recess wall) and where they lie on the axis.
+  const coaxial = target.faces.filter((face) => (face.surfaceType === "Cylinder" || face.surfaceType === "Cone") && face.axisOriginMm && face.axisDirection
+    && parallelSine(face.axisDirection, d) <= MATE_PARALLEL_SINE && length(cross(sub(face.axisOriginMm, axis.pointMm), d)) <= 1e-3);
+  const existing = (direction: Vector3, origin: Vector3, firstMm: number | undefined) => {
+    for (const face of coaxial) {
+      const facing = surfaceFacing(face);
+      if (facing === "boss") continue;
+      const where = `(face ${face.id}${face.radiusMm !== null ? `, radius ${round6([face.radiusMm, 0, 0])[0]} mm` : ""})`;
+      if (facing === undefined) throw new AxisRefusal("existing-hole", `${label}: the target has a ${face.surfaceType.toLowerCase()} face on this axis ${where} whose facing cannot be proven, so it may be an existing hole; transfer_holes cuts new holes only`);
+      const positions = face.edgeIds.map((id) => edgeById.get(id)).filter((edge): edge is Edge => !!edge?.circleGeometry).map((edge) => dot(sub(edge.circleGeometry!.centerMm, origin), direction));
+      if (positions.length === 0) throw new AxisRefusal("existing-hole", `${label}: the target has an inward ${face.surfaceType.toLowerCase()} face on this axis ${where} whose extent cannot be measured, so it may be an existing hole; transfer_holes cuts new holes only`);
+      // A recess or cup wall ends at (or before) the entry plane; a hole on the axis runs on past it. A blind cut only
+      // meets the part of the axis it reaches (reachMm past the entry).
+      if (firstMm === undefined || (Math.max(...positions) > firstMm + 1e-4 && Math.min(...positions) < firstMm + reachMm - 1e-4)) {
+        throw new AxisRefusal("existing-hole", `${label}: the target already has a hole on this axis ${where}; transfer_holes cuts new holes only and does not re-cut or enlarge an existing one`);
       }
     }
-  } else for (const corner of boxCorners(face.boundsMm)) take(corner);
-  const gap = (i: number) => Math.max(0, low[i]!, -high[i]!);
-  return { sMin: low[0]!, lateralMm: Math.hypot(gap(1), gap(2)) };
+  };
+  // A selected source hole drills toward the side where the target is nearer to its end (a bracket against one wall of
+  // an enclosure faces the far wall too); a tie, or a given point with the target on both sides, is refused.
+  const nearestOf = (lists: ProbeRayResult["intersections"][]) => Math.min(...lists.map((list) => list[0]?.distanceMm ?? Number.POSITIVE_INFINITY));
+  const nearPlus = nearestOf(hitsPlus), nearMinus = nearestOf(hitsMinus);
+  const pick = anyPlus && anyMinus && axis.endsMm && Math.abs(nearPlus - nearMinus) > RAY_AGREE_MM ? (nearPlus < nearMinus ? 1 : -1) : undefined;
+  if (anyPlus && anyMinus && pick === undefined) {
+    throw new AxisRefusal("between", `${label}: the reference point lies between target faces (the target is on both sides of it along the axis${axis.endsMm ? ", past both ends of the source hole" : ""}); give axesMm with a point outside the target on the entry side`);
+  }
+  if (!anyPlus && !anyMinus) {
+    existing(d, axis.pointMm, undefined);
+    throw new AxisRefusal("miss", `${label} misses the target body ${target.id} (no face of it lies on the axis)`);
+  }
+  const sign = pick ?? (anyPlus ? 1 : -1);
+  const direction = clean(scale(d, sign));
+  const rays = sign > 0 ? probed.plus : probed.minus;
+  const hits = sign > 0 ? hitsPlus : hitsMinus;
+  const origin = rays[0]!.originMm;
+  const firsts = hits.map((list) => list[0]);
+  const nearest = Math.min(...firsts.filter((hit) => hit !== undefined).map((hit) => hit!.distanceMm));
+  existing(direction, origin, nearest);
+  const axisHits = hits[0]!;
+  const rimFirsts = firsts.slice(1);
+  const rimsAgree = rimFirsts.length > 0 && rimFirsts.every((hit) => hit && Math.abs(hit.distanceMm - rimFirsts[0]!.distanceMm) <= RAY_AGREE_MM && normalToAxis(faceById.get(hit.faceId), direction));
+  if (axisHits.length === 0 || (rimsAgree && axisHits[0]!.distanceMm > rimFirsts[0]!.distanceMm + RAY_AGREE_MM)) {
+    throw new AxisRefusal("existing-hole", `${label}: the axis finds no material where the bore would start (the rim rays meet face ${rimFirsts[0]?.faceId ?? "?"} ${rimFirsts[0] ? `at ${round6([rimFirsts[0].distanceMm, 0, 0])[0]} mm` : ""}, the axis does not): the target already has a hole or an opening on this axis; transfer_holes cuts new holes only`);
+  }
+  const first = axisHits[0]!;
+  const entryFace = faceById.get(first.faceId);
+  if (!normalToAxis(entryFace, direction)) {
+    const later = axisHits.find((hit) => normalToAxis(faceById.get(hit.faceId), direction) && dot(faceById.get(hit.faceId)!.normal, direction) < 0);
+    const what = `${first.faceId} ${entryFace?.surfaceType ?? "face"}`;
+    if (later) throw new AxisRefusal("precedes", `${label}: target face ${first.faceId} (${entryFace?.surfaceType ?? "face"}) may lie on the bore before the entry face ${later.faceId} (it starts ${round6([later.distanceMm - first.distanceMm, 0, 0])[0]} mm before the entry plane): material precedes the first planar face (a non-planar or oblique entry is not supported), and the hole would skip it`);
+    throw new AxisRefusal("non-planar", `${label} crosses no planar face of the target normal to the axis: it meets the target only through non-planar, oblique or tangent faces (${what}), and a non-planar or oblique entry is not supported`);
+  }
+  if (dot(entryFace!.normal, direction) >= 0) throw new AxisRefusal("non-planar", `${label}: the first planar target face along the axis (${entryFace!.id}) faces away from the source, so the axis enters the target through a non-planar face: a non-planar or oblique entry is not supported`);
+  const entryPointMm = add(origin, scale(direction, first.distanceMm));
+  const rimRadius = Math.max(...radii);
+  const exact = pointInPlanarFace(target, entryFace!, entryPointMm);
+  if (exact && exact.boundaryDistanceMm < rimRadius + 1e-3) throw new AxisRefusal("rim", `${label}: the hole rim (radius ${rimRadius} mm) does not fit inside the entry face ${entryFace!.id} (${exact.boundaryDistanceMm.toFixed(4)} mm to its edge)`);
+  // Every rim ray meets the entry plane first, on a planar face normal to the axis.
+  for (const [k, hit] of rimFirsts.entries()) {
+    const radius = radii[Math.floor(k / RIM_RAYS)]!;
+    const angle = (360 * (k % RIM_RAYS)) / RIM_RAYS;
+    const at = `the rim ray at radius ${radius} mm, ${angle} degrees`;
+    if (!hit) throw new AxisRefusal("rim", `${label}: the rim runs over an edge of the entry face ${entryFace!.id}: ${at} finds no material`);
+    if (hit.distanceMm < first.distanceMm - RAY_AGREE_MM) {
+      throw new AxisRefusal("precedes", `${label}: target face ${hit.faceId} (${faceById.get(hit.faceId)?.surfaceType ?? "face"}) may lie on the bore before the entry face ${entryFace!.id} (it starts ${round6([first.distanceMm - hit.distanceMm, 0, 0])[0]} mm before the entry plane, on ${at}): material precedes the first planar face, and the hole would skip it`);
+    }
+    if (hit.distanceMm > first.distanceMm + RAY_AGREE_MM || !normalToAxis(faceById.get(hit.faceId), direction)) {
+      throw new AxisRefusal("rim", `${label}: the rim runs over an edge of the entry face ${entryFace!.id}: ${at} first meets face ${hit.faceId} (${faceById.get(hit.faceId)?.surfaceType ?? "face"}) ${round6([hit.distanceMm - first.distanceMm, 0, 0])[0]} mm past the entry plane`);
+    }
+  }
+  // The local wall: from the entry to the next crossing, the least over the rays. Bore rays: the axis and the first
+  // RIM_RAYS; head rays: the rest.
+  const boreCount = 1 + RIM_RAYS;
+  const wallOf = (list: ProbeRayResult["intersections"]) => (list.length >= 2 ? list[1]!.distanceMm - list[0]!.distanceMm : undefined);
+  const resolved = (from: number, to: number) => rays.slice(from, to).every((ray, k) => !ray.unresolvedCrossings && hits[from + k]!.length % 2 === 0);
+  const least = (from: number, to: number) => {
+    const walls = hits.slice(from, to).map(wallOf).filter((wall): wall is number => wall !== undefined);
+    return walls.length > 0 ? Math.min(...walls) : undefined;
+  };
+  const nextFaceMm = least(0, boreCount);
+  const headWallMm = radii.length > 1 ? least(boreCount, hits.length) : undefined;
+  // Side breakout before the edit: every bore ray meets the same crossings after the entry (count and distances).
+  const sequence = (list: ProbeRayResult["intersections"]) => list.slice(1).map((hit) => hit.distanceMm - list[0]!.distanceMm);
+  const reference = sequence(axisHits);
+  let disagreement: string | undefined;
+  for (const list of hits.slice(1, boreCount)) {
+    const other = sequence(list);
+    if (other.length === reference.length && other.every((value, k) => Math.abs(value - reference[k]!) <= RAY_AGREE_MM)) continue;
+    // Name what the rays meet: a curved face, an oblique face, or planar faces normal to the axis at other depths.
+    const met = [...axisHits.slice(1), ...list.slice(1)].map((hit) => faceById.get(hit.faceId)).filter((face): face is Face => !!face);
+    const curved = met.find((face) => !face.planar);
+    const oblique = met.find((face) => face.planar && parallelSine(face.normal, direction) > PARALLEL_SINE && Math.abs(dot(unit(face.normal), direction)) > PARALLEL_SINE);
+    disagreement = curved
+      ? `the bore crosses a curved face of the target (face ${curved.id} ${curved.surfaceType}: a cross hole or a fillet), so it would not be a full cylinder`
+      : oblique
+        ? `the bore exits through an oblique face of the target (face ${oblique.id}: a chamfer or slope), so it would not end in a full circle`
+        : "the bore breaks out of a side wall of the target (its rays leave the material at different depths: a step or a wall within the bore)";
+    break;
+  }
+  const exit = lineBoxSpan(entryPointMm, direction, target.boundsMm);
+  return {
+    index, source: axis, entryPointMm, direction, entryFaceId: entryFace!.id, entryProof: exact ? "edges" : "rays", farDistanceMm: exit ? exit[1] : 0,
+    ...(nextFaceMm !== undefined ? { nextFaceMm } : {}),
+    ...(nextFaceMm !== undefined && resolved(0, boreCount) ? { wallMm: nextFaceMm } : {}),
+    ...(headWallMm !== undefined ? { headWallMm } : {}),
+    agree: disagreement === undefined,
+    ...(disagreement ? { disagreement } : {}),
+  };
 }
-
-const boxCorners = (box: Bounds): Vector3[] => {
-  const corners: Vector3[] = [];
-  for (const x of [box.min[0], box.max[0]]) for (const y of [box.min[1], box.max[1]]) for (const z of [box.min[2], box.max[2]]) corners.push([x, y, z]);
-  return corners;
-};
-const grow = (box: Bounds, by: number): Bounds => ({ min: box.min.map((value) => value - by) as Vector3, max: box.max.map((value) => value + by) as Vector3 });
 
 /** A cylinder or cone face: hole (normal toward its axis), boss (away from it), or undefined when the normal says neither. */
 function surfaceFacing(face: Face): "hole" | "boss" | undefined {
@@ -784,48 +840,6 @@ function surfaceFacing(face: Face): "hole" | "boss" | undefined {
   const radialLength = length(radial);
   const facing = radialLength > 1e-9 ? dot(face.normal, radial) / radialLength : 0;
   return facing < -0.5 ? "hole" : facing > 0.5 ? "boss" : undefined;
-}
-
-/**
- * Can the line touch this face? Exact for a planar face normal to the line with line and circle edges (inside or on its
- * boundary) and for a planar face parallel to the line (only when the line lies in its plane); from the face bounds
- * otherwise.
- */
-function lineMayTouchFace(body: Body, face: Face, point: Vector3, d: Vector3): boolean {
-  // A cylinder whose axis runs along the line meets it only where the line lies on the cylinder.
-  if (face.surfaceType === "Cylinder" && face.radiusMm !== null && face.axisOriginMm && face.axisDirection && parallelSine(face.axisDirection, d) <= PARALLEL_SINE) {
-    return Math.abs(length(cross(sub(point, face.axisOriginMm), d)) - face.radiusMm) <= COINCIDENT_MM;
-  }
-  if (face.planar) {
-    const n = unit(face.normal, "face normal");
-    if (parallelSine(n, d) <= PARALLEL_SINE) {
-      const hit = add(point, scale(d, dot(sub(face.centerMm, point), d)));
-      const exact = pointInPlanarFace(body, face, hit);
-      if (exact) return exact.inside || exact.boundaryDistanceMm <= COINCIDENT_MM;
-    } else if (Math.abs(dot(n, d)) <= PARALLEL_SINE && Math.abs(dot(sub(point, face.centerMm), n)) > COINCIDENT_MM) return false;
-  }
-  return !!lineBoxSpan(point, d, grow(face.boundsMm, 1e-3));
-}
-
-/** Planar faces normal to a line that the line crosses inside the face, with the signed position s along d. */
-function planarCrossings(target: Body, point: Vector3, d: Vector3): Array<{ face: Face; s: number; proof: "edges" | "bounds"; boundary: number }> {
-  const crossings: Array<{ face: Face; s: number; proof: "edges" | "bounds"; boundary: number }> = [];
-  for (const face of target.faces) {
-    if (!face.planar || parallelSine(face.normal, d) > PARALLEL_SINE) continue;
-    const s = dot(sub(face.centerMm, point), d);
-    const hit = add(point, scale(d, s));
-    const exact = pointInPlanarFace(target, face, hit);
-    if (exact) {
-      if (exact.inside || exact.boundaryDistanceMm <= COINCIDENT_MM) crossings.push({ face, s, proof: "edges", boundary: exact.inside ? exact.boundaryDistanceMm : 0 });
-    } else {
-      const inBounds = [0, 1, 2].every((i) => hit[i]! >= face.boundsMm.min[i]! - 1e-3 && hit[i]! <= face.boundsMm.max[i]! + 1e-3);
-      if (inBounds) {
-        const boundary = Math.min(...[0, 1, 2].filter((i) => face.boundsMm.max[i]! - face.boundsMm.min[i]! > 1e-3).map((i) => Math.min(hit[i]! - face.boundsMm.min[i]!, face.boundsMm.max[i]! - hit[i]!)));
-        crossings.push({ face, s, proof: "bounds", boundary });
-      }
-    }
-  }
-  return crossings;
 }
 
 function validateTransfer(input: TransferHolesInput): void {
@@ -842,10 +856,12 @@ function validateTransfer(input: TransferHolesInput): void {
 
 const entryRadius = (hole: TransferHoleSpec): number => (hole.counterbore ? hole.counterbore.diameterMm / 2 : hole.countersunk ? hole.countersunk.headDiameterMm / 2 : hole.diameterMm / 2);
 const OVERSHOOT_MM = 0.5;
+const PROBE_BATCH = 64;
 
-export interface TransferPlan { source: Body; target: Body; holes: PlannedHole[]; skipped: NonNullable<TransferHolesResult["skipped"]> }
+export interface TransferPlan { source: Body; target: Body; holes: PlannedHole[]; skipped: NonNullable<TransferHolesResult["skipped"]>; probe: { rays: number; calls: number; ms: number } }
 
-export function planTransfer(state: RuntimeState, input: TransferHolesInput): TransferPlan {
+/** The source axes of a transfer, checked (pure). */
+function transferAxes(state: RuntimeState, input: TransferHolesInput): { source: Body; target: Body; axes: SourceAxis[] } {
   validateTransfer(input);
   if (state.revision !== input.revision) throw new Error(`Stale reference: expected revision ${input.revision}, current revision is ${state.revision}`);
   const source = state.bodies.find((body) => body.id === input.sourceId);
@@ -877,11 +893,45 @@ export function planTransfer(state: RuntimeState, input: TransferHolesInput): Tr
     const apart = length(cross(sub(second.pointMm, first.pointMm), unit(first.direction)));
     if (apart < 2 * radius) throw new Error(`${describeAxis(a, first)} and ${describeAxis(b, second)} are ${apart.toFixed(4)} mm apart, closer than the Ø${2 * radius} mm ${input.hole.counterbore ? "counterbore" : input.hole.countersunk ? "countersink head" : "hole"}: the holes would overlap`);
   }
+  return { source, target, axes };
+}
+
+/** The probe radii of a hole: the bore, then the countersink head or counterbore when there is one. */
+const probeRadii = (hole: TransferHoleSpec): number[] => (hole.countersunk || hole.counterbore ? [hole.diameterMm / 2, entryRadius(hole)] : [hole.diameterMm / 2]);
+
+export async function planTransfer(operations: Pick<TransferOperations, "probeSurface">, state: RuntimeState, input: TransferHolesInput): Promise<TransferPlan> {
+  const { source, target, axes } = transferAxes(state, input);
+  const radii = probeRadii(input.hole);
+  const reach = Math.max(...radii);
+  // An axis whose bore cannot meet the target's bounds (a conservative box) misses it; no ray is cast for it.
+  const inBounds = axes.map((axis) => {
+    const span = target.boundsMm ? lineBoxSpan(axis.pointMm, unit(axis.direction, "axis"), { min: target.boundsMm.min.map((value) => value - reach) as Vector3, max: target.boundsMm.max.map((value) => value + reach) as Vector3 }) : undefined;
+    return !!span && span[1] - span[0] > COINCIDENT_MM;
+  });
+  // Cast every ray of every axis, PROBE_BATCH rays per probe call.
+  const perAxis = axes.map((axis, index) => (inBounds[index] ? axisRays(axis, radii) : undefined));
+  const flat = perAxis.flatMap((rays) => (rays ? [...rays.plus, ...rays.minus] : []));
+  const results: ProbeRayResult[] = [];
+  const started = performance.now();
+  let calls = 0;
+  for (let from = 0; from < flat.length; from += PROBE_BATCH) {
+    const evidence = await operations.probeSurface({ id: target.id, rays: flat.slice(from, from + PROBE_BATCH) }, state.revision);
+    results.push(...evidence.rays);
+    calls += 1;
+  }
+  const probe = { rays: flat.length, calls, ms: Math.round((performance.now() - started) * 10) / 10 };
   const holes: PlannedHole[] = [];
   const skipped: TransferPlan["skipped"] = [];
+  let cursor = 0;
   for (const [index, axis] of axes.entries()) {
+    const rays = perAxis[index];
     try {
-      holes.push(planEntry(target, axis, index, radius));
+      if (!rays) throw new AxisRefusal("miss", `${describeAxis(index, axis)} misses the target body ${target.id} (its bounds)`);
+      const plus = results.slice(cursor, cursor + rays.plus.length);
+      cursor += rays.plus.length;
+      const minus = results.slice(cursor, cursor + rays.minus.length);
+      cursor += rays.minus.length;
+      holes.push(planEntry(target, axis, index, radii, { plus, minus }, input.hole.depthMm ?? Number.POSITIVE_INFINITY));
     } catch (error) {
       if (!(error instanceof AxisRefusal) || error.code !== "miss" || input.onMiss !== "skip") throw error;
       skipped.push({ axisIndex: index, pointMm: round6(axis.pointMm), axis: round6(axis.direction), reason: error.message });
@@ -891,17 +941,19 @@ export function planTransfer(state: RuntimeState, input: TransferHolesInput): Tr
   for (const hole of holes) {
     const label = describeAxis(hole.index, hole.source);
     if (input.hole.depthMm !== undefined && input.hole.depthMm >= hole.farDistanceMm - 1e-6) throw new Error(`${label}: depthMm ${input.hole.depthMm} reaches the far side of the target (${hole.farDistanceMm.toFixed(4)} mm along the axis); use through: true`);
-    // The local wall: the next target face on the axis. At least MIN_FEATURE_MM of material stays under a floor.
+    // The local wall from the rays: the next target face after the entry. At least MIN_FEATURE_MM stays under a floor.
     const wall = hole.nextFaceMm;
     const wallText = wall === undefined ? "" : `the next target face on the axis is ${wall.toFixed(4)} mm from the entry (the local wall thickness)`;
     if (wall !== undefined && input.hole.depthMm !== undefined && input.hole.depthMm > wall - MIN_FEATURE_MM) throw new Error(`${label}: depthMm ${input.hole.depthMm} reaches the far side of the wall: ${wallText}, and at least ${MIN_FEATURE_MM} mm must stay under the floor; use a smaller depthMm or through: true`);
     if (input.hole.counterbore && input.hole.counterbore.depthMm >= hole.farDistanceMm - 1e-6) throw new Error(`${label}: counterbore depth reaches the far side of the target`);
-    if (wall !== undefined && input.hole.counterbore && input.hole.counterbore.depthMm > wall - MIN_FEATURE_MM) throw new Error(`${label}: counterbore depth ${input.hole.counterbore.depthMm} reaches the far side of the wall: ${wallText}`);
+    const boreWall = Math.min(wall ?? Number.POSITIVE_INFINITY, hole.headWallMm ?? Number.POSITIVE_INFINITY);
+    if (input.hole.counterbore && input.hole.counterbore.depthMm > boreWall - MIN_FEATURE_MM) throw new Error(`${label}: counterbore depth ${input.hole.counterbore.depthMm} reaches the far side of the wall: the next target face is ${boreWall.toFixed(4)} mm from the entry within the counterbore radius`);
     const sink = input.hole.countersunk ? (input.hole.countersunk.headDiameterMm - input.hole.diameterMm) / 2 : undefined;
     if (sink !== undefined && sink >= hole.farDistanceMm - 1e-6) throw new Error(`${label}: countersink depth reaches the far side of the target`);
     if (sink !== undefined && wall !== undefined && sink > wall - MIN_FEATURE_MM) throw new Error(`${label}: the ${sink} mm deep countersink reaches the far side of the wall: ${wallText}`);
+    if (input.hole.through && !hole.agree) throw new AxisRefusal("breakout", `${label}: ${hole.disagreement}; a hole must be a full cylinder along its whole length, so the cut is refused before the edit`);
   }
-  return { source, target, holes, skipped };
+  return { source, target, holes, skipped, probe };
 }
 
 // Pattern recipes share one axis and one material depth, so holes group by both.
@@ -909,25 +961,39 @@ function groupKey(hole: PlannedHole): string {
   return `${round6(hole.direction).join(",")}|${Math.round(hole.farDistanceMm * 1e6)}`;
 }
 
-/** Circle and boundary checks of one cylinder face cut by the tool: every end a full turn, no edge shared with a side wall. */
-function breakoutProblem(face: Face, edgeById: Map<string, Edge>, direction: Vector3): string | undefined {
-  const ends = new Map<number, number>();
+/**
+ * Circle and boundary checks of one face the cut made (a bore cylinder, a countersink cone, a counterbore wall or floor):
+ * every circle edge measured, the circles at each end a full turn, and no edge shared with another face but a circle (a
+ * seam line borders only its own face). A problem names what the cut ran into: a side wall, an oblique face or a curved one.
+ */
+function breakoutProblem(face: Face, faceById: Map<string, Face>, edgeById: Map<string, Edge>, direction: Vector3): string | undefined {
+  const what = face.surfaceType === "Cone" ? "the countersink cone" : face.planar ? "the counterbore floor" : "the bore";
+  const into = (otherId: string | undefined) => {
+    const other = otherId === undefined ? undefined : faceById.get(otherId);
+    if (other && !other.planar) return `crosses a curved face of the target (face ${other.id} ${other.surfaceType}: a cross hole or a fillet)`;
+    if (other && parallelSine(other.normal, direction) > PARALLEL_SINE && Math.abs(dot(unit(other.normal), direction)) > PARALLEL_SINE) return `exits through an oblique face of the target (face ${other.id}: a chamfer or slope)`;
+    return "breaks out of a side wall of the target";
+  };
+  const ends = new Map<number, { sweep: number; other?: string | undefined }>();
   for (const id of face.edgeIds) {
     const edge = edgeById.get(id);
-    if (!edge) return `edge ${id} of cylinder face ${face.id} is missing`;
+    if (!edge) return `${what} cannot be proven whole: edge ${id} of face ${face.id} is missing`;
+    const others = edge.faceIds.filter((other) => other !== face.id);
     if (edge.circle) {
       const sweep = circleSweepDeg(edge);
-      if (sweep === undefined) return `circle edge ${edge.id} of cylinder face ${face.id} carries no geometry, so the bore cannot be proven whole`;
+      if (sweep === undefined) return `${what} cannot be proven whole: circle edge ${edge.id} of face ${face.id} carries no geometry`;
+      if (face.planar && sweep < FULL_TURN_DEG) return `${what} ${into(others[0])} (its circle edge ${edge.id} is a partial circle, ${sweep.toFixed(1)} degrees)`;
       const key = Math.round(dot(edge.circleGeometry!.centerMm, direction) / AXIS_END_MM);
-      ends.set(key, (ends.get(key) ?? 0) + sweep);
+      const end = ends.get(key) ?? { sweep: 0 };
+      end.sweep += sweep;
+      end.other ??= others[0];
+      ends.set(key, end);
       continue;
     }
-    // A seam line borders only its own face; any other edge borders a side wall the bore cuts into.
-    const others = edge.faceIds.filter((other) => other !== face.id);
-    if (others.length > 0) return `cylinder face ${face.id} has a ${edge.curveType} edge ${edge.id} on face ${others[0]}`;
+    if (others.length > 0) return `${what} ${into(others[0])} (face ${face.id} has a ${edge.curveType} edge ${edge.id} on face ${others[0]})`;
   }
-  for (const [key, sweep] of ends) if (sweep < FULL_TURN_DEG) return `cylinder face ${face.id} ends in a partial circle (${sweep.toFixed(1)} degrees) ${(key * AXIS_END_MM).toFixed(3)} mm along the axis`;
-  if (ends.size < 2) return `cylinder face ${face.id} has ${ends.size} circle end(s), not two`;
+  for (const [key, end] of ends) if (end.sweep < FULL_TURN_DEG) return `${what} ${into(end.other)} (face ${face.id} ends in a partial circle (${end.sweep.toFixed(1)} degrees) ${(key * AXIS_END_MM).toFixed(3)} mm along the axis)`;
+  if (!face.planar && ends.size < 2) return `${what} cannot be proven whole: face ${face.id} has ${ends.size} circle end(s), not two`;
   return undefined;
 }
 
@@ -948,7 +1014,7 @@ function countBores(faces: Face[], edgeById: Map<string, Edge>, direction: Vecto
 
 export async function transferHoles(operations: TransferOperations, input: TransferHolesInput): Promise<TransferHolesResult> {
   const initial = await operations.state();
-  const plan = planTransfer(initial, input);
+  const plan = await planTransfer(operations, initial, input);
   const spec = input.hole;
   const steps: MateStep[] = [];
   const recipes = new PlasticityRecipes(operations);
@@ -1017,20 +1083,38 @@ export async function transferHoles(operations: TransferOperations, input: Trans
           return sweep >= FULL_TURN_DEG;
         });
         if (!entryCircle) problems.push(`${label}: no full Ø${2 * entryRadiusMm} circle centred on the entry point ${JSON.stringify(round6(hole.entryPointMm))} borders a planar face in the entry plane`);
-        // Side breakout: every circle boundary of every cylinder face the cut made on this axis is a full circle. An outward
-        // face on the axis (a rod or boss the hole runs down the middle of) was there before and is no bore.
-        for (const face of coaxialFaces.filter((candidate) => candidate.surfaceType === "Cylinder" && surfaceFacing(candidate) !== "boss")) {
-          const breakout = breakoutProblem(face, edgeById, unit(hole.direction));
-          if (breakout) { problems.push(`${label}: the bore breaks out of a side wall of the target (${breakout}); a hole must be a full cylinder along its whole length`); break; }
+        // Breakout: every face the cut made on this axis is whole: the bore cylinders, the countersink cone, the
+        // counterbore wall and its floor. An outward face on the axis (a rod or boss the hole runs down the middle of) was
+        // there before and is no part of the cut.
+        // The faces the cut made: a coaxial face that ends at or before the entry plane (a recess, cup or pocket-corner
+        // wall), or that starts past a blind hole's floor (a drilled far wall), was there before.
+        const reach = spec.depthMm ?? Number.POSITIVE_INFINITY;
+        const positionsOf = (face: Face) => face.edgeIds.map((id) => edgeById.get(id)).filter((edge): edge is Edge => !!edge?.circleGeometry).map((edge) => dot(sub(edge.circleGeometry!.centerMm, hole.entryPointMm), unit(hole.direction)));
+        const inCut = (face: Face) => { const at = positionsOf(face); return at.length > 0 && Math.max(...at) > 1e-4 && Math.min(...at) < reach + 1e-4; };
+        const made = coaxialFaces.filter((candidate) => surfaceFacing(candidate) !== "boss" && inCut(candidate));
+        const madeIds = new Set(made.map((face) => face.id));
+        const ours = bore.filter((entry) => madeIds.has(entry.cylinder.faceId));
+        if (ours.length === 0) { problems.push(`${label}: no full-turn Ø${spec.diameterMm} hole face made by the cut is coaxial with the source axis within 1e-6 mm`); continue; }
+        if (spec.counterbore) {
+          const floorPoint = add(hole.entryPointMm, scale(hole.direction, spec.counterbore.depthMm));
+          const wall = made.find((face) => face.surfaceType === "Cylinder" && face.radiusMm !== null && Math.abs(face.radiusMm - spec.counterbore!.diameterMm / 2) <= COINCIDENT_MM);
+          const floorEdge = wall?.edgeIds.map((id) => edgeById.get(id)).find((edge) => !!edge?.circleGeometry && distance(edge.circleGeometry.centerMm, floorPoint) <= COINCIDENT_MM);
+          const floor = floorEdge?.faceIds.filter((id) => id !== wall!.id).map((id) => faceById.get(id)).find((face) => face?.planar);
+          if (!floor) problems.push(`${label}: no counterbore floor at depth ${spec.counterbore.depthMm} mm borders the counterbore wall`);
+          else made.push(floor);
+        }
+        for (const face of made) {
+          const breakout = breakoutProblem(face, faceById, edgeById, unit(hole.direction));
+          if (breakout) { problems.push(`${label}: ${breakout}; a hole must be a full cylinder (and its countersink or counterbore whole) along its whole length`); break; }
         }
         if (spec.depthMm !== undefined) {
           const floorPoint = add(hole.entryPointMm, scale(hole.direction, spec.depthMm));
-          const floor = bore[0]!.cylinder.circleEdges.find((edge) => distance(edge.circleGeometry!.centerMm, floorPoint) <= COINCIDENT_MM
-            && edge.faceIds.some((other) => { const face = faceById.get(other); return face !== undefined && other !== bore[0]!.cylinder.faceId && face.planar && face.edgeIds.every((id) => bore[0]!.cylinder.circleEdges.some((own) => own.id === id)); }));
+          const floor = ours.some(({ cylinder }) => cylinder.circleEdges.some((edge) => distance(edge.circleGeometry!.centerMm, floorPoint) <= COINCIDENT_MM
+            && edge.faceIds.some((other) => { const face = faceById.get(other); return face !== undefined && other !== cylinder.faceId && face.planar && face.edgeIds.every((id) => cylinder.circleEdges.some((own) => own.id === id)); })));
           if (!floor) problems.push(`${label}: no flat floor closes the blind hole at depth ${spec.depthMm} mm`);
         }
-        const boreFaces = coaxialFaces.filter((face) => face.surfaceType === "Cylinder" && surfaceFacing(face) !== "boss" && face.radiusMm !== null && Math.abs(face.radiusMm - spec.diameterMm / 2) <= COINCIDENT_MM);
-        const best = bore[0]!;
+        const boreFaces = made.filter((face) => face.surfaceType === "Cylinder" && face.radiusMm !== null && Math.abs(face.radiusMm - spec.diameterMm / 2) <= COINCIDENT_MM);
+        const best = ours[0]!;
         holes.push({ axisIndex: hole.index, holeFaceId: best.cylinder.faceId, axisOriginMm: round6(best.cylinder.originMm), axisDirection: round6(best.cylinder.direction), coaxialOffsetMm: best.offset, bores: countBores(boreFaces, edgeById, unit(hole.direction)) });
       }
       problems.push(...await validityProblems(operations, body.id, final.revision));
@@ -1056,6 +1140,7 @@ export async function transferHoles(operations: TransferOperations, input: Trans
     holes,
     ...(plan.skipped.length > 0 ? { skipped: plan.skipped } : {}),
     maxCoaxialOffsetMm: Math.max(0, ...holes.map((hole) => hole.coaxialOffsetMm)),
+    probe: plan.probe,
     undoSteps: final.undoDepth - initial.undoDepth,
     steps,
   };
