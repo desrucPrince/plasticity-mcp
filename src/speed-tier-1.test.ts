@@ -88,11 +88,11 @@ function fixture() {
     async fillet(...args: unknown[]) { calls.push({ op: "fillet", args }); return commit({}); },
     async showFaceControlPoints(...args: unknown[]) {
       calls.push({ op: "showFaceControlPoints", args });
-      return { state: commit({}), controlPoints: [{ cvId: 3, positionMm: [1.123456789, 2, 3] }, { cvId: 4, positionMm: [4, 5, 6] }] };
+      return { state: commit({}), controlPoints: [{ cvId: "9c3", positionMm: [1.123456789, 2, 3] }, { cvId: "9c4", positionMm: [4, 5, 6] }] };
     },
     async moveFaceControlPoints(...args: unknown[]) {
       calls.push({ op: "moveFaceControlPoints", args });
-      return { state: commit({}), controlPoints: [{ cvId: 3, positionMm: [1, 2, 4] }] };
+      return { state: commit({}), controlPoints: [{ cvId: "9c3", positionMm: [1, 2, 4] }] };
     },
     async setDrivingDistance(...args: unknown[]) {
       calls.push({ op: "setDrivingDistance", args });
@@ -283,7 +283,7 @@ test("stored step results stay whole: four reference paths resolve in lean mode"
   const fillets = calls.filter((call) => call.op === "fillet");
   assert.deepEqual(fillets[0]!.args.slice(0, 3), [1, ["s1", "s2", "s3"].filter((id) => ["s1", "s2", "s3"].includes(id)), 1], "$n.result.createdEdges[*].edgeId");
   assert.deepEqual(fillets[1]!.args.slice(0, 3), [1, ["e4", "s1", "s2"], 0.5], "$n.result.matches[*].id");
-  assert.deepEqual(calls.find((call) => call.op === "moveFaceControlPoints")!.args.slice(0, 3), [1, [3, 4], [0, 0, 1]], "$n.result.controlPoints[*].cvId");
+  assert.deepEqual(calls.find((call) => call.op === "moveFaceControlPoints")!.args.slice(0, 3), [1, ["9c3", "9c4"], [0, 0, 1]], "$n.result.controlPoints[*].cvId");
   assert.deepEqual(calls.find((call) => call.op === "boolean")!.args.slice(0, 2), [[1], [10]], "$n.added[0]");
   await close();
 });
@@ -297,7 +297,7 @@ test("mutating steps carry their tool-specific result fields in both detail mode
   ];
   for (const detail of ["standard", "lean"]) {
     const output = await runBatchOnFresh({ detail, steps });
-    assert.deepEqual(output.steps[0].result.controlPoints.map((point: { cvId: number }) => point.cvId), [3, 4], detail);
+    assert.deepEqual(output.steps[0].result.controlPoints.map((point: { cvId: string }) => point.cvId), ["9c3", "9c4"], detail);
     assert.deepEqual(output.steps[1].result, { path: "/tmp/plate.step", bytes: 4321 }, detail);
     assert.equal(output.steps[2].result.previousDistanceMm, 20.123456789, detail);
     assert.equal(output.steps[2].result.distanceMm, 30);
@@ -311,7 +311,7 @@ test("roundMm rounds the reply only, never the stored results", async () => {
   const steps = [
     { toolName: "plasticity_show_face_control_points", arguments: { bodyId: 1, faceIds: ["f1"] } },
     { toolName: "plasticity_create_box", arguments: { originMm: [0, 0, 0], sizeMm: [2, 2, 2] } },
-    { toolName: "plasticity_move_face_control_points", arguments: { bodyId: 1, cvIds: [3], deltaMm: ["$0.result.controlPoints[0].positionMm[0]", 0, 1] } },
+    { toolName: "plasticity_move_face_control_points", arguments: { bodyId: 1, cvIds: ["9c3"], deltaMm: ["$0.result.controlPoints[0].positionMm[0]", 0, 1] } },
   ];
   const { fake, calls } = fixture();
   const { client, close } = await connect(fake);
