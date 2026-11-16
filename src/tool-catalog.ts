@@ -9,6 +9,7 @@ const compactTools = new Set([
   "plasticity_current_selection",
   "plasticity_list_bodies",
   "plasticity_body_info",
+  "plasticity_describe_body",
   "plasticity_capture_snapshot",
   "plasticity_changes_since",
   "plasticity_reconcile",

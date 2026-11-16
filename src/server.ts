@@ -22,7 +22,7 @@ import { PrintedThreadRecipes } from "./plasticity/printed-thread-recipes.ts";
 import { acquireWindowOwnership, type WindowOwnership } from "./plasticity/ownership.ts";
 import { connectSessionWindow, type SessionConnection } from "./plasticity/session-lifecycle.ts";
 import { LONG_NATIVE_IMPORT_TIMEOUT_MS, NATIVE_STATE_READ_TIMEOUT_MS, PlasticityRuntime, type RuntimeState } from "./plasticity/runtime.ts";
-import { findEdges, findFaces, type EdgeQuery, type FaceQuery } from "./plasticity/semantic.ts";
+import { describeBody, findEdges, findFaces, type EdgeQuery, type FaceQuery } from "./plasticity/semantic.ts";
 import { fastenerDesignationInputSchema, resolveFastenerDesignation } from "./fasteners/designation.ts";
 import { checkFastenerStack, fastenerStackInputSchema } from "./fasteners/stack.ts";
 import type { AnalysisClient } from "./codex/analysis-client.ts";
@@ -2194,6 +2194,9 @@ function orderMatches<T>(matches: T[], sortBy: string | undefined, order: "asc" 
   }
   return limit === undefined ? ordered : ordered.slice(0, limit);
 }
+const DIRECT_FIND_REPLY_BYTES = 8_000;
+const DIRECT_FIND_HINT = "add limit/sortBy or narrow the query";
+const BODY_INFO_HINT_BYTES = 20_000;
 const COORDINATE_AXIS: Record<string, number> = { x: 0, y: 1, z: 2 };
 // plasticity_measure_face_properties measures at most 256 faces per call (MAX_FACES in plasticity/face-properties.ts).
 const FACE_AREA_SORT_LIMIT = 256;
@@ -2357,6 +2360,22 @@ function createServerWithCatalog(
     } finally {
       release?.();
     }
+  };
+  // Set while plasticity_batch runs its steps: a batch reads full find results through $n.result references, so only
+  // direct find calls are cut to a safe size.
+  const batchRunning = new AsyncLocalStorage<true>();
+  // A direct find without limit never returns more than DIRECT_FIND_REPLY_BYTES: the clients cut or save oversized
+  // replies to a file. The matches that fit stay in their order; count stays the total. An explicit limit is honoured.
+  const directFindReply = <T extends { matches: unknown[] }>(reply: T, limit: number | undefined): T | (T & { truncated: true; hint: string }) => {
+    if (limit !== undefined || batchRunning.getStore() || Buffer.byteLength(JSON.stringify(reply)) <= DIRECT_FIND_REPLY_BYTES) return reply;
+    const fits = (keep: number) => Buffer.byteLength(JSON.stringify({ ...reply, matches: reply.matches.slice(0, keep), truncated: true, hint: DIRECT_FIND_HINT })) <= DIRECT_FIND_REPLY_BYTES;
+    let low = 0;
+    let high = reply.matches.length;
+    while (low < high) { // largest number of matches that fits
+      const middle = Math.ceil((low + high) / 2);
+      if (fits(middle)) low = middle; else high = middle - 1;
+    }
+    return { ...reply, matches: reply.matches.slice(0, low), truncated: true, hint: DIRECT_FIND_HINT };
   };
   const persistJournalEntry = async (entry: JournalEntry): Promise<void> => {
     if (!constructionHistory) return;
@@ -2703,7 +2722,7 @@ function createServerWithCatalog(
     description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all); addedSolids, addedSheets and addedWires filter by type (create_cone adds a Solid and its profile Wire); likewise removed and regionsAdded. Read any step's output with \"$<step>.result.path\" using .key, [i] and [*], e.g. \"$3.result.matches[*].id\" after plasticity_find_edges or \"$2.result.createdEdges[*].edgeId\" after plasticity_boolean. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many. The reply lists what changed (new bodies with bounds); verbose=true adds the full scene summary. A step may carry return: [paths] (e.g. [\"matches[*].id\", \"matches[*].axisOriginMm\"]) to get exactly those values back; without it a read result over 1,500 bytes is cut to ids with truncated: true. detail: \"lean\" leaves out the createdEdges echo (createdEdgeCount stays), bodies a later step consumed and empty lists, a recipe's step journal (its status stays), and the matches of a read a later step references (count, plus ids up to 8, stay), and ends with one summary of what survives. roundMm rounds numbers in the reply only.",
     inputSchema: batchSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
-  }, async (rawInput, extra) => result(await exclusive(async () => {
+  }, async (rawInput, extra) => result(await exclusive(async () => await batchRunning.run(true, async () => {
     const input = batchSchema.parse(rawInput);
     hud.start("batch");
     try {
@@ -2714,7 +2733,7 @@ function createServerWithCatalog(
       hud.fail(error);
       throw error;
     }
-  })));
+  }))));
   // Only a batch turns on state reuse (PlasticityOperations.state): it holds the lock for every step, so the state
   // read after step k can stand in for step k+1's journal-before, revision check and before-state. Fakes without the
   // hooks, and every direct tool call, read exactly as before.
@@ -2970,11 +2989,35 @@ function createServerWithCatalog(
     await session.get().listCurveControlPoints(wireIds, current), true);
   tool("plasticity_list_curve_intersections", "List exact revision-bound native intersections between Wire bodies.", z.object({}), async () =>
     await session.get().listCurveIntersections(), true);
-  tool("plasticity_body_info", "Read one body from the current document revision.", z.object({ id: z.number().int().positive() }), async ({ id }) => {
+  tool("plasticity_body_info", "Read one body from the current document revision: exact topology of every face, edge and vertex. faces, edges and vertices (default true) take a list out of the reply when false. For sizing and locating features use plasticity_describe_body.", z.object({
+    id: z.number().int().positive(),
+    faces: z.boolean().optional(),
+    edges: z.boolean().optional(),
+    vertices: z.boolean().optional(),
+  }), async ({ id, faces, edges, vertices }) => {
     const state = await session.get().state();
     const body = state.bodies.find((candidate) => candidate.id === id);
     if (!body) throw new Error(`Unknown body ID: ${id}`);
-    return { documentToken: state.documentToken, revision: state.revision, measurementSource: "native-brep", body };
+    const flagged = faces !== undefined || edges !== undefined || vertices !== undefined;
+    const { faces: allFaces, edges: allEdges, vertices: allVertices, ...rest } = body;
+    const shaped = {
+      ...rest,
+      ...(faces === false ? {} : { faces: allFaces }),
+      ...(edges === false ? {} : { edges: allEdges }),
+      ...(vertices === false || allVertices === undefined ? {} : { vertices: allVertices }),
+    };
+    const reply = { documentToken: state.documentToken, revision: state.revision, measurementSource: "native-brep", body: flagged ? shaped : body };
+    // Nothing is dropped by default: a big reply only says how to get a smaller one.
+    if (!flagged && Buffer.byteLength(JSON.stringify(reply)) > BODY_INFO_HINT_BYTES) {
+      return { ...reply, hint: "large reply; use plasticity_describe_body, or pass edges:false/vertices:false" };
+    }
+    return reply;
+  }, true);
+  tool("plasticity_describe_body", "Describe one body compactly for sizing against it and verifying it: bounds and size, planar faces grouped by outward normal (xPos, xNeg, yPos, yNeg, zPos, zNeg, slanted) with each plane's coordinate mm on that axis (walls, cavity floor), face count (when over 1) and largest face, cylinders grouped by radius and axis with hole or boss and axis points, other surface counts and blend radii. Millimetres. Use plasticity_body_info for exact per-face and edge topology.", z.object({ id: z.number().int().positive() }).strict(), async ({ id }) => {
+    const state = await session.get().state();
+    const body = state.bodies.find((candidate) => candidate.id === id);
+    if (!body) throw new Error(`Unknown body ID: ${id}`);
+    return describeBody(body, state.revision);
   }, true);
   tool("plasticity_inspect_fastener_group", "Read exact in-plane centers and diameters from two or more explicitly selected cylindrical faces on one current Solid. The returned revision-bound native B-Rep evidence and assignments can be passed into fastener-group load distribution; coaxial duplicate faces, stale references, and axes not normal to the supplied frame are rejected.", fastenerGroupInspectionInputSchema, async (request) =>
     await session.get().inspectFastenerGroup(request), true);
@@ -3001,10 +3044,10 @@ function createServerWithCatalog(
         return { ...face, areaMm2 };
       });
       const matches = orderMatches(withArea, sortBy, order, limit, (face) => face.areaMm2);
-      return { documentToken: state.documentToken, revision: state.revision, measurementSource: "native-brep", count: found.length, matches };
+      return directFindReply({ documentToken: state.documentToken, revision: state.revision, measurementSource: "native-brep", count: found.length, matches }, limit);
     }
     const matches = orderMatches(found, sortBy, order, limit, (face, key) => face.centerMm[COORDINATE_AXIS[key]!]!);
-    return { documentToken: state.documentToken, revision: state.revision, measurementSource: "native-brep", count: found.length, matches };
+    return directFindReply({ documentToken: state.documentToken, revision: state.revision, measurementSource: "native-brep", count: found.length, matches }, limit);
   }, true);
   tool("plasticity_find_edges", "Find current B-Rep edges semantically by body, curve type, direction, exact length, center, bounds, or adjacent faces. boundsMm matches by overlap. sortBy (length, or x, y or z of the edge center), order (length defaults to desc) and limit pick among the matches; count is the total before limit.", z.object({
     revision,
@@ -3017,7 +3060,7 @@ function createServerWithCatalog(
     if (state.revision !== expected) throw new Error(`Stale reference: expected revision ${expected}, current revision is ${state.revision}`);
     const found = findEdges(state, query);
     const matches = orderMatches(found, sortBy, order, limit, (edge, key) => (key === "length" ? edge.lengthMm : edge.centerMm[COORDINATE_AXIS[key]!]!));
-    return { documentToken: state.documentToken, revision: state.revision, measurementSource: "native-brep", count: found.length, matches };
+    return directFindReply({ documentToken: state.documentToken, revision: state.revision, measurementSource: "native-brep", count: found.length, matches }, limit);
   }, true);
   tool("plasticity_save_named_selection", "Save a semantic face or edge query and re-evaluate it after topology changes.", z.discriminatedUnion("kind", [
     z.object({ name: z.string().trim().min(1).max(120), kind: z.literal("faces"), query: faceQuerySchema, expectedCount: z.number().int().positive().max(4096).optional(), revision }).strict(),

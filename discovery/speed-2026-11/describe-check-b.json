@@ -1,0 +1,1116 @@
+{
+ "scenario": "b",
+ "tier": "1b",
+ "measuredAt": "2026-11-16T17:40:13.768Z",
+ "scenarioMs": 408,
+ "totals": {
+  "turns": 1,
+  "calls": 1,
+  "reqBytes": 2308,
+  "respBytes": 2230,
+  "outTokens": 577,
+  "inTokens": 558,
+  "serverMs": 407,
+  "forcedExtra": []
+ },
+ "detail": {
+  "bodyId": 1136,
+  "faceCount": 23,
+  "steps": 16,
+  "out": {
+   "steps": [
+    {
+     "step": 0,
+     "toolName": "plasticity_create_box",
+     "added": [
+      1136
+     ],
+     "addedBodies": [
+      {
+       "id": 1136,
+       "versionId": 1883,
+       "type": "Solid",
+       "name": "l-bracket",
+       "boundsMm": {
+        "min": [
+         2200,
+         0,
+         0
+        ],
+        "max": [
+         2240,
+         30,
+         4
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 6,
+       "edgeCount": 12,
+       "vertexCount": 8
+      }
+     ]
+    },
+    {
+     "step": 1,
+     "toolName": "plasticity_create_box",
+     "added": [
+      1137
+     ]
+    },
+    {
+     "step": 2,
+     "toolName": "plasticity_boolean",
+     "removed": [
+      1137
+     ],
+     "createdEdgeCount": 5
+    },
+    {
+     "step": 3,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 1,
+      "ids": [
+       "1885e231616"
+      ]
+     }
+    },
+    {
+     "step": 4,
+     "toolName": "plasticity_fillet"
+    },
+    {
+     "step": 5,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 2,
+      "ids": [
+       "1886e231443",
+       "1886e231439"
+      ]
+     }
+    },
+    {
+     "step": 6,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 2,
+      "ids": [
+       "1886e231561",
+       "1886e231551"
+      ]
+     }
+    },
+    {
+     "step": 7,
+     "toolName": "plasticity_fillet"
+    },
+    {
+     "step": 8,
+     "toolName": "plasticity_create_rib",
+     "added": [
+      1138
+     ],
+     "regionsAdded": [
+      "1890r232296"
+     ],
+     "addedBodies": [
+      {
+       "id": 1138,
+       "versionId": 1888,
+       "type": "Wire",
+       "name": "Polyline.001",
+       "boundsMm": {
+        "min": [
+         2203.5,
+         13,
+         3.5
+        ],
+        "max": [
+         2229,
+         13,
+         29.000000000000007
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 0,
+       "edgeCount": 0,
+       "vertexCount": 0
+      }
+     ],
+     "result": {
+      "status": "completed"
+     }
+    },
+    {
+     "step": 9,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      1140
+     ]
+    },
+    {
+     "step": 10,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      1141
+     ]
+    },
+    {
+     "step": 11,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      1142
+     ]
+    },
+    {
+     "step": 12,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      1143
+     ]
+    },
+    {
+     "step": 13,
+     "toolName": "plasticity_boolean",
+     "removed": [
+      1140,
+      1141,
+      1142,
+      1143
+     ],
+     "createdEdgeCount": 20
+    },
+    {
+     "step": 14,
+     "toolName": "plasticity_find_faces",
+     "result": {
+      "matches[*].axisOriginMm": [
+       [
+        2226,
+        7.5,
+        -0.5
+       ],
+       [
+        2199.5,
+        7.5,
+        26
+       ],
+       [
+        2199.5,
+        22.5,
+        26
+       ],
+       [
+        2226,
+        22.5,
+        -0.5
+       ]
+      ],
+      "matches[*].axisDirection": [
+       [
+        0,
+        0,
+        1
+       ],
+       [
+        1,
+        0,
+        2.2204460492503136e-16
+       ],
+       [
+        1,
+        0,
+        2.2204460492503136e-16
+       ],
+       [
+        0,
+        0,
+        1
+       ]
+      ]
+     }
+    },
+    {
+     "step": 15,
+     "toolName": "plasticity_find_faces",
+     "result": {
+      "matches[*].radiusMm": [
+       5,
+       5,
+       3,
+       3,
+       3,
+       3,
+       2.25,
+       2.25,
+       2.25,
+       2.25
+      ]
+     }
+    }
+   ],
+   "summary": {
+    "revision": "r20.a2f57f163671c437",
+    "undoSteps": 13,
+    "bodyCount": 6,
+    "added": [
+     {
+      "id": 1138,
+      "type": "Wire",
+      "name": "Polyline.001",
+      "boundsMm": {
+       "min": [
+        2203.5,
+        13,
+        3.5
+       ],
+       "max": [
+        2229,
+        13,
+        29.000000000000007
+       ]
+      },
+      "faceCount": 0,
+      "edgeCount": 0
+     },
+     {
+      "id": 1136,
+      "type": "Solid",
+      "name": "l-bracket",
+      "boundsMm": {
+       "min": [
+        2200,
+        0,
+        0
+       ],
+       "max": [
+        2240,
+        30,
+        40
+       ]
+      },
+      "faceCount": 23,
+      "edgeCount": 63
+     }
+    ]
+   }
+  },
+  "checks": [
+   {
+    "check": "bracket bounds",
+    "expected": {
+     "min": [
+      2200,
+      0,
+      0
+     ],
+     "max": [
+      2240,
+      30,
+      40
+     ]
+    },
+    "actual": {
+     "min": [
+      2200,
+      0,
+      0
+     ],
+     "max": [
+      2240,
+      30,
+      40
+     ]
+    },
+    "ok": true
+   },
+   {
+    "check": "base-leg hole axes",
+    "expected": [
+     [
+      2226,
+      7.5
+     ],
+     [
+      2226,
+      22.5
+     ]
+    ],
+    "actual": [
+     [
+      2226,
+      7.5
+     ],
+     [
+      2226,
+      22.5
+     ]
+    ],
+    "count": 2,
+    "ok": true
+   },
+   {
+    "check": "vertical-leg hole axes",
+    "expected": [
+     [
+      7.5,
+      26
+     ],
+     [
+      22.5,
+      26
+     ]
+    ],
+    "actual": [
+     [
+      7.5,
+      26
+     ],
+     [
+      22.5,
+      26
+     ]
+    ],
+    "count": 2,
+    "ok": true
+   },
+   {
+    "check": "cylindrical faces radii (expect r5 bend x2 split by gusset, r3 tips x4, r2.25 holes x4)",
+    "actual": [
+     5,
+     5,
+     3,
+     3,
+     3,
+     3,
+     2.25,
+     2.25,
+     2.25,
+     2.25
+    ],
+    "ok": true
+   }
+  ]
+ },
+ "calls": [
+  {
+   "turn": 1,
+   "label": "build L-bracket + verify reads (one lean batch)",
+   "tool": "plasticity_batch",
+   "reqBytes": 2308,
+   "respBytes": 2230,
+   "wallMs": 407.1,
+   "isError": false,
+   "ops": {
+    "stateReads": 14,
+    "stateMs": 136.7,
+    "stateBytesMax": 66445,
+    "probes": 17,
+    "probeMs": 41.1,
+    "mutates": 13,
+    "mutateMs": 115.7,
+    "reads": 0,
+    "readMs": 0,
+    "journalWrites": 11,
+    "journalMs": 78.4
+   },
+   "stepOps": [
+    {
+     "step": 0,
+     "stateReads": 1,
+     "stateMs": 5.4,
+     "stateBytesMax": 28124,
+     "probes": 1,
+     "probeMs": 2.6,
+     "mutates": 1,
+     "mutateMs": 7.7,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7.3,
+     "wallMs": 23.9,
+     "residualMs": 0.9
+    },
+    {
+     "step": 1,
+     "stateReads": 1,
+     "stateMs": 4.8,
+     "stateBytesMax": 35834,
+     "probes": 1,
+     "probeMs": 2.6,
+     "mutates": 1,
+     "mutateMs": 9.7,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.2,
+     "wallMs": 24.4,
+     "residualMs": 1.1
+    },
+    {
+     "step": 2,
+     "stateReads": 1,
+     "stateMs": 5.2,
+     "stateBytesMax": 31844,
+     "probes": 1,
+     "probeMs": 2,
+     "mutates": 1,
+     "mutateMs": 9,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.2,
+     "wallMs": 23.3,
+     "residualMs": 0.9
+    },
+    {
+     "step": 3,
+     "stateReads": 0,
+     "stateMs": 0,
+     "stateBytesMax": 0,
+     "probes": 1,
+     "probeMs": 3.9,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 4.6,
+     "residualMs": 0.7
+    },
+    {
+     "step": 4,
+     "stateReads": 1,
+     "stateMs": 7.1,
+     "stateBytesMax": 34398,
+     "probes": 1,
+     "probeMs": 2.3,
+     "mutates": 1,
+     "mutateMs": 7.1,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 8.9,
+     "wallMs": 28.2,
+     "residualMs": 2.8
+    },
+    {
+     "step": 5,
+     "stateReads": 0,
+     "stateMs": 0,
+     "stateBytesMax": 0,
+     "probes": 1,
+     "probeMs": 1.9,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 2.8,
+     "residualMs": 0.9
+    },
+    {
+     "step": 6,
+     "stateReads": 0,
+     "stateMs": 0,
+     "stateBytesMax": 0,
+     "probes": 1,
+     "probeMs": 1.5,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 1.8,
+     "residualMs": 0.3
+    },
+    {
+     "step": 7,
+     "stateReads": 1,
+     "stateMs": 7.6,
+     "stateBytesMax": 44047,
+     "probes": 1,
+     "probeMs": 1.4,
+     "mutates": 1,
+     "mutateMs": 7.9,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 9.2,
+     "wallMs": 28.3,
+     "residualMs": 2.2
+    },
+    {
+     "step": 8,
+     "stateReads": 3,
+     "stateMs": 36.5,
+     "stateBytesMax": 53148,
+     "probes": 1,
+     "probeMs": 2.2,
+     "mutates": 3,
+     "mutateMs": 31.4,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.2,
+     "wallMs": 82.5,
+     "residualMs": 6.2
+    },
+    {
+     "step": 9,
+     "stateReads": 1,
+     "stateMs": 19.4,
+     "stateBytesMax": 55840,
+     "probes": 1,
+     "probeMs": 2.2,
+     "mutates": 1,
+     "mutateMs": 6.8,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7.9,
+     "wallMs": 39.7,
+     "residualMs": 3.4
+    },
+    {
+     "step": 10,
+     "stateReads": 1,
+     "stateMs": 10.9,
+     "stateBytesMax": 58553,
+     "probes": 1,
+     "probeMs": 5.7,
+     "mutates": 1,
+     "mutateMs": 9.7,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7,
+     "wallMs": 36,
+     "residualMs": 2.7
+    },
+    {
+     "step": 11,
+     "stateReads": 1,
+     "stateMs": 12.1,
+     "stateBytesMax": 61340,
+     "probes": 1,
+     "probeMs": 3.3,
+     "mutates": 1,
+     "mutateMs": 7,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 5.8,
+     "wallMs": 32.2,
+     "residualMs": 4
+    },
+    {
+     "step": 12,
+     "stateReads": 1,
+     "stateMs": 9.1,
+     "stateBytesMax": 64135,
+     "probes": 1,
+     "probeMs": 2.2,
+     "mutates": 1,
+     "mutateMs": 6.4,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 5.5,
+     "wallMs": 26.4,
+     "residualMs": 3.2
+    },
+    {
+     "step": 13,
+     "stateReads": 1,
+     "stateMs": 15.6,
+     "stateBytesMax": 66445,
+     "probes": 1,
+     "probeMs": 2.2,
+     "mutates": 1,
+     "mutateMs": 12.8,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 8.1,
+     "wallMs": 41.2,
+     "residualMs": 2.5
+    },
+    {
+     "step": 14,
+     "stateReads": 0,
+     "stateMs": 0,
+     "stateBytesMax": 0,
+     "probes": 1,
+     "probeMs": 1.9,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 2.5,
+     "residualMs": 0.6
+    },
+    {
+     "step": 15,
+     "stateReads": 0,
+     "stateMs": 0,
+     "stateBytesMax": 0,
+     "probes": 2,
+     "probeMs": 3.4,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 5.4,
+     "residualMs": 2
+    }
+   ]
+  }
+ ],
+ "responses": [
+  {
+   "steps": [
+    {
+     "step": 0,
+     "toolName": "plasticity_create_box",
+     "added": [
+      1136
+     ],
+     "addedBodies": [
+      {
+       "id": 1136,
+       "versionId": 1883,
+       "type": "Solid",
+       "name": "l-bracket",
+       "boundsMm": {
+        "min": [
+         2200,
+         0,
+         0
+        ],
+        "max": [
+         2240,
+         30,
+         4
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 6,
+       "edgeCount": 12,
+       "vertexCount": 8
+      }
+     ]
+    },
+    {
+     "step": 1,
+     "toolName": "plasticity_create_box",
+     "added": [
+      1137
+     ]
+    },
+    {
+     "step": 2,
+     "toolName": "plasticity_boolean",
+     "removed": [
+      1137
+     ],
+     "createdEdgeCount": 5
+    },
+    {
+     "step": 3,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 1,
+      "ids": [
+       "1885e231616"
+      ]
+     }
+    },
+    {
+     "step": 4,
+     "toolName": "plasticity_fillet"
+    },
+    {
+     "step": 5,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 2,
+      "ids": [
+       "1886e231443",
+       "1886e231439"
+      ]
+     }
+    },
+    {
+     "step": 6,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 2,
+      "ids": [
+       "1886e231561",
+       "1886e231551"
+      ]
+     }
+    },
+    {
+     "step": 7,
+     "toolName": "plasticity_fillet"
+    },
+    {
+     "step": 8,
+     "toolName": "plasticity_create_rib",
+     "added": [
+      1138
+     ],
+     "regionsAdded": [
+      "1890r232296"
+     ],
+     "addedBodies": [
+      {
+       "id": 1138,
+       "versionId": 1888,
+       "type": "Wire",
+       "name": "Polyline.001",
+       "boundsMm": {
+        "min": [
+         2203.5,
+         13,
+         3.5
+        ],
+        "max": [
+         2229,
+         13,
+         29.000000000000007
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 0,
+       "edgeCount": 0,
+       "vertexCount": 0
+      }
+     ],
+     "result": {
+      "status": "completed"
+     }
+    },
+    {
+     "step": 9,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      1140
+     ]
+    },
+    {
+     "step": 10,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      1141
+     ]
+    },
+    {
+     "step": 11,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      1142
+     ]
+    },
+    {
+     "step": 12,
+     "toolName": "plasticity_create_cylinder",
+     "added": [
+      1143
+     ]
+    },
+    {
+     "step": 13,
+     "toolName": "plasticity_boolean",
+     "removed": [
+      1140,
+      1141,
+      1142,
+      1143
+     ],
+     "createdEdgeCount": 20
+    },
+    {
+     "step": 14,
+     "toolName": "plasticity_find_faces",
+     "result": {
+      "matches[*].axisOriginMm": [
+       [
+        2226,
+        7.5,
+        -0.5
+       ],
+       [
+        2199.5,
+        7.5,
+        26
+       ],
+       [
+        2199.5,
+        22.5,
+        26
+       ],
+       [
+        2226,
+        22.5,
+        -0.5
+       ]
+      ],
+      "matches[*].axisDirection": [
+       [
+        0,
+        0,
+        1
+       ],
+       [
+        1,
+        0,
+        2.2204460492503136e-16
+       ],
+       [
+        1,
+        0,
+        2.2204460492503136e-16
+       ],
+       [
+        0,
+        0,
+        1
+       ]
+      ]
+     }
+    },
+    {
+     "step": 15,
+     "toolName": "plasticity_find_faces",
+     "result": {
+      "matches[*].radiusMm": [
+       5,
+       5,
+       3,
+       3,
+       3,
+       3,
+       2.25,
+       2.25,
+       2.25,
+       2.25
+      ]
+     }
+    }
+   ],
+   "summary": {
+    "revision": "r20.a2f57f163671c437",
+    "undoSteps": 13,
+    "bodyCount": 6,
+    "added": [
+     {
+      "id": 1138,
+      "type": "Wire",
+      "name": "Polyline.001",
+      "boundsMm": {
+       "min": [
+        2203.5,
+        13,
+        3.5
+       ],
+       "max": [
+        2229,
+        13,
+        29.000000000000007
+       ]
+      },
+      "faceCount": 0,
+      "edgeCount": 0
+     },
+     {
+      "id": 1136,
+      "type": "Solid",
+      "name": "l-bracket",
+      "boundsMm": {
+       "min": [
+        2200,
+        0,
+        0
+       ],
+       "max": [
+        2240,
+        30,
+        40
+       ]
+      },
+      "faceCount": 23,
+      "edgeCount": 63
+     }
+    ]
+   }
+  }
+ ],
+ "described": {
+  "bodyId": 1136,
+  "describeBytes": 978,
+  "describe": {
+   "id": 1136,
+   "type": "Solid",
+   "name": "l-bracket",
+   "revision": "r20.a2f57f163671c437",
+   "boundsMm": {
+    "min": [
+     2200,
+     0,
+     0
+    ],
+    "max": [
+     2240,
+     30,
+     40
+    ]
+   },
+   "sizeMm": [
+    40,
+    30,
+    40
+   ],
+   "faceCount": 23,
+   "edgeCount": 63,
+   "vertexCount": 38,
+   "planes": {
+    "xNeg": [
+     {
+      "mm": 2200,
+      "face": "1897f231463"
+     },
+     {
+      "mm": 2204.5,
+      "face": "1897f232827"
+     }
+    ],
+    "xPos": [
+     {
+      "mm": 2204,
+      "face": "1897f231510"
+     },
+     {
+      "mm": 2240,
+      "face": "1897f231418"
+     }
+    ],
+    "yNeg": [
+     {
+      "mm": 0,
+      "face": "1897f231468"
+     },
+     {
+      "mm": 9,
+      "face": "1897f232517"
+     }
+    ],
+    "yPos": [
+     {
+      "mm": 13,
+      "face": "1897f232555"
+     },
+     {
+      "mm": 30,
+      "face": "1897f231458"
+     }
+    ],
+    "zNeg": [
+     {
+      "mm": 0,
+      "face": "1897f231424"
+     },
+     {
+      "mm": 4.5,
+      "face": "1897f232767"
+     }
+    ],
+    "zPos": [
+     {
+      "mm": 4,
+      "face": "1897f231473"
+     },
+     {
+      "mm": 40,
+      "face": "1897f231565"
+     }
+    ],
+    "slanted": [
+     {
+      "normal": [
+       0.7071,
+       0,
+       0.7071
+      ],
+      "mm": 1578.6159,
+      "face": "1897f232575"
+     }
+    ]
+   },
+   "cylinders": [
+    {
+     "radiusMm": 2.25,
+     "axis": "x",
+     "kind": "hole",
+     "count": 2,
+     "axisPointsMm": [
+      [
+       2202,
+       22.5,
+       26
+      ],
+      [
+       2202.25,
+       7.5,
+       26
+      ]
+     ]
+    },
+    {
+     "radiusMm": 2.25,
+     "axis": "z",
+     "kind": "hole",
+     "count": 2,
+     "axisPointsMm": [
+      [
+       2226,
+       7.5,
+       2.25
+      ],
+      [
+       2226,
+       22.5,
+       2
+      ]
+     ]
+    }
+   ],
+   "otherSurfaces": {},
+   "blendRadii": {
+    "3": 4,
+    "5": 2
+   }
+  },
+  "bodyInfoBytes": 45447,
+  "bodyInfoHint": "large reply; use plasticity_describe_body, or pass edges:false/vertices:false",
+  "bodyInfoNoEdgesNoVerticesBytes": 11737
+ },
+ "restored": {
+  "ok": true,
+  "undoDepth": 7,
+  "bodyCount": 4,
+  "redoDepth": 13
+ },
+ "startUndoDepth": 7,
+ "startBodyCount": 4
+}

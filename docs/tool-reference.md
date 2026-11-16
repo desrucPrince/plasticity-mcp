@@ -133,6 +133,52 @@ and asks for a narrower one. `sortBy: "area", limit: 1` picks the main face
 over small fragments (for example an enclosure floor split by bosses). No
 other query makes that extra read.
 
+A direct `plasticity_find_faces` or `plasticity_find_edges` call without
+`limit` never returns more than 8,000 bytes. When the full reply would be
+larger, it carries the matches that fit (in the usual order), `count` (the
+total), `truncated: true` and `hint: "add limit/sortBy or narrow the query"`.
+A reply of 8,000 bytes or less is unchanged, an explicit `limit` is always
+honoured, and the steps of a `plasticity_batch` are never cut (a later step can
+reference every match).
+
+### Describe a body (speed tier 1c)
+
+`plasticity_describe_body` (`{ id }`, strict, read-only, in the compact list)
+returns one body in 1-2 KB instead of the 17-110 KB of
+`plasticity_body_info`. It is built from the read model with no extra native
+call, in millimetres, rounded to 4 decimals, and never longer than 4 KB (the
+longest lists are shortened first, with `more` counts).
+
+- `id, type, name, revision, boundsMm, sizeMm, faceCount, edgeCount, vertexCount`.
+- `planes`: planar faces grouped by outward normal: `xPos`, `xNeg`, `yPos`,
+  `yNeg`, `zPos`, `zNeg`, and `slanted` (each entry carries its `normal`). Each
+  group lists distinct plane positions in ascending order as
+  `{ mm, count?, face }`: `mm` is the plane's coordinate on that axis (for
+  `slanted`, its offset along the normal), `count` the number of faces on it
+  (left out when 1) and `face` the id of the largest one (by bounding box). A
+  cavity floor reads as a `zPos` entry, the inner side of the walls as `xNeg`
+  and `yNeg` entries at the far side. At most 12 positions per group;
+  `planes.more` maps a group to the number left out.
+- `cylinders`: groups by radius, axis direction and kind:
+  `{ radiusMm, axis, kind, count, axisPointsMm, more? }`. `axis` is `"x"`, `"y"`
+  or `"z"`, else a unit vector. `kind` is `"hole"` or `"boss"` from the face
+  normal (toward or away from the axis) and is left out when the normal does
+  not say. `axisPointsMm` lists one point on each distinct axis (at the middle
+  of the faces' extent along an axis-aligned axis), at most 16, with a `more`
+  count. Cylindrical blend faces are not listed here.
+- `otherSurfaces`: face counts by surface type (`Cone` also has `halfAngleDeg`).
+- `blendRadii`: `{ "<radius mm>": faceCount }` for fillet and blend faces.
+
+All of these are plain keys, so `return` in a batch step can name them:
+`return: ["cylinders", "planes.zNeg", "blendRadii", "sizeMm"]`. A face id from
+`planes` goes straight into `find_faces`/`fillet`/`extrude_faces`.
+
+`plasticity_body_info` takes optional `faces`, `edges` and `vertices` booleans
+(default true: the reply is unchanged). `false` leaves that list out of
+`body`; the id lists stay. When the reply is over 20,000 bytes and none of the
+three flags was passed, it still carries everything and adds a top-level
+`hint: "large reply; use plasticity_describe_body, or pass edges:false/vertices:false"`.
+
 Inside a batch the server reads the document once per edit step instead of
 5-7 times. The state read after step k stands in for step k+1's
 journal-before, revision check and before-state. Before reusing it, each step

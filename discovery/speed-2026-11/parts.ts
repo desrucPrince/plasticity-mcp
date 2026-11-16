@@ -8,6 +8,8 @@
 // --tier1b runs the same tier-1 parts with the workarounds tier 1b makes unnecessary taken out (no return: ["count"]
 // on reads a later step references, no return: ["status"] on recipes, sortBy "area" for the lid's floor face) and
 // writes part-<name>-tier1b.json. --tag=<t> writes part-<name>-<t>-tier1b.json instead (same-session before/after runs).
+// --describe (with --tier1b) also reads the built body with plasticity_describe_body and plasticity_body_info after the
+// scenario and writes describe-check-<name>.json (reply bytes and the describe reply itself).
 // Each scenario restores the document to the starting undo depth and body ids and asserts it.
 import { bytes, openInProcess, Recorder, restore, save, status } from "./lib.ts";
 
@@ -449,7 +451,8 @@ tier1.d = async (h, rec) => {
 const T1 = process.argv.includes("--tier1") || T1B;
 const TAG = process.argv.find((arg) => arg.startsWith("--tag="))?.slice("--tag=".length);
 // A tagged run is tier-1b evidence (e.g. --tag=before1 from a pre-change tree): part-<name>-<tag>-tier1b.json.
-const outName = (base: string, name: string) => (TAG ? `part-${name}-${TAG}-tier1b.json` : `${base}.json`);
+const DESCRIBE = process.argv.includes("--describe");
+const outName = (base: string, name: string) => (DESCRIBE ? `describe-check-${name}.json` : TAG ? `part-${name}-${TAG}-tier1b.json` : `${base}.json`);
 const names = process.argv.slice(2).filter((n) => !n.startsWith("--"));
 if (names[0] === "dump-steps") {
   save("steps-a1.json", enclosureCompact(A).steps);
@@ -478,8 +481,22 @@ try {
     if (!run) throw new Error(`no ${T1 ? "tier-1 " : ""}scenario ${name}`);
     try { detail = await run(h, rec); } catch (e) { error = (e as Error).message.slice(0, 4000); console.error(name, "FAILED", error); }
     const scenarioMs = Math.round(performance.now() - t0);
+    let described: unknown;
+    if (DESCRIBE && !error) {
+      const bodyId = (detail as { bodyId?: number; baseId?: number }).bodyId ?? (detail as { baseId?: number }).baseId;
+      const read = async (toolName: string, args: Record<string, unknown>) => {
+        const response = await h.client.callTool({ name: toolName, arguments: args });
+        const text = (response.content as Array<{ text: string }>)[0]!.text;
+        return { bytes: bytes(text), reply: JSON.parse(text) };
+      };
+      const describeReply = await read("plasticity_describe_body", { id: bodyId });
+      const infoReply = await read("plasticity_body_info", { id: bodyId });
+      const slim = await read("plasticity_body_info", { id: bodyId, edges: false, vertices: false });
+      described = { bodyId, describeBytes: describeReply.bytes, describe: describeReply.reply, bodyInfoBytes: infoReply.bytes, bodyInfoHint: infoReply.reply.hint ?? null, bodyInfoNoEdgesNoVerticesBytes: slim.bytes };
+      console.error(name, "describe", JSON.stringify({ describeBytes: describeReply.bytes, bodyInfoBytes: infoReply.bytes, slim: slim.bytes }));
+    }
     const restored = await restore(h, start);
-    const record = { scenario: name, ...(T1 ? { tier: T1B ? "1b" : 1 } : {}), ...(TAG ? { tag: TAG } : {}), measuredAt: new Date().toISOString(), scenarioMs, totals: rec.totals(), detail, error, calls: rec.calls, responses: rec.results, restored, startUndoDepth: start.undoDepth, startBodyCount: start.bodies.length };
+    const record = { scenario: name, ...(T1 ? { tier: T1B ? "1b" : 1 } : {}), ...(TAG ? { tag: TAG } : {}), measuredAt: new Date().toISOString(), scenarioMs, totals: rec.totals(), detail, error, calls: rec.calls, responses: rec.results, ...(described ? { described } : {}), restored, startUndoDepth: start.undoDepth, startBodyCount: start.bodies.length };
     save(outName(T1B ? `part-${name}-tier1b` : T1 ? `part-${name}-tier1` : `part-${name}`, name), record);
     summary[name] = { totals: record.totals, error, restored, checks: (detail as { checks?: unknown })?.checks };
     console.error(name, JSON.stringify(summary[name]));
