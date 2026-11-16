@@ -6109,3 +6109,78 @@ test("plasticity_screenshot without a path in default mode returns an inline ima
   assert.deepEqual(screenshotModes, []);
   await close();
 });
+
+async function withOperationsClient<T>(operations: Record<string, (...args: unknown[]) => Promise<unknown>>, run: (client: Client) => Promise<T>): Promise<T> {
+  const fake = {
+    async windows() { return []; },
+    async connect() { return {}; },
+    get() { return operations as unknown as PlasticityOperations; },
+    capabilities() { return { bindings: [], operations: unavailableConstruction() }; },
+    async captureSnapshot() { return {}; },
+    async changesSince() { return {}; },
+    async waitForChange() { return {}; },
+  } satisfies SessionLike;
+  const server = createServer(fake);
+  const client = new Client({ name: "quick-wins-test-client", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await server.connect(serverTransport);
+  await client.connect(clientTransport);
+  try {
+    return await run(client);
+  } finally {
+    await client.close();
+  }
+}
+
+test("MCP validates and forwards native IGES export parameters", async () => {
+  let received: unknown[] | undefined;
+  await withOperationsClient({
+    async exportIges(...args: unknown[]) { received = args; return { path: "/tmp/part.igs", bytes: 160 }; },
+  }, async (client) => {
+    const tool = (await client.listTools()).tools.find((entry) => entry.name === "plasticity_export_iges");
+    assert.equal(tool?.annotations?.readOnlyHint, false);
+    assert.equal(tool?.annotations?.destructiveHint, false);
+    const response = await client.callTool({ name: "plasticity_export_iges", arguments: { ids: [7], path: "/tmp/part.igs", revision: "r1" } });
+    assert.equal(response.isError, undefined);
+    assert.deepEqual(received, [[7], "/tmp/part.igs", "r1"]);
+    const invalid = await client.callTool({ name: "plasticity_export_iges", arguments: { path: "/tmp/part.igs", revision: "r1" } });
+    assert.equal(invalid.isError, true);
+  });
+});
+
+test("MCP validates and forwards native SAT export parameters", async () => {
+  let received: unknown[] | undefined;
+  await withOperationsClient({
+    async exportSat(...args: unknown[]) { received = args; return { path: "/tmp/part.sat", bytes: 160 }; },
+  }, async (client) => {
+    const tool = (await client.listTools()).tools.find((entry) => entry.name === "plasticity_export_sat");
+    assert.equal(tool?.annotations?.readOnlyHint, false);
+    assert.equal(tool?.annotations?.destructiveHint, false);
+    const response = await client.callTool({ name: "plasticity_export_sat", arguments: { ids: [7], path: "/tmp/part.sat", revision: "r1" } });
+    assert.equal(response.isError, undefined);
+    assert.deepEqual(received, [[7], "/tmp/part.sat", "r1"]);
+    const invalid = await client.callTool({ name: "plasticity_export_sat", arguments: { ids: [7], path: "/tmp/part.sat" } });
+    assert.equal(invalid.isError, true);
+  });
+});
+
+test("MCP forwards the revision to clear selection and requires it", async () => {
+  let received: unknown[] | undefined;
+  await withOperationsClient({
+    async clearSelection(...args: unknown[]) { received = args; return { bodyIds: [] }; },
+  }, async (client) => {
+    assert((await client.listTools()).tools.some((entry) => entry.name === "plasticity_clear_selection"));
+    const response = await client.callTool({ name: "plasticity_clear_selection", arguments: { revision: "r1" } });
+    assert.equal(response.isError, undefined);
+    assert.deepEqual(received, ["r1"]);
+    const invalid = await client.callTool({ name: "plasticity_clear_selection", arguments: {} });
+    assert.equal(invalid.isError, true);
+  });
+});
+
+test("MCP instructions name the calling client instead of Codex in the opening line", async () => {
+  await withOperationsClient({}, async (client) => {
+    const instructions = client.getInstructions() ?? "";
+    assert.match(instructions, /^Use Plasticity MCP as the native CAD tool; keep the conversation in the calling client\./u);
+  });
+});

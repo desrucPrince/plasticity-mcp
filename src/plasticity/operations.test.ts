@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, realpath, rm, truncate, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, realpath, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -7037,4 +7037,174 @@ test("item transform preserves missing native measurement names by stable ID ins
   current = original;
   await assert.rejects(execute(editor, { async commit() { throw Error("native failure"); } }), /native failure/);
   assert.equal(current, original);
+});
+
+function cadExportFixture() {
+  const body = { id: 7, versionId: 17, type: "Solid", name: "Box", boundsMm: null, faceIds: [], edgeIds: [], faces: [], edges: [], vertices: [] };
+  const state: RuntimeState = { targetId: "window-1", title: "Untitled - Plasticity", documentToken: "document-1", revision: "current-revision", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [body] };
+  const exported: Array<{ factory: string; items: unknown[]; filePath: string }> = [];
+  const view = { id: "body-view-7" };
+  const editor = {
+    geo: { geometryModel: new Map([[17, { view }]]) },
+    db: { lookupStableId(version: number) { return version === 17 ? 7 : undefined; } },
+    executor: { isBusy: false },
+  };
+  let content: Buffer | undefined;
+  let mutations = 0;
+  const runtime = {
+    async getState() { return state; },
+    // Runs the generated native source against the stub editor, then stages the file the factory would write.
+    async mutate(source: string, bindings: string[], values: unknown[]) {
+      mutations += 1;
+      const native = Function(`return (${source})`)();
+      class Factory {
+        items: unknown[] = [];
+        filePath = "";
+        async commit() {
+          exported.push({ factory: bindings[0]!, items: this.items, filePath: this.filePath });
+          if (content) await writeFile(this.filePath, content);
+        }
+      }
+      await native.call(editor, Factory, ...values);
+      return {};
+    },
+    isUncertain() { return false; },
+  } as unknown as PlasticityRuntime;
+  return {
+    state, view, exported, operations: new PlasticityOperations(runtime),
+    stage(value: Buffer | undefined) { content = value; },
+    get mutations() { return mutations; },
+  };
+}
+
+const igesLine = (section: string) => `${"IGES test fixture".padEnd(72)}${section}      1\n`;
+
+test("exports exact bodies as a validated IGES file without overwriting", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-iges-export-test-"));
+  const f = cadExportFixture();
+  const payload = Buffer.from(igesLine("S") + igesLine("G"));
+  try {
+    f.stage(payload);
+    const output = join(root, "box.igs");
+    const result = await f.operations.exportIges([7], output, f.state.revision);
+
+    assert.deepEqual(result, { path: output, bytes: payload.length });
+    assert.deepEqual(await readFile(output), payload);
+    assert.equal(f.exported[0]?.factory, "ExportCadFactory");
+    assert.deepEqual(f.exported[0]?.items, [f.view]);
+    assert.match(f.exported[0]?.filePath ?? "", /\.plasticity-iges-[^/]+\/geometry\.igs$/u);
+    const iges = await f.operations.exportIges([7], join(root, "box.IGES"), f.state.revision);
+    assert.equal(iges.bytes, payload.length);
+
+    const mutations = f.mutations;
+    await assert.rejects(f.operations.exportIges([7], output, f.state.revision), /overwrite/u);
+    await assert.rejects(f.operations.exportIges([7], join(root, "box.step"), f.state.revision), /\.igs or \.iges/u);
+    await assert.rejects(f.operations.exportIges([], join(root, "empty.igs"), f.state.revision), /nonempty unique/u);
+    await assert.rejects(f.operations.exportIges([99], join(root, "missing.igs"), f.state.revision), /unknown current body/iu);
+    await assert.rejects(f.operations.exportIges([7], join(root, "stale.igs"), "stale-revision"), /stale reference/iu);
+    assert.equal(f.mutations, mutations);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("rejects an invalid staged IGES file and leaves no output or staging directory", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-iges-invalid-test-"));
+  const f = cadExportFixture();
+  try {
+    for (const bad of [Buffer.alloc(0), Buffer.from("not an iges file\n"), Buffer.from(igesLine("G"))]) {
+      f.stage(bad);
+      const output = join(root, "bad.igs");
+      await assert.rejects(f.operations.exportIges([7], output, f.state.revision), /invalid IGES/u);
+      await assert.rejects(readFile(output), { code: "ENOENT" });
+    }
+    assert.deepEqual(await readdir(root), []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("exports exact bodies as a validated SAT file without overwriting", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-sat-export-test-"));
+  const f = cadExportFixture();
+  const payload = Buffer.from("700 0 1 0 \n12 1 1 0\nbody $-1 -1 $-1 $1 $-1 $-1 #\n");
+  try {
+    f.stage(payload);
+    const output = join(root, "box.sat");
+    const result = await f.operations.exportSat([7], output, f.state.revision);
+
+    assert.deepEqual(result, { path: output, bytes: payload.length });
+    assert.deepEqual(await readFile(output), payload);
+    assert.equal(f.exported[0]?.factory, "ExportCadFactory");
+    assert.deepEqual(f.exported[0]?.items, [f.view]);
+    assert.match(f.exported[0]?.filePath ?? "", /\.plasticity-sat-[^/]+\/geometry\.sat$/u);
+
+    const mutations = f.mutations;
+    await assert.rejects(f.operations.exportSat([7], output, f.state.revision), /overwrite/u);
+    await assert.rejects(f.operations.exportSat([7], join(root, "box.igs"), f.state.revision), /end in \.sat/u);
+    await assert.rejects(f.operations.exportSat([7, 7], join(root, "duplicate.sat"), f.state.revision), /nonempty unique/u);
+    await assert.rejects(f.operations.exportSat([99], join(root, "missing.sat"), f.state.revision), /unknown current body/iu);
+    await assert.rejects(f.operations.exportSat([7], join(root, "stale.sat"), "stale-revision"), /stale reference/iu);
+    assert.equal(f.mutations, mutations);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("rejects an invalid staged SAT file and leaves no output or staging directory", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-sat-invalid-test-"));
+  const f = cadExportFixture();
+  try {
+    for (const bad of [Buffer.alloc(0), Buffer.from("**PARASOLID**\n"), Buffer.from("700 0 1\n"), Buffer.from("700 0 1 0 extra\n")]) {
+      f.stage(bad);
+      const output = join(root, "bad.sat");
+      await assert.rejects(f.operations.exportSat([7], output, f.state.revision), /invalid SAT/u);
+      await assert.rejects(readFile(output), { code: "ENOENT" });
+    }
+    assert.deepEqual(await readdir(root), []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("clearSelection executes its native source, checks the revision, and creates no Undo entry", async () => {
+  const state: RuntimeState = { targetId: "window-1", title: "Untitled - Plasticity", documentToken: "document-1", revision: "current-revision", dbVersion: 1, undoDepth: 3, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [] };
+  const history = { undoStack: [1, 2, 3], redoStack: [] as number[] };
+  const selected = { items: [{ id: "view" }], removed: 0, removeAll() { this.items = []; this.removed += 1; } };
+  const editor = {
+    selection: { selected },
+    history,
+    geo: { geometryModel: new Map() },
+    db: { lookupStableId() { return undefined; } },
+    executor: { isBusy: false },
+  };
+  const reads: string[] = [];
+  const emptySelection = { bodyIds: [], curveIds: [], instanceIds: [], referenceMeshIds: [], groupIds: [], faces: [], edges: [], regionIds: [], curveControlPoints: [] };
+  let mutations = 0;
+  const runtime = {
+    async getState() { return state; },
+    async read(source: string, values: unknown[] = []) {
+      reads.push(source);
+      if (source.includes("const selection = this.selection.selected;")) return { ...emptySelection, bodyIds: selected.items.map(() => 7) };
+      await Function(`return (${source})`)().apply(editor, values);
+      return undefined;
+    },
+    async mutate() { mutations += 1; return {}; },
+  } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+
+  const result = await operations.clearSelection(state.revision);
+
+  assert.deepEqual(result, { documentToken: state.documentToken, revision: state.revision, ...emptySelection });
+  assert.equal(selected.removed, 1);
+  assert.deepEqual(selected.items, []);
+  assert.equal(mutations, 0);
+  assert.deepEqual(history.undoStack, [1, 2, 3]);
+  assert.deepEqual(history.redoStack, []);
+  assert.match(reads[0] ?? "", /this\.selection\.selected\.removeAll\(\)/u);
+
+  const readCount = reads.length;
+  await assert.rejects(operations.clearSelection("old-revision"), /stale reference/iu);
+  assert.equal(reads.length, readCount);
+  assert.equal(selected.removed, 1);
 });

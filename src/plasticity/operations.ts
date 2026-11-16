@@ -2886,6 +2886,14 @@ export class PlasticityOperations {
     return await this.selectNodes(ids, [], [], [], revision);
   }
 
+  async clearSelection(revision: string): Promise<PlasticitySelection> {
+    await this.assertRevision(revision);
+    await this.runtime.read(nativeFunction`function () {
+      this.selection.selected.removeAll();
+    }`);
+    return await this.selection();
+  }
+
   async selectCurves(ids: number[], revision: string): Promise<PlasticitySelection> {
     const state = await this.assertRevision(revision);
     requireWireBodyIds(state, ids);
@@ -8811,6 +8819,66 @@ export class PlasticityOperations {
     }
   }
 
+  async exportIges(ids: number[], outputPath: string, revision: string): Promise<{ path: string; bytes: number }> {
+    const state = await this.assertRevision(revision);
+    requireCadExportBodies(state, ids, "IGES");
+    const output = resolve(outputPath);
+    const extension = extname(output).toLowerCase();
+    if (extension !== ".igs" && extension !== ".iges") throw new Error("IGES output must end in .igs or .iges");
+    await assertAbsent(output);
+    await mkdir(dirname(output), { recursive: true });
+    const staging = await mkdtemp(join(dirname(output), ".plasticity-iges-"));
+    const temporary = join(staging, `geometry${extension}`);
+    try {
+      await this.runtime.mutate(nativeFunction`async function (Factory, args) {
+        ${findView}
+        if (this.executor.isBusy) throw new Error('Plasticity is busy');
+        const factory = new Factory(this);
+        factory.items = args.ids.map(find);
+        factory.filePath = args.path;
+        await factory.commit();
+      }`, ["ExportCadFactory"], [{ ids, path: temporary }]);
+      const bytes = await validateIgesPath(temporary, "Plasticity IGES output");
+      await copyFile(temporary, output, constants.COPYFILE_EXCL);
+      return { path: output, bytes };
+    } finally {
+      if (!this.runtime.isUncertain()) {
+        await rm(temporary, { force: true }).catch(() => undefined);
+        await rmdir(staging).catch(() => undefined);
+      }
+    }
+  }
+
+  async exportSat(ids: number[], outputPath: string, revision: string): Promise<{ path: string; bytes: number }> {
+    const state = await this.assertRevision(revision);
+    requireCadExportBodies(state, ids, "SAT");
+    const output = resolve(outputPath);
+    const extension = extname(output).toLowerCase();
+    if (extension !== ".sat") throw new Error("SAT output must end in .sat");
+    await assertAbsent(output);
+    await mkdir(dirname(output), { recursive: true });
+    const staging = await mkdtemp(join(dirname(output), ".plasticity-sat-"));
+    const temporary = join(staging, `geometry${extension}`);
+    try {
+      await this.runtime.mutate(nativeFunction`async function (Factory, args) {
+        ${findView}
+        if (this.executor.isBusy) throw new Error('Plasticity is busy');
+        const factory = new Factory(this);
+        factory.items = args.ids.map(find);
+        factory.filePath = args.path;
+        await factory.commit();
+      }`, ["ExportCadFactory"], [{ ids, path: temporary }]);
+      const bytes = await validateSatPath(temporary, "Plasticity SAT output");
+      await copyFile(temporary, output, constants.COPYFILE_EXCL);
+      return { path: output, bytes };
+    } finally {
+      if (!this.runtime.isUncertain()) {
+        await rm(temporary, { force: true }).catch(() => undefined);
+        await rmdir(staging).catch(() => undefined);
+      }
+    }
+  }
+
   async exportStl(
     ids: number[],
     outputPath: string,
@@ -10253,6 +10321,33 @@ async function validateParasolidPath(path: string, label: string): Promise<numbe
   } finally {
     await handle.close();
   }
+}
+
+async function readFirstLine(path: string, label: string): Promise<{ bytes: number; line: string }> {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const file = await handle.stat();
+    if (!file.isFile()) throw new Error(`${label} must be a regular file`);
+    const buffer = Buffer.alloc(Math.min(file.size, 512));
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    return { bytes: file.size, line: buffer.subarray(0, bytesRead).toString("latin1").split(/\r?\n/u, 1)[0]! };
+  } finally {
+    await handle.close();
+  }
+}
+
+// IGES fixed-format lines are 80 columns wide; column 73 holds the section letter and the first line is in the Start section.
+async function validateIgesPath(path: string, label: string): Promise<number> {
+  const { bytes, line } = await readFirstLine(path, label);
+  if (bytes === 0 || line.length < 73 || line[72] !== "S") throw new Error("Plasticity produced or received an invalid IGES file");
+  return bytes;
+}
+
+// ACIS SAT files start with four integers: version, record count, entity count, and flags.
+async function validateSatPath(path: string, label: string): Promise<number> {
+  const { bytes, line } = await readFirstLine(path, label);
+  if (bytes === 0 || !/^\d+ \d+ \d+ \d+\s*$/u.test(line)) throw new Error("Plasticity produced or received an invalid SAT file");
+  return bytes;
 }
 
 function groupContains(state: RuntimeState, ancestorId: number, candidateId: number): boolean {

@@ -2674,6 +2674,8 @@ function createServerWithCatalog(
     await session.get().selection(), true);
   tool("plasticity_select_bodies", "Replace the current Plasticity selection with stable body IDs.", z.object({ ids, revision }), async ({ ids: bodyIds, revision: current }) =>
     await session.get().selectBodies(bodyIds, current));
+  tool("plasticity_clear_selection", "Empty the current Plasticity selection. This is not a document edit and creates no Undo entry.", z.object({ revision }), async ({ revision: current }) =>
+    await session.get().clearSelection(current));
   tool("plasticity_select_curves", "Replace the current Plasticity selection with whole native Wire curves, using current revision-bound Wire IDs. The returned curveIds identify selected Wires; bodyIds may also contain the same native Wire IDs.", z.object({ ids, revision }).strict(), async ({ ids: curveIds, revision: current }) =>
     await session.get().selectCurves(curveIds, current));
   tool("plasticity_select_nodes", "Replace the current Plasticity selection with a mixed set of current bodies, linked instances, approximate reference meshes, and native groups so the agent can point out assembly content in the application.", z.object({ ...groupSelectionFields, revision }).strict().superRefine(requireNodeSelection), async ({ bodyIds, instanceIds: currentInstanceIds, referenceMeshIds: currentReferenceMeshIds, groupIds: currentGroupIds, revision: current }) =>
@@ -3983,6 +3985,10 @@ function createServerWithCatalog(
     await session.get().exportStep(bodyIds, path, current), false, { destructiveHint: false });
   tool("plasticity_export_parasolid", "Export exact native B-Rep bodies to a new Parasolid text (.x_t) or binary (.x_b) file without overwriting. Use this for high-fidelity exchange with software that supports the Parasolid kernel format.", z.object({ ids, path: z.string().min(1), revision }), async ({ ids: bodyIds, path, revision: current }) =>
     await session.get().exportParasolid(bodyIds, path, current), false, { destructiveHint: false });
+  tool("plasticity_export_iges", "Export exact native B-Rep bodies to a new IGES (.igs or .iges) file without overwriting. The staged file is checked for the IGES Start section before it is copied.", z.object({ ids, path: z.string().min(1), revision }), async ({ ids: bodyIds, path, revision: current }) =>
+    await session.get().exportIges(bodyIds, path, current), false, { destructiveHint: false });
+  tool("plasticity_export_sat", "Export exact native B-Rep bodies to a new ACIS SAT (.sat) file without overwriting. The staged file is checked for the ACIS SAT header before it is copied.", z.object({ ids, path: z.string().min(1), revision }), async ({ ids: bodyIds, path, revision: current }) =>
+    await session.get().exportSat(bodyIds, path, current), false, { destructiveHint: false });
   tool("plasticity_export_stl", "Tessellate exact B-Rep bodies to a new millimeter-scaled binary STL for slicing. The result is a derived mesh, while STEP remains the editable source.", z.object({
     ids,
     path: z.string().min(1),
