@@ -82,7 +82,7 @@ test("reads a body version's native topology once and reuses it until the body c
   class Solid {}
   class Plane {}
   const makeItem = () => {
-    const vertex = { Id: () => 7, GetPoint: () => point(0, 0, 0), GetEdges: () => undefined, GetFaces: () => undefined };
+    const vertex = { Id: () => 7, GetPoint: () => point(0, 0, 0), GetEdges: (): any => ({ in: { Size: () => 1, Get: () => edge }, out: { Size: () => 1, Get: () => edge } }), GetFaces: () => undefined };
     const face = {
       Id: () => 101,
       FindMidpoint: () => ({ position: point(0.001, 0, 0), normal: point(0, 0, 1) }),
@@ -107,6 +107,7 @@ test("reads a body version's native topology once and reuses it until the body c
     return {
       view: Object.assign(new Solid(), { high: { faces: views(101, "11"), edges: views(201, "12") } }),
       model: {
+        Id: () => 1000,
         FindBox() { calls.FindBox += 1; return box; },
         GetFaces() { calls.GetFaces += 1; return { Size: () => 1, Get: () => face }; },
         GetEdges() { calls.GetEdges += 1; return { Size: () => 1, Get: () => edge }; },
@@ -143,6 +144,7 @@ test("reads a body version's native topology once and reuses it until the body c
     ConstructionPlaneDatabase: { Top: plane, Bottom: plane, Left: plane, Right: plane, Front: plane, Back: plane },
     Vector3: class {},
     Quaternion: class {},
+    pk_default: { a: {} },
   };
   const client = {
     async send(method: string, params: Record<string, unknown> = {}) {
@@ -158,12 +160,18 @@ test("reads a body version's native topology once and reuses it until the body c
   const bindings = (runtime as unknown as { bindings: Map<string, string> }).bindings;
   for (const name of Object.keys(natives)) bindings.set(name, name);
 
+  const cacheKey = Symbol.for("plasticity-mcp.body-topology");
+  const cache = Reflect.get(globalThis, cacheKey) ?? new WeakMap();
+  cache.set(geometryModel.get(21)!.view, { versionId: 21, topology: { boundsMm: null, faces: [], edges: [], vertices: [], faceIds: [], edgeIds: [] } });
+  Reflect.set(globalThis, cacheKey, cache);
   const first = await runtime.getState();
   const second = await runtime.getState();
   assert.deepEqual(calls, { FindBox: 1, GetFaces: 1, GetEdges: 1 });
   assert.deepEqual(second.bodies, first.bodies);
+  assert.equal(cache.get(geometryModel.get(21)!.view).format, 3, "old adapter cache entries must be rebuilt");
   assert.equal(first.bodies[0]?.faces[0]?.id, "11");
   assert.deepEqual(first.bodies[0]?.edges[0]?.faceIds, ["11"]);
+  assert.deepEqual(first.bodies[0]?.vertices?.[0]?.edgeIds, ["12"], "incoming and outgoing vertex edges must be combined without duplicates");
   assert.deepEqual(first.bodies[0]?.boundsMm, { min: [0, 0, 0], max: [2, 1, 0] });
 
   editor.db.nodes.getName = () => "Renamed plate";
@@ -199,4 +207,70 @@ test("reads a body version's native topology once and reuses it until the body c
   assert.deepEqual(calls, { FindBox: 5, GetFaces: 5, GetEdges: 5 }, "a reopened document with reused numeric IDs and new views rereads topology");
   assert.equal(reopened.bodies[0]?.materialId, 3);
   assert.equal(reopened.bodies[0]?.visible, false);
+  assert.equal(reopened.bodies[0]?.boundsMethod, "native-box");
+  let extremaCalls = 0;
+  natives.pk_default = { a: {
+    Context: { Get: () => ({}) },
+    Eval: class { Extremes(ids: Int32Array, directions: Float64Array) {
+      assert.deepEqual([...ids], Array(6).fill(1000)); assert.equal(directions.length, 54); extremaCalls += 1;
+      return { ok: 6, errors: new Int32Array(6), extremes: Float64Array.of(0.0015,0,0, 0,0,0, 0,0.001,0, 0,0,0, 0,0,0, 0,0,0) };
+    } },
+  } };
+  geometryModel.set(22, makeItem());
+  const exact = await runtime.getState();
+  assert.equal(exact.bodies[0]?.boundsMethod, "native-extrema");
+  assert.deepEqual(exact.bodies[0]?.boundsMm, { min: [0,0,0], max: [1.5,1,0] });
+  assert.notEqual(exact.revision, reopened.revision);
+  await runtime.getState();
+  assert.equal(extremaCalls, 1, "tight bounds share the body-version topology cache");
+  assert.equal(calls.FindBox, 5, "modern Solid state must not read the conservative box");
+
+});
+
+function appearanceStateHarness(entries: unknown[]) {
+  const point = (x: number, y: number, z: number) => ({ x, y, z });
+  const plane = { name: "Top", p: point(0, 0, 0), n: point(0, 0, 1), x: point(1, 0, 0), y: point(0, 1, 0) };
+  const appearance = { color: { getHexString: () => "336699" }, roughness: 0.25, metalness: 0.4, opacity: 0.8 };
+  const editor = {
+    planes: { snapshot: () => ({ ids: new Map(), planes: [] }) }, viewports: [],
+    geo: { geometryModel: new Map(), automatics: new Set() },
+    db: { version: 1, nodes: {}, empties: { snapshot: () => ({ empties: [], infos: [] }) }, groups: { snapshot: () => ({ groupIds: [], children: [], currentGroupId: 0 }) } },
+    materials: { list: () => entries, get(id: number) { assert.equal(id, 7); return appearance; } },
+    measurements: { snapshot: () => ({ repo: { measurements: [] } }) },
+    document: { uuid: "appearance-document" }, history: { undoStack: [], redoStack: [] },
+  };
+  const natives: Record<string, unknown> = { ConstructionPlaneDatabase: { Top: plane, Bottom: plane, Left: plane, Right: plane, Front: plane, Back: plane }, Vector3: class {}, Quaternion: class {}, pk_default: { a: {} } };
+  const client = {
+    async send(method: string, params: Record<string, unknown> = {}) {
+      assert.equal(method, "Runtime.callFunctionOn");
+      const args = (params.arguments as Array<{ objectId?: string }>).map(arg => natives[String(arg.objectId)]);
+      const execute = new Function(`return (${String(params.functionDeclaration)})`)();
+      return { result: { value: JSON.parse(JSON.stringify(execute.apply(editor, args))) } };
+    }, close() {},
+  } as unknown as CdpClient;
+  const Constructor = PlasticityRuntime as unknown as new (client: CdpClient, target: { id: string; title: string; webSocketDebuggerUrl: string }, editorId: string) => PlasticityRuntime;
+  const runtime = new Constructor(client, { id: "window-materials", title: "Appearance fixture", webSocketDebuggerUrl: "ws://127.0.0.1/devtools/page/materials" }, "editor");
+  const bindings = (runtime as unknown as { bindings: Map<string, string> }).bindings;
+  for (const name of Object.keys(natives)) bindings.set(name, name);
+  return { runtime, appearance };
+}
+
+test("native state reads legacy material pairs and modern material-info objects without changing their public contract", async () => {
+  const legacy = appearanceStateHarness([[7, { name: "Synthetic appearance" }]]);
+  const modern = appearanceStateHarness([{ id: 7, uuid: "synthetic", name: "Synthetic appearance", material: {} }]);
+  const first = await legacy.runtime.getState();
+  const second = await modern.runtime.getState();
+  assert.deepEqual(second.materials, [{ id: 7, name: "Synthetic appearance", colorHex: "#336699", roughness: 0.25, metalness: 0.4, opacity: 0.8 }]);
+  assert.deepEqual(first.materials, second.materials);
+  assert.equal(first.revision, second.revision);
+  modern.appearance.roughness = 0.5;
+  const changed = await modern.runtime.getState();
+  assert.equal(changed.materials?.[0]?.roughness, 0.5);
+  assert.notEqual(changed.revision, second.revision, "native appearance edits must invalidate the revision");
+});
+
+test("native material enumeration rejects malformed entries instead of silently omitting them", async () => {
+  for (const entry of [null, {}, { id: null }, { id: true }, { id: "" }, { id: "unexpected", name: "Invalid" }, [7, null]]) {
+    await assert.rejects(appearanceStateHarness([entry]).runtime.getState(), /Unsupported native appearance material entry/);
+  }
 });

@@ -1,0 +1,200 @@
+# Plasticity 26.2.1 experimental adapter
+
+Validated on macOS Apple Silicon on 2026-10-25, alongside a separate copy of
+26.1.3, with recipe follow-ups on 2026-10-26. The installed application was not changed. This is adapter compatibility
+for a prepared experimental copy, not support for launching the unmodified
+26.2.1 distribution.
+
+## Startup and security prerequisites
+
+The official 26.2.1 Electron Framework disables
+`EnableNodeCliInspectArguments`. The launcher still fails its read-only fuse
+preflight for that bundle. Neither the server nor either launcher changes fuses,
+entitlements, signatures, system security settings, or the installed application.
+
+The separately authorized local experiment enabled only that inspector fuse in
+a disposable copy, ad-hoc signed the modified framework and containing bundle,
+and supplied `com.apple.security.cs.disable-library-validation` to that copy and
+its helper bundles where needed. Vendor native modules and helpers already
+carrying that entitlement were preserved. Changing the copy's signature and
+library-validation protection is a separate security decision; those changes
+are not performed or enabled by an MCP option.
+
+For an already prepared copy:
+
+```sh
+npm run start:plasticity-isolated -- --application /absolute/Experimental/Plasticity.app
+```
+
+This allocates a fresh temporary profile and distinct loopback inspector/CDP
+ports. Set `PLASTICITY_CDP_URL` to the returned renderer endpoint when starting
+MCP. Call `plasticity_list_windows` and explicitly select that copy's window.
+The default application and 26.1.3 startup remain available.
+
+Electron 42 can begin with an empty main script, without the old entry pause.
+The launcher now uses `beforeScriptExecution` instrumentation to find a usable
+module before `app.isReady()`. It removes that breakpoint and resumes the app
+on both success and rejection. Remote debugging remains bound to loopback.
+
+## Adapter changes
+
+- 26.1.3 retains discovery from command-log closures. When the renderer exposes
+  no `[[Scopes]]`, the new route queries live functions and objects, requires a
+  unique native Editor and kernel namespace, and retains only resolved bindings.
+  Ambiguous constructors are omitted, rather than selected arbitrarily.
+- Four UI enums are identified by complete verified scalar contracts. Kernel
+  exports come from the actual live namespace; Three.js types come from the
+  editor's viewport camera, with a checked Vector2 prototype.
+- A call-local API view maps `geo.read.geometryModel`, editor stores, native
+  geometry lookups, and generic selection to the legacy access contract.
+  Factories and commands receive the real Editor. Its database, geometry,
+  prototypes and selection objects are not patched.
+- Explicit aliases cover unified primitive, cut, realization, control-point,
+  bridge and edge-dissolve factories. Changed control-point selection, slide
+  directions and bridge endpoints are adapted separately. Open Wire vertices
+  resolve to a unique adjacent native segment, preserving its endpoint parameter.
+- Control-point ID zero is accepted by MCP, as returned by 26.2.1. Negative,
+  duplicate, unknown and stale references remain rejected.
+
+- Material state reads accept legacy `[id, info]` pairs and 26.2 material-info
+  objects without changing the public appearance fields or revision semantics.
+  Malformed entries reject explicitly. Public appearance ID zero is translated
+  to the native unset value for clearing an assignment inside the owned command.
+
+- Solid/Sheet bounds use native support extrema when the kernel exposes them.
+  Older kernels and Wires retain conservative boxes with explicit `boundsMethod`
+  provenance. Cache format 3 invalidates the previous descriptors/revisions.
+- Native Helices currently require whole positive turns. Thread recipes check
+  their length/pitch and extended female-cutter turns before any geometry step.
+  Fractional parameters reject explicitly on both versions; no dimensions or
+  pitch are silently adjusted. See [bounds and Helix compatibility](native-bounds-and-helix.md).
+
+- Curve imprint now accepts explicit normal projection, with no direction.
+  Existing vector calls retain their behavior. Analytic-circle qualification
+  passes for aligned and rotated planar targets on both versions; the vector
+  SPCurve/mass limitation remains. See [projection methods](curve-imprint-projection.md).
+
+- Screenshot calls can explicitly select `captureMode: viewport` for a verified
+  fresh native WebGL image, including a hidden document. Default full-window
+  capture retains its visibility guard. HTML labels, CSS panels/backgrounds
+  and OS window visibility are outside native-canvas capture scope. See
+  [screenshot modes](viewport-screenshots.md).
+
+- Separate STEP/channel geometry fixtures pass on both versions without
+  changing conservative legacy boxes. Original strict 26.1.3 nominal-box
+  gates remain unaccepted; imported corners/plane constraints and native
+  material-envelope probes provide independent evidence. See
+  [legacy bounds qualification](legacy-bounds-qualification.md).
+
+## Catalog audit follow-up
+
+The subsequent [catalog audit](plasticity-26-2-catalog-audit.md) records every
+registered tool with independent per-version evidence and explicit gaps. It
+adds deformation, refinement, reference meshes, interference, dimensions,
+sections, fastener workflows and SVG checks. The follow-up fixes hollow-shell unjoin and shell-vertex offset, and resolves the
+26.1 native-open confirmation timeout. The final six-scenario regression passed
+on both versions; the audit does not claim acceptance of all 371 tools.
+
+The next continuation covers patterns, direct rectangle dimensions, Wire
+reversal/unjoin and hole recipes. It also corrects whole-body mirror: native
+`move` is a numeric mirror offset, so replacement mode uses zero offset and a
+source-deletion transaction inside the same command. Copy and replacement are
+checked separately for bodies beside and crossing the mirror plane. The audit
+records the executed cases and their per-version results.
+
+Nine further Sheet/blend/feature scenarios passed on both copies. Region patch
+clears source selection inside its command to prevent an awaiting interactive
+move after commit. Face-property validation accepts native periodic curved
+faces with equal total/inner loop counts, while retaining planar outer-loop
+and native-validity checks. The [audit](plasticity-26-2-catalog-audit.md)
+records exact areas, volumes, bore depths, Undo/Redo and remaining gaps.
+
+The profile/closure continuation adds signed Wire and Region offsets, endpoint
+extension, edge extraction, Region loft/sweep, Sheet joining/capping and
+separate Solid creation from a closed Sheet. Its guarded cases check source
+preservation, native geometry, one history step, Undo/Redo and cleanup. No
+production adapter change was required for this group; the audit records each
+version's completed fixtures.
+
+The alignment/projection continuation passed nine scenarios on both versions,
+including translational vertex/edge/cylinder alignment, Line projection,
+analytic body-imprint/dissolve, Sheet edits, draft and semantic-selection
+rebinding through move/Undo/Redo. Its strict circular curve-imprint case remains
+unaccepted on both versions: native Check passes, but SPCurve length and nominal
+mass/bounds do not meet the stated qualification. This was not classified as a
+26.2 adapter regression; tolerances were retained and the matrix records the
+failed case separately.
+
+The next guarded suite covers native bounds and distance measurements, datum
+refresh and the save/open/backup lifecycle on a 10 × 20 × 30 mm Box. Measurement
+reads must preserve revision/history, and stale datum references must never be
+rebound to an unrelated face. Its STEP round-trip retains a strict 0.00001 mm
+nominal-bounds gate; imported kernel bounds expanded by 0.00005 mm per side on
+both versions, so that fixture remains unaccepted and does not establish restart
+provenance/history coverage. The new saved-plane/workplane case was not run
+because UI automation could not acquire the experimental window. See the
+[catalog audit](plasticity-26-2-catalog-audit.md) for completed per-version results.
+
+The joint/vent continuation adds guarded synthetic recipes for ventilation,
+heat-set pockets, locating pins, snap hooks, dovetails, enclosure lips/grooves
+and cable channels. The cable-channel case remains unaccepted on both versions:
+its native maximum Z is 10.112742414248142 mm against a nominal 10 mm bound;
+its strict bounds tolerance was retained. The suite checks native geometry and explicit multi-step history,
+retained profiles, cutter consumption, Undo/Redo and paired-body interference.
+The supplied clearances remain geometric test inputs, not qualified print fits,
+insert-retention ratings or snap-strength evidence. Per-version outcomes remain
+in the [catalog audit](plasticity-26-2-catalog-audit.md).
+
+The initial standalone custom rounded-thread fixtures failed on both versions:
+all six tested cases exceeded their declared native body-box envelope, and
+2.5-turn female Helices exceeded their requested length/end. Native Check,
+bounded-volume and sampled handedness checks passed, but those partial results
+do not accept the workflows. The same observations occur on 26.1.3; the initial audit made no adapter change or tolerance relaxation. The later
+[bounds/whole-turn correction](native-bounds-and-helix.md) qualifies an explicitly
+bounded whole-turn subset and rejects fractional requests before geometry. See [standalone thread qualification](plasticity-26-2-catalog-audit.md#standalone-printed-thread-qualification).
+
+## Initial live coverage
+
+The same checkout and production adapter were used against both disposable
+application copies. Every listed final run passed; fixtures were undone or the
+saved baseline was reopened.
+
+| Scenario | 26.1.3 copy | Experimental 26.2.1 copy | Entry point |
+| --- | --- | --- | --- |
+| Fresh isolated startup, renderer discovery | Passed | Passed | `ensurePlasticityCdp` |
+| Box, sphere, cylinder, exact volumes, native Check | Passed | Passed | Production operations |
+| Move, Undo/Redo, STEP, groups, native save/open | Passed | Passed | Production operations |
+| Curve selection, slide, move, rotate, scale, delete, exact B-Rep, Undo/Redo | Passed | Passed | `accept:native-curve-control-points`, stdio MCP |
+| G0–G3 curve bridge, vertex bridge, shell-edge bridge | Passed | Passed | `accept:native-curve-bridge`, stdio MCP |
+| Linked instances, transforms, realization, independent Solid/Sheet duplication | Passed | Passed | `accept:instances`, stdio MCP |
+| Group hierarchy, activation, placement, selection, visibility, locks, viewport checks | Passed | Passed | `accept:groups`, stdio MCP |
+| Move, extend, offset, dissolve edges, exact topology, Undo/Redo | Passed | Passed | `accept:native-edge-edits`, stdio MCP |
+| Hidden bodies/groups after native reopen, viewport pixel comparison, locks and Undo/Redo | Passed | Passed | `accept:visibility-after-load` |
+| Face cut: two valid 500 mm³ solids; G2 surface bridge: valid Sheet, 3 faces/10 edges | Passed | Passed | `accept:native-store-factories` |
+
+The sphere additionally passed its standalone stdio acceptance on 26.2.1.
+Discovery resolved all 212 literal native bindings requested by the adapter.
+That binding count does not establish live acceptance for the entire tool
+catalog. Existing historical 26.1.3 acceptance entries retain their version and
+scope; unrelated CAD tools, all import/export formats, Workbench integrations,
+slicers and physical manufacturing were not reaccepted on 26.2.1.
+
+Run a suite against an explicitly selected **empty disposable document**, with
+a new output directory:
+
+```sh
+PLASTICITY_CDP_URL=http://127.0.0.1:PORT npm run accept:native-store-factories -- \
+  --target WINDOW_ID --allow-disposable-mutations --output /absolute/new-evidence
+```
+
+The acceptance scripts for groups, instances, curve bridges and edge edits now
+fetch revision-matched `plasticity_body_info` when mutation results contain
+compact summaries. The helper leaves validation/measurement responses intact
+and rejects document, revision or body-ID mismatches.
+
+## Initial automated checks (PR #12)
+
+On PR #12, `npm test` passed 1390 tests, and `npm run typecheck` passed.
+Workbench passed 90 tests, its typecheck, and its production build. The build
+retains its advisory warning about chunks larger than 500 kB. These checks do
+not run Plasticity or replace the live evidence above.

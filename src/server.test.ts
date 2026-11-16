@@ -15,6 +15,7 @@ import { frameFromOriginNormalX } from "./plasticity/construction.ts";
 import { PlasticityOperations } from "./plasticity/operations.ts";
 import type { PlasticityRuntime, RuntimeState } from "./plasticity/runtime.ts";
 import { PrintedThreadQualificationStore } from "./printing/thread-qualification.ts";
+import { catalogScore } from "./tool-catalog.ts";
 import { StepImportReferenceStore } from "./plasticity/import-reference-store.ts";
 import { ConstructionHistoryStore } from "./plasticity/construction-history.ts";
 import { StrengthStore } from "./strength/store.ts";
@@ -971,6 +972,14 @@ test("MCP initializes, lists tools, and validates tool input", async () => {
     arguments: { targetId: 7, curveIds: [11], direction: [0, 0, 0], revision: "r1" },
   });
   assert.equal(invalidImprint.isError, true);
+  const invalidCaptureMode = await client.callTool({ name: "plasticity_screenshot", arguments: { path: "test.png", captureMode: "unknown" } });
+  assert.equal(invalidCaptureMode.isError, true);
+  assert.match(JSON.stringify(invalidCaptureMode.content), /captureMode/);
+  for (const parameters of [{}, { projectionMethod: "vector" }, { projectionMethod: "normal", direction: [0,0,-1] }, { projectionMethod: "invalid" }]) {
+    const rejected = await client.callTool({ name: "plasticity_imprint_curves_on_body", arguments: { targetId: 7, curveIds: [11], revision: "r1", ...parameters } });
+    assert.equal(rejected.isError, true);
+    assert.match(JSON.stringify(rejected.content), /direction|projectionMethod/);
+  }
   const invalidPatch = await client.callTool({
     name: "plasticity_patch_regions",
     arguments: { regionIds: [], revision: "r1" },
@@ -1295,6 +1304,23 @@ test("Codex tool router catalogs and validates every registered operation", asyn
   } while (true);
   assert.equal(catalogTotal, registered.tools.length - 2, "every tool except the plasticity_call router and plasticity_batch is in the catalog");
   assert.equal(catalogNames.size, catalogTotal, "catalog pages must cover every registered operation without duplicates");
+  const catalogEntries = registered.tools
+    .filter((tool) => tool.name !== "plasticity_call")
+    .map((tool) => ({ name: tool.name, description: tool.description ?? "" }));
+  for (const [words, expected] of [
+    ["translate move bodies", "plasticity_move"],
+    ["delete bodies", "plasticity_delete"],
+    ["sew join sheets", "plasticity_join_sheets"],
+    ["polyline line segment", "plasticity_create_polyline"],
+    ["check body validity", "plasticity_validate_bodies"],
+  ] as Array<[string, string]>) {
+    const ranked = parseToolJson(await client.callTool({ name: "plasticity_call", arguments: { toolName: "catalog", query: words, limit: 3 } }));
+    assert.equal((ranked.tools as Array<{ name: string }>)[0]?.name, expected, `"${words}" must rank ${expected} first`);
+    const scores = catalogEntries.map((tool) => ({ name: tool.name, score: catalogScore(words, tool) }))
+      .sort((left, right) => right.score - left.score);
+    assert.ok(scores[0]!.score > scores[1]!.score,
+      `"${words}" must rank ${expected} first on score, not on name order: ${JSON.stringify(scores.slice(0, 3))}`);
+  }
 
   const invalid = await client.callTool({ name: "plasticity_call", arguments: {
     toolName: "plasticity_create_box",
@@ -5269,7 +5295,7 @@ test("serializes compact curve inspection and all native rebuild modes", async (
   const controlPoints = [{
     id: 7, versionId: 17, positionSource: "native-control-handle" as const,
     boundaryVertices: [{ reference: { bodyId: 7, kind: "vertex" as const, pointId: 101 }, versionId: "17v101", positionMm: [0, 0, 0] as [number, number, number], slideDirections: { positiveU: [1, 0, 0] as [number, number, number], negativeU: [-1, 0, 0] as [number, number, number] } }],
-    interiorControlPoints: [{ reference: { bodyId: 7, kind: "control-point" as const, pointId: 2 }, versionId: "17c2", positionMm: [10, 20, 0] as [number, number, number], slideDirections: { positiveU: [0, 1, 0] as [number, number, number], negativeU: [0, -1, 0] as [number, number, number] } }],
+    interiorControlPoints: [{ reference: { bodyId: 7, kind: "control-point" as const, pointId: 0 }, versionId: "17c0", positionMm: [10, 20, 0] as [number, number, number], slideDirections: { positiveU: [0, 1, 0] as [number, number, number], negativeU: [0, -1, 0] as [number, number, number] } }],
   }];
   const evaluatedSamples = [{
     reference: { bodyId: 7, segmentEntityId: 99, normalizedParameter: 0.5 }, bodyVersionId: 17,
@@ -5333,35 +5359,41 @@ test("serializes compact curve inspection and all native rebuild modes", async (
   const duplicateRegions = await client.callTool({ name: "plasticity_create_curves_from_regions", arguments: { regionIds: ["20r1", "20r1"], revision: state.revision } });
   assert.equal(duplicateRegions.isError, true);
   const movedControlPoint = await client.callTool({ name: "plasticity_move_curve_control_points", arguments: {
-    points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], deltaMm: [0, 10, 5], revision: state.revision,
+    points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], deltaMm: [0, 10, 5], revision: state.revision,
   } });
   assert.equal(movedControlPoint.isError, undefined);
   assert.deepEqual(nativeCalls.at(-1)?.bindings, ["MultiMoveControlPointFactory", "MoveControlPointCommand"]);
-  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], delta: [0, 0.01, 0.005] }]);
+  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], delta: [0, 0.01, 0.005] }]);
   const slidControlPoint = await client.callTool({ name: "plasticity_slide_curve_control_points", arguments: {
-    points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], direction: "positive-u", distanceMm: 5, revision: state.revision,
+    points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], direction: "positive-u", distanceMm: 5, revision: state.revision,
   } });
   assert.equal(slidControlPoint.isError, undefined);
   assert.deepEqual(nativeCalls.at(-1)?.bindings, ["MultiSlideControlPointFactory", "MoveControlPointCommand"]);
-  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], direction: "posU", distance: 0.005 }]);
+  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], direction: "posU", distance: 0.005 }]);
   const rotatedControlPoint = await client.callTool({ name: "plasticity_rotate_curve_control_points", arguments: {
-    points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], pivotMm: [10, 20, 0], axis: [0, 0, 2], degrees: 90, revision: state.revision,
+    points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], pivotMm: [10, 20, 0], axis: [0, 0, 2], degrees: 90, revision: state.revision,
   } });
   assert.equal(rotatedControlPoint.isError, undefined);
   assert.deepEqual(nativeCalls.at(-1)?.bindings, ["MultiRotateControlPointFactory", "RotateControlPointCommand", "Vector3", "Quaternion"]);
-  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], pivot: [0.01, 0.02, 0], axis: [0, 0, 1], radians: Math.PI / 2 }]);
+  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], pivot: [0.01, 0.02, 0], axis: [0, 0, 1], radians: Math.PI / 2 }]);
   const scaledControlPoint = await client.callTool({ name: "plasticity_scale_curve_control_points", arguments: {
-    points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], pivotMm: [10, 20, 0], factors: [2, 0.5, 1], revision: state.revision,
+    points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], pivotMm: [10, 20, 0], factors: [2, 0.5, 1], revision: state.revision,
   } });
   assert.equal(scaledControlPoint.isError, undefined);
   assert.deepEqual(nativeCalls.at(-1)?.bindings, ["MultiScaleControlPointFactory", "ScaleControlPointCommand"]);
-  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], pivot: [0.01, 0.02, 0], factors: [2, 0.5, 1] }]);
+  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], pivot: [0.01, 0.02, 0], factors: [2, 0.5, 1] }]);
+  const beforeInvalidPoint = nativeCalls.length;
+  const invalidPoint = await client.callTool({ name: "plasticity_move_curve_control_points", arguments: {
+    points: [{ bodyId: 7, kind: "control-point", pointId: -1 }], deltaMm: [0, 1, 0], revision: state.revision,
+  } });
+  assert.equal(invalidPoint.isError, true);
+  assert.equal(nativeCalls.length, beforeInvalidPoint);
   const deletedControlPoint = await client.callTool({ name: "plasticity_delete_curve_control_points", arguments: {
-    points: [{ bodyId: 7, kind: "control-point", pointId: 2 }], revision: state.revision,
+    points: [{ bodyId: 7, kind: "control-point", pointId: 0 }], revision: state.revision,
   } });
   assert.equal(deletedControlPoint.isError, undefined);
   assert.deepEqual(nativeCalls.at(-1)?.bindings, ["DeleteControlPointFactory", "DeleteControlPointCommand"]);
-  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 2 }] }]);
+  assert.deepEqual(nativeCalls.at(-1)?.values, [{ points: [{ bodyId: 7, kind: "control-point", pointId: 0 }] }]);
 
   for (const arguments_ of [
     { ids: [7], method: "tolerance", toleranceMm: 0.1, revision: state.revision },
@@ -5796,10 +5828,11 @@ test("ensureConnected connects only when exactly one Plasticity window is open",
 });
 
 test("plasticity_screenshot without a path returns the image inline", async () => {
+  const screenshotModes: Array<string | undefined> = [];
   const operations = {
     async state() { return emptyState(); },
     async screenshotImage(maxWidth: number) { return { data: "/9j/AA==", mimeType: "image/jpeg", width: maxWidth, height: 300, bytes: 4 }; },
-    async screenshot(path: string) { return { path, bytes: 10 }; },
+    async screenshot(path: string, mode?: string) { screenshotModes.push(mode); return { path, bytes: 10 }; },
   } as unknown as PlasticityOperations;
   const fake = {
     async windows() { return []; }, async connect() { return emptyState(); }, get() { return operations; },
@@ -6014,5 +6047,65 @@ test("plasticity_batch filters created bodies by type with addedSolids and added
   ] } });
   assert.equal(response.isError, undefined, JSON.stringify(response.content));
   assert.deepEqual(booleans[0]?.slice(0, 2), [[7], [11]], "addedSolids skips the profile Wire");
+  await close();
+});
+
+test("plasticity_screenshot rejects captureMode viewport without a path", async () => {
+  const screenshotModes: Array<string | undefined> = [];
+  const operations = {
+    async state() { return emptyState(); },
+    async screenshotImage(maxWidth: number) { return { data: "/9j/AA==", mimeType: "image/jpeg", width: maxWidth, height: 300, bytes: 4 }; },
+    async screenshot(path: string, mode?: string) { screenshotModes.push(mode); return { path, bytes: 10 }; },
+  } as unknown as PlasticityOperations;
+  const fake = {
+    async windows() { return []; }, async connect() { return emptyState(); }, get() { return operations; },
+    capabilities() { return { bindings: [], operations: unavailableConstruction() }; },
+    async captureSnapshot() { return {}; }, async changesSince() { return {}; }, async waitForChange() { return {}; },
+  } satisfies SessionLike;
+  const { client, close } = await batchClient(fake);
+  const noPath = await client.callTool({ name: "plasticity_screenshot", arguments: { captureMode: "viewport" } });
+  assert.equal(noPath.isError, true);
+  assert.match(JSON.stringify(noPath.content), /captureMode=viewport saves a PNG file; pass path/);
+  assert.deepEqual(screenshotModes, []);
+  await close();
+});
+
+test("plasticity_screenshot forwards captureMode viewport with a path", async () => {
+  const screenshotModes: Array<string | undefined> = [];
+  const operations = {
+    async state() { return emptyState(); },
+    async screenshotImage(maxWidth: number) { return { data: "/9j/AA==", mimeType: "image/jpeg", width: maxWidth, height: 300, bytes: 4 }; },
+    async screenshot(path: string, mode?: string) { screenshotModes.push(mode); return { path, bytes: 10 }; },
+  } as unknown as PlasticityOperations;
+  const fake = {
+    async windows() { return []; }, async connect() { return emptyState(); }, get() { return operations; },
+    capabilities() { return { bindings: [], operations: unavailableConstruction() }; },
+    async captureSnapshot() { return {}; }, async changesSince() { return {}; }, async waitForChange() { return {}; },
+  } satisfies SessionLike;
+  const { client, close } = await batchClient(fake);
+  const saved = await client.callTool({ name: "plasticity_screenshot", arguments: { path: "/tmp/v.png", captureMode: "viewport" } });
+  assert.deepEqual(parseToolJson(saved), { path: "/tmp/v.png", bytes: 10 });
+  assert.deepEqual(screenshotModes, ["viewport"]);
+  await close();
+});
+
+test("plasticity_screenshot without a path in default mode returns an inline image", async () => {
+  const screenshotModes: Array<string | undefined> = [];
+  const operations = {
+    async state() { return emptyState(); },
+    async screenshotImage(maxWidth: number) { return { data: "/9j/AA==", mimeType: "image/jpeg", width: maxWidth, height: 300, bytes: 4 }; },
+    async screenshot(path: string, mode?: string) { screenshotModes.push(mode); return { path, bytes: 10 }; },
+  } as unknown as PlasticityOperations;
+  const fake = {
+    async windows() { return []; }, async connect() { return emptyState(); }, get() { return operations; },
+    capabilities() { return { bindings: [], operations: unavailableConstruction() }; },
+    async captureSnapshot() { return {}; }, async changesSince() { return {}; }, async waitForChange() { return {}; },
+  } satisfies SessionLike;
+  const { client, close } = await batchClient(fake);
+  const inline = await client.callTool({ name: "plasticity_screenshot", arguments: {} });
+  const parts = inline.content as Array<{ type: string; mimeType?: string }>;
+  assert.equal(parts[0]?.type, "image");
+  assert.equal(parts[0]?.mimeType, "image/jpeg");
+  assert.deepEqual(screenshotModes, []);
   await close();
 });

@@ -9,6 +9,7 @@ import { frameFromOriginNormalX } from "./construction.ts";
 import { evaluateSvgCubicBezier, type SvgCubicBezier } from "./svg-cubic.ts";
 import { countActiveCurveSpans } from "./curve-span-count.ts";
 import type { PlasticityRuntime, RuntimeState } from "./runtime.ts";
+import { LONG_NATIVE_IMPORT_TIMEOUT_MS } from "./runtime.ts";
 
 const emptyConstruction: RuntimeState["construction"] = {
   planes: [],
@@ -16,6 +17,96 @@ const emptyConstruction: RuntimeState["construction"] = {
   planeStateToken: "planes:empty",
   viewStateToken: "workplane:standard:top",
 };
+
+test("document opening backs up first and uses the native scene/history replacement lifecycle", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-open-test-"));
+  const input = join(root, "empty.plasticity");
+  const backup = join(root, "backup.plasticity");
+  const header = Buffer.alloc(24); header.write("plasticity");
+  await writeFile(input, header);
+  const events: string[] = [];
+  let state: RuntimeState = { targetId: "window", title: "Fixture", documentToken: "fixture", revision: "r1", dbVersion: 1, undoDepth: 5, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [] };
+  const editor = {
+    executor: { isBusy: false }, document: { filename: "fixture.plasticity" },
+    async save() {
+      events.push("save-backup");
+      assert.equal(this.document.filename, await realpath(backup));
+    },
+    async open(path: string) {
+      events.push("open");
+      assert.deepEqual(await readFile(backup), header);
+      this.document.filename = path;
+      state = { ...state, documentToken: "empty", revision: "r2", undoDepth: 0, redoDepth: 0 };
+    },
+  };
+  const runtime = {
+    async getState() { return state; },
+    async mutate(source: string, bindings: string[], values: unknown[], timeout: number) {
+      assert.deepEqual(bindings, []);
+      assert.equal(timeout, LONG_NATIVE_IMPORT_TIMEOUT_MS);
+      return await Function(`return (${source})`)().apply(editor, values);
+    },
+  } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+  operations.saveCopy = async (path: string) => { events.push("backup"); await writeFile(path, header); return { path, bytes: header.length }; };
+  try {
+    const opened = await operations.openDocument(input, backup, "r1");
+    assert.deepEqual(events, ["backup", "save-backup", "open"]);
+    assert.equal(opened.documentToken, "empty");
+    assert.equal(opened.undoDepth, 0);
+    assert.equal(opened.bodies.length, 0);
+    editor.open = async () => { throw new Error("native open failed"); };
+    await assert.rejects(operations.openDocument(input, backup, "r2"), /native open failed/);
+    editor.open = async () => { editor.document.filename = backup; };
+    await assert.rejects(operations.openDocument(input, backup, "r2"), /did not open the requested document/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("document opening never invokes native open when validation or backup fails", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-open-reject-test-"));
+  const input = join(root, "invalid.plasticity");
+  await writeFile(input, "invalid");
+  const runtime = {
+    async getState() { return { revision: "r1", construction: emptyConstruction, bodies: [], regions: [] }; },
+    async mutate() { assert.fail("must not mutate before validation and backup succeed"); },
+  } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+  let backups = 0;
+  operations.saveCopy = async () => { backups += 1; throw new Error("backup failed"); };
+  try {
+    await assert.rejects(operations.openDocument(input, join(root, "backup.plasticity"), "r1"), /not a valid Plasticity document/);
+    assert.equal(backups, 0);
+    const header = Buffer.alloc(24); header.write("plasticity"); await writeFile(input, header);
+    await assert.rejects(operations.openDocument(input, join(root, "backup.plasticity"), "r1"), /backup failed/);
+    assert.equal(backups, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("document opening never overwrites the old file and stops if native backup saving fails", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-open-save-"));
+  const input = join(root, "input.plasticity"), backup = join(root, "backup.plasticity"), original = join(root, "original.plasticity");
+  const header = Buffer.alloc(24); header.write("plasticity");
+  await writeFile(input, header);
+  await writeFile(original, "original document must not be overwritten");
+  let opens = 0;
+  const editor = { executor: { isBusy: false }, document: { filename: original }, async save() { assert.equal(this.document.filename, await realpath(backup)); throw new Error("native backup save failed"); }, async open() { opens += 1; } };
+  const runtime = {
+    async getState() { return { revision: "r1", construction: emptyConstruction, bodies: [], regions: [] }; },
+    async mutate(source: string, _bindings: string[], values: unknown[]) { return await Function(`return (${source})`)().apply(editor, values); },
+  } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+  operations.saveCopy = async path => { await writeFile(path, header); return { path, bytes: 24 }; };
+  try {
+    await assert.rejects(operations.openDocument(input, backup, "r1"), /native backup save failed/);
+    assert.equal(opens, 0);
+    assert.equal(editor.document.filename, await realpath(backup));
+    assert.equal(await readFile(original, "utf8"), "original document must not be overwritten");
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
 
 test("screenshot refuses a stale renderer surface while Plasticity is hidden", async () => {
   const root = await mkdtemp(join(tmpdir(), "plasticity-screenshot-hidden-test-"));
@@ -1223,6 +1314,30 @@ test("synchronizes visible native distance-measurement overlays with exact B-Rep
   assert.match(calls[0]?.source ?? "", /manager\.set\(key, tag\)/);
   assert.match(calls[0]?.source ?? "", /manager\.get\(key\) !== tag/);
 
+  // Execute the emitted callback with suspended RAF, then explicitly refresh.
+  const source = calls[0]!.source;
+  const callback = source.slice(source.indexOf("          const updateLabels ="), source.indexOf("          tag.refreshLabels();") + "          tag.refreshLabels();".length);
+  let nextFrame = 0;
+  const pending = new Map<number, () => void>();
+  const label = { style: {} as Record<string, string>, removed: false, remove() { this.removed = true; } };
+  const tag: any = {};
+  const manager = new Map([["measurement", tag]]);
+  const point = { x: 0, y: 0, z: 0 };
+  Function("manager", "key", "tag", "labels", "labelPoint", "requestAnimationFrame", "cancelAnimationFrame", callback)(
+    manager, "measurement", tag,
+    [{ label, viewport: { camera: { updateMatrixWorld() {} }, container: { clientWidth: 100, clientHeight: 80 } } }],
+    { clone: () => ({ project: () => point }) },
+    (fn: () => void) => { pending.set(++nextFrame, fn); return nextFrame; },
+    (id: number) => pending.delete(id),
+  );
+  assert.equal(label.style.left, "50px");
+  for (let i = 0; i < 3; i++) { point.x = .5; tag.refreshLabels(); assert.equal(pending.size, 1); }
+  assert.equal(label.style.left, "75px");
+  point.z = 2; tag.refreshLabels(); assert.equal(label.style.display, "none");
+  manager.clear(); tag.refreshLabels();
+  assert.equal(pending.size, 0);
+  assert.equal(label.removed, true);
+
   await operations.state();
   assert.equal(calls.length, 1, "an unchanged measurement revision should not rebuild its overlay");
 
@@ -1383,7 +1498,7 @@ test("lists and removes current native measurements through Plasticity history",
   assert.deepEqual(call?.bindings, ["RemoveMeasurementCommand"]);
   assert.deepEqual(call?.values, [{ id: 3 }]);
   assert.match(call?.source ?? "", /lookupByStableId\(args\.id\)/);
-  assert.match(call?.source ?? "", /selected\.addMeasurement\(measurement\)/);
+  assert.match(call?.source ?? "", /nativeApi\.selection\.addMeasurement\(measurement\)/);
   assert.match(call?.source ?? "", /command\.execute\.bind\(command\)/);
   assert.match(call?.source ?? "", /viewport\.setNeedsRender\(\)/);
 });
@@ -1642,7 +1757,7 @@ test("creates and transforms native instances through their empty transforms", a
   assert.match(calls[0]?.source ?? "", /move\.empties = created/);
   assert.deepEqual(calls[1]?.bindings, ["MoveItemAndEmptyFactory"]);
   assert.deepEqual(calls[1]?.values, [{ ids: [0], delta: [0.005, 0, 0] }]);
-  assert.match(calls[1]?.source ?? "", /const store = this\.db\.empties\.write/);
+  assert.match(calls[1]?.source ?? "", /const store = nativeApi\.db\.empties\.write/);
   assert.match(calls[1]?.source ?? "", /const copy = original\.clone\(false\)/);
   assert.match(calls[1]?.source ?? "", /store\.id2empty\.set\(id, copy\)/);
   assert.match(calls[1]?.source ?? "", /factory\.empties = args\.ids\.map\(find\)/);
@@ -1705,7 +1820,7 @@ test("mirror is a plain copy: it turns off the native cut and union", async () =
   assert.deepEqual(calls[0]?.bindings, ["MirrorFactory"]);
   assert.match(calls[0]?.source ?? "", /factory\.shouldCut = false/);
   assert.match(calls[0]?.source ?? "", /factory\.shouldUnion = false/);
-  assert.match(calls[0]?.source ?? "", /factory\.move = !args\.keepOriginal/);
+  assert.match(calls[0]?.source ?? "", /factory\.move = 0/);
 });
 
 test("fillet sets the native curvature-continuous blend shape only for shape g2", async () => {
@@ -1780,7 +1895,7 @@ test("realizes and deletes current native instances while rejecting stale identi
   assert.deepEqual(calls[0]?.bindings, ["RealizeInstanceFactory"]);
   assert.match(calls[0]?.source ?? "", /factory\.empties = args\.ids\.map\(find\)/);
   assert.deepEqual(calls[1]?.bindings, []);
-  assert.match(calls[1]?.source ?? "", /selection\.selected\.addEmpty\(empty\)/);
+  assert.match(calls[1]?.source ?? "", /nativeApi\.selection\.addEmpty\(empty\)/);
   assert.match(calls[1]?.source ?? "", /new this\.commands\.DeleteCommand/);
 
   const mutationCount = calls.length;
@@ -1835,7 +1950,7 @@ test("manages native groups, hierarchy, visibility, and locks through document h
   assert.deepEqual(calls[0]?.bindings, []);
   assert.deepEqual(calls[0]?.values, [{ bodyIds: [7], instanceIds: [0], referenceMeshIds: [3], groupIds: [1], name: "Bracket assembly" }]);
   assert.match(calls[0]?.source ?? "", /findReferenceMesh/u);
-  assert.match(calls[0]?.source ?? "", /selected\.addGroup\(group\)/);
+  assert.match(calls[0]?.source ?? "", /nativeApi\.selection\.addGroup\(group\)/);
   assert.match(calls[0]?.source ?? "", /command\.execute = async function/);
   assert.match(calls[0]?.source ?? "", /db\.nodes\.setName/);
   assert.deepEqual(calls[1]?.bindings, ["MoveSelectionToGroupCommand"]);
@@ -1848,13 +1963,15 @@ test("manages native groups, hierarchy, visibility, and locks through document h
   assert.match(calls[3]?.source ?? "", /new Command\(this, group\)/);
   assert.deepEqual(calls[4]?.values, [{ id: 0 }]);
   assert.deepEqual(calls[5]?.bindings, ["DissolveGroupCommand"]);
-  assert.match(calls[5]?.source ?? "", /selected\.addGroup\(group\)/);
+  assert.match(calls[5]?.source ?? "", /nativeApi\.selection\.addGroup\(group\)/);
   assert.deepEqual(calls[6]?.values, [{ flag: "visibility", bodyIds: [7], instanceIds: [0], referenceMeshIds: [3], groupIds: [1], value: false }]);
-  assert.match(calls[6]?.source ?? "", /db\.nodes\.setVisible/);
   assert.match(calls[6]?.source ?? "", /selection\.selected\.removeAll\(\)/);
+  assert.match(calls[6]?.source ?? "", /nativeApi\.db\.makeTransaction\(\)[\s\S]*transaction\.makeVisible\(item\)[\s\S]*transaction\.makeInvisible\(item\)[\s\S]*await nativeApi\.db\.commit\(transaction\)/);
+  assert.doesNotMatch(calls[6]?.source ?? "", /db\.nodes\.setVisible/);
   assert.deepEqual(calls[7]?.values, [{ flag: "locked", bodyIds: [7], instanceIds: [0], referenceMeshIds: [3], groupIds: [1], value: true }]);
-  assert.match(calls[7]?.source ?? "", /db\.nodes\.setLocked/);
   assert.match(calls[7]?.source ?? "", /selection\.selected\.removeAll\(\)/);
+  assert.match(calls[7]?.source ?? "", /transaction\.lock\(item\)[\s\S]*transaction\.unlock\(item\)[\s\S]*await nativeApi\.db\.commit\(transaction\)/);
+  assert.doesNotMatch(calls[7]?.source ?? "", /db\.nodes\.setLocked/);
 });
 
 test("rejects stale, missing, duplicate, root, empty, and cyclic group operations before mutation", async () => {
@@ -1917,17 +2034,17 @@ test("reads and replaces mixed native body, instance, and group selections", asy
 
   assert.deepEqual(result, { documentToken: state.documentToken, revision: state.revision, ...selected });
   assert.deepEqual(reads[0]?.values, [{ bodyIds: [7], instanceIds: [0], referenceMeshIds: [], groupIds: [1] }]);
-  assert.match(reads[0]?.source ?? "", /selected\.addEmpty\(empty\)/);
-  assert.match(reads[0]?.source ?? "", /selected\.addGroup\(group\)/);
+  assert.match(reads[0]?.source ?? "", /nativeApi\.selection\.addEmpty\(empty\)/);
+  assert.match(reads[0]?.source ?? "", /nativeApi\.selection\.addGroup\(group\)/);
   assert.match(reads[1]?.source ?? "", /selection\.empties/);
   assert.match(reads[1]?.source ?? "", /selection\.groups/);
 
   await operations.selectFaces([{ bodyId: 7, faceId: "17f1" }], state.revision);
   await operations.selectEdges([{ bodyId: 7, edgeId: "17e1" }], state.revision);
   assert.deepEqual(reads[2]?.values, [{ references: [{ bodyId: 7, faceId: "17f1" }] }]);
-  assert.match(reads[2]?.source ?? "", /selected\.addFace/);
+  assert.match(reads[2]?.source ?? "", /nativeApi\.selection\.addFace/);
   assert.deepEqual(reads[4]?.values, [{ references: [{ bodyId: 7, edgeId: "17e1" }] }]);
-  assert.match(reads[4]?.source ?? "", /selected\.addEdge/);
+  assert.match(reads[4]?.source ?? "", /nativeApi\.selection\.addEdge/);
 
   const readCount = reads.length;
   await assert.rejects(operations.selectNodes([], [], [], [], state.revision), /at least one body, instance, reference mesh, or group/i);
@@ -1959,7 +2076,7 @@ test("selects whole native Wire curves by current revision-bound body ID", async
 
   assert.deepEqual(result, { documentToken: state.documentToken, revision: state.revision, ...selected });
   assert.deepEqual(reads[0]?.values, [{ ids: [7] }]);
-  assert.match(reads[0]?.source ?? "", /selected\.addCurve\(find\(id\)\)/u);
+  assert.match(reads[0]?.source ?? "", /nativeApi\.selection\.addCurve\(find\(id\)\)/u);
   assert.match(reads[1]?.source ?? "", /selection\.curveIds/u);
 
   const readCount = reads.length;
@@ -1991,8 +2108,8 @@ test("reads and replaces revision-bound native curve control-point selections", 
 
   assert.deepEqual(await operations.selectCurveControlPoints(points, state.revision), { documentToken: state.documentToken, revision: state.revision, ...selected });
   assert.deepEqual(reads[0]?.values, [{ points }]);
-  assert.match(reads[0]?.source ?? "", /selected\.addVertex/);
-  assert.match(reads[0]?.source ?? "", /selected\.addCurveCV/);
+  assert.match(reads[0]?.source ?? "", /nativeApi\.selection\.addVertex/);
+  assert.match(reads[0]?.source ?? "", /nativeApi\.selection\.addCurveCV/);
   assert.match(reads[1]?.source ?? "", /selection\.curveVertices/);
   assert.match(reads[1]?.source ?? "", /selection\.curveCVs/);
 });
@@ -2225,11 +2342,11 @@ test("inserts exact native split vertices along incident shell edges", async () 
 
   await operations.offsetVertices(references, 5, state.revision);
 
-  assert.deepEqual(call?.bindings, ["OffsetVertexFactory", "OffsetVertexCommand"]);
+  assert.deepEqual(call?.bindings, ["OffsetVertexFactory", "OffsetVertexCommand", "pk_default"]);
   assert.deepEqual(call?.values, [{ vertices: references, distance: 0.005 }]);
   assert.match(call?.source ?? "", /Snaps_ShellVertexSnap/);
-  assert.match(call?.source ?? "", /factory\.vertices = selectedSnaps\.map\(snap => snap\.model\)/);
-  assert.match(call?.source ?? "", /factory\._vertices\.views = selectedSnaps\.map/);
+  assert.match(call?.source ?? "", /nativeApi\.configureOffsetVertices\(factory, selectedSnaps, pk_default\.a\)/);
+  assert.match(call?.source ?? "", /factory\._vertices\.views = snaps\.map/);
   assert.match(call?.source ?? "", /parentItem: snap\.item/);
   assert.match(call?.source ?? "", /new Command\(editor\)/);
 });
@@ -2619,7 +2736,7 @@ test("sets an exact native radius dimension on one cylindrical face", async () =
 
   assert.deepEqual(call?.bindings, ["DimensionRadiusCommand", "DimensionRadiusFactory"]);
   assert.deepEqual(call?.values, [{ face: { bodyId: 7, faceId: "17f2" }, radius: 0.007 }]);
-  assert.match(call?.source ?? "", /selected\.addFace/);
+  assert.match(call?.source ?? "", /nativeApi\.selection\.addFace/);
   assert.match(call?.source ?? "", /collection\?\.HasRadius/);
   assert.match(call?.source ?? "", /factory\.radius = args\.radius/);
 });
@@ -2772,7 +2889,7 @@ test("lists and assigns native Plasticity appearance materials", async () => {
   assert.deepEqual(call?.bindings, []);
   assert.deepEqual(call?.values, [{ ids: [7], material: { materialId: 2 } }]);
   assert.match(call?.source ?? "", /selection\.selected\.removeAll\(\)/);
-  assert.match(call?.source ?? "", /editor\.db\.nodes\.setMaterial\(editor\.db\.nodes\.item2key\(view\), materialId\)/);
+  assert.match(call?.source ?? "", /nativeApi\.db\.nodes\.setMaterial\(nativeApi\.db\.nodes\.item2key\(view\), materialId === 0 \? undefined : materialId\)/);
 });
 
 test("creates bounded appearance materials through native document history", async () => {
@@ -2786,8 +2903,8 @@ test("creates bounded appearance materials through native document history", asy
   await operations.setAppearanceMaterial([7], material, state.revision);
 
   assert.deepEqual(call?.values, [{ ids: [7], material }]);
-  assert.match(call?.source ?? "", /editor\.db\.materials\.default\.clone\(\)/);
-  assert.match(call?.source ?? "", /editor\.db\.materials\.add\(args\.material\.name, appearance\)/);
+  assert.match(call?.source ?? "", /nativeApi\.db\.materials\.default\.clone\(\)/);
+  assert.match(call?.source ?? "", /nativeApi\.db\.materials\.add\(args\.material\.name, appearance\)/);
   assert.match(call?.source ?? "", /new this\.commands\.GroupSelectedCommand\(this\)/);
 });
 
@@ -3594,7 +3711,7 @@ test("lists native Wire boundary vertices and interior control points without mu
   assert.deepEqual(readCall?.values, [{ ids: [7] }]);
   assert.match(readCall?.source ?? "", /item\.view\.vertices/);
   assert.match(readCall?.source ?? "", /item\.view\.cvs/);
-  assert.match(readCall?.source ?? "", /factory\.orientation\.posU/);
+  assert.match(readCall?.source ?? "", /nativeApi\.slideDirections\(factory\)/);
   assert.match(readCall?.source ?? "", /native-control-handle/);
 });
 
@@ -3998,8 +4115,8 @@ test("splits one nonperiodic native Wire segment at a normalized parameter", asy
   assert.deepEqual(call?.values, [{ reference: { bodyId: 7, segmentEntityId: 99 }, normalizedParameter: 0.5 }]);
   assert.match(call?.source ?? "", /edge\.IsPeriodic\(\)/);
   assert.match(call?.source ?? "", /factory\._segment\.model = new Proxy/);
-  assert.match(call?.source ?? "", /target\.SplitAt\(args\.normalizedParameter\)/);
-  assert.doesNotMatch(call?.source ?? "", /Denormalize/);
+  assert.match(call?.source ?? "", /nativeApi\.configureCurveSplit\(factory, segment, args\.normalizedParameter\)/);
+  assert.doesNotMatch((call?.source ?? "").slice((call?.source ?? "").lastIndexOf("return (async function")), /Denormalize/);
 });
 
 test("rejects invalid native curve segment splits before mutation", async () => {
@@ -4112,7 +4229,7 @@ test("slides native curve control points along their local positive or negative 
     [{ points, direction: "posU", distance: 0.005 }],
     [{ points, direction: "negU", distance: 0.0025 }],
   ]);
-  assert.match(mutations[0]?.source ?? "", /factory\.direction = args\.direction/);
+  assert.match(mutations[0]?.source ?? "", /factory\.direction = nativeApi\.slideDirection\(args\.direction\)/);
   assert.match(mutations[0]?.source ?? "", /factory\.distance = args\.distance/);
 });
 
@@ -4683,12 +4800,13 @@ test("imprints native Wire bodies onto a target body along an explicit vector", 
     targetId: 7,
     curveIds: [11],
     direction: [0, 0, -1],
+    projectionMethodName: "Vector",
     bidirectional: false,
     occlude: true,
     completionName: "None",
   }]);
   assert.match(call?.source ?? "", /ImprintCurveBodyCommand/);
-  assert.match(call?.source ?? "", /factory\.method = ProjectionMethod\.Vector/);
+  assert.match(call?.source ?? "", /factory\.method = ProjectionMethod\[args\.projectionMethodName\]/);
 });
 
 test("rejects invalid native curve imprint inputs before mutation", async () => {
@@ -5499,10 +5617,10 @@ test("unjoins complete native Solid and Sheet shells into independent faces", as
 
   await operations.unjoinShells([7, 8], state.revision);
 
-  assert.deepEqual(call?.bindings, ["UnjoinShellsFactory"]);
+  assert.deepEqual(call?.bindings, ["UnjoinShellsFactory", "CreateSheetFromFacesFactory"]);
   assert.deepEqual(call?.values, [{ ids: [7, 8] }]);
   assert.match(call?.source ?? "", /UnjoinShellsCommand/);
-  assert.match(call?.source ?? "", /factory\.shells = args\.ids\.map\(find\)/);
+  assert.match(call?.source ?? "", /nativeApi\.createUnjoinFactory\(Factory, SheetFactory, args\.ids\.map\(find\)\)/);
 });
 
 test("rejects stale, duplicate, missing, and Wire shell-unjoin inputs before mutation", async () => {
@@ -5948,6 +6066,7 @@ test("rejects invalid native helix geometry before mutation", async () => {
   await assert.rejects(operations.createHelix([0, 0, 0], [0, 0, 0], 5, 4, [1, 0, 0], "right", state.revision), /axis/i);
   await assert.rejects(operations.createHelix([0, 0, 0], [0, 0, 20], 0, 4, [1, 0, 0], "right", state.revision), /radius/i);
   await assert.rejects(operations.createHelix([0, 0, 0], [0, 0, 20], 5, 0, [1, 0, 0], "right", state.revision), /turns/i);
+  await assert.rejects(operations.createHelix([0, 0, 0], [0, 0, 5], 3.6, 2.5, [1, 0, 0], "right", state.revision), /Fractional Helix/);
   await assert.rejects(operations.createHelix([0, 0, 0], [0, 0, 20], 5, 4, [0, 0, 1], "right", state.revision), /radial direction/i);
   await assert.rejects(operations.createHelix([0, 0, 0], [0, 0, 20], 5, 4, [1, 0, 0], "right", "old-revision"), /stale reference/i);
   assert.equal(mutations, 0);
@@ -6425,10 +6544,10 @@ test("bridges exact Solid or Sheet edge endpoints with native continuity", async
 
   assert.deepEqual(call?.bindings, ["BridgeEdgeFactory", "BridgeEdgeCommand", "ContinuityType"]);
   assert.deepEqual(call?.values, [{ first, second, firstPosition: [0, 0, 0.01], secondPosition: [0.02, 0.01, 0.02], startContinuity: "G1", endContinuity: "G3" }]);
-  assert.match(call?.source ?? "", /factory\.edge1 = edge\(args\.first\)/);
+  assert.match(call?.source ?? "", /nativeApi\.initializeBridge\(factory, edge\(args\.first\), edge\(args\.second\), 'edge'\)/);
   assert.match(call?.source ?? "", /factory\.pickClosestVertices\(\)/);
   assert.match(call?.source ?? "", /matches\(factory\.startPosition, args\.firstPosition\)/);
-  assert.match(call?.source ?? "", /factory\.side1 = !factory\.side1/);
+  assert.match(call?.source ?? "", /nativeApi\.flipBridgeEnd\(factory, 1\)/);
   assert.match(call?.source ?? "", /factory\.startCurvature = Continuity\[args\.startContinuity\]/);
   assert.match(call?.source ?? "", /factory\.lockDistances = true/);
   assert.match(call?.source ?? "", /selection\.selected\.removeAll\(\)/);
@@ -6488,7 +6607,7 @@ test("bridges exact open Wire vertices with native continuity", async () => {
 
   assert.deepEqual(call?.bindings, ["BridgeVertexFactory", "BridgeVertexCommand", "ContinuityType"]);
   assert.deepEqual(call?.values, [{ first, second, firstPosition: [0.01, 0, 0], secondPosition: [0.02, 0.01, 0], startContinuity: "G1", endContinuity: "G3" }]);
-  assert.match(call?.source ?? "", /factory\.vertex1 = vertex\(args\.first\)/);
+  assert.match(call?.source ?? "", /nativeApi\.initializeBridge\(factory, vertex\(args\.first\), vertex\(args\.second\), 'vertex'\)/);
   assert.match(call?.source ?? "", /matches\(factory\.startPosition, args\.firstPosition\)/);
   assert.match(call?.source ?? "", /factory\.startCurvature = Continuity\[args\.startContinuity\]/);
   assert.match(call?.source ?? "", /factory\.lockDistances = true/);
@@ -6801,4 +6920,121 @@ test("undo and redo treat a changed history stack as done instead of awaiting th
   assert.match(calls[0]!.source, /stack\(\)\.length < before && !this\.executor\.isBusy/, "done when the stack shrinks and the executor is idle");
   assert.match(calls[0]!.source, /did not complete within/, "a bounded wait, not an unbounded await");
   await assert.rejects(operations.undo("stale"), /Stale reference/);
+});
+
+test("appearance assignment clears with native undefined on legacy and modern editors, preserves other bodies and propagates native failures", async () => {
+  for (const modern of [false, true]) {
+    const assignments = new Map([[7, 2], [8, 2]]);
+    const seen: Array<number | undefined> = [];
+    let running = false; let failClear = false; let commands = 0;
+    const target = {}; const other = {};
+    const nodes = {
+      item2key(view: object) { assert.equal(view, target); return 7; },
+      setMaterial(key: number, id: number | undefined) {
+        assert.equal(running, true, "material edits must run inside the owned command");
+        assert.equal(key, 7); assert.notEqual(id, 0, "zero is a public sentinel, not a native material ID");
+        seen.push(id);
+        if (failClear && id === undefined) throw new Error("Native clear failed");
+        if (id === undefined) assignments.delete(key); else assignments.set(key, id);
+      },
+    };
+    const geometryModel = new Map([[17, { view: target }], [18, { view: other }]]);
+    const lookupStableId = (version: number) => version === 17 ? 7 : 8;
+    const materials = { has: (id: number) => id === 2 };
+    const editor = {
+      geo: modern ? { read: { geometryModel }, lookupStableId } : { geometryModel },
+      db: { nodes, materials, lookupStableId, commit() {} }, nodes, materials,
+      executor: { isBusy: false }, selection: { selected: { removeAll() {} } },
+      commands: { GroupSelectedCommand: class { remember = true; constructor(_editor: unknown) {} } },
+      async exec(command: { remember: boolean; execute(): Promise<void> }) {
+        commands += 1; assert.equal(command.remember, false); running = true;
+        try { await command.execute(); } finally { running = false; }
+      },
+    };
+    const state: RuntimeState = { targetId: "window", title: "Fixture", documentToken: "document", revision: "current", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], materials: [{ id: 2, name: "Fixture", colorHex: "#336699", roughness: 0.25, metalness: 0.4, opacity: 0.8 }], bodies: [7, 8].map(id => ({ id, versionId: id + 10, type: "Solid", name: null, boundsMm: null, faceIds: [], edgeIds: [], faces: [], edges: [], materialId: 2 })) };
+    const runtime = {
+      async getState() { return state; },
+      async mutate(source: string, bindings: string[], values: unknown[]) {
+        assert.deepEqual(bindings, []);
+        return await Function(`return (${source})`)().apply(editor, values);
+      },
+    } as unknown as PlasticityRuntime;
+    const operations = new PlasticityOperations(runtime);
+    await operations.setAppearanceMaterial([7], { materialId: 0 }, state.revision);
+    assert.equal(assignments.has(7), false); assert.equal(assignments.get(8), 2);
+    await operations.setAppearanceMaterial([7], { materialId: 2 }, state.revision);
+    assert.equal(assignments.get(7), 2);
+    failClear = true;
+    await assert.rejects(operations.setAppearanceMaterial([7], { materialId: 0 }, state.revision), /Native clear failed/);
+    assert.equal(assignments.get(7), 2); assert.equal(assignments.get(8), 2);
+    assert.equal(commands, 3); assert.deepEqual(seen, [undefined, 2, undefined]);
+  }
+});
+
+
+test("normal imprint uses the native normal method without inventing a vector", async () => {
+  const state = { revision: "r1" } as RuntimeState;
+  const calls: Array<{ source: string; values: any[] }> = [];
+  const runtime = { async getState() { return state; }, async mutate(source: string, _bindings: string[], values: any[]) { calls.push({ source, values }); } } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+  await operations.imprintCurvesOnBody(7, [11], undefined, { projectionMethod: "normal" }, state.revision);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]!.values[0].direction, null);
+  assert.equal(calls[0]!.values[0].projectionMethodName, "Normal");
+  assert.match(calls[0]!.source, /if \(args.direction\) factory.direction.copy/);
+  await assert.rejects(operations.imprintCurvesOnBody(7, [11], undefined, {}, state.revision), /direction must be nonzero/);
+  await assert.rejects(operations.imprintCurvesOnBody(7, [11], [0,0,-1], { projectionMethod: "normal" }, state.revision), /only valid for vector/);
+  await assert.rejects(operations.imprintCurvesOnBody(7, [11], [0,0,-1], { projectionMethod: "invalid" as never }, state.revision), /Unsupported imprint projection/);
+  assert.equal(calls.length, 1);
+});
+
+
+test("explicit viewport screenshot requires freshness and matching canvas dimensions without window capture", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-viewport-test-"));
+  const png = Buffer.alloc(24); Buffer.from([137,80,78,71,13,10,26,10]).copy(png); png.write("IHDR",12,"ascii"); png.writeUInt32BE(10,16); png.writeUInt32BE(20,20);
+  let reads = 0;
+  let result = { data: png.toString("base64"), width: 10, height: 20, freshFrame: true, rendererHidden: true };
+  const runtime = { async read() { reads += 1; return result; }, async cdp() { throw new Error("Window CDP must not run"); }, async captureScreenshot() { throw new Error("Window capture must not run"); } } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+  try {
+    const output = join(root,"view.png");
+    assert.deepEqual(await operations.screenshot(output,"viewport"), { path: output, bytes: 24, captureMode: "viewport", freshFrame: true, rendererHidden: true, width: 10, height: 20 });
+    await assert.rejects(operations.screenshot(output,"viewport"), /exists|overwrite/); assert.equal(reads,1);
+    result = { ...result, freshFrame: false };
+    await assert.rejects(operations.screenshot(join(root,"stale.png"),"viewport"), /freshness/);
+    await assert.rejects(readFile(join(root,"stale.png")), { code: "ENOENT" });
+    result = { ...result, freshFrame: true, width: 11 };
+    await assert.rejects(operations.screenshot(join(root,"mismatch.png"),"viewport"), /dimensions/);
+    await assert.rejects(readFile(join(root,"mismatch.png")), { code: "ENOENT" });
+  } finally { await rm(root,{recursive:true,force:true}); }
+});
+
+test("item transform preserves missing native measurement names by stable ID inside commit", async () => {
+  const state: RuntimeState = { targetId: "window", title: "Fixture", documentToken: "fixture", revision: "r1", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [] };
+  let source = "";
+  const runtime = { async getState() { return state; }, async mutate(code: string) { source = code; } } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+  await operations.move([7], [5, 0, 0], state.revision);
+  const body = source.slice(source.indexOf("      const measurementNames ="), source.indexOf("      return result;") + "      return result;".length);
+  const execute = Function("editor", "factory", `return (async () => {${body}})()`);
+  const original = [
+    { versionId: 1, userData: { name: "Width" } },
+    { versionId: 2, userData: { name: "Deleted" } },
+    { versionId: 3, userData: { name: "" } },
+    { versionId: 4, userData: { name: "Old" } },
+  ];
+  const replaced: any[] = [{ versionId: 11 }, { versionId: 13, userData: { extra: true } }, { versionId: 14, userData: { name: "Native replacement" } }, { versionId: 22 }];
+  let current: any[] = original;
+  const ids = new Map([[1, 1], [11, 1], [2, 2], [3, 3], [13, 3], [4, 4], [14, 4], [22, 22]]);
+  const editor = { measurements: { snapshot: () => ({ repo: { measurements: current } }), lookupStableId: (id: number) => ids.get(id) } };
+  const result = await execute(editor, { async commit() { current = replaced; return "native-result"; } });
+  assert.equal(result, "native-result");
+  assert.equal(replaced[0].userData.name, "Width");
+  assert.deepEqual(replaced[1].userData, { extra: true, name: "" });
+  assert.equal(replaced[2].userData.name, "Native replacement");
+  assert.equal(replaced[3].userData, undefined, "deleted stable ID must not name another measurement");
+  assert.deepEqual(original[0], { versionId: 1, userData: { name: "Width" } });
+  current = original;
+  await assert.rejects(execute(editor, { async commit() { throw Error("native failure"); } }), /native failure/);
+  assert.equal(current, original);
 });

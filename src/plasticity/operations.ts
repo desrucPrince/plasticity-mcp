@@ -1,8 +1,11 @@
+import { requireWholeHelixTurns } from "./helix-turns.ts";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { copyFile, mkdir, mkdtemp, open, readFile, realpath, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 
+import { NATIVE_VIEWPORT_CAPTURE } from "./viewport-capture.ts";
+import { nativeFunction } from "./native-function.ts";
 import { LONG_NATIVE_IMPORT_TIMEOUT_MS, NATIVE_STATE_READ_TIMEOUT_MS, PlasticityRuntime, type RuntimeState } from "./runtime.ts";
 import { add, ConstructionGeometry, cross, dot, frameFromOriginNormalX, localPointToWorld, normalize, scale, subtract } from "./construction.ts";
 import {
@@ -254,6 +257,7 @@ export interface SurfaceStructureDescriptor {
   trimmed: boolean;
   faceParameterBounds: { uMin: number; uMax: number; vMin: number; vMax: number };
   naturalParameterBounds: { uMin: number; uMax: number; vMin: number; vMax: number } | null;
+  naturalParameterBoundsSource?: "surface" | "untrimmed-face" | null;
   bSpline: {
     uDegree: number;
     vDegree: number;
@@ -347,8 +351,8 @@ export interface CreateTextInput {
 }
 
 const findView = `const find = id => {
-  for (const [versionId, item] of this.geo.geometryModel) {
-    if (this.db.lookupStableId(versionId) === id) return item.view;
+  for (const [versionId, item] of nativeApi.geo.geometryModel) {
+    if (nativeApi.db.lookupStableId(versionId) === id) return item.view;
   }
   throw new Error('Unknown body ID: ' + id);
 };`;
@@ -372,8 +376,8 @@ const selectedEdges = args.edges.map(reference => {
 
 const findCurveControlPoints = `const views = new Map();
 for (const bodyId of new Set(args.points.map(point => point.bodyId))) {
-  for (const [versionId, item] of this.geo.geometryModel) {
-    if (this.db.lookupStableId(versionId) === bodyId && item.view?.constructor?.name === 'Wire') {
+  for (const [versionId, item] of nativeApi.geo.geometryModel) {
+    if (nativeApi.db.lookupStableId(versionId) === bodyId && item.view?.constructor?.name === 'Wire') {
       views.set(bodyId, item.view);
       break;
     }
@@ -391,7 +395,7 @@ for (const point of args.points) {
 }`;
 
 const findWritableInstanceEmpty = `const find = id => {
-  const store = this.db.empties.write;
+  const store = nativeApi.db.empties.write;
   const original = store.id2empty.get(id);
   if (original?.constructor?.name !== 'InstanceEmpty') throw new Error('Unknown native instance ID: ' + id);
   const copy = original.clone(false);
@@ -452,6 +456,29 @@ function nativeExtrudeOptions(options: ExtrudeOptions): Record<string, number> {
   }
   return native;
 }
+
+// Capture primitive metadata before commit and restore only missing names on
+// surviving stable IDs, inside the command so history snapshots include them.
+const commandEndPreservingMeasurementNames = `
+      const measurementNames = new Map(Array.from(editor.measurements.snapshot().repo?.measurements ?? [])
+        .filter(measurement => typeof measurement.userData?.name === 'string')
+        .map(measurement => [editor.measurements.lookupStableId(measurement.versionId), measurement.userData.name]));
+      const result = await factory.commit();
+      for (const measurement of editor.measurements.snapshot().repo?.measurements ?? []) {
+        const name = measurementNames.get(editor.measurements.lookupStableId(measurement.versionId));
+        if (name !== undefined && typeof measurement.userData?.name !== 'string') {
+          measurement.userData ??= {};
+          measurement.userData.name = name;
+        }
+      }
+      return result;
+    } catch (error) {
+      failure = error;
+      throw error;
+    }
+  };
+  await this.exec(command);
+  if (failure) throw failure;`;
 
 export class PlasticityOperations {
   readonly runtime: PlasticityRuntime;
@@ -650,7 +677,13 @@ export class PlasticityOperations {
             }
             tag.frameId = requestAnimationFrame(updateLabels);
           };
-          updateLabels();
+          // Hidden renderers may suspend RAF. Keep an explicit refresh without
+          // starting a second animation loop when a caller advances the camera.
+          tag.refreshLabels = () => {
+            if (tag.frameId !== undefined) cancelAnimationFrame(tag.frameId);
+            updateLabels();
+          };
+          tag.refreshLabels();
         }
         for (const viewport of viewports) viewport.setNeedsRender();
       }`, ["LineSegmentHelper", "Vector3", "Vector2", "makeAxisAlignedMeasurementPath"], [{
@@ -710,7 +743,7 @@ export class PlasticityOperations {
       isCircle: boolean;
       samples: Array<{ normalizedParameter: number; positionMm: [number, number, number] }>;
       maxObservedChordDeviationMm: number;
-    }>(`function (args) {
+    }>(nativeFunction`function (args) {
       const mm = value => value * 1000;
       const vector = value => [mm(value.x), mm(value.y), mm(value.z)];
       const pointSegmentDistance = (point, first, second) => {
@@ -720,15 +753,15 @@ export class PlasticityOperations {
         return Math.hypot(point.x - (first.x + dx * t), point.y - (first.y + dy * t), point.z - (first.z + dz * t));
       };
       let item;
-      for (const [versionId, candidate] of this.geo.geometryModel) {
-        if (this.db.lookupStableId(versionId) === args.reference.bodyId) { item = candidate; break; }
+      for (const [versionId, candidate] of nativeApi.geo.geometryModel) {
+        if (nativeApi.db.lookupStableId(versionId) === args.reference.bodyId) { item = candidate; break; }
       }
       if (!item) throw new Error('Curved-edge body is no longer current: ' + args.reference.bodyId);
       let nativeEdge;
       if (args.reference.kind === 'wire-segment') {
         if (item.view?.constructor?.name !== 'Wire') throw new Error('Curved segment source is no longer a Wire: ' + args.reference.bodyId);
         for (const segmentView of Array.from(item.view.segments ?? [])) {
-          const candidate = this.db.lookupTopologyItem(segmentView);
+          const candidate = nativeApi.db.lookupTopologyItem(segmentView);
           if (Number(candidate?.Id?.()) === args.reference.segmentEntityId) { nativeEdge = candidate; break; }
         }
         if (!nativeEdge) throw new Error('Stale or unknown Wire segment: ' + args.reference.bodyId + ':' + args.reference.segmentEntityId);
@@ -853,11 +886,11 @@ export class PlasticityOperations {
       }
       bodyVersions.set(body.id, body.versionId);
     }
-    const analyses = await this.runtime.readNative(`async function (evalCurvatureMeasurements, Measurement, Target, Landmark, args) {
+    const analyses = await this.runtime.readNative(nativeFunction`async function (evalCurvatureMeasurements, Measurement, Target, Landmark, args) {
       const selected = args.edges.map(reference => {
         let item;
-        for (const [versionId, candidate] of this.geo.geometryModel) {
-          if (this.db.lookupStableId(versionId) === reference.bodyId) { item = candidate; break; }
+        for (const [versionId, candidate] of nativeApi.geo.geometryModel) {
+          if (nativeApi.db.lookupStableId(versionId) === reference.bodyId) { item = candidate; break; }
         }
         if (!item || !['Wire', 'Solid', 'Sheet'].includes(item.view?.constructor?.name)) {
           throw new Error('Unknown current Wire, Solid, or Sheet body ID: ' + reference.bodyId);
@@ -982,15 +1015,15 @@ export class PlasticityOperations {
     }
     const unitPullDirection = normalize(pullDirection, "Draft pull direction");
     const bodyVersions = new Map(before.bodies.map((body) => [body.id, body.versionId]));
-    const native = await this.runtime.readNative<NativeFaceDraftSamples[]>(`function (args) {
+    const native = await this.runtime.readNative<NativeFaceDraftSamples[]>(nativeFunction`function (args) {
       const mm = value => value * 1000;
       const vectorMm = value => [mm(value.x), mm(value.y), mm(value.z)];
       const direction = value => [Number(value.x), Number(value.y), Number(value.z)];
       const result = [];
       for (const reference of args.faces) {
         let found;
-        for (const [versionId, item] of this.geo.geometryModel) {
-          if (this.db.lookupStableId(versionId) === reference.bodyId) { found = [versionId, item]; break; }
+        for (const [versionId, item] of nativeApi.geo.geometryModel) {
+          if (nativeApi.db.lookupStableId(versionId) === reference.bodyId) { found = [versionId, item]; break; }
         }
         if (!found || !['Solid', 'Sheet'].includes(found[1].view?.constructor?.name)) {
           throw new Error('Unknown current draft-analysis body ID: ' + reference.bodyId);
@@ -1090,11 +1123,11 @@ export class PlasticityOperations {
       normalAngleDeg: normalAngleToleranceDeg,
       relativeCurvature: relativeCurvatureTolerance,
     };
-    const analyses = await this.runtime.readNative(`async function (Factory, ContinuityType, evalSurfaceContinuityMeasurements, Refresh, args) {
+    const analyses = await this.runtime.readNative(nativeFunction`async function (Factory, ContinuityType, evalSurfaceContinuityMeasurements, Refresh, args) {
       const selected = args.edges.map(reference => {
         let item;
-        for (const [versionId, candidate] of this.geo.geometryModel) {
-          if (this.db.lookupStableId(versionId) === reference.bodyId) { item = candidate; break; }
+        for (const [versionId, candidate] of nativeApi.geo.geometryModel) {
+          if (nativeApi.db.lookupStableId(versionId) === reference.bodyId) { item = candidate; break; }
         }
         if (!item || !['Solid', 'Sheet'].includes(item.view?.constructor?.name)) {
           throw new Error('Unknown current Solid or Sheet body ID: ' + reference.bodyId);
@@ -1266,15 +1299,15 @@ export class PlasticityOperations {
     if (first.bodyId === second.bodyId && first.vertexId === second.vertexId) {
       throw new Error("Distance measurement vertices must be different");
     }
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       const editor = this;
       const wanted = new Map(args.vertices.map(reference => [reference.bodyId + ':' + reference.vertexId, reference]));
       const matches = new Map();
-      for (const entry of this.snaps.cache.entries ?? []) {
+      for (const entry of nativeApi.pointSnapEntries()) {
         for (let index = 0; index < (entry.positions?.length ?? 0) / 3; index += 1) {
           const snap = entry.lookup(index);
-          if (snap?.constructor?.name !== 'Snaps_ShellVertexSnap') continue;
-          const bodyId = this.db.lookupStableId(snap.item?.versionId);
+          if (!['Snaps_ShellVertexSnap', 'ShellVertexSnap'].includes(snap?.constructor?.name)) continue;
+          const bodyId = nativeApi.db.lookupStableId(snap.item?.versionId);
           const vertexId = snap.model?.Id?.();
           const key = bodyId + ':' + vertexId;
           if (wanted.has(key) && !matches.has(key)) matches.set(key, snap);
@@ -1321,11 +1354,11 @@ export class PlasticityOperations {
     }
     const measured = measurePointDistance(state, first, second, revision);
     if (measured.distanceMm <= 1e-9) throw new Error("Distance measurement topology points must be different");
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       const editor = this;
       const findItem = bodyId => {
-        for (const [versionId, item] of editor.geo.geometryModel) {
-          if (editor.db.lookupStableId(versionId) === bodyId) return item;
+        for (const [versionId, item] of nativeApi.geo.geometryModel) {
+          if (nativeApi.db.lookupStableId(versionId) === bodyId) return item;
         }
         throw new Error('Unknown current body ID: ' + bodyId);
       };
@@ -1342,18 +1375,18 @@ export class PlasticityOperations {
         return { reference, entityId: entityId(reference, item) };
       });
       const snaps = wanted.map(({ reference, entityId }) => {
-        for (const entry of editor.snaps.cache.entries ?? []) {
+        for (const entry of nativeApi.pointSnapEntries()) {
           for (let index = 0; index < (entry.positions?.length ?? 0) / 3; index += 1) {
             const candidate = entry.lookup(index);
-            if (editor.db.lookupStableId(candidate?.item?.versionId) !== reference.bodyId) continue;
+            if (nativeApi.db.lookupStableId(candidate?.item?.versionId) !== reference.bodyId) continue;
             if (reference.type === 'vertex'
-              && candidate?.constructor?.name === 'Snaps_ShellVertexSnap'
+              && ['Snaps_ShellVertexSnap', 'ShellVertexSnap'].includes(candidate?.constructor?.name)
               && Number(candidate.model?.Id?.()) === entityId) return candidate;
             if (reference.type === 'edge-midpoint'
               && candidate?.constructor?.name === 'EdgePointSnap'
               && Number(candidate.model?.Id?.()) === entityId) return candidate;
             if (reference.type === 'face-center'
-              && candidate?.constructor?.name === 'Snaps_FaceCenterPointSnap'
+              && ['Snaps_FaceCenterPointSnap', 'FaceCenterPointSnap'].includes(candidate?.constructor?.name)
               && Number(candidate.faceSnap?.model?.Id?.()) === entityId) return candidate;
           }
         }
@@ -1403,11 +1436,11 @@ export class PlasticityOperations {
       if (!currentEdge) throw new Error(`Unknown current edge ID ${edge.edgeId} on body ${edge.bodyId}`);
       if (!currentEdge.circle) throw new Error(`Radius measurement requires a circular edge: ${edge.bodyId}:${edge.edgeId}`);
     }
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       const editor = this;
       let item;
-      for (const [versionId, candidate] of this.geo.geometryModel) {
-        if (this.db.lookupStableId(versionId) === args.edge.bodyId) { item = candidate; break; }
+      for (const [versionId, candidate] of nativeApi.geo.geometryModel) {
+        if (nativeApi.db.lookupStableId(versionId) === args.edge.bodyId) { item = candidate; break; }
       }
       if (!item || !['Wire', 'Solid', 'Sheet'].includes(item.view?.constructor?.name)) {
         throw new Error('Unknown current Wire, Solid, or Sheet body ID: ' + args.edge.bodyId);
@@ -1429,18 +1462,7 @@ export class PlasticityOperations {
       }
       if (!modelEdge) throw new Error('Stale or unknown native edge: ' + args.edge.bodyId + ':' + entityId);
       if (!modelEdge.IsCircle()) throw new Error('Radius measurement requires a circular edge');
-      let snap;
-      for (const entry of this.snaps.cache.entries ?? []) {
-        for (let index = 0; index < (entry.positions?.length ?? 0) / 3; index += 1) {
-          const candidate = entry.lookup(index);
-          if (!['EdgePointSnap', 'CurveSegmentMidpointSnap'].includes(candidate?.constructor?.name)) continue;
-          if (this.db.lookupStableId(candidate.item?.versionId) !== args.edge.bodyId) continue;
-          if (Number(candidate.model?.Id?.()) !== entityId) continue;
-          snap = candidate;
-          break;
-        }
-        if (snap) break;
-      }
+      const snap = nativeApi.findRadiusSnap(item, args.edge.bodyId, entityId);
       if (!snap) throw new Error('Plasticity circular-edge snap is unavailable for the requested radius measurement');
       let failure;
       const command = new this.commands.MeasureRadiusCommand(this);
@@ -1470,11 +1492,11 @@ export class PlasticityOperations {
     if (!(state.measurements ?? []).some((measurement) => measurement.id === id)) {
       throw new Error(`Unknown current measurement ID: ${id}`);
     }
-    await this.runtime.mutate(`async function (RemoveMeasurementCommand, args) {
+    await this.runtime.mutate(nativeFunction`async function (RemoveMeasurementCommand, args) {
       const measurement = this.measurements.lookupByStableId(args.id);
       if (!measurement) throw new Error('Unknown measurement ID: ' + args.id);
       this.selection.selected.removeAll();
-      this.selection.selected.addMeasurement(measurement);
+      nativeApi.selection.addMeasurement(measurement);
       let failure;
       const command = new RemoveMeasurementCommand(this);
       command.remember = false;
@@ -1502,7 +1524,7 @@ export class PlasticityOperations {
   async createInstance(bodyId: number, translationMm: Vector3, revision: string): Promise<RuntimeState> {
     const state = await this.assertRevision(revision);
     if (!state.bodies.some((body) => body.id === bodyId)) throw new Error(`Unknown current body ID: ${bodyId}`);
-    await this.runtime.mutate(`async function (CreateFactory, MoveFactory, args) {
+    await this.runtime.mutate(nativeFunction`async function (CreateFactory, MoveFactory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -1544,7 +1566,7 @@ export class PlasticityOperations {
     pivot[index] = planeOffsetMm / 1000;
     const factors: Vector3 = [1, 1, 1];
     factors[index] = -1;
-    await this.runtime.mutate(`async function (CreateFactory, ScaleFactory, args) {
+    await this.runtime.mutate(nativeFunction`async function (CreateFactory, ScaleFactory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -1585,7 +1607,7 @@ export class PlasticityOperations {
     const invalid = ids.filter((id) => !["Solid", "Sheet"].includes(current.get(id)!.type));
     if (invalid.length > 0) throw new Error(`Body duplication requires current Solid or Sheet bodies: ${invalid.join(", ")}`);
     const translation = toMeters(translationMm);
-    await this.runtime.mutate(`async function (CreateFactory, MoveFactory, RealizeFactory, args) {
+    await this.runtime.mutate(nativeFunction`async function (CreateFactory, MoveFactory, RealizeFactory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -1621,7 +1643,7 @@ export class PlasticityOperations {
   async moveInstances(ids: number[], deltaMm: Vector3, revision: string): Promise<RuntimeState> {
     const state = await this.assertRevision(revision);
     requireInstanceIds(state, ids);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findWritableInstanceEmpty}
       ${commandStart("MoveItemCommand")}
       factory.empties = args.ids.map(find);
@@ -1634,7 +1656,7 @@ export class PlasticityOperations {
   async rotateInstances(ids: number[], pivotMm: Vector3, axis: Vector3, degrees: number, revision: string): Promise<RuntimeState> {
     const state = await this.assertRevision(revision);
     requireInstanceIds(state, ids);
-    await this.runtime.mutate(`async function (Factory, Vector, Quaternion, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Vector, Quaternion, args) {
       ${findWritableInstanceEmpty}
       ${commandStart("RotateItemCommand")}
       factory.empties = args.ids.map(find);
@@ -1648,7 +1670,7 @@ export class PlasticityOperations {
   async scaleInstances(ids: number[], pivotMm: Vector3, factors: Vector3, revision: string): Promise<RuntimeState> {
     const state = await this.assertRevision(revision);
     requireInstanceIds(state, ids);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findWritableInstanceEmpty}
       ${commandStart("ScaleItemCommand")}
       factory.empties = args.ids.map(find);
@@ -1662,9 +1684,9 @@ export class PlasticityOperations {
   async realizeInstances(ids: number[], revision: string): Promise<RuntimeState> {
     const state = await this.assertRevision(revision);
     requireInstanceIds(state, ids);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       const find = id => {
-        const empty = this.db.lookupEmptyById(id);
+        const empty = nativeApi.db.lookupEmptyById(id);
         if (empty?.constructor?.name !== 'InstanceEmpty') throw new Error('Unknown native instance ID: ' + id);
         return empty;
       };
@@ -1678,15 +1700,15 @@ export class PlasticityOperations {
   async deleteInstances(ids: number[], revision: string): Promise<RuntimeState> {
     const state = await this.assertRevision(revision);
     requireInstanceIds(state, ids);
-    await this.runtime.mutate(`async function (args) {
+    await this.runtime.mutate(nativeFunction`async function (args) {
       const find = id => {
-        const empty = this.db.lookupEmptyById(id);
+        const empty = nativeApi.db.lookupEmptyById(id);
         if (empty?.constructor?.name !== 'InstanceEmpty') throw new Error('Unknown native instance ID: ' + id);
         return empty;
       };
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       this.selection.selected.removeAll();
-      for (const empty of args.ids.map(find)) this.selection.selected.addEmpty(empty);
+      for (const empty of args.ids.map(find)) nativeApi.selection.addEmpty(empty);
       const command = new this.commands.DeleteCommand(this);
       command.remember = false;
       let failure;
@@ -1717,10 +1739,10 @@ export class PlasticityOperations {
   async moveReferenceMeshes(ids: number[], deltaMm: Vector3, revision: string): Promise<RuntimeState> {
     const state = await this.assertRevision(revision);
     requireReferenceMeshIds(state, ids);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       const find = id => {
-        const empty = this.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        const empty = nativeApi.db.lookupEmptyById(id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       ${commandStart("MoveItemCommand")}
@@ -1735,10 +1757,10 @@ export class PlasticityOperations {
     const state = await this.assertRevision(revision);
     requireReferenceMeshIds(state, ids);
     const unitAxis = normalize(axis, "Reference mesh rotation axis");
-    await this.runtime.mutate(`async function (Factory, Vector, Quaternion, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Vector, Quaternion, args) {
       const find = id => {
-        const empty = this.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        const empty = nativeApi.db.lookupEmptyById(id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       ${commandStart("RotateItemCommand")}
@@ -1756,10 +1778,10 @@ export class PlasticityOperations {
     if (factors.some((factor) => !Number.isFinite(factor) || factor <= 0)) {
       throw new Error("Reference mesh scale factors must be positive finite values");
     }
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       const find = id => {
-        const empty = this.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        const empty = nativeApi.db.lookupEmptyById(id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       ${commandStart("ScaleItemCommand")}
@@ -1774,15 +1796,15 @@ export class PlasticityOperations {
   async deleteReferenceMeshes(ids: number[], revision: string): Promise<RuntimeState> {
     const state = await this.assertRevision(revision);
     requireReferenceMeshIds(state, ids);
-    await this.runtime.mutate(`async function (args) {
+    await this.runtime.mutate(nativeFunction`async function (args) {
       const find = id => {
-        const empty = this.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        const empty = nativeApi.db.lookupEmptyById(id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       this.selection.selected.removeAll();
-      for (const empty of args.ids.map(find)) this.selection.selected.addEmpty(empty);
+      for (const empty of args.ids.map(find)) nativeApi.selection.addEmpty(empty);
       const command = new this.commands.DeleteCommand(this);
       command.remember = false;
       let failure;
@@ -1800,9 +1822,9 @@ export class PlasticityOperations {
   async renameReferenceMesh(id: number, name: string, revision: string): Promise<RuntimeState> {
     const state = await this.assertRevision(revision);
     requireReferenceMeshIds(state, [id]);
-    await this.runtime.mutate(`async function (args) {
-      const empty = this.db.lookupEmptyById(args.id);
-      if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + args.id);
+    await this.runtime.mutate(nativeFunction`async function (args) {
+      const empty = nativeApi.db.lookupEmptyById(args.id);
+      if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + args.id);
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       this.selection.selected.removeAll();
       const editor = this;
@@ -1810,7 +1832,7 @@ export class PlasticityOperations {
       const command = new this.commands.GroupSelectedCommand(this);
       command.remember = false;
       command.execute = async function () {
-        try { editor.db.nodes.setName(editor.db.nodes.item2key(empty), args.name); }
+        try { nativeApi.db.nodes.setName(nativeApi.db.nodes.item2key(empty), args.name); }
         catch (error) { failure = error; throw error; }
       };
       await this.exec(command);
@@ -1844,29 +1866,29 @@ export class PlasticityOperations {
   ): Promise<RuntimeState> {
     const state = await this.assertRevision(revision);
     requireGroupSelection(state, bodyIds, instanceIds, referenceMeshIds, groupIds);
-    await this.runtime.mutate(`async function (args) {
+    await this.runtime.mutate(nativeFunction`async function (args) {
       ${findView}
       const findEmpty = id => {
-        const empty = this.db.lookupEmptyById(id);
+        const empty = nativeApi.db.lookupEmptyById(id);
         if (empty?.constructor?.name !== 'InstanceEmpty') throw new Error('Unknown native instance ID: ' + id);
         return empty;
       };
       const findReferenceMesh = id => {
-        const empty = this.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        const empty = nativeApi.db.lookupEmptyById(id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       const findGroup = id => {
-        const group = this.db.groups.lookupById(id);
+        const group = nativeApi.db.groups.lookupById(id);
         if (!group || id === 0) throw new Error('Unknown or protected group ID: ' + id);
         return group;
       };
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       this.selection.selected.removeAll();
       for (const view of args.bodyIds.map(find)) this.selection.selected.add(view);
-      for (const empty of args.instanceIds.map(findEmpty)) this.selection.selected.addEmpty(empty);
-      for (const empty of args.referenceMeshIds.map(findReferenceMesh)) this.selection.selected.addEmpty(empty);
-      for (const group of args.groupIds.map(findGroup)) this.selection.selected.addGroup(group);
+      for (const empty of args.instanceIds.map(findEmpty)) nativeApi.selection.addEmpty(empty);
+      for (const empty of args.referenceMeshIds.map(findReferenceMesh)) nativeApi.selection.addEmpty(empty);
+      for (const group of args.groupIds.map(findGroup)) nativeApi.selection.addGroup(group);
       const editor = this;
       let failure;
       const command = new this.commands.GroupSelectedCommand(this);
@@ -1877,7 +1899,7 @@ export class PlasticityOperations {
           const result = await execute();
           const selected = Array.from(editor.selection.selected.groups);
           if (selected.length !== 1) throw new Error('Plasticity did not create exactly one group');
-          if (args.name) editor.db.nodes.setName(editor.db.nodes.item2key(selected[0]), args.name);
+          if (args.name) nativeApi.db.nodes.setName(nativeApi.db.nodes.item2key(selected[0]), args.name);
           return result;
         } catch (error) { failure = error; throw error; }
       };
@@ -1903,35 +1925,40 @@ export class PlasticityOperations {
         throw new Error(`Moving group ${groupId} to ${destinationGroupId} would create a group cycle`);
       }
     }
-    await this.runtime.mutate(`async function (Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Command, args) {
       ${findView}
       const findEmpty = id => {
-        const empty = this.db.lookupEmptyById(id);
+        const empty = nativeApi.db.lookupEmptyById(id);
         if (empty?.constructor?.name !== 'InstanceEmpty') throw new Error('Unknown native instance ID: ' + id);
         return empty;
       };
       const findReferenceMesh = id => {
-        const empty = this.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        const empty = nativeApi.db.lookupEmptyById(id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       const findGroup = id => {
-        const group = this.db.groups.lookupById(id);
+        const group = nativeApi.db.groups.lookupById(id);
         if (!group) throw new Error('Unknown group ID: ' + id);
         return group;
       };
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
-      this.selection.selected.removeAll();
-      for (const view of args.bodyIds.map(find)) this.selection.selected.add(view);
-      for (const empty of args.instanceIds.map(findEmpty)) this.selection.selected.addEmpty(empty);
-      for (const empty of args.referenceMeshIds.map(findReferenceMesh)) this.selection.selected.addEmpty(empty);
-      for (const group of args.groupIds.map(findGroup)) this.selection.selected.addGroup(group);
+      const editor = this;
       let failure;
       const command = new Command(this, findGroup(args.destinationGroupId));
       command.remember = false;
       const execute = command.execute.bind(command);
       command.execute = async function () {
-        try { return await execute(); }
+        try {
+          editor.selection.selected.removeAll();
+          for (const view of args.bodyIds.map(find)) editor.selection.selected.add(view);
+          for (const empty of args.instanceIds.map(findEmpty)) nativeApi.selection.addEmpty(empty);
+          for (const empty of args.referenceMeshIds.map(findReferenceMesh)) nativeApi.selection.addEmpty(empty);
+          for (const group of args.groupIds.map(findGroup)) nativeApi.selection.addGroup(group);
+          const result = await execute();
+          nativeApi.completeGroupMove(args.referenceMeshIds.length);
+          return result;
+        }
         catch (error) { failure = error; throw error; }
       };
       await this.exec(command);
@@ -1943,8 +1970,8 @@ export class PlasticityOperations {
   async renameGroup(id: number, name: string, revision: string): Promise<RuntimeState> {
     const state = await this.assertRevision(revision);
     requireGroupIds(state, [id], false);
-    await this.runtime.mutate(`async function (args) {
-      const group = this.db.groups.lookupById(args.id);
+    await this.runtime.mutate(nativeFunction`async function (args) {
+      const group = nativeApi.db.groups.lookupById(args.id);
       if (!group || args.id === 0) throw new Error('Unknown or protected group ID: ' + args.id);
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       this.selection.selected.removeAll();
@@ -1953,7 +1980,7 @@ export class PlasticityOperations {
       const command = new this.commands.GroupSelectedCommand(this);
       command.remember = false;
       command.execute = async function () {
-        try { editor.db.nodes.setName(editor.db.nodes.item2key(group), args.name); }
+        try { nativeApi.db.nodes.setName(nativeApi.db.nodes.item2key(group), args.name); }
         catch (error) { failure = error; throw error; }
       };
       await this.exec(command);
@@ -1965,8 +1992,8 @@ export class PlasticityOperations {
   async activateGroup(id: number, revision: string): Promise<RuntimeState> {
     const state = await this.assertRevision(revision);
     requireGroupIds(state, [id], true);
-    await this.runtime.mutate(`async function (Command, args) {
-      const group = this.db.groups.lookupById(args.id);
+    await this.runtime.mutate(nativeFunction`async function (Command, args) {
+      const group = nativeApi.db.groups.lookupById(args.id);
       if (!group) throw new Error('Unknown group ID: ' + args.id);
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       let failure;
@@ -1986,15 +2013,15 @@ export class PlasticityOperations {
   async dissolveGroups(ids: number[], revision: string): Promise<RuntimeState> {
     const state = await this.assertRevision(revision);
     requireGroupIds(state, ids, false);
-    await this.runtime.mutate(`async function (Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Command, args) {
       const find = id => {
-        const group = this.db.groups.lookupById(id);
+        const group = nativeApi.db.groups.lookupById(id);
         if (!group || id === 0) throw new Error('Unknown or protected group ID: ' + id);
         return group;
       };
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       this.selection.selected.removeAll();
-      for (const group of args.ids.map(find)) this.selection.selected.addGroup(group);
+      for (const group of args.ids.map(find)) nativeApi.selection.addGroup(group);
       let failure;
       const command = new Command(this);
       command.remember = false;
@@ -2042,29 +2069,29 @@ export class PlasticityOperations {
   ): Promise<RuntimeState> {
     const state = await this.assertRevision(revision);
     requireGroupSelection(state, bodyIds, instanceIds, referenceMeshIds, groupIds, true);
-    await this.runtime.mutate(`async function (args) {
+    await this.runtime.mutate(nativeFunction`async function (args) {
       ${findView}
       const findEmpty = id => {
-        const empty = this.db.lookupEmptyById(id);
+        const empty = nativeApi.db.lookupEmptyById(id);
         if (empty?.constructor?.name !== 'InstanceEmpty') throw new Error('Unknown native instance ID: ' + id);
         return empty;
       };
       const findReferenceMesh = id => {
-        const empty = this.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        const empty = nativeApi.db.lookupEmptyById(id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       const findGroup = id => {
-        const group = this.db.groups.lookupById(id);
+        const group = nativeApi.db.groups.lookupById(id);
         if (!group) throw new Error('Unknown group ID: ' + id);
         return group;
       };
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
-      const keys = [
-        ...args.bodyIds.map(id => this.db.nodes.item2key(find(id))),
-        ...args.instanceIds.map(id => this.db.nodes.item2key(findEmpty(id))),
-        ...args.referenceMeshIds.map(id => this.db.nodes.item2key(findReferenceMesh(id))),
-        ...args.groupIds.map(id => this.db.nodes.item2key(findGroup(id))),
+      const items = [
+        ...args.bodyIds.map(find),
+        ...args.instanceIds.map(findEmpty),
+        ...args.referenceMeshIds.map(findReferenceMesh),
+        ...args.groupIds.map(findGroup),
       ];
       this.selection.selected.removeAll();
       const editor = this;
@@ -2073,10 +2100,18 @@ export class PlasticityOperations {
       command.remember = false;
       command.execute = async function () {
         try {
-          for (const key of keys) {
-            if (args.flag === 'visibility') editor.db.nodes.setVisible(key, args.value);
-            else editor.db.nodes.setLocked(key, args.value);
+          // Like the outliner's ToggleVisibilityCommand, commit a database transaction: its pipeline
+          // updates the node flags, the scene cache and the render list, and builds GPU meshes for
+          // bodies that were hidden since load. Writing the node flags directly skips all of that.
+          const transaction = nativeApi.db.makeTransaction();
+          for (const item of items) {
+            if (args.flag === 'visibility') {
+              if (args.value) transaction.makeVisible(item);
+              else transaction.makeInvisible(item);
+            } else if (args.value) transaction.lock(item);
+            else transaction.unlock(item);
           }
+          await nativeApi.db.commit(transaction);
         } catch (error) { failure = error; throw error; }
       };
       await this.exec(command);
@@ -2225,11 +2260,11 @@ export class PlasticityOperations {
 
   async selection(): Promise<PlasticitySelection> {
     const state = await this.state();
-    const selected = await this.runtime.read<Omit<PlasticitySelection, "documentToken" | "revision">>(`function () {
+    const selected = await this.runtime.read<Omit<PlasticitySelection, "documentToken" | "revision">>(nativeFunction`function () {
       const selection = this.selection.selected;
       const stableId = view => {
         const versionId = view?.parentItem?.versionId ?? view?.versionId;
-        return versionId === undefined ? null : (this.db.lookupStableId(versionId) ?? null);
+        return versionId === undefined ? null : (nativeApi.db.lookupStableId(versionId) ?? null);
       };
       return {
         bodyIds: Array.from(selection.items ?? []).map(stableId).filter(Number.isInteger),
@@ -2239,7 +2274,7 @@ export class PlasticityOperations {
           .map(empty => Number(empty.versionId))
           .filter(Number.isInteger),
         referenceMeshIds: Array.from(selection.empties ?? [])
-          .filter(empty => empty?.constructor?.name === 'Empties_ObjectEmpty')
+          .filter(empty => nativeApi.isReferenceMesh(empty))
           .map(empty => Number(empty.versionId))
           .filter(Number.isInteger),
         groupIds: Array.from(selection.groups ?? [])
@@ -2272,16 +2307,16 @@ export class PlasticityOperations {
     fragments: CurveFragmentDescriptor[];
   }> {
     const before = await this.state();
-    const fragments = await this.runtime.read<CurveFragmentDescriptor[]>(`function () {
+    const fragments = await this.runtime.read<CurveFragmentDescriptor[]>(nativeFunction`function () {
       const mm = value => value * 1000;
       const vector = value => [mm(value.x), mm(value.y), mm(value.z)];
       const result = [];
       for (const info of this.fragments.read.modelId2info.values()) {
-        const bodyId = this.db.lookupStableId(info.ancestorViewId);
-        const fragmentItem = this.geo.geometryModel.get(info.fragmentViewId);
+        const bodyId = nativeApi.db.lookupStableId(info.ancestorViewId);
+        const fragmentItem = nativeApi.geo.geometryModel.get(info.fragmentViewId);
         if (!Number.isInteger(bodyId) || !fragmentItem) continue;
         for (const segment of Array.from(fragmentItem.view?.segments ?? [])) {
-          const edge = this.db.lookupTopologyItem(segment);
+          const edge = nativeApi.db.lookupTopologyItem(segment);
           const start = edge.GetPointAndTangent(0);
           const midpoint = edge.GetPointAndTangent(0.5);
           const end = edge.GetPointAndTangent(1);
@@ -2314,16 +2349,16 @@ export class PlasticityOperations {
     endpoints: CurveEndpointDescriptor[];
   }> {
     const before = await this.state();
-    const endpoints = await this.runtime.read<CurveEndpointDescriptor[]>(`function () {
+    const endpoints = await this.runtime.read<CurveEndpointDescriptor[]>(nativeFunction`function () {
       const mm = value => value * 1000;
       const vector = value => [mm(value.x), mm(value.y), mm(value.z)];
       const result = [];
-      for (const [versionId, item] of this.geo.geometryModel) {
+      for (const [versionId, item] of nativeApi.geo.geometryModel) {
         if (item.view?.constructor?.name !== 'Wire') continue;
-        const bodyId = this.db.lookupStableId(versionId);
+        const bodyId = nativeApi.db.lookupStableId(versionId);
         if (!Number.isInteger(bodyId)) continue;
         for (const vertex of Array.from(item.view.vertices ?? [])) {
-          const model = this.db.lookupTopologyItem(vertex);
+          const model = nativeApi.db.lookupTopologyItem(vertex);
           if (!model.IsSpur()) continue;
           result.push({
             id: String(vertex.versionId),
@@ -2350,17 +2385,17 @@ export class PlasticityOperations {
     vertices: CurveVertexDescriptor[];
   }> {
     const before = await this.state();
-    const vertices = await this.runtime.readNative<CurveVertexDescriptor[]>(`function () {
+    const vertices = await this.runtime.readNative<CurveVertexDescriptor[]>(nativeFunction`function () {
       const mm = value => value * 1000;
       const vector = value => [mm(value.x), mm(value.y), mm(value.z)];
       const result = [];
-      for (const [versionId, item] of this.geo.geometryModel) {
+      for (const [versionId, item] of nativeApi.geo.geometryModel) {
         if (item.view?.constructor?.name !== 'Wire') continue;
-        const bodyId = this.db.lookupStableId(versionId);
+        const bodyId = nativeApi.db.lookupStableId(versionId);
         if (!Number.isInteger(bodyId)) continue;
         const bodyEdges = item.model?.GetEdges?.();
         for (const view of Array.from(item.view.vertices ?? [])) {
-          const vertex = this.db.lookupTopologyItem(view);
+          const vertex = nativeApi.db.lookupTopologyItem(view);
           const vertexId = Number(vertex.Id());
           if (!Number.isInteger(vertexId)) continue;
           const adjacentEdgeEntityIds = [];
@@ -2400,7 +2435,7 @@ export class PlasticityOperations {
     curves: CurveDirectionDescriptor[];
   }> {
     const before = await this.state();
-    const curves = await this.runtime.readNative<CurveDirectionDescriptor[]>(`function () {
+    const curves = await this.runtime.readNative<CurveDirectionDescriptor[]>(nativeFunction`function () {
       const mm = value => value * 1000;
       const vector = value => [mm(value.x), mm(value.y), mm(value.z)];
       const direction = value => {
@@ -2409,9 +2444,9 @@ export class PlasticityOperations {
         return [value.x / length, value.y / length, value.z / length];
       };
       const result = [];
-      for (const [versionId, item] of this.geo.geometryModel) {
+      for (const [versionId, item] of nativeApi.geo.geometryModel) {
         if (item.view?.constructor?.name !== 'Wire') continue;
-        const id = this.db.lookupStableId(versionId);
+        const id = nativeApi.db.lookupStableId(versionId);
         if (!Number.isInteger(id)) continue;
         const edges = item.model?.GetEdges?.();
         const segments = [];
@@ -2451,7 +2486,7 @@ export class PlasticityOperations {
         }
         let closed = true;
         for (const vertex of Array.from(item.view.vertices ?? [])) {
-          if (this.db.lookupTopologyItem(vertex).IsSpur()) { closed = false; break; }
+          if (nativeApi.db.lookupTopologyItem(vertex).IsSpur()) { closed = false; break; }
         }
         result.push({ id, versionId, measurementSource: 'native-brep', closed, segments });
       }
@@ -2484,7 +2519,7 @@ export class PlasticityOperations {
         throw new Error("Curve segment normalized parameter must be from 0 to 1");
       }
     }
-    const evaluated = await this.runtime.readNative<CurveSegmentSampleDescriptor[]>(`function (args) {
+    const evaluated = await this.runtime.readNative<CurveSegmentSampleDescriptor[]>(nativeFunction`function (args) {
       const mm = value => value * 1000;
       const vector = value => [mm(value.x), mm(value.y), mm(value.z)];
       const direction = value => {
@@ -2495,14 +2530,14 @@ export class PlasticityOperations {
       const result = [];
       for (const reference of args.samples) {
         let found;
-        for (const [versionId, item] of this.geo.geometryModel) {
-          if (this.db.lookupStableId(versionId) === reference.bodyId) { found = [versionId, item]; break; }
+        for (const [versionId, item] of nativeApi.geo.geometryModel) {
+          if (nativeApi.db.lookupStableId(versionId) === reference.bodyId) { found = [versionId, item]; break; }
         }
         if (!found || found[1].view?.constructor?.name !== 'Wire') throw new Error('Curve segment source is no longer a Wire: ' + reference.bodyId);
         const [versionId, item] = found;
         let edge;
         for (const candidate of Array.from(item.view.segments ?? [])) {
-          const model = this.db.lookupTopologyItem(candidate);
+          const model = nativeApi.db.lookupTopologyItem(candidate);
           if (Number(model?.Id?.()) === reference.segmentEntityId) { edge = model; break; }
         }
         if (!edge) throw new Error('Stale or unknown curve segment: ' + reference.bodyId + ':' + reference.segmentEntityId);
@@ -2538,14 +2573,14 @@ export class PlasticityOperations {
     const selected = ids.map((id) => before.bodies.find((body) => body.id === id));
     const invalid = ids.filter((_id, index) => selected[index]?.type !== "Wire");
     if (invalid.length > 0) throw new Error(`Curve structure requires current Wire bodies: ${invalid.join(", ")}`);
-    const curves = await this.runtime.readNative<CurveStructureDescriptor[]>(`function (args) {
+    const curves = await this.runtime.readNative<CurveStructureDescriptor[]>(nativeFunction`function (args) {
       const countActiveCurveSpans = (${countActiveCurveSpans.toString()});
       const mm = value => value * 1000;
       const result = [];
       for (const wantedId of args.ids) {
         let found;
-        for (const [versionId, item] of this.geo.geometryModel) {
-          if (this.db.lookupStableId(versionId) === wantedId) { found = [versionId, item]; break; }
+        for (const [versionId, item] of nativeApi.geo.geometryModel) {
+          if (nativeApi.db.lookupStableId(versionId) === wantedId) { found = [versionId, item]; break; }
         }
         if (!found) throw new Error('Unknown current Wire ID: ' + wantedId);
         const [versionId, item] = found;
@@ -2630,15 +2665,15 @@ export class PlasticityOperations {
       return type !== "Solid" && type !== "Sheet";
     });
     if (invalidBodies.length > 0) throw new Error(`Surface structure requires current Solid or Sheet bodies: ${invalidBodies.join(", ")}`);
-    const surfaces = await this.runtime.readNative<SurfaceStructureDescriptor[]>(`function (args) {
+    const surfaces = await this.runtime.readNative<SurfaceStructureDescriptor[]>(nativeFunction`function (args) {
       const finiteBounds = value => value && ['uMin', 'uMax', 'vMin', 'vMax'].every(key => Number.isFinite(value[key]))
         ? { uMin: Number(value.uMin), uMax: Number(value.uMax), vMin: Number(value.vMin), vMax: Number(value.vMax) }
         : null;
       const result = [];
       for (const reference of args.faces) {
         let found;
-        for (const [versionId, item] of this.geo.geometryModel) {
-          if (this.db.lookupStableId(versionId) === reference.bodyId) { found = [versionId, item]; break; }
+        for (const [versionId, item] of nativeApi.geo.geometryModel) {
+          if (nativeApi.db.lookupStableId(versionId) === reference.bodyId) { found = [versionId, item]; break; }
         }
         if (!found) throw new Error('Unknown current surface body ID: ' + reference.bodyId);
         const [versionId, item] = found;
@@ -2661,7 +2696,16 @@ export class PlasticityOperations {
         let info;
         try { info = surface.GetInfo(); } catch {}
         let naturalBounds;
-        try { naturalBounds = finiteBounds(surface.GetUVBox()); } catch { naturalBounds = null; }
+        let naturalParameterBoundsSource = null;
+        if (typeof surface.GetUVBox === 'function') {
+          try { naturalBounds = finiteBounds(surface.GetUVBox()); } catch { naturalBounds = null; }
+          if (naturalBounds) naturalParameterBoundsSource = 'surface';
+        } else if (face.IsUntrimmed()) {
+          // 26.2 removed GetUVBox. An untrimmed face covers the carrier's full
+          // native parameter domain; trimmed faces must still report unknown.
+          naturalBounds = { ...faceBounds };
+          naturalParameterBoundsSource = 'untrimmed-face';
+        } else naturalBounds = null;
         const bSpline = surface.constructor?.name === 'BSurf' &&
           ['uDegree', 'vDegree', 'uSpans', 'vSpans', 'uVertices', 'vVertices'].every(key => Number.isInteger(info?.[key]))
           ? {
@@ -2680,6 +2724,7 @@ export class PlasticityOperations {
           trimmed: !face.IsUntrimmed(),
           faceParameterBounds: faceBounds,
           naturalParameterBounds: naturalBounds,
+          naturalParameterBoundsSource,
           bSpline,
         });
       }
@@ -2702,15 +2747,15 @@ export class PlasticityOperations {
     if (new Set(ids).size !== ids.length) throw new Error("Wire IDs must be unique");
     const invalid = ids.filter((id) => before.bodies.find((body) => body.id === id)?.type !== "Wire");
     if (invalid.length > 0) throw new Error(`Curve planarity requires current Wire bodies: ${invalid.join(", ")}`);
-    const curves = await this.runtime.readNative<CurvePlanarityDescriptor[]>(`function (args) {
+    const curves = await this.runtime.readNative<CurvePlanarityDescriptor[]>(nativeFunction`function (args) {
       const mm = value => value * 1000;
       const vector = value => [mm(value.x), mm(value.y), mm(value.z)];
       const direction = value => [value.x, value.y, value.z];
       const result = [];
       for (const wantedId of args.ids) {
         let found;
-        for (const [versionId, item] of this.geo.geometryModel) {
-          if (this.db.lookupStableId(versionId) === wantedId) { found = [versionId, item]; break; }
+        for (const [versionId, item] of nativeApi.geo.geometryModel) {
+          if (nativeApi.db.lookupStableId(versionId) === wantedId) { found = [versionId, item]; break; }
         }
         if (!found) throw new Error('Unknown current Wire ID: ' + wantedId);
         const [versionId, item] = found;
@@ -2743,17 +2788,17 @@ export class PlasticityOperations {
     if (new Set(ids).size !== ids.length) throw new Error("Wire IDs must be unique");
     const invalid = ids.filter((id) => before.bodies.find((body) => body.id === id)?.type !== "Wire");
     if (invalid.length > 0) throw new Error(`Curve control points require current Wire bodies: ${invalid.join(", ")}`);
-    const curves = await this.runtime.readNative<CurveControlPointDescriptor[]>(`function (SlideFactory, args) {
+    const curves = await this.runtime.readNative<CurveControlPointDescriptor[]>(nativeFunction`function (SlideFactory, args) {
       const mm = value => value * 1000;
       const position = value => [mm(value.x), mm(value.y), mm(value.z)];
       const direction = value => [value.x, value.y, value.z];
       const slideDirections = (view, kind) => {
         try {
           const factory = new SlideFactory(this);
-          if (kind === 'vertex') factory.vertices = [view];
-          else factory.cvs = [view];
-          const positiveU = direction(factory.orientation.posU);
-          const negativeU = direction(factory.orientation.negU);
+          nativeApi.setCurveControlPoints(factory, kind === 'vertex' ? [view] : [], kind === 'vertex' ? [] : [view]);
+          const orientation = nativeApi.slideDirections(factory);
+          const positiveU = direction(orientation.posU);
+          const negativeU = direction(orientation.negU);
           if (![...positiveU, ...negativeU].every(Number.isFinite)) return null;
           if (Math.hypot(...positiveU) < 1e-12 || Math.hypot(...negativeU) < 1e-12) return null;
           return { positiveU, negativeU };
@@ -2763,8 +2808,8 @@ export class PlasticityOperations {
       let totalApproximationPoints = 0;
       for (const wantedId of args.ids) {
         let found;
-        for (const [versionId, item] of this.geo.geometryModel) {
-          if (this.db.lookupStableId(versionId) === wantedId) { found = [versionId, item]; break; }
+        for (const [versionId, item] of nativeApi.geo.geometryModel) {
+          if (nativeApi.db.lookupStableId(versionId) === wantedId) { found = [versionId, item]; break; }
         }
         if (!found) throw new Error('Unknown current Wire ID: ' + wantedId);
         const [versionId, item] = found;
@@ -2804,14 +2849,14 @@ export class PlasticityOperations {
     intersections: CurveIntersectionDescriptor[];
   }> {
     const before = await this.state();
-    const intersections = await this.runtime.read<CurveIntersectionDescriptor[]>(`function () {
+    const intersections = await this.runtime.read<CurveIntersectionDescriptor[]>(nativeFunction`function () {
       const mm = value => value * 1000;
       const result = new Map();
       for (const cross of this.crosses.crosses) {
         const sides = [cross.on1, cross.on2].map(on => {
           const versionId = Number(on.versionId);
-          const item = this.geo.geometryModel.get(versionId);
-          const bodyId = this.db.lookupStableId(versionId);
+          const item = nativeApi.geo.geometryModel.get(versionId);
+          const bodyId = nativeApi.db.lookupStableId(versionId);
           if (!item || item.view?.constructor?.name !== 'Wire' || !Number.isInteger(bodyId)) return null;
           return { bodyId, versionId, edgeEntityId: Number(on.edgeId), parameter: Number(on.t) };
         });
@@ -2844,10 +2889,10 @@ export class PlasticityOperations {
   async selectCurves(ids: number[], revision: string): Promise<PlasticitySelection> {
     const state = await this.assertRevision(revision);
     requireWireBodyIds(state, ids);
-    await this.runtime.read(`function (args) {
+    await this.runtime.read(nativeFunction`function (args) {
       ${findView}
       this.selection.selected.removeAll();
-      for (const id of args.ids) this.selection.selected.addCurve(find(id));
+      for (const id of args.ids) nativeApi.selection.addCurve(find(id));
     }`, [{ ids }]);
     return await this.selection();
   }
@@ -2855,14 +2900,14 @@ export class PlasticityOperations {
   async selectReferenceMeshes(ids: number[], revision: string): Promise<PlasticitySelection> {
     const state = await this.assertRevision(revision);
     requireReferenceMeshIds(state, ids);
-    await this.runtime.read(`function (args) {
+    await this.runtime.read(nativeFunction`function (args) {
       const find = id => {
-        const empty = this.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        const empty = nativeApi.db.lookupEmptyById(id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       this.selection.selected.removeAll();
-      for (const empty of args.ids.map(find)) this.selection.selected.addEmpty(empty);
+      for (const empty of args.ids.map(find)) nativeApi.selection.addEmpty(empty);
     }`, [{ ids }]);
     return await this.selection();
   }
@@ -2870,28 +2915,28 @@ export class PlasticityOperations {
   async selectNodes(bodyIds: number[], instanceIds: number[], referenceMeshIds: number[], groupIds: number[], revision: string): Promise<PlasticitySelection> {
     const state = await this.assertRevision(revision);
     requireGroupSelection(state, bodyIds, instanceIds, referenceMeshIds, groupIds, true);
-    await this.runtime.read(`function (args) {
+    await this.runtime.read(nativeFunction`function (args) {
       ${findView}
       const findEmpty = id => {
-        const empty = this.db.lookupEmptyById(id);
+        const empty = nativeApi.db.lookupEmptyById(id);
         if (empty?.constructor?.name !== 'InstanceEmpty') throw new Error('Unknown native instance ID: ' + id);
         return empty;
       };
       const findReferenceMesh = id => {
-        const empty = this.db.lookupEmptyById(id);
-        if (empty?.constructor?.name !== 'Empties_ObjectEmpty') throw new Error('Unknown native reference mesh ID: ' + id);
+        const empty = nativeApi.db.lookupEmptyById(id);
+        if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + id);
         return empty;
       };
       const findGroup = id => {
-        const group = this.db.groups.lookupById(id);
+        const group = nativeApi.db.groups.lookupById(id);
         if (!group) throw new Error('Unknown group ID: ' + id);
         return group;
       };
       this.selection.selected.removeAll();
       for (const view of args.bodyIds.map(find)) this.selection.selected.add(view);
-      for (const empty of args.instanceIds.map(findEmpty)) this.selection.selected.addEmpty(empty);
-      for (const empty of args.referenceMeshIds.map(findReferenceMesh)) this.selection.selected.addEmpty(empty);
-      for (const group of args.groupIds.map(findGroup)) this.selection.selected.addGroup(group);
+      for (const empty of args.instanceIds.map(findEmpty)) nativeApi.selection.addEmpty(empty);
+      for (const empty of args.referenceMeshIds.map(findReferenceMesh)) nativeApi.selection.addEmpty(empty);
+      for (const group of args.groupIds.map(findGroup)) nativeApi.selection.addGroup(group);
     }`, [{ bodyIds, instanceIds, referenceMeshIds, groupIds }]);
     return await this.selection();
   }
@@ -2899,14 +2944,14 @@ export class PlasticityOperations {
   async selectFaces(references: FaceReference[], revision: string): Promise<PlasticitySelection> {
     const state = await this.assertRevision(revision);
     requireTopologySelection(state, references, "face");
-    await this.runtime.read(`function (args) {
+    await this.runtime.read(nativeFunction`function (args) {
       ${findView}
       this.selection.selected.removeAll();
       for (const reference of args.references) {
         const view = find(reference.bodyId);
         const index = view.high.faces.versionIds.indexOf(reference.faceId);
         if (index < 0) throw new Error('Unknown current face ID: ' + reference.faceId);
-        this.selection.selected.addFace(view.high.faces.get(index));
+        nativeApi.selection.addFace(view.high.faces.get(index));
       }
     }`, [{ references }]);
     return await this.selection();
@@ -2915,14 +2960,14 @@ export class PlasticityOperations {
   async selectEdges(references: EdgeReference[], revision: string): Promise<PlasticitySelection> {
     const state = await this.assertRevision(revision);
     requireTopologySelection(state, references, "edge");
-    await this.runtime.read(`function (args) {
+    await this.runtime.read(nativeFunction`function (args) {
       ${findView}
       this.selection.selected.removeAll();
       for (const reference of args.references) {
         const view = find(reference.bodyId);
         const index = view.high.edges.versionIds.indexOf(reference.edgeId);
         if (index < 0) throw new Error('Unknown current edge ID: ' + reference.edgeId);
-        this.selection.selected.addEdge(view.high.edges.get(index));
+        nativeApi.selection.addEdge(view.high.edges.get(index));
       }
     }`, [{ references }]);
     return await this.selection();
@@ -2930,11 +2975,11 @@ export class PlasticityOperations {
 
   async selectCurveControlPoints(references: CurveControlPointReference[], revision: string): Promise<PlasticitySelection> {
     await this.assertCurveControlPointReferences(references, revision);
-    await this.runtime.read(`function (args) {
+    await this.runtime.read(nativeFunction`function (args) {
       ${findCurveControlPoints}
       this.selection.selected.removeAll();
-      for (const vertex of vertices) this.selection.selected.addVertex(vertex);
-      for (const controlPoint of cvs) this.selection.selected.addCurveCV(controlPoint);
+      for (const vertex of vertices) nativeApi.selection.addVertex(vertex);
+      for (const controlPoint of cvs) nativeApi.selection.addCurveCV(controlPoint);
     }`, [{ points: references }]);
     return await this.selection();
   }
@@ -2972,7 +3017,7 @@ export class PlasticityOperations {
     const targetNormal = relation === "opposed" ? scale(fixedNormal, -1) : fixedNormal;
     const destinationMm = add(targetFace.centerMm, scale(fixedNormal, gapMm));
     const deltaMm = subtract(destinationMm, sourceFace.centerMm);
-    await this.runtime.mutate(`async function (RotateFactory, MoveFactory, Vector, Quaternion, args) {
+    await this.runtime.mutate(nativeFunction`async function (RotateFactory, MoveFactory, Vector, Quaternion, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -3057,7 +3102,7 @@ export class PlasticityOperations {
     const deltaMm = axialMode === "anchor"
       ? subtract(add(targetFace.axisOriginMm, scale(fixedAxis, axialOffsetMm)), sourceFace.axisOriginMm)
       : subtract(betweenOrigins, scale(fixedAxis, betweenOrigins.reduce((sum, value, index) => sum + value * fixedAxis[index]!, 0)));
-    await this.runtime.mutate(`async function (RotateFactory, MoveFactory, Vector, Quaternion, args) {
+    await this.runtime.mutate(nativeFunction`async function (RotateFactory, MoveFactory, Vector, Quaternion, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -3136,7 +3181,7 @@ export class PlasticityOperations {
       throw new Error("Vertex alignment would not move the selected bodies");
     }
 
-    await this.runtime.mutate(`async function (MoveFactory, args) {
+    await this.runtime.mutate(nativeFunction`async function (MoveFactory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -3201,7 +3246,7 @@ export class PlasticityOperations {
       throw new Error("Linear-edge alignment would not transform the selected bodies");
     }
 
-    await this.runtime.mutate(`async function (RotateFactory, MoveFactory, Vector, Quaternion, args) {
+    await this.runtime.mutate(nativeFunction`async function (RotateFactory, MoveFactory, Vector, Quaternion, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -3256,7 +3301,7 @@ export class PlasticityOperations {
     if (revision) await this.assertRevision(revision);
     const origin = toMeters(originMm);
     const size = toMeters(sizeMm);
-    await this.runtime.mutate(`async function (Factory, Vector, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Vector, args) {
       ${commandStart("ThreePointBoxCommand")}
       const [x, y, z] = args.origin;
       const [width, depth, height] = args.size;
@@ -3265,7 +3310,7 @@ export class PlasticityOperations {
       factory.p3 = new Vector(x + width, y + depth, z);
       factory.p4 = new Vector(x + width, y + depth, z + height);
       const created = await factory.commit();
-      if (args.name && created) for (const view of (Array.isArray(created) ? created : [created])) editor.db.nodes.setName(editor.db.nodes.item2key(view), args.name);
+      if (args.name && created) for (const view of (Array.isArray(created) ? created : [created])) nativeApi.db.nodes.setName(nativeApi.db.nodes.item2key(view), args.name);
       return created;
       } catch (error) { failure = error; throw error; }
       };
@@ -3277,12 +3322,12 @@ export class PlasticityOperations {
 
   async createSphere(centerMm: Vector3, radiusMm: number, name?: string, revision?: string): Promise<RuntimeState> {
     if (revision) await this.assertRevision(revision);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${commandStart("SphereCommand")}
       factory.center.fromArray(args.center);
       factory.radius = args.radius;
       const created = await factory.commit();
-      if (args.name && created) for (const view of (Array.isArray(created) ? created : [created])) editor.db.nodes.setName(editor.db.nodes.item2key(view), args.name);
+      if (args.name && created) for (const view of (Array.isArray(created) ? created : [created])) nativeApi.db.nodes.setName(nativeApi.db.nodes.item2key(view), args.name);
       return created;
       } catch (error) { failure = error; throw error; }
       };
@@ -3294,14 +3339,14 @@ export class PlasticityOperations {
 
   async createCylinder(centerMm: Vector3, radiusMm: number, heightMm: number, name?: string, revision?: string, axis: Vector3 = [0, 0, 1]): Promise<RuntimeState> {
     if (revision) await this.assertRevision(revision);
-    await this.runtime.mutate(`async function (Factory, Vector, Quaternion, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Vector, Quaternion, args) {
       ${commandStart("CylinderCommand")}
       factory.center.fromArray(args.center);
       factory.orientation.copy(new Quaternion().setFromUnitVectors(new Vector(0, 0, 1), new Vector(...args.axis).normalize()));
       factory.radius = args.radius;
       factory.height = args.height;
       const created = await factory.commit();
-      if (args.name && created) for (const view of (Array.isArray(created) ? created : [created])) editor.db.nodes.setName(editor.db.nodes.item2key(view), args.name);
+      if (args.name && created) for (const view of (Array.isArray(created) ? created : [created])) nativeApi.db.nodes.setName(nativeApi.db.nodes.item2key(view), args.name);
       return created;
       } catch (error) { failure = error; throw error; }
       };
@@ -3334,7 +3379,7 @@ export class PlasticityOperations {
     const profilePointsMm = topRadiusMm === 0
       ? [frame.originMm, bottomOuterMm, topCenterMm]
       : [frame.originMm, bottomOuterMm, add(topCenterMm, scale(frame.xDirection, topRadiusMm)), topCenterMm];
-    await this.runtime.mutate(`async function (CurveFactory, RevolveFactory, Vector, CurveType, args) {
+    await this.runtime.mutate(nativeFunction`async function (CurveFactory, RevolveFactory, Vector, CurveType, args) {
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
       let failure;
@@ -3343,8 +3388,8 @@ export class PlasticityOperations {
       command.execute = async function () {
         try {
           const existingRegionIds = new Set();
-          for (const [versionId, item] of editor.geo.geometryModel) {
-            if (!editor.geo.automatics.has(versionId) || item.view?.constructor?.name !== 'SketchIsland') continue;
+          for (const [versionId, item] of nativeApi.geo.geometryModel) {
+            if (!nativeApi.geo.automatics.has(versionId) || item.view?.constructor?.name !== 'SketchIsland') continue;
             for (let index = 0; index < (item.view.regions?.length ?? 0); index += 1) {
               const region = item.view.regions.get(index);
               if (region) existingRegionIds.add(String(region.versionId));
@@ -3357,8 +3402,8 @@ export class PlasticityOperations {
           let profiles = await profile.commit();
           profiles = Array.isArray(profiles) ? profiles : [profiles];
           const regions = [];
-          for (const [versionId, item] of editor.geo.geometryModel) {
-            if (!editor.geo.automatics.has(versionId) || item.view?.constructor?.name !== 'SketchIsland') continue;
+          for (const [versionId, item] of nativeApi.geo.geometryModel) {
+            if (!nativeApi.geo.automatics.has(versionId) || item.view?.constructor?.name !== 'SketchIsland') continue;
             for (let index = 0; index < (item.view.regions?.length ?? 0); index += 1) {
               const region = item.view.regions.get(index);
               if (region && !existingRegionIds.has(String(region.versionId))) regions.push(region);
@@ -3373,8 +3418,8 @@ export class PlasticityOperations {
           let created = await revolve.commit();
           created = Array.isArray(created) ? created : [created];
           if (args.name) {
-            for (const view of profiles) editor.db.nodes.setName(editor.db.nodes.item2key(view), args.name + ' profile');
-            for (const view of created) editor.db.nodes.setName(editor.db.nodes.item2key(view), args.name);
+            for (const view of profiles) nativeApi.db.nodes.setName(nativeApi.db.nodes.item2key(view), args.name + ' profile');
+            for (const view of created) nativeApi.db.nodes.setName(nativeApi.db.nodes.item2key(view), args.name);
           }
           return created;
         } catch (error) { failure = error; throw error; }
@@ -3406,7 +3451,7 @@ export class PlasticityOperations {
     }
     const frame = frameFromOriginNormalX(centerMm, axis, radialDirection);
     const profileCenterMm = add(frame.originMm, scale(frame.xDirection, majorRadiusMm));
-    await this.runtime.mutate(`async function (CircleFactory, RevolveFactory, Vector, Quaternion, args) {
+    await this.runtime.mutate(nativeFunction`async function (CircleFactory, RevolveFactory, Vector, Quaternion, args) {
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
       let failure;
@@ -3431,8 +3476,8 @@ export class PlasticityOperations {
           let created = await revolve.commit();
           created = Array.isArray(created) ? created : [created];
           if (args.name) {
-            for (const view of profiles) editor.db.nodes.setName(editor.db.nodes.item2key(view), args.name + ' profile');
-            for (const view of created) editor.db.nodes.setName(editor.db.nodes.item2key(view), args.name);
+            for (const view of profiles) nativeApi.db.nodes.setName(nativeApi.db.nodes.item2key(view), args.name + ' profile');
+            for (const view of created) nativeApi.db.nodes.setName(nativeApi.db.nodes.item2key(view), args.name);
           }
           return created;
         } catch (error) { failure = error; throw error; }
@@ -3518,6 +3563,7 @@ export class PlasticityOperations {
     if (revision) await this.assertRevision(revision);
     if (!Number.isFinite(radiusMm) || radiusMm <= 0) throw new Error("Helix radius must be positive");
     if (!Number.isFinite(turns) || turns <= 0) throw new Error("Helix turns must be positive");
+    turns = requireWholeHelixTurns(turns);
     const axis = axisEndMm.map((value, index) => value - axisStartMm[index]!) as Vector3;
     const axisLength = Math.hypot(...axis);
     if (!(axisLength > 1e-9)) throw new Error("Helix axis must have nonzero length");
@@ -3798,7 +3844,7 @@ export class PlasticityOperations {
       if (endMm.length !== 3) throw new Error("World-space tangent arc end must contain three coordinates");
       worldEnd = endMm;
     }
-    await this.runtime.mutate(`async function (Factory, Vector, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Vector, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -3807,7 +3853,7 @@ export class PlasticityOperations {
       let segment;
       let edge;
       for (const candidate of Array.from(wire.segments ?? [])) {
-        const model = editor.db.lookupTopologyItem(candidate);
+        const model = nativeApi.db.lookupTopologyItem(candidate);
         if (Number(model?.Id?.()) !== args.segmentEntityId) continue;
         segment = candidate;
         edge = model;
@@ -3901,7 +3947,7 @@ export class PlasticityOperations {
       }
     }
 
-    await this.runtime.mutate(`async function (Factory, Command, Vector, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, Vector, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -3909,7 +3955,7 @@ export class PlasticityOperations {
         const wire = find(reference.bodyId);
         if (wire?.constructor?.name !== 'Wire') throw new Error('Tangent-circle source is no longer a Wire');
         for (const candidate of Array.from(wire.segments ?? [])) {
-          const edge = editor.db.lookupTopologyItem(candidate);
+          const edge = nativeApi.db.lookupTopologyItem(candidate);
           if (Number(edge?.Id?.()) === reference.segmentEntityId) return candidate;
         }
         throw new Error('Stale or unknown tangent-circle segment: ' + reference.bodyId + ':' + reference.segmentEntityId);
@@ -3976,7 +4022,7 @@ export class PlasticityOperations {
     if (dot(subtract(secondPoint, firstPoint), subtract(secondPoint, firstPoint)) <= 1e-18) {
       throw new Error("Curve Bridge endpoints must be distinct");
     }
-    await this.runtime.mutate(`async function (Factory, Continuity, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Continuity, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -3984,7 +4030,7 @@ export class PlasticityOperations {
         const wire = find(reference.bodyId);
         if (wire?.constructor?.name !== 'Wire') throw new Error('Curve Bridge source is no longer a Wire');
         for (const candidate of Array.from(wire.segments ?? [])) {
-          const edge = editor.db.lookupTopologyItem(candidate);
+          const edge = nativeApi.db.lookupTopologyItem(candidate);
           if (Number(edge?.Id?.()) === reference.segmentEntityId) return candidate;
         }
         throw new Error('Stale or unknown Curve Bridge segment: ' + reference.bodyId + ':' + reference.segmentEntityId);
@@ -4049,7 +4095,7 @@ export class PlasticityOperations {
     const delta = subtract(resolved[1]!.vertex.positionMm, resolved[0]!.vertex.positionMm);
     if (dot(delta, delta) <= 1e-18) throw new Error("Shell Edge Bridge endpoints must be distinct");
 
-    await this.runtime.mutate(`async function (Factory, Command, Continuity, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, Continuity, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -4073,11 +4119,9 @@ export class PlasticityOperations {
       command.execute = async function () {
         try {
           const factory = new Factory(editor).resource(this);
-          factory.edge1 = edge(args.first);
-          factory.edge2 = edge(args.second);
-          factory.pickClosestVertices();
-          if (!matches(factory.startPosition, args.firstPosition)) factory.side1 = !factory.side1;
-          if (!matches(factory.endPosition, args.secondPosition)) factory.side2 = !factory.side2;
+          nativeApi.initializeBridge(factory, edge(args.first), edge(args.second), 'edge');
+          if (!matches(factory.startPosition, args.firstPosition)) nativeApi.flipBridgeEnd(factory, 1);
+          if (!matches(factory.endPosition, args.secondPosition)) nativeApi.flipBridgeEnd(factory, 2);
           if (!matches(factory.startPosition, args.firstPosition) || !matches(factory.endPosition, args.secondPosition)) {
             throw new Error('Requested Shell Edge Bridge endpoints are unavailable');
           }
@@ -4139,7 +4183,7 @@ export class PlasticityOperations {
     const delta = subtract(resolved[1]!.positionMm, resolved[0]!.positionMm);
     if (dot(delta, delta) <= 1e-18) throw new Error("Curve Vertex Bridge endpoints must be distinct");
 
-    await this.runtime.mutate(`async function (Factory, Command, Continuity, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, Continuity, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -4147,8 +4191,8 @@ export class PlasticityOperations {
         const wire = find(reference.bodyId);
         if (wire?.constructor?.name !== 'Wire') throw new Error('Curve Vertex Bridge source is no longer a Wire');
         for (const candidate of Array.from(wire.vertices ?? [])) {
-          const model = editor.db.lookupTopologyItem(candidate);
-          if (Number(model?.Id?.()) === reference.vertexId) return candidate;
+          const model = nativeApi.db.lookupTopologyItem(candidate);
+          if (Number(model?.Id?.()) === reference.vertexId) return nativeApi.bridgeVertex(wire, candidate);
         }
         throw new Error('Stale or unknown Curve Vertex Bridge vertex: ' + reference.bodyId + ':' + reference.vertexId);
       };
@@ -4163,8 +4207,7 @@ export class PlasticityOperations {
       command.execute = async function () {
         try {
           const factory = new Factory(editor).resource(this);
-          factory.vertex1 = vertex(args.first);
-          factory.vertex2 = vertex(args.second);
+          nativeApi.initializeBridge(factory, vertex(args.first), vertex(args.second), 'vertex');
           if (!matches(factory.startPosition, args.firstPosition) || !matches(factory.endPosition, args.secondPosition)) {
             throw new Error('Requested Curve Vertex Bridge endpoints are unavailable');
           }
@@ -4381,7 +4424,7 @@ export class PlasticityOperations {
     const textY = add(scale(baseY, cosine), scale(baseX, -sine));
     const rotate = !vectorsNear(textX, [1, 0, 0]) || !vectorsNear(textY, [0, 1, 0]) || !vectorsNear(planeNormal, [0, 0, 1]);
     const move = Math.hypot(...worldOrigin) > 1e-12;
-    await this.runtime.mutate(`async function (TextFactory, RotateFactory, MoveFactory, Vector, Matrix, Quaternion, args) {
+    await this.runtime.mutate(nativeFunction`async function (TextFactory, RotateFactory, MoveFactory, Vector, Matrix, Quaternion, args) {
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
       let failure;
@@ -4412,8 +4455,8 @@ export class PlasticityOperations {
             const moved = await move.commit();
             views = Array.isArray(moved) ? moved : [moved];
           }
-          if (args.name) views.forEach((view, index) => editor.db.nodes.setName(
-            editor.db.nodes.item2key(view),
+          if (args.name) views.forEach((view, index) => nativeApi.db.nodes.setName(
+            nativeApi.db.nodes.item2key(view),
             views.length === 1 ? args.name : args.name + ' ' + (index + 1),
           ));
           return views;
@@ -4438,25 +4481,25 @@ export class PlasticityOperations {
 
   async move(ids: number[], deltaMm: Vector3, revision: string): Promise<RuntimeState> {
     await this.assertRevision(revision);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("MoveItemCommand")}
       factory.items = args.ids.map(find);
       factory.move.fromArray(args.delta);
-      ${commandEnd}
+      ${commandEndPreservingMeasurementNames}
     }`, ["MoveItemAndEmptyFactory"], [{ ids, delta: toMeters(deltaMm) }]);
     return await this.state();
   }
 
   async rotate(ids: number[], pivotMm: Vector3, axis: Vector3, degrees: number, revision: string): Promise<RuntimeState> {
     await this.assertRevision(revision);
-    await this.runtime.mutate(`async function (Factory, Vector, Quaternion, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Vector, Quaternion, args) {
       ${findView}
       ${commandStart("RotateItemCommand")}
       factory.items = args.ids.map(find);
       factory.pivot.fromArray(args.pivot);
       factory.rotation.copy(new Quaternion().setFromAxisAngle(new Vector(...args.axis).normalize(), args.radians));
-      ${commandEnd}
+      ${commandEndPreservingMeasurementNames}
     }`, ["RotateItemAndEmptyFactory", "Vector3", "Quaternion"], [{ ids, pivot: toMeters(pivotMm), axis, radians: degreesToRadians(degrees) }]);
     return await this.state();
   }
@@ -4470,26 +4513,26 @@ export class PlasticityOperations {
     }
     const quaternion: QuaternionXyzw = quaternionFromXyzDegrees(rotationDeg);
     if (Math.hypot(quaternion[0], quaternion[1], quaternion[2]) < 1e-12) throw new Error("Print orientation is zero; no CAD mutation is required");
-    await this.runtime.mutate(`async function (Factory, Vector, Quaternion, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Vector, Quaternion, args) {
       ${findView}
       ${commandStart("RotateItemCommand")}
       factory.items = args.ids.map(find);
       factory.pivot.fromArray(args.pivot);
       factory.rotation.set(args.quaternion[0], args.quaternion[1], args.quaternion[2], args.quaternion[3]);
-      ${commandEnd}
+      ${commandEndPreservingMeasurementNames}
     }`, ["RotateItemAndEmptyFactory", "Vector3", "Quaternion"], [{ ids, pivot: toMeters(pivotMm), quaternion }]);
     return await this.state();
   }
 
   async scale(ids: number[], pivotMm: Vector3, factors: Vector3, revision: string): Promise<RuntimeState> {
     await this.assertRevision(revision);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("ScaleItemCommand")}
       factory.items = args.ids.map(find);
       factory.pivot.fromArray(args.pivot);
       factory.scale.fromArray(args.factors);
-      ${commandEnd}
+      ${commandEndPreservingMeasurementNames}
     }`, ["ProjectingScaleItemAndEmptyFactory"], [{ ids, pivot: toMeters(pivotMm), factors }]);
     return await this.state();
   }
@@ -4510,7 +4553,7 @@ export class PlasticityOperations {
     for (const [name, value] of [["widthMm", widthMm], ["lengthMm", lengthMm], ["heightMm", heightMm]] as const) {
       if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} must be a positive finite number`);
     }
-    await this.runtime.mutate(`async function (Command, Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Command, Factory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -4576,7 +4619,7 @@ export class PlasticityOperations {
       throw new Error(`Radius dimension target must be one current cylindrical face: ${face.bodyId}:${face.faceId}`);
     }
     if (!Number.isFinite(radiusMm) || radiusMm <= 0) throw new Error("radiusMm must be a positive finite number");
-    await this.runtime.mutate(`async function (Command, Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Command, Factory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -4584,7 +4627,7 @@ export class PlasticityOperations {
       const index = view.high.faces.versionIds.indexOf(args.face.faceId);
       if (index < 0) throw new Error('Stale or unknown face: ' + args.face.faceId);
       this.selection.selected.removeAll();
-      this.selection.selected.addFace(view.high.faces.get(index));
+      nativeApi.selection.addFace(view.high.faces.get(index));
 
       let collection = null;
       const base = Object.getPrototypeOf(Factory.prototype);
@@ -4643,7 +4686,7 @@ export class PlasticityOperations {
     for (const [name, value] of [["widthMm", widthMm], ["lengthMm", lengthMm]] as const) {
       if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} must be a positive finite number`);
     }
-    await this.runtime.mutate(`async function (Command, Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Command, Factory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -4696,7 +4739,7 @@ export class PlasticityOperations {
   async boolean(targetIds: number[], toolIds: number[], operation: "union" | "difference" | "intersection", keepTools: boolean, revision: string): Promise<RuntimeState> {
     await this.assertRevision(revision);
     if (targetIds.some((id) => toolIds.includes(id))) throw new Error("Target and tool IDs must not overlap");
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("BooleanCommand")}
       factory.targets = args.targetIds.map(find);
@@ -4723,7 +4766,7 @@ export class PlasticityOperations {
     const badCurves = uniqueCurveIds.filter((id) => typeOf(id) !== "Wire");
     if (badCurves.length > 0) throw new Error(`Cutters must be current Wire bodies: ${badCurves.join(", ")}`);
     if (directionVector && !(Math.hypot(...directionVector) > 0)) throw new Error("Cut direction must be nonzero");
-    await this.runtime.mutate(`async function (Factory, Vector, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Vector, args) {
       ${findView}
       ${commandStart("CutCommand")}
       factory.shells = args.targetIds.map(find);
@@ -4741,7 +4784,7 @@ export class PlasticityOperations {
     const type = state.bodies.find((body) => body.id === targetId)?.type;
     if (type !== "Solid" && type !== "Sheet") throw new Error(`Knife target must be a current Solid or Sheet body: ${targetId}`);
     if (pointsMm.length < 2) throw new Error("Knife curve requires at least two points");
-    await this.runtime.mutate(`async function (Factory, Vector, CurveType, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Vector, CurveType, args) {
       ${findView}
       ${commandStart("CurveCommand")}
       factory.target = find(args.targetId);
@@ -4789,7 +4832,7 @@ export class PlasticityOperations {
     if (invalidCutters.length > 0) {
       throw new Error(`Cut requires current planar cutter faces: ${invalidCutters.map((face) => `${face.bodyId}:${face.faceId}`).join(", ")}`);
     }
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("CutCommand")}
       factory.shells = args.targetIds.map(find);
@@ -4847,7 +4890,7 @@ export class PlasticityOperations {
         if (!Number.isFinite(value) || value < 0 || value > 1) throw new Error(`Appearance ${name} must be between 0 and 1`);
       }
     }
-    await this.runtime.mutate(`async function (args) {
+    await this.runtime.mutate(nativeFunction`async function (args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -4862,17 +4905,18 @@ export class PlasticityOperations {
         try {
           let materialId = args.material.materialId;
           if (materialId === undefined) {
-            const appearance = editor.db.materials.default.clone();
+            const appearance = nativeApi.db.materials.default.clone();
             appearance.color.set(args.material.colorHex);
             appearance.roughness = args.material.roughness;
             appearance.metalness = args.material.metalness;
             appearance.opacity = args.material.opacity;
             appearance.transparent = args.material.opacity < 1;
-            materialId = editor.db.materials.add(args.material.name, appearance);
-          } else if (materialId !== 0 && !editor.db.materials.has(materialId)) {
+            materialId = nativeApi.db.materials.add(args.material.name, appearance);
+          } else if (materialId !== 0 && !nativeApi.db.materials.has(materialId)) {
             throw new Error('Appearance material ID is no longer current: ' + materialId);
           }
-          for (const view of views) editor.db.nodes.setMaterial(editor.db.nodes.item2key(view), materialId);
+          // Public ID 0 means no assignment; native node state uses undefined.
+          for (const view of views) nativeApi.db.nodes.setMaterial(nativeApi.db.nodes.item2key(view), materialId === 0 ? undefined : materialId);
         } catch (error) {
           failure = error;
           throw error;
@@ -4889,7 +4933,7 @@ export class PlasticityOperations {
   // (measured live: relative G2 deviation 0 at both tangent edges, versus 1 for round).
   async fillet(id: number, edgeIds: string[], radiusMm: number, revision: string, shape: "round" | "g2" = "round"): Promise<RuntimeState> {
     await this.assertRevision(revision);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("FilletShellCommand")}
       const view = find(args.id);
@@ -4909,7 +4953,7 @@ export class PlasticityOperations {
 
   async chamfer(id: number, edgeIds: string[], distanceMm: number, revision: string): Promise<RuntimeState> {
     await this.assertRevision(revision);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("FilletShellCommand")}
       const view = find(args.id);
@@ -4939,7 +4983,7 @@ export class PlasticityOperations {
       return type !== "Solid" && type !== "Sheet";
     });
     if (invalid.length > 0) throw new Error(`Fillet removal requires current Solid or Sheet bodies: ${invalid.join(", ")}`);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("RemoveFilletsFromShellCommand")}
       factory.shells = args.ids.map(find);
@@ -4970,7 +5014,7 @@ export class PlasticityOperations {
     }
     const nonpositive = faces.filter((_reference, index) => selected[index]!.blendRadiusMm! + deltaMm <= 0);
     if (nonpositive.length > 0) throw new Error("Refillet delta must leave every selected face with a positive radius");
-    await this.runtime.mutate(`async function (Command, Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Command, Factory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -5000,7 +5044,7 @@ export class PlasticityOperations {
 
   async extrudeFaces(id: number, faceIds: string[], distanceMm: number, revision: string): Promise<RuntimeState> {
     await this.assertRevision(revision);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("ExtrudeCommand")}
       const view = find(args.id);
@@ -5018,12 +5062,12 @@ export class PlasticityOperations {
 
   async extrudeProfile(id: number, distanceMm: number, revision: string, options: ExtrudeOptions = {}): Promise<RuntimeState> {
     await this.assertRevision(revision);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("ExtrudeCommand")}
       const view = find(args.id);
       if (view.constructor.name !== 'Wire') throw new Error('Profile must be a Wire');
-      const profileItem = Array.from(editor.geo.geometryModel.values()).find(item => item.view === view);
+      const profileItem = Array.from(nativeApi.geo.geometryModel.values()).find(item => item.view === view);
       if (!profileItem?.model?.IsClosed?.()) throw new Error('Profile must be a closed Wire');
       let basis;
       try { basis = editor.curves.lookup(view); } catch { throw new Error('Profile is not planar'); }
@@ -5032,8 +5076,8 @@ export class PlasticityOperations {
       const sketchId = Number(sketchEntry?.[0]);
       if (!Number.isInteger(sketchId)) throw new Error('Profile sketch is unavailable');
       const regions = [];
-      for (const [versionId, item] of editor.geo.geometryModel) {
-        if (!editor.geo.automatics.has(versionId) || item.view?.constructor?.name !== 'SketchIsland') continue;
+      for (const [versionId, item] of nativeApi.geo.geometryModel) {
+        if (!nativeApi.geo.automatics.has(versionId) || item.view?.constructor?.name !== 'SketchIsland') continue;
         let candidateSketchId;
         try { candidateSketchId = Number(editor.sketches.getSketchId(item.view)); } catch { continue; }
         if (candidateSketchId !== sketchId) continue;
@@ -5056,12 +5100,12 @@ export class PlasticityOperations {
     if (regionIds.length === 0) throw new Error("At least one Region ID is required");
     const uniqueIds = [...new Set(regionIds)];
     if (uniqueIds.length !== regionIds.length) throw new Error("Region IDs must be unique");
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${commandStart("ExtrudeCommand")}
       const wanted = new Set(args.regionIds);
       const regions = [];
-      for (const [versionId, item] of editor.geo.geometryModel) {
-        if (!editor.geo.automatics.has(versionId) || item.view?.constructor?.name !== 'SketchIsland') continue;
+      for (const [versionId, item] of nativeApi.geo.geometryModel) {
+        if (!nativeApi.geo.automatics.has(versionId) || item.view?.constructor?.name !== 'SketchIsland') continue;
         for (let index = 0; index < (item.view.regions?.length ?? 0); index += 1) {
           const region = item.view.regions.get(index);
           if (region && wanted.has(String(region.versionId))) regions.push(region);
@@ -5083,7 +5127,7 @@ export class PlasticityOperations {
     const uniqueIds = [...new Set(ids)];
     if (uniqueIds.length === 0) throw new Error("At least one Wire ID is required");
     if (directionVector && !(Math.hypot(...directionVector) > 0)) throw new Error("Extrude direction must be nonzero");
-    await this.runtime.mutate(`async function (Factory, Vector, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Vector, args) {
       ${findView}
       ${commandStart("ExtrudeCommand")}
       const curves = args.ids.map(id => {
@@ -5105,10 +5149,10 @@ export class PlasticityOperations {
     const uniqueIds = [...new Set(ids)];
     if (uniqueIds.length === 0) throw new Error("At least one Wire ID is required");
     if (uniqueIds.length !== ids.length) throw new Error("Wire IDs must be unique");
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       const findWire = id => {
-        for (const [versionId, item] of this.geo.geometryModel) {
-          if (this.db.lookupStableId(versionId) !== id) continue;
+        for (const [versionId, item] of nativeApi.geo.geometryModel) {
+          if (nativeApi.db.lookupStableId(versionId) !== id) continue;
           if (item.view?.constructor?.name !== 'Wire') throw new Error('Planar curve offset requires Wire bodies');
           return item.view;
         }
@@ -5130,7 +5174,7 @@ export class PlasticityOperations {
     if (uniqueIds.length !== ids.length) throw new Error("Wire IDs must be unique");
     const invalid = uniqueIds.filter((id) => state.bodies.find((body) => body.id === id)?.type !== "Wire");
     if (invalid.length > 0) throw new Error(`Slot profiles require current Wire bodies: ${invalid.join(", ")}`);
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findView}
       const wires = args.ids.map(id => {
         const view = find(id);
@@ -5176,9 +5220,9 @@ export class PlasticityOperations {
     const islandVersionIds = new Set(selected.map((region) => region!.islandVersionId));
     if (islandVersionIds.size !== 1) throw new Error("Region offsets must belong to the same sketch island");
     const islandVersionId = selected[0]!.islandVersionId;
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${commandStart("OffsetRegionCommand")}
-      const island = editor.geo.geometryModel.get(args.islandVersionId);
+      const island = nativeApi.geo.geometryModel.get(args.islandVersionId);
       if (!island || island.view?.constructor?.name !== 'SketchIsland') throw new Error('Stale or unknown Region sketch');
       const wanted = new Set(args.regionIds);
       const regions = [];
@@ -5210,12 +5254,12 @@ export class PlasticityOperations {
     if (fragmentIds.length === 0) throw new Error("At least one curve fragment ID is required");
     const uniqueIds = [...new Set(fragmentIds)];
     if (uniqueIds.length !== fragmentIds.length) throw new Error("Curve fragment IDs must be unique");
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${commandStart("TrimCommand")}
       const wanted = new Set(args.fragmentIds);
       const selected = [];
       for (const info of editor.fragments.read.modelId2info.values()) {
-        const fragmentItem = editor.geo.geometryModel.get(info.fragmentViewId);
+        const fragmentItem = nativeApi.geo.geometryModel.get(info.fragmentViewId);
         if (!fragmentItem) continue;
         for (const segment of Array.from(fragmentItem.view?.segments ?? [])) {
           if (wanted.has(String(segment.versionId))) selected.push(segment);
@@ -5236,15 +5280,15 @@ export class PlasticityOperations {
     if (endpointIds.length === 0) throw new Error("At least one curve endpoint ID is required");
     const uniqueIds = [...new Set(endpointIds)];
     if (uniqueIds.length !== endpointIds.length) throw new Error("Curve endpoint IDs must be unique");
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${commandStart("ExtendCurveCommand")}
       const wanted = new Set(args.endpointIds);
       const selected = [];
-      for (const [, item] of editor.geo.geometryModel) {
+      for (const [, item] of nativeApi.geo.geometryModel) {
         if (item.view?.constructor?.name !== 'Wire') continue;
         for (const vertex of Array.from(item.view.vertices ?? [])) {
           if (!wanted.has(String(vertex.versionId))) continue;
-          const model = editor.db.lookupTopologyItem(vertex);
+          const model = nativeApi.db.lookupTopologyItem(vertex);
           if (!model.IsSpur()) throw new Error('Curve extension requires open Wire endpoints');
           selected.push(vertex);
         }
@@ -5284,7 +5328,7 @@ export class PlasticityOperations {
     if (invalidDegree.length > 0) {
       throw new Error(`Curve vertex conversion requires exactly two adjacent segments: ${invalidDegree.join(", ")}`);
     }
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       const editor = this;
       if (editor.executor.isBusy) throw new Error('Plasticity is busy');
       let failure;
@@ -5295,12 +5339,12 @@ export class PlasticityOperations {
           const wanted = new Set(args.vertices.map(reference => reference.bodyId + ':' + reference.vertexId));
           const selected = [];
           const found = new Set();
-          for (const [versionId, item] of editor.geo.geometryModel) {
+          for (const [versionId, item] of nativeApi.geo.geometryModel) {
             if (item.view?.constructor?.name !== 'Wire') continue;
-            const bodyId = editor.db.lookupStableId(versionId);
+            const bodyId = nativeApi.db.lookupStableId(versionId);
             if (!Number.isInteger(bodyId)) continue;
             for (const view of Array.from(item.view.vertices ?? [])) {
-              const vertex = editor.db.lookupTopologyItem(view);
+              const vertex = nativeApi.db.lookupTopologyItem(view);
               const key = bodyId + ':' + vertex.Id();
               if (!wanted.has(key)) continue;
               if (vertex.IsSpur()) throw new Error('Cannot convert endpoint vertex: ' + key);
@@ -5326,7 +5370,7 @@ export class PlasticityOperations {
     await this.assertRevision(revision);
     if (!Number.isFinite(radiusMm) || radiusMm <= 0) throw new Error("Curve fillet radius must be positive");
     if (firstId === secondId) throw new Error("Curve fillet needs two different Wires; use plasticity_fillet_curve_vertices for corners inside one Wire");
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("FilletCurveCommand")}
       const curves = [args.first, args.second].map(id => {
@@ -5358,17 +5402,17 @@ export class PlasticityOperations {
     if (endpoints.length > 0) throw new Error(`Curve fillet requires interior or closed Wire vertices: ${endpoints.join(", ")}`);
     const invalidDegree = keys.filter((key) => byKey.get(key)?.adjacentEdgeEntityIds.length !== 2);
     if (invalidDegree.length > 0) throw new Error(`Curve fillet requires exactly two adjacent segments at every vertex: ${invalidDegree.join(", ")}`);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       const host = this;
       const wanted = new Set(args.vertices.map(reference => reference.bodyId + ':' + reference.vertexId));
       const selected = [];
       const found = new Set();
-      for (const [versionId, item] of host.geo.geometryModel) {
+      for (const [versionId, item] of nativeApi.geo.geometryModel) {
         if (item.view?.constructor?.name !== 'Wire') continue;
-        const bodyId = host.db.lookupStableId(versionId);
+        const bodyId = nativeApi.db.lookupStableId(versionId);
         if (!Number.isInteger(bodyId)) continue;
         for (const view of Array.from(item.view.vertices ?? [])) {
-          const vertex = host.db.lookupTopologyItem(view);
+          const vertex = nativeApi.db.lookupTopologyItem(view);
           const key = bodyId + ':' + vertex.Id();
           if (!wanted.has(key)) continue;
           selected.push(view);
@@ -5395,7 +5439,7 @@ export class PlasticityOperations {
     if (uniqueIds.length !== ids.length) throw new Error("Wire IDs must be unique");
     const invalid = uniqueIds.filter((id) => state.bodies.find((body) => body.id === id)?.type !== "Wire");
     if (invalid.length > 0) throw new Error(`Curve unjoin requires current Wire bodies: ${invalid.join(", ")}`);
-    await this.runtime.mutate(`async function (Command, Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Command, Factory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -5428,7 +5472,7 @@ export class PlasticityOperations {
     if (uniqueIds.length !== ids.length) throw new Error("Wire IDs must be unique");
     const invalid = uniqueIds.filter((id) => state.bodies.find((body) => body.id === id)?.type !== "Wire");
     if (invalid.length > 0) throw new Error(`Curve duplication requires current Wire bodies: ${invalid.join(", ")}`);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -5459,10 +5503,10 @@ export class PlasticityOperations {
     const current = new Set(state.regions.map((region) => region.id));
     const missing = uniqueIds.filter((id) => !current.has(id));
     if (missing.length > 0) throw new Error(`Stale or unknown Region IDs: ${missing.join(", ")}`);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       const wanted = new Set(args.regionIds);
       const regions = [];
-      for (const [, item] of this.geo.geometryModel) {
+      for (const [, item] of nativeApi.geo.geometryModel) {
         if (item.view?.constructor?.name !== 'SketchIsland') continue;
         for (let index = 0; index < (item.view.regions?.length ?? 0); index += 1) {
           const region = item.view.regions.get(index);
@@ -5500,7 +5544,7 @@ export class PlasticityOperations {
     if (uniqueIds.length !== ids.length) throw new Error("Wire IDs must be unique");
     const invalid = uniqueIds.filter((id) => state.bodies.find((body) => body.id === id)?.type !== "Wire");
     if (invalid.length > 0) throw new Error(`Curve join requires current Wire bodies: ${invalid.join(", ")}`);
-    await this.runtime.mutate(`async function (Command, Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Command, Factory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -5560,7 +5604,7 @@ export class PlasticityOperations {
       default:
         throw new Error(`Unsupported curve rebuild method: ${String((options as { method?: unknown }).method)}`);
     }
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("RebuildCurveCommand")}
       factory.curves = args.ids.map(find);
@@ -5592,7 +5636,7 @@ export class PlasticityOperations {
     if (new Set(ids).size !== ids.length) throw new Error("Wire IDs must be unique");
     const invalid = ids.filter((id) => state.bodies.find((body) => body.id === id)?.type !== "Wire");
     if (invalid.length > 0) throw new Error(`Curve degree elevation requires current Wire bodies: ${invalid.join(", ")}`);
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -5618,7 +5662,7 @@ export class PlasticityOperations {
     if (new Set(ids).size !== ids.length) throw new Error("Wire IDs must be unique");
     const invalid = ids.filter((id) => state.bodies.find((body) => body.id === id)?.type !== "Wire");
     if (invalid.length > 0) throw new Error(`Curve subdivision requires current Wire bodies: ${invalid.join(", ")}`);
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -5653,7 +5697,7 @@ export class PlasticityOperations {
     if (!Number.isFinite(normalizedParameter) || normalizedParameter <= 0 || normalizedParameter >= 1) {
       throw new Error("Curve knot normalized parameter must be greater than 0 and less than 1");
     }
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -5662,7 +5706,7 @@ export class PlasticityOperations {
       let segment;
       let edge;
       for (const candidate of Array.from(wire.segments ?? [])) {
-        const model = editor.db.lookupTopologyItem(candidate);
+        const model = nativeApi.db.lookupTopologyItem(candidate);
         if (Number(model?.Id?.()) !== args.reference.segmentEntityId) continue;
         segment = candidate;
         edge = model;
@@ -5682,18 +5726,7 @@ export class PlasticityOperations {
         try {
           const factory = new Factory(editor).resource(this);
           factory.segment = segment;
-          const model = factory._segment?.model;
-          if (!model) throw new Error('Plasticity 26.1.3 Insert Knot model bridge is unavailable');
-          // InsertKnotFactory's public segment setter does not populate its private UI parameter.
-          // Keep the native factory transaction, database replacement, and history behavior while
-          // supplying the explicit normalized MCP parameter to the same kernel Edge::InsertKnot call.
-          factory._segment.model = new Proxy(model, {
-            get(target, key) {
-              if (key === 'InsertKnot') return () => target.InsertKnot(nativeParameter);
-              const value = Reflect.get(target, key, target);
-              return typeof value === 'function' ? value.bind(target) : value;
-            },
-          });
+          nativeApi.configureCurveKnot(factory, nativeParameter);
           return await factory.commit();
         } catch (error) { failure = error; throw error; }
       };
@@ -5718,7 +5751,7 @@ export class PlasticityOperations {
     if (!Number.isFinite(normalizedParameter) || normalizedParameter <= 0 || normalizedParameter >= 1) {
       throw new Error("Curve split normalized parameter must be greater than 0 and less than 1");
     }
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -5727,7 +5760,7 @@ export class PlasticityOperations {
       let segment;
       let edge;
       for (const candidate of Array.from(wire.segments ?? [])) {
-        const model = editor.db.lookupTopologyItem(candidate);
+        const model = nativeApi.db.lookupTopologyItem(candidate);
         if (Number(model?.Id?.()) !== args.reference.segmentEntityId) continue;
         segment = candidate;
         edge = model;
@@ -5742,19 +5775,7 @@ export class PlasticityOperations {
       command.execute = async function () {
         try {
           const factory = new Factory(editor).resource(this);
-          factory.segment = segment;
-          const model = factory._segment?.model;
-          if (!model) throw new Error('Plasticity 26.1.3 Split Segment model bridge is unavailable');
-          // SplitSegmentFactory receives the split parameter only from its private UI command.
-          // Preserve the native commit/database/history path and supply the explicit MCP value
-          // to the same normalized Edge::SplitAt call used by that factory.
-          factory._segment.model = new Proxy(model, {
-            get(target, key) {
-              if (key === 'SplitAt') return () => target.SplitAt(args.normalizedParameter);
-              const value = Reflect.get(target, key, target);
-              return typeof value === 'function' ? value.bind(target) : value;
-            },
-          });
+          nativeApi.configureCurveSplit(factory, segment, args.normalizedParameter);
           return await factory.commit();
         } catch (error) { failure = error; throw error; }
       };
@@ -5771,7 +5792,7 @@ export class PlasticityOperations {
     const invalid = ids.filter((id) => state.bodies.find((body) => body.id === id)?.type !== "Wire");
     if (invalid.length > 0) throw new Error(`Curve planarization requires current Wire bodies: ${invalid.join(", ")}`);
     const unitNormal = normalize(normal);
-    await this.runtime.mutate(`async function (Factory, Command, Vector, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, Vector, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -5802,7 +5823,7 @@ export class PlasticityOperations {
     if (deltaMm.some((value) => !Number.isFinite(value)) || Math.hypot(...deltaMm) === 0) {
       throw new Error("Curve control point move delta must be a finite nonzero vector");
     }
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findCurveControlPoints}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -5812,8 +5833,7 @@ export class PlasticityOperations {
       command.execute = async function () {
         try {
           const factory = new Factory(editor).resource(this);
-          if (vertices.length > 0) factory.vertices = vertices;
-          if (cvs.length > 0) factory.cvs = cvs;
+          nativeApi.setCurveControlPoints(factory, vertices, cvs);
           factory.move.fromArray(args.delta);
           return await factory.commit();
         } catch (error) { failure = error; throw error; }
@@ -5844,7 +5864,7 @@ export class PlasticityOperations {
     if (unsupported.length > 0) {
       throw new Error(`Native slide directions are unavailable for curve control points: ${unsupported.map((point) => `${point.bodyId}:${point.kind}:${point.pointId}`).join(", ")}`);
     }
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findCurveControlPoints}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -5854,9 +5874,8 @@ export class PlasticityOperations {
       command.execute = async function () {
         try {
           const factory = new Factory(editor).resource(this);
-          if (vertices.length > 0) factory.vertices = vertices;
-          if (cvs.length > 0) factory.cvs = cvs;
-          factory.direction = args.direction;
+          nativeApi.setCurveControlPoints(factory, vertices, cvs);
+          factory.direction = nativeApi.slideDirection(args.direction);
           factory.distance = args.distance;
           return await factory.commit();
         } catch (error) { failure = error; throw error; }
@@ -5881,7 +5900,7 @@ export class PlasticityOperations {
     await this.assertCurveControlPointReferences(points, revision);
     if (!Number.isFinite(degrees) || degrees === 0) throw new Error("Curve control point rotation angle must be finite and nonzero");
     const unitAxis = normalize(axis);
-    await this.runtime.mutate(`async function (Factory, Command, Vector, Quaternion, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, Vector, Quaternion, args) {
       ${findCurveControlPoints}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -5891,8 +5910,7 @@ export class PlasticityOperations {
       command.execute = async function () {
         try {
           const factory = new Factory(editor).resource(this);
-          if (vertices.length > 0) factory.vertices = vertices;
-          if (cvs.length > 0) factory.cvs = cvs;
+          nativeApi.setCurveControlPoints(factory, vertices, cvs);
           factory.pivot.fromArray(args.pivot);
           factory.rotation.copy(new Quaternion().setFromAxisAngle(new Vector(...args.axis), args.radians));
           return await factory.commit();
@@ -5920,7 +5938,7 @@ export class PlasticityOperations {
       throw new Error("Curve control point scale factors must be finite and positive");
     }
     if (factors.every((value) => value === 1)) throw new Error("Curve control point scale must change at least one factor");
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findCurveControlPoints}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -5930,8 +5948,7 @@ export class PlasticityOperations {
       command.execute = async function () {
         try {
           const factory = new Factory(editor).resource(this);
-          if (vertices.length > 0) factory.vertices = vertices;
-          if (cvs.length > 0) factory.cvs = cvs;
+          nativeApi.setCurveControlPoints(factory, vertices, cvs);
           factory.pivot.fromArray(args.pivot);
           factory.scale.fromArray(args.factors);
           return await factory.commit();
@@ -5950,7 +5967,7 @@ export class PlasticityOperations {
     }
     const bodyIds = new Set(points.map((point) => point.bodyId));
     if (bodyIds.size !== 1) throw new Error("Deleted curve control points must belong to one Wire");
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findCurveControlPoints}
       if (vertices.length > 0 || cvs.length !== args.points.length) throw new Error('Only interior B-Spline control points can be deleted');
       const view = views.get(args.points[0].bodyId);
@@ -5963,7 +5980,7 @@ export class PlasticityOperations {
         try {
           const factory = new Factory(editor).resource(this);
           factory.curve = view;
-          factory.cvs = cvs;
+          nativeApi.setCurveControlPoints(factory, [], cvs);
           return await factory.commit();
         } catch (error) { failure = error; throw error; }
       };
@@ -5983,7 +6000,7 @@ export class PlasticityOperations {
     if (uniqueIds.length !== ids.length) throw new Error("Wire IDs must be unique");
     const invalid = uniqueIds.filter((id) => state.bodies.find((body) => body.id === id)?.type !== "Wire");
     if (invalid.length > 0) throw new Error(`Curve reversal requires current Wire bodies: ${invalid.join(", ")}`);
-    await this.runtime.mutate(`async function (Command, Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Command, Factory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -6013,7 +6030,7 @@ export class PlasticityOperations {
     if (uniqueIds.length !== ids.length) throw new Error("Sheet IDs must be unique");
     const invalid = uniqueIds.filter((id) => state.bodies.find((body) => body.id === id)?.type !== "Sheet");
     if (invalid.length > 0) throw new Error(`Sheet reversal requires current Sheet bodies: ${invalid.join(", ")}`);
-    await this.runtime.mutate(`async function (Command, Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Command, Factory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -6053,7 +6070,7 @@ export class PlasticityOperations {
     if (invalid.length > 0) throw new Error(`Body outlines require current Solid or Sheet bodies: ${invalid.join(", ")}`);
     const plane = this.datumRegistry.requireCurrentPlane(planeIdentity, state.documentToken, state.revision);
     const factoryBinding = placement === "source" ? "CreateOutlineFromShellsFactory" : "ProjectOutlineFromShellsFactory";
-    await this.runtime.mutate(`async function (Factory, Database, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Database, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const viewport = Array.from(this.viewports)[0];
@@ -6125,7 +6142,7 @@ export class PlasticityOperations {
     if (!Number.isInteger(count) || count < 2 || count > 1000) {
       throw new Error("Curve-pattern count must be an integer between 2 and 1000");
     }
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -6168,10 +6185,10 @@ export class PlasticityOperations {
     const completion = options.completion ?? "none";
     const completionName = ({ none: "None", edge: "Edge", "face-set": "FaceSet" } as const)[completion];
     if (!completionName) throw new Error(`Unsupported projection completion: ${completion}`);
-    await this.runtime.mutate(`async function (Factory, Vector, ProjectionMethod, ProjectionCompletionType, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Vector, ProjectionMethod, ProjectionCompletionType, args) {
       const find = id => {
-        for (const [versionId, item] of this.geo.geometryModel) {
-          if (this.db.lookupStableId(versionId) === id) return item.view;
+        for (const [versionId, item] of nativeApi.geo.geometryModel) {
+          if (nativeApi.db.lookupStableId(versionId) === id) return item.view;
         }
         throw new Error('Unknown body ID: ' + id);
       };
@@ -6220,7 +6237,7 @@ export class PlasticityOperations {
       return type !== "Solid" && type !== "Sheet";
     });
     if (invalid.length > 0) throw new Error(`Body intersection tools must be current Solid or Sheet bodies: ${invalid.join(", ")}`);
-    await this.runtime.mutate(`async function (Command, Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Command, Factory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -6275,7 +6292,7 @@ export class PlasticityOperations {
     if (!Number.isFinite(projectionDepthMm) || projectionDepthMm <= 0) {
       throw new Error("Curve projection depth must be positive");
     }
-    await this.runtime.mutate(`async function (Command, Factory, Vector, args) {
+    await this.runtime.mutate(nativeFunction`async function (Command, Factory, Vector, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -6325,7 +6342,7 @@ export class PlasticityOperations {
     if (!Number.isInteger(count) || count < 1 || count > 1000) {
       throw new Error("Isoparam count must be an integer between 1 and 1000");
     }
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findFaceViews}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -6359,7 +6376,7 @@ export class PlasticityOperations {
     if (invalid.length > 0) {
       throw new Error(`Surface degree elevation requires current B-Surface faces: ${invalid.map((face) => `${face.bodyId}:${face.faceId}`).join(", ")}`);
     }
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findFaceViews}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -6389,7 +6406,7 @@ export class PlasticityOperations {
     if (!Number.isFinite(toleranceMm) || toleranceMm <= 0 || toleranceMm > 10) {
       throw new Error("Face rebuild tolerance must be positive and no greater than 10 mm");
     }
-    await this.runtime.mutate(`async function (Factory, Command, RebuildFaceMethod, ChangeEdgeMethod, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, RebuildFaceMethod, ChangeEdgeMethod, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -6438,7 +6455,7 @@ export class PlasticityOperations {
     if (invalidBodies.length > 0) {
       throw new Error(`Face matching requires current Solid or Sheet bodies: ${invalidBodies.join(", ")}`);
     }
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -6480,7 +6497,7 @@ export class PlasticityOperations {
       return type !== "Solid" && type !== "Sheet";
     });
     if (invalidBodies.length > 0) throw new Error(`Surface untrim requires current Solid or Sheet bodies: ${invalidBodies.join(", ")}`);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findFaceViews}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -6504,8 +6521,8 @@ export class PlasticityOperations {
   async imprintCurvesOnBody(
     targetId: number,
     curveIds: number[],
-    direction: Vector3,
-    options: { bidirectional?: boolean; occlude?: boolean; completion?: "none" | "edge" | "face-set" },
+    direction: Vector3 | undefined,
+    options: { projectionMethod?: "vector" | "normal"; bidirectional?: boolean; occlude?: boolean; completion?: "none" | "edge" | "face-set" },
     revision: string,
   ): Promise<RuntimeState> {
     await this.assertRevision(revision);
@@ -6513,13 +6530,16 @@ export class PlasticityOperations {
     const uniqueIds = [...new Set(curveIds)];
     if (uniqueIds.length !== curveIds.length) throw new Error("Wire IDs must be unique");
     if (uniqueIds.includes(targetId)) throw new Error("Imprint curves must not include the target body");
-    const length = Math.hypot(...direction);
-    if (!Number.isFinite(length) || length === 0) throw new Error("Imprint direction must be nonzero");
-    const normalizedDirection = direction.map((value) => value / length) as Vector3;
+    const projectionMethod = options.projectionMethod ?? "vector";
+    if (projectionMethod !== "vector" && projectionMethod !== "normal") throw new Error("Unsupported imprint projection method");
+    if (projectionMethod === "normal" && direction !== undefined) throw new Error("Imprint direction is only valid for vector projection");
+    const length = direction ? Math.hypot(...direction) : 0;
+    if (projectionMethod === "vector" && (!Number.isFinite(length) || length === 0)) throw new Error("Imprint vector direction must be nonzero");
+    const normalizedDirection = direction ? direction.map((value) => value / length) as Vector3 : null;
     const completion = options.completion ?? "none";
     const completionName = ({ none: "None", edge: "Edge", "face-set": "FaceSet" } as const)[completion];
     if (!completionName) throw new Error(`Unsupported imprint completion: ${completion}`);
-    await this.runtime.mutate(`async function (Factory, Vector, ProjectionMethod, ProjectionCompletionType, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Vector, ProjectionMethod, ProjectionCompletionType, args) {
       ${findView}
       ${commandStart("ImprintCurveBodyCommand")}
       const target = find(args.targetId);
@@ -6531,8 +6551,8 @@ export class PlasticityOperations {
       });
       factory.target = target;
       factory.curves = curves;
-      factory.method = ProjectionMethod.Vector;
-      factory.direction.copy(new Vector(...args.direction));
+      factory.method = ProjectionMethod[args.projectionMethodName];
+      if (args.direction) factory.direction.copy(new Vector(...args.direction));
       factory.bidirectional = args.bidirectional;
       factory.occlude = args.occlude;
       factory.complete = ProjectionCompletionType[args.completionName];
@@ -6541,6 +6561,7 @@ export class PlasticityOperations {
       targetId,
       curveIds: uniqueIds,
       direction: normalizedDirection,
+      projectionMethodName: projectionMethod === "normal" ? "Normal" : "Vector",
       bidirectional: options.bidirectional ?? false,
       occlude: options.occlude ?? true,
       completionName,
@@ -6566,7 +6587,7 @@ export class PlasticityOperations {
       return type !== "Solid" && type !== "Sheet";
     });
     if (invalid.length > 0) throw new Error(`Body imprint tools must be current Solid or Sheet bodies: ${invalid.join(", ")}`);
-    await this.runtime.mutate(`async function (Command, Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Command, Factory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -6621,14 +6642,14 @@ export class PlasticityOperations {
     if (!Number.isFinite(twistDegrees)) throw new Error("Sweep twist must be finite");
     const alignmentName = ({ normal: "Normal", parallel: "Parallel", transport: "Transport" } as const)[options.alignment ?? "normal"];
     const cornerName = ({ miter: "Mitre", round: "Round" } as const)[options.corner ?? "miter"];
-    await this.runtime.mutate(`async function (Factory, SweepAlignmentType, SweepCornerType, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, SweepAlignmentType, SweepCornerType, args) {
       ${commandStart("SweepCommand")}
       const wanted = new Set(args.regionIds);
       const regions = [];
       let spine;
-      for (const [versionId, item] of editor.geo.geometryModel) {
-        if (editor.db.lookupStableId(versionId) === args.spineId) spine = item.view;
-        if (!editor.geo.automatics.has(versionId) || item.view?.constructor?.name !== 'SketchIsland') continue;
+      for (const [versionId, item] of nativeApi.geo.geometryModel) {
+        if (nativeApi.db.lookupStableId(versionId) === args.spineId) spine = item.view;
+        if (!nativeApi.geo.automatics.has(versionId) || item.view?.constructor?.name !== 'SketchIsland') continue;
         for (let index = 0; index < (item.view.regions?.length ?? 0); index += 1) {
           const region = item.view.regions.get(index);
           if (region && wanted.has(String(region.versionId))) regions.push(region);
@@ -6684,12 +6705,12 @@ export class PlasticityOperations {
     const profileWireIds = new Set(selected.flatMap((region) => region!.sketchWireIds));
     const profileGuides = guideIds.filter((id) => profileWireIds.has(id));
     if (profileGuides.length > 0) throw new Error(`Loft guide must not reuse a profile Wire: ${profileGuides.join(", ")}`);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("LoftCommand")}
       const available = new Map();
-      for (const [versionId, item] of editor.geo.geometryModel) {
-        if (!editor.geo.automatics.has(versionId) || item.view?.constructor?.name !== 'SketchIsland') continue;
+      for (const [versionId, item] of nativeApi.geo.geometryModel) {
+        if (!nativeApi.geo.automatics.has(versionId) || item.view?.constructor?.name !== 'SketchIsland') continue;
         for (let index = 0; index < (item.view.regions?.length ?? 0); index += 1) {
           const region = item.view.regions.get(index);
           if (region) available.set(String(region.versionId), region);
@@ -6755,7 +6776,7 @@ export class PlasticityOperations {
     }
     const curvature = ({ natural: "Natural", unconstrained: "Unconstrained", clamped: "Clamped" } as const)[options.curvature ?? "unconstrained"];
 
-    await this.runtime.mutate(`async function (Factory, Command, Curvature, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, Curvature, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -6838,7 +6859,7 @@ export class PlasticityOperations {
     const startCondition = conditionNames[options.startCondition ?? "unconstrained"];
     const endCondition = conditionNames[options.endCondition ?? "unconstrained"];
 
-    await this.runtime.mutate(`async function (Factory, Command, Curvature, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, Curvature, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -6902,12 +6923,12 @@ export class PlasticityOperations {
     const availableIds = new Set(state.regions.map((region) => region.id));
     const missing = uniqueIds.filter((id) => !availableIds.has(id));
     if (missing.length > 0) throw new Error(`Stale or unknown regions: ${missing.join(", ")}`);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${commandStart("PatchCommand")}
       const wanted = new Set(args.regionIds);
       const regions = [];
-      for (const [versionId, item] of editor.geo.geometryModel) {
-        if (!editor.geo.automatics.has(versionId) || item.view?.constructor?.name !== 'SketchIsland') continue;
+      for (const [versionId, item] of nativeApi.geo.geometryModel) {
+        if (!nativeApi.geo.automatics.has(versionId) || item.view?.constructor?.name !== 'SketchIsland') continue;
         for (let index = 0; index < (item.view.regions?.length ?? 0); index += 1) {
           const region = item.view.regions.get(index);
           if (region && wanted.has(String(region.versionId))) regions.push(region);
@@ -6916,6 +6937,8 @@ export class PlasticityOperations {
       const found = new Set(regions.map(region => String(region.versionId)));
       const missing = args.regionIds.filter(id => !found.has(id));
       if (missing.length > 0) throw new Error('Stale or unknown regions: ' + missing.join(', '));
+      // Clear inside the command so a selected profile cannot start a follow-up move.
+      editor.selection.selected.removeAll();
       factory.regions = regions;
       ${commandEnd}
     }`, ["PatchRegionFactory"], [{ regionIds: uniqueIds }]);
@@ -6932,11 +6955,11 @@ export class PlasticityOperations {
     if (missing.length > 0) throw new Error(`Unknown current closed-Wire patch body IDs: ${missing.join(", ")}`);
     const invalid = ids.filter((id) => current.get(id)!.type !== "Wire");
     if (invalid.length > 0) throw new Error(`Closed-Wire patching requires current Wire bodies: ${invalid.join(", ")}`);
-    const closure = await this.runtime.read<Array<{ id: number; closed: boolean }>>(`function (ids) {
+    const closure = await this.runtime.read<Array<{ id: number; closed: boolean }>>(nativeFunction`function (ids) {
       const wanted = new Set(ids);
       const result = [];
-      for (const [versionId, item] of this.geo.geometryModel) {
-        const id = this.db.lookupStableId(versionId);
+      for (const [versionId, item] of nativeApi.geo.geometryModel) {
+        const id = nativeApi.db.lookupStableId(versionId);
         if (!wanted.has(id)) continue;
         if (item.view?.constructor?.name !== 'Wire') throw new Error('Closed-Wire patch source is no longer a Wire: ' + id);
         result.push({ id, closed: Boolean(item.model?.IsClosed?.()) });
@@ -6949,12 +6972,12 @@ export class PlasticityOperations {
     if (unresolved.length > 0) throw new Error(`Closed-Wire patch sources changed while being inspected: ${unresolved.join(", ")}`);
     const open = ids.filter((id) => closureById.get(id) !== true);
     if (open.length > 0) throw new Error(`Surface patching requires closed Wire bodies: ${open.join(", ")}`);
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
       const findWire = id => {
-        for (const [versionId, item] of editor.geo.geometryModel) {
-          if (editor.db.lookupStableId(versionId) !== id) continue;
+        for (const [versionId, item] of nativeApi.geo.geometryModel) {
+          if (nativeApi.db.lookupStableId(versionId) !== id) continue;
           if (item.view?.constructor?.name !== 'Wire' || !item.model?.IsClosed?.()) {
             throw new Error('Surface patch source must remain a closed Wire: ' + id);
           }
@@ -7004,7 +7027,7 @@ export class PlasticityOperations {
     if (invalid.length > 0) {
       throw new Error(`Surface Bridge requires current Sheet faces; stale or unknown: ${invalid.map((reference) => `${reference.bodyId}:${reference.faceId}`).join(", ")}`);
     }
-    await this.runtime.mutate(`async function (Factory, Vector, BlendShape, BlendTrim, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Vector, BlendShape, BlendTrim, args) {
       ${findView}
       ${commandStart("BridgeSurfaceCommand")}
       const face = ref => {
@@ -7042,7 +7065,7 @@ export class PlasticityOperations {
     if (uniqueIds.length !== ids.length) throw new Error("Sheet IDs must be unique");
     const invalid = uniqueIds.filter((id) => state.bodies.find((body) => body.id === id)?.type !== "Sheet");
     if (invalid.length > 0) throw new Error(`Join requires current Sheet bodies: ${invalid.join(", ")}`);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("JoinSheetsCommand")}
       factory.sheets = args.ids.map(id => {
@@ -7114,7 +7137,7 @@ export class PlasticityOperations {
     if (invalid.length > 0) {
       throw new Error(`Stale or unknown faces: ${invalid.map((face) => `${face.bodyId}:${face.faceId}`).join(", ")}`);
     }
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("CreateSolidFromFacesCommand")}
       factory.faces = args.faces.map(ref => {
@@ -7135,7 +7158,7 @@ export class PlasticityOperations {
     if (descriptor.surfaceType !== "Cylinder") {
       throw new Error(`Exact face unwrapping requires an analytic Cylinder face: ${face.bodyId}:${face.faceId}`);
     }
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -7387,7 +7410,7 @@ export class PlasticityOperations {
         throw new Error(`${name} must be positive and at most 1000`);
       }
     }
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findView}
       const findFace = ref => {
         const view = find(ref.bodyId);
@@ -7410,8 +7433,7 @@ export class PlasticityOperations {
             }
             return Array.from({ length: view.high.faces.length }, (_, index) => view.high.faces.get(index));
           });
-          factory.sourceFace = findFace(args.sourceFace);
-          factory.targetFace = findFace(args.targetFace);
+          nativeApi.setDeformationFaces(factory, findFace(args.sourceFace), findFace(args.targetFace));
           factory.keepTools = true;
           factory.scaleU = args.options.scaleU;
           factory.scaleV = args.options.scaleV;
@@ -7472,7 +7494,7 @@ export class PlasticityOperations {
         throw new Error(`${name} must be positive and at most 1000`);
       }
     }
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findView}
       const findFace = ref => {
         const view = find(ref.bodyId);
@@ -7493,8 +7515,7 @@ export class PlasticityOperations {
             if (view.constructor.name !== 'Wire') throw new Error('Curve deformation inputs must remain Wire bodies');
             return view;
           });
-          factory.sourceFace = findFace(args.sourceFace);
-          factory.targetFace = findFace(args.targetFace);
+          nativeApi.setDeformationFaces(factory, findFace(args.sourceFace), findFace(args.targetFace));
           factory.keepTools = true;
           factory.scaleU = args.options.scaleU;
           factory.scaleV = args.options.scaleV;
@@ -7527,7 +7548,7 @@ export class PlasticityOperations {
     if (invalid.length > 0) {
       throw new Error(`Stale or unknown edges: ${invalid.map((edge) => `${edge.bodyId}:${edge.edgeId}`).join(", ")}`);
     }
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("DuplicateEdgeAndProjectCommand")}
       factory.edges = args.edges.map(ref => {
@@ -7554,7 +7575,7 @@ export class PlasticityOperations {
     if (invalid.length > 0) {
       throw new Error(`Stale or unknown faces: ${invalid.map((face) => `${face.bodyId}:${face.faceId}`).join(", ")}`);
     }
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("UnjoinFacesCommand")}
       factory.faces = args.faces.map(ref => {
@@ -7583,7 +7604,7 @@ export class PlasticityOperations {
     if (missing.length > 0) throw new Error(`Stale or unknown target Sheet edges: ${missing.join(", ")}`);
     const nonBoundary = selected.filter((edge) => edge!.faceIds.length !== 1).map((edge) => edge!.id);
     if (nonBoundary.length > 0) throw new Error(`Sheet insertion requires target boundary edges: ${nonBoundary.join(", ")}`);
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -7626,12 +7647,22 @@ export class PlasticityOperations {
     if (invalid.length > 0) throw new Error(`Shell unjoin requires current Solid or Sheet bodies: ${invalid.join(", ")}`);
     const singleFace = ids.filter((id) => current.get(id)!.faceIds.length < 2);
     if (singleFace.length > 0) throw new Error(`Shell unjoin requires bodies with at least two faces: ${singleFace.join(", ")}`);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, SheetFactory, args) {
       ${findView}
-      ${commandStart("UnjoinShellsCommand")}
-      factory.shells = args.ids.map(find);
-      ${commandEnd}
-    }`, ["UnjoinShellsFactory"], [{ ids }]);
+      if (this.executor.isBusy) throw new Error('Plasticity is busy');
+      const editor = this;
+      let failure;
+      const command = new this.commands.UnjoinShellsCommand(this);
+      command.remember = false;
+      command.execute = async function () {
+        try {
+          const factory = nativeApi.createUnjoinFactory(Factory, SheetFactory, args.ids.map(find)).resource(this);
+          return await factory.commit();
+        } catch (error) { failure = error; throw error; }
+      };
+      await this.exec(command);
+      if (failure) throw failure;
+    }`, ["UnjoinShellsFactory", "CreateSheetFromFacesFactory"], [{ ids }]);
     return await this.state();
   }
 
@@ -7643,7 +7674,7 @@ export class PlasticityOperations {
     if (state.bodies.find((body) => body.id === id)?.type !== "Sheet") {
       throw new Error(`Solid creation requires a current Sheet body: ${id}`);
     }
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("CreateSolidFromFacesCommand")}
       const view = find(args.id);
@@ -7668,7 +7699,7 @@ export class PlasticityOperations {
     if (invalid.length > 0) {
       throw new Error(`Stale or unknown faces: ${invalid.map((face) => `${face.bodyId}:${face.faceId}`).join(", ")}`);
     }
-    await this.runtime.mutate(`async function (Command, Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Command, Factory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -7709,7 +7740,7 @@ export class PlasticityOperations {
     if (invalid.length > 0) {
       throw new Error(`Stale or unknown faces: ${invalid.map((face) => `${face.bodyId}:${face.faceId}`).join(", ")}`);
     }
-    await this.runtime.mutate(`async function (Command, Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Command, Factory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -7752,7 +7783,7 @@ export class PlasticityOperations {
     if (missing.length > 0) throw new Error(`Stale or unknown Sheet edges: ${missing.join(", ")}`);
     const nonBoundary = selected.filter((edge) => edge!.faceIds.length !== 1).map((edge) => edge!.id);
     if (nonBoundary.length > 0) throw new Error(`Hole patch requires boundary edges: ${nonBoundary.join(", ")}`);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("PatchCommand")}
       const view = find(args.id);
@@ -7778,7 +7809,7 @@ export class PlasticityOperations {
     if (uniqueIds.length !== ids.length) throw new Error("Sheet IDs must be unique");
     const invalid = uniqueIds.filter((id) => state.bodies.find((body) => body.id === id)?.type !== "Sheet");
     if (invalid.length > 0) throw new Error(`Hole capping requires current Sheet bodies: ${invalid.join(", ")}`);
-    await this.runtime.mutate(`async function (Command, Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Command, Factory, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -7817,7 +7848,7 @@ export class PlasticityOperations {
     if (missing.length > 0) throw new Error(`Stale or unknown Sheet edges: ${missing.join(", ")}`);
     const nonBoundary = selected.filter((edge) => edge!.faceIds.length !== 1).map((edge) => edge!.id);
     if (nonBoundary.length > 0) throw new Error(`Sheet extension requires boundary edges: ${nonBoundary.join(", ")}`);
-    await this.runtime.mutate(`async function (Factory, ExtensionShape, BodyExtensionType, ExtensionLimit, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, ExtensionShape, BodyExtensionType, ExtensionLimit, args) {
       ${findView}
       ${commandStart("ExtendSheetCommand")}
       const view = find(args.id);
@@ -7858,11 +7889,11 @@ export class PlasticityOperations {
     const missing = uniqueIds.filter((_id, index) => !bodies[index]);
     if (missing.length > 0) throw new Error(`Unknown body IDs: ${missing.join(", ")}`);
 
-    const nativeChecks = await this.runtime.readNative<Array<{ id: number; nativeCheckCodes: number[] }>>(`function (args) {
+    const nativeChecks = await this.runtime.readNative<Array<{ id: number; nativeCheckCodes: number[] }>>(nativeFunction`function (args) {
       const wanted = new Set(args.ids);
       const result = [];
-      for (const [versionId, item] of this.geo.geometryModel) {
-        const id = this.db.lookupStableId(versionId);
+      for (const [versionId, item] of nativeApi.geo.geometryModel) {
+        const id = nativeApi.db.lookupStableId(versionId);
         if (!wanted.has(id)) continue;
         const model = item.model;
         if (!model || typeof model.Check !== 'function') throw new Error('Native Check is unavailable for body ID: ' + id);
@@ -7923,7 +7954,7 @@ export class PlasticityOperations {
     if (!Number.isFinite(wallThicknessMm) || wallThicknessMm < 0) throw new Error("Pipe wall thickness must be nonnegative");
     const invalid = uniqueIds.filter((id) => state.bodies.find((body) => body.id === id)?.type !== "Wire");
     if (invalid.length > 0) throw new Error(`Pipe requires current Wire spines: ${invalid.join(", ")}`);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("PipeCommand")}
       const spines = args.spineIds.map(id => {
@@ -7951,7 +7982,7 @@ export class PlasticityOperations {
     revision: string,
   ): Promise<RuntimeState> {
     await this.assertRevision(revision);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("RevolveCommand")}
       const view = find(args.id);
@@ -7977,7 +8008,7 @@ export class PlasticityOperations {
     revision: string,
   ): Promise<RuntimeState> {
     await this.assertRevision(revision);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("ThickenSheetCommand")}
       const sheets = args.ids.map(find);
@@ -8007,7 +8038,7 @@ export class PlasticityOperations {
     if (referenceFace.bodyId === id && faceIds.includes(referenceFace.faceId)) {
       throw new Error("Draft faces must not include the neutral reference face");
     }
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("DraftFaceCommand")}
       const view = find(args.id);
@@ -8030,7 +8061,7 @@ export class PlasticityOperations {
 
   async offsetFaces(id: number, faceIds: string[], distanceMm: number, revision: string): Promise<RuntimeState> {
     await this.assertRevision(revision);
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("OffsetFaceCommand")}
       const view = find(args.id);
@@ -8052,7 +8083,7 @@ export class PlasticityOperations {
     if (deltaMm.some((value) => !Number.isFinite(value)) || Math.hypot(...deltaMm) === 0) {
       throw new Error("Face move delta must be a finite nonzero vector");
     }
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findFaceViews}
       ${commandStart("MoveFaceCommand")}
       factory.faces = selectedFaces;
@@ -8074,7 +8105,7 @@ export class PlasticityOperations {
     if (pivotMm.some((value) => !Number.isFinite(value))) throw new Error("Face rotation pivot must be finite");
     if (!Number.isFinite(degrees) || degrees === 0) throw new Error("Face rotation angle must be finite and nonzero");
     const unitAxis = normalize(axis, "Face rotation axis");
-    await this.runtime.mutate(`async function (Factory, Vector, Quaternion, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Vector, Quaternion, args) {
       ${findFaceViews}
       ${commandStart("RotateFaceCommand")}
       factory.faces = selectedFaces;
@@ -8103,7 +8134,7 @@ export class PlasticityOperations {
       throw new Error("Face scale factors must be finite and positive");
     }
     if (factors.every((value) => value === 1)) throw new Error("Face scale must change at least one factor");
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findFaceViews}
       ${commandStart("ScaleFaceCommand")}
       factory.faces = selectedFaces;
@@ -8129,7 +8160,7 @@ export class PlasticityOperations {
       throw new Error("Face-thickening front and back distances must be finite and nonnegative");
     }
     if (frontMm === 0 && backMm === 0) throw new Error("Face thickening requires a positive front or back distance");
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findFaceViews}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -8167,7 +8198,7 @@ export class PlasticityOperations {
     const body = state.bodies.find((candidate) => candidate.id === references[0]!.bodyId)!;
     if (body.type !== "Solid" && body.type !== "Sheet") throw new Error("Native face-loop offset requires a Solid or Sheet body");
     if (!Number.isFinite(distanceMm) || distanceMm === 0) throw new Error("Face-loop offset distance must be finite and nonzero");
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findFaceViews}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -8199,7 +8230,7 @@ export class PlasticityOperations {
     requireSingleTopologyBody(references, "Patched Solid edge loops");
     const body = state.bodies.find((candidate) => candidate.id === references[0]!.bodyId)!;
     if (body.type !== "Solid") throw new Error("Native Solid edge-loop patching requires a Solid body");
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findEdgeViews}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -8226,7 +8257,7 @@ export class PlasticityOperations {
     if (deltaMm.some((value) => !Number.isFinite(value)) || Math.hypot(...deltaMm) === 0) {
       throw new Error("Edge move delta must be a finite nonzero vector");
     }
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findEdgeViews}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -8253,7 +8284,7 @@ export class PlasticityOperations {
     requireTopologySelection(state, references, "edge");
     requireSingleTopologyBody(references, "Offset edges");
     if (!Number.isFinite(distanceMm) || distanceMm === 0) throw new Error("Edge offset distance must be finite and nonzero");
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findEdgeViews}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -8279,7 +8310,7 @@ export class PlasticityOperations {
     const state = await this.assertRevision(revision);
     requireTopologySelection(state, references, "edge");
     requireSingleTopologyBody(references, "Deleted edges");
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       ${findEdgeViews}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -8316,14 +8347,14 @@ export class PlasticityOperations {
     if (!Number.isFinite(distanceMm) || distanceMm <= 0) {
       throw new Error("Shell-vertex offset distance must be finite and positive");
     }
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, pk_default, args) {
       const wanted = new Set(args.vertices.map(reference => reference.bodyId + ':' + reference.vertexId));
       const selectedByKey = new Map();
-      for (const entry of this.snaps.cache.entries ?? []) {
+      for (const entry of nativeApi.pointSnapEntries()) {
         for (let index = 0; index < (entry.positions?.length ?? 0) / 3; index += 1) {
           const snap = entry.lookup(index);
-          if (snap?.constructor?.name !== 'Snaps_ShellVertexSnap') continue;
-          const bodyId = this.db.lookupStableId(snap.item?.versionId);
+          if (!['Snaps_ShellVertexSnap', 'ShellVertexSnap'].includes(snap?.constructor?.name)) continue;
+          const bodyId = nativeApi.db.lookupStableId(snap.item?.versionId);
           const vertexId = snap.model?.Id?.();
           const key = bodyId + ':' + vertexId;
           if (wanted.has(key)) selectedByKey.set(key, snap);
@@ -8340,18 +8371,14 @@ export class PlasticityOperations {
       command.execute = async function () {
         try {
           const factory = new Factory(editor).resource(this);
-          factory.vertices = selectedSnaps.map(snap => snap.model);
-          if (!factory._vertices || !Array.isArray(factory._vertices.views)) {
-            throw new Error('Plasticity 26.1.3 shell-vertex ownership bridge is unavailable');
-          }
-          factory._vertices.views = selectedSnaps.map(snap => ({ parentItem: snap.item, position: snap.position }));
+          nativeApi.configureOffsetVertices(factory, selectedSnaps, pk_default.a);
           factory.distance = args.distance;
           return await factory.commit();
         } catch (error) { failure = error; throw error; }
       };
       await editor.exec(command);
       if (failure) throw failure;
-    }`, ["OffsetVertexFactory", "OffsetVertexCommand"], [{ vertices: references, distance: millimetersToMeters(distanceMm) }]);
+    }`, ["OffsetVertexFactory", "OffsetVertexCommand", "pk_default"], [{ vertices: references, distance: millimetersToMeters(distanceMm) }]);
     return await this.state();
   }
 
@@ -8377,7 +8404,7 @@ export class PlasticityOperations {
     if (!Number.isFinite(spacing1Mm) || spacing1Mm <= 0) throw new Error("Rectangular face pattern spacing1 must be positive");
     if (!Number.isFinite(spacing2Mm) || spacing2Mm < 0 || (count2 > 1 && spacing2Mm === 0)) throw new Error("Rectangular face pattern spacing2 must be positive when count2 is greater than one");
     if (count2 > 1 && nearlyParallel(unitDirection1, unitDirection2)) throw new Error("Rectangular face pattern directions must not be parallel");
-    await this.runtime.mutate(`async function (Factory, Command, Vector, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, Vector, args) {
       ${findFaceViews}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -8431,7 +8458,7 @@ export class PlasticityOperations {
     const unitAxis = normalize(axis, "Radial face pattern axis");
     if (!Number.isInteger(count) || count < 2 || count > 1000) throw new Error("Radial face pattern count must be an integer between 2 and 1000");
     if (!Number.isFinite(sweepDegrees) || sweepDegrees <= 0 || sweepDegrees > 360) throw new Error("Radial face pattern sweep must be greater than zero and at most 360 degrees");
-    await this.runtime.mutate(`async function (Factory, Command, Vector, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, Vector, args) {
       ${findFaceViews}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -8477,7 +8504,7 @@ export class PlasticityOperations {
   ): Promise<RuntimeState> {
     await this.assertRevision(revision);
     const signedThickness = direction === "inward" ? -wallThicknessMm : wallThicknessMm;
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("HollowFacesCommand")}
       const view = find(args.id);
@@ -8512,7 +8539,7 @@ export class PlasticityOperations {
     const invalid = ids.filter((id) => !currentSolids.has(id));
     if (invalid.length > 0) throw new Error(`Closed hollowing requires current Solids: ${invalid.join(", ")}`);
     const signedThickness = direction === "inward" ? -wallThicknessMm : wallThicknessMm;
-    await this.runtime.mutate(`async function (Factory, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("HollowSolidsCommand")}
       const solids = args.ids.map(find);
@@ -8535,18 +8562,38 @@ export class PlasticityOperations {
     revision: string,
   ): Promise<RuntimeState> {
     await this.assertRevision(revision);
-    await this.runtime.mutate(`async function (Factory, args) {
+    if (new Set(ids).size !== ids.length) throw new Error("Mirror body IDs must be unique");
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
       ${commandStart("MirrorCommand")}
-      factory.shells = args.ids.map(find);
+      const originals = args.ids.map(find);
+      const beforeIds = new Set(Array.from(nativeApi.geo.geometryModel.keys(), versionId => nativeApi.db.lookupStableId(versionId)));
+      factory.shells = originals;
       factory.origin.fromArray(args.origin);
       factory.normal.fromArray(args.normal);
-      factory.move = !args.keepOriginal;
+      // Native move is a mirror-offset distance, not a copy/replace flag.
+      factory.move = 0;
       // MirrorFactory defaults to shouldCut = true (Plasticity's symmetry mode, which may trim sources that cross
       // the plane). This tool is a plain mirror, so it never cuts or unions.
       factory.shouldCut = false;
       factory.shouldUnion = false;
-      ${commandEnd}
+      const result = await factory.commit();
+      if (!args.keepOriginal) {
+        const reflected = Array.from(nativeApi.geo.geometryModel).filter(([versionId, item]) => {
+          const id = nativeApi.db.lookupStableId(versionId);
+          return Number.isInteger(id) && !beforeIds.has(id)
+            && originals.some(original => original.constructor.name === item.view?.constructor?.name);
+        });
+        if (reflected.length !== originals.length) throw new Error('Mirror did not create one reflected body per source; originals were not deleted');
+        const transaction = nativeApi.db.makeTransaction();
+        for (const original of originals) transaction.delete(original);
+        await nativeApi.db.commit(transaction);
+      }
+      return result;
+    } catch (error) { failure = error; throw error; }
+    };
+    await this.exec(command);
+    if (failure) throw failure;
     }`, ["MirrorFactory"], [{ ids, origin: toMeters(planeOriginMm), normal: planeNormal, keepOriginal }]);
     return await this.state();
   }
@@ -8563,7 +8610,7 @@ export class PlasticityOperations {
   ): Promise<RuntimeState> {
     await this.assertRevision(revision);
     if (count2 > 1 && nearlyParallel(direction1, direction2)) throw new Error("Rectangular pattern directions must not be parallel");
-    await this.runtime.mutate(`async function (Factory, Vector, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Vector, args) {
       ${findView}
       ${commandStart("RectangularArrayCommand")}
       factory.items = args.ids.map(find);
@@ -8596,7 +8643,7 @@ export class PlasticityOperations {
     revision: string,
   ): Promise<RuntimeState> {
     await this.assertRevision(revision);
-    await this.runtime.mutate(`async function (Factory, Vector, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Vector, args) {
       ${findView}
       ${commandStart("RadialArrayCommand")}
       const axis = new Vector(...args.axis).normalize();
@@ -8622,7 +8669,7 @@ export class PlasticityOperations {
 
   async rename(id: number, name: string, revision: string): Promise<RuntimeState> {
     await this.assertRevision(revision);
-    await this.runtime.mutate(`async function (args) {
+    await this.runtime.mutate(nativeFunction`async function (args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
@@ -8632,7 +8679,7 @@ export class PlasticityOperations {
       const command = new this.commands.GroupSelectedCommand(this);
       command.remember = false;
       command.execute = async function () {
-        try { editor.db.nodes.setName(editor.db.nodes.item2key(view), args.name); }
+        try { nativeApi.db.nodes.setName(nativeApi.db.nodes.item2key(view), args.name); }
         catch (error) { failure = error; throw error; }
       };
       await this.exec(command);
@@ -8643,7 +8690,7 @@ export class PlasticityOperations {
 
   async remove(ids: number[], revision: string): Promise<RuntimeState> {
     await this.assertRevision(revision);
-    await this.runtime.mutate(`async function (args) {
+    await this.runtime.mutate(nativeFunction`async function (args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       this.selection.selected.removeAll();
@@ -8706,7 +8753,7 @@ export class PlasticityOperations {
     const staging = await mkdtemp(join(dirname(output), ".plasticity-step-"));
     const temporary = join(staging, "geometry.step");
     try {
-      await this.runtime.mutate(`async function (Factory, args) {
+      await this.runtime.mutate(nativeFunction`async function (Factory, args) {
         ${findView}
         if (this.executor.isBusy) throw new Error('Plasticity is busy');
         const factory = new Factory(this);
@@ -8741,7 +8788,7 @@ export class PlasticityOperations {
     const staging = await mkdtemp(join(dirname(output), ".plasticity-parasolid-"));
     const temporary = join(staging, `geometry${extension}`);
     try {
-      await this.runtime.mutate(`async function (Factory, args) {
+      await this.runtime.mutate(nativeFunction`async function (Factory, args) {
         ${findView}
         if (this.executor.isBusy) throw new Error('Plasticity is busy');
         const factory = new Factory(this);
@@ -8779,7 +8826,7 @@ export class PlasticityOperations {
     const staging = await mkdtemp(join(dirname(output), ".plasticity-stl-"));
     const temporary = join(staging, "geometry.stl");
     try {
-      await this.runtime.mutate(`async function (Factory, args) {
+      await this.runtime.mutate(nativeFunction`async function (Factory, args) {
         ${findView}
         if (this.executor.isBusy) throw new Error('Plasticity is busy');
         const factory = new Factory(this);
@@ -8835,7 +8882,7 @@ export class PlasticityOperations {
     const staging = await mkdtemp(join(dirname(output), ".plasticity-3mf-"));
     const temporary = join(staging, "geometry.3mf");
     try {
-      await this.runtime.mutate(`async function (Factory, args) {
+      await this.runtime.mutate(nativeFunction`async function (Factory, args) {
         ${findView}
         if (this.executor.isBusy) throw new Error('Plasticity is busy');
         const factory = new Factory(this);
@@ -8898,7 +8945,7 @@ export class PlasticityOperations {
     const staging = await mkdtemp(join(dirname(output), ".plasticity-obj-"));
     const temporary = join(staging, "geometry.obj");
     try {
-      await this.runtime.mutate(`async function (Factory, args) {
+      await this.runtime.mutate(nativeFunction`async function (Factory, args) {
         ${findView}
         if (this.executor.isBusy) throw new Error('Plasticity is busy');
         const factory = new Factory(this);
@@ -8995,7 +9042,7 @@ export class PlasticityOperations {
         rationalConic: { fitSamplesMm: Vector3[]; validationSamplesMm: Vector3[]; startTangent: Vector3 } | null;
         approximation: { pointsMm: Vector3[]; maxChordDeviationMm: number } | null;
       }>;
-    }>>(`function (args) {
+    }>>(nativeFunction`function (args) {
       const tessellateCurve = (${tessellateCurve.toString()});
       const isExactSvgCubicPolynomialDegree = (${isExactSvgCubicPolynomialDegree.toString()});
       const mm = value => value * 1000;
@@ -9010,8 +9057,8 @@ export class PlasticityOperations {
       let totalApproximationPoints = 0;
       for (const wantedId of args.ids) {
         let found;
-        for (const [versionId, item] of this.geo.geometryModel) {
-          if (this.db.lookupStableId(versionId) === wantedId) { found = [versionId, item]; break; }
+        for (const [versionId, item] of nativeApi.geo.geometryModel) {
+          if (nativeApi.db.lookupStableId(versionId) === wantedId) { found = [versionId, item]; break; }
         }
         if (!found) throw new Error('Unknown current Wire ID: ' + wantedId);
         const [versionId, item] = found;
@@ -9021,7 +9068,7 @@ export class PlasticityOperations {
         if (!basis || !edges) throw new Error('SVG export requires a planar native Wire: ' + wantedId);
         let closed = true;
         for (const vertex of Array.from(item.view.vertices ?? [])) {
-          if (this.db.lookupTopologyItem(vertex).IsSpur()) { closed = false; break; }
+          if (nativeApi.db.lookupTopologyItem(vertex).IsSpur()) { closed = false; break; }
         }
         const segments = [];
         for (let index = 0; index < edges.Size(); index++) {
@@ -9494,11 +9541,11 @@ export class PlasticityOperations {
       scaleXmmPerPixel: number;
       scaleYmmPerPixel: number;
       cameraType: string;
-    }>(`async function (Factory, Vector2, args) {
+    }>(nativeFunction`async function (Factory, Vector2, args) {
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const views = args.ids.map(wantedId => {
-        for (const [versionId, item] of this.geo.geometryModel) {
-          if (this.db.lookupStableId(versionId) !== wantedId) continue;
+        for (const [versionId, item] of nativeApi.geo.geometryModel) {
+          if (nativeApi.db.lookupStableId(versionId) !== wantedId) continue;
           if (item.view?.constructor?.name !== 'Solid') throw new Error('Hidden-line SVG export requires native Solid bodies: ' + wantedId);
           return item.view;
         }
@@ -9685,7 +9732,7 @@ export class PlasticityOperations {
     const metadata = await stat(input);
     if (!metadata.isFile()) throw new Error("Reference mesh input must be a regular file");
     if (metadata.size === 0) throw new Error("Reference mesh input must not be empty");
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const editor = this;
       let failure;
@@ -9698,7 +9745,7 @@ export class PlasticityOperations {
           factory.unit = args.sourceUnit;
           const result = await factory.commit();
           const created = Array.isArray(result) ? result : [result].filter(Boolean);
-          if (created.length === 0 || !created.every(item => item?.constructor?.name === 'Empties_ObjectEmpty')) {
+          if (created.length === 0 || !created.every(item => nativeApi.isReferenceMesh(item))) {
             throw new Error('Plasticity did not create reference mesh objects for the complete import');
           }
           return result;
@@ -9802,50 +9849,60 @@ export class PlasticityOperations {
     const header = await readFile(input);
     if (header.length < 24 || header.subarray(0, 10).toString() !== "plasticity") throw new Error("Input is not a valid Plasticity document");
     await this.saveCopy(backupPath);
-    await this.runtime.mutate(`async function (Factory, Command, args) {
+    const opened = await this.runtime.mutate<{ filename: string }>(`async function (args) {
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
-      const editor = this;
-      let failure;
-      const command = new Command(this);
-      command.remember = false;
-      command.execute = async function () {
-        try {
-          const factory = new Factory(editor).resource(this);
-          factory.filename = args.path;
-          return await factory.commit();
-        } catch (error) { failure = error; throw error; }
-      };
-      await this.exec(command);
-      if (failure) throw failure;
-      this.document.filename = args.path;
-    }`, ["OpenFileFactory", "OpenFileCommand"], [{ path: input }]);
-    return await this.state();
+      // A raw saver copy does not clear the native unsaved-changes prompt.
+      // Save through the editor lifecycle at the explicit backup path, never
+      // over the previous document. On open failure this remains the saved copy.
+      this.document.filename = args.backup;
+      await this.save();
+      // The native open path also replaces the scene and resets document history.
+      // Committing OpenFileFactory directly skips that lifecycle.
+      await this.open(args.path);
+      return { filename: this.document.filename };
+    }`, [], [{ path: input, backup: await realpath(resolve(backupPath)) }], LONG_NATIVE_IMPORT_TIMEOUT_MS);
+    if (await realpath(opened.filename) !== input) throw new Error("Plasticity did not open the requested document");
+    return await this.state(LONG_NATIVE_IMPORT_TIMEOUT_MS);
   }
 
-  async screenshot(outputPath: string): Promise<{ path: string; bytes: number }> {
+  async screenshot(outputPath: string, captureMode: "window" | "viewport" = "window"): Promise<{ path: string; bytes: number; captureMode?: "viewport"; freshFrame?: boolean; rendererHidden?: boolean; width?: number; height?: number }> {
+    if (captureMode !== "window" && captureMode !== "viewport") throw new Error("Unsupported screenshot capture mode");
     const output = resolve(outputPath);
     if (extname(output).toLowerCase() !== ".png") throw new Error("Screenshot output must end in .png");
     await assertAbsent(output);
     await mkdir(dirname(output), { recursive: true });
-    await this.runtime.cdp("Page.bringToFront");
-    const hidden = await this.runtime.read<boolean>("function () { return document.hidden; }");
-    if (hidden) throw new Error("Plasticity renderer is hidden; activate Plasticity and retry the screenshot");
-    const frame = await this.runtime.captureScreenshot();
+    let viewport: { data: string; width: number; height: number; rendererHidden: boolean; freshFrame: boolean } | undefined;
+    let frame: string;
+    if (captureMode === "viewport") {
+      viewport = await this.runtime.read(NATIVE_VIEWPORT_CAPTURE);
+      if (!viewport || viewport.freshFrame !== true || typeof viewport.data !== "string" || typeof viewport.rendererHidden !== "boolean") {
+        throw new Error("Native viewport freshness verification failed");
+      }
+      frame = viewport.data;
+    } else {
+      await this.runtime.cdp("Page.bringToFront");
+      const hidden = await this.runtime.read<boolean>("function () { return document.hidden; }");
+      if (hidden) throw new Error("Plasticity renderer is hidden; activate Plasticity and uncover its window, or explicitly use captureMode=viewport for a fresh WebGL frame without HTML overlays");
+      frame = await this.runtime.captureScreenshot();
+    }
     const data = Buffer.from(frame, "base64");
     const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
     if (data.length < 24 || !data.subarray(0, 8).equals(pngSignature) || data.toString("ascii", 12, 16) !== "IHDR" ||
       data.readUInt32BE(16) < 1 || data.readUInt32BE(20) < 1) {
       throw new Error("Plasticity returned an invalid PNG screencast frame");
     }
+    if (viewport && (data.readUInt32BE(16) !== viewport.width || data.readUInt32BE(20) !== viewport.height)) {
+      throw new Error("Native viewport PNG dimensions do not match the rendered canvas");
+    }
     await writeFile(output, data, { flag: "wx" });
-    return { path: output, bytes: data.length };
+    return { path: output, bytes: data.length, ...(viewport ? { captureMode: "viewport" as const, freshFrame: true, rendererHidden: viewport.rendererHidden, width: viewport.width, height: viewport.height } : {}) };
   }
 
   // A scaled JPEG the agent can see in the same tool response; no file is written.
   async screenshotImage(maxWidth = 1024, quality = 70): Promise<{ data: string; mimeType: "image/jpeg"; width: number; height: number; bytes: number }> {
     await this.runtime.cdp("Page.bringToFront");
     const hidden = await this.runtime.read<boolean>("function () { return document.hidden; }");
-    if (hidden) throw new Error("Plasticity renderer is hidden; activate Plasticity and retry the screenshot");
+    if (hidden) throw new Error("Plasticity renderer is hidden; activate Plasticity and retry the screenshot; a hidden window can still be captured by passing path with captureMode: \"viewport\"");
     const metrics = await this.runtime.cdp("Page.getLayoutMetrics") as { cssLayoutViewport?: { clientWidth?: number; clientHeight?: number } };
     const viewWidth = metrics.cssLayoutViewport?.clientWidth ?? 0;
     const viewHeight = metrics.cssLayoutViewport?.clientHeight ?? 0;
@@ -9864,7 +9921,7 @@ export class PlasticityOperations {
   }
 
   async setView(view: "front" | "back" | "left" | "right" | "top" | "bottom" | "isometric", fit: boolean): Promise<unknown> {
-    return await this.runtime.read(`async function (args) {
+    return await this.runtime.read(nativeFunction`async function (args) {
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       const viewport = Array.from(this.viewports)[0];
       if (!viewport) throw new Error('Plasticity viewport is unavailable');
@@ -9877,7 +9934,7 @@ export class PlasticityOperations {
         await viewport.navigateToOrientation(({ front: 4, back: 1, left: 3, right: 0, top: 2, bottom: 5 })[args.view]);
       }
       if (args.fit) {
-        const bounds = [...this.geo.geometryModel].map(([, item]) => item.model?.FindBox?.()).filter(Boolean);
+        const bounds = [...nativeApi.geo.geometryModel].map(([, item]) => item.model?.FindBox?.()).filter(Boolean);
         if (bounds.length) {
           const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
           for (const box of bounds) for (let i = 0; i < 3; i++) {
@@ -9908,6 +9965,7 @@ export class PlasticityOperations {
         }
       }
       viewport.setNeedsRender();
+      for (const tag of this.__plasticityMcpDistanceOverlays?.values() ?? []) tag.refreshLabels?.();
       return { position: viewport.camera.position.toArray(), target: viewport.camera.target.toArray(), mode: viewport.camera.mode };
     }`, [{ view, fit }]);
   }

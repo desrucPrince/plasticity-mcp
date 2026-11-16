@@ -1,3 +1,4 @@
+import { nativeFunction } from "./native-function.ts";
 import type { PlasticityRuntime, RuntimeState } from "./runtime.ts";
 import type { FaceReference } from "./measurements.ts";
 
@@ -98,19 +99,19 @@ export async function measureFaceProperties(
     source: "native-brep-face-mass-properties",
     faces: measured,
     totals: { areaMm2, summedBoundaryLengthMm, areaWeightedCentroidMm },
-    limitation: "Summed boundary length counts every selected face boundary independently; shared edges are counted once for each selected face that uses them.",
+    limitation: "Summed boundary length counts every selected face boundary independently; shared edges are counted once for each selected face that uses them. Native inner-loop counts describe carrier topology; periodic curved faces can classify all their loops as inner.",
   };
 }
 
 async function collectNativeProperties(runtime: PlasticityRuntime, faces: FaceReference[]): Promise<NativeFaceProperties[]> {
-  return await runtime.readNative<NativeFaceProperties[]>(`function (pk_default, args) {
+  return await runtime.readNative<NativeFaceProperties[]>(nativeFunction`function (pk_default, args) {
     // The face collection's own centroid is the centre of its bounding box;
     // the kernel's Eval.MassProperties answers the centre of area.
     const evaluator = new pk_default.a.Eval(pk_default.a.Context.Get());
     const find = reference => {
       const matches = [];
-      for (const [versionId, item] of this.geo.geometryModel) {
-        if (this.db.lookupStableId(versionId) === reference.bodyId) matches.push({ versionId, item });
+      for (const [versionId, item] of nativeApi.geo.geometryModel) {
+        if (nativeApi.db.lookupStableId(versionId) === reference.bodyId) matches.push({ versionId, item });
       }
       if (matches.length !== 1 || !['Solid', 'Sheet'].includes(matches[0].item?.view?.constructor?.name)) {
         throw new Error('Requested current Solid or Sheet is unavailable: ' + reference.bodyId);
@@ -123,7 +124,7 @@ async function collectNativeProperties(runtime: PlasticityRuntime, faces: FaceRe
       const viewIndex = faceViews.versionIds.indexOf(reference.faceId);
       if (viewIndex < 0) throw new Error('Requested current face is unavailable: ' + reference.bodyId + ':' + reference.faceId);
       const entityId = Number(faceViews.get(viewIndex).entityId);
-      const collection = this.db.lookupFaceCollection([reference.faceId]);
+      const collection = nativeApi.db.lookupFaceCollection([reference.faceId]);
       if (collection.Size() !== 1) throw new Error('Expected exactly one native face: ' + reference.bodyId + ':' + reference.faceId);
       const face = collection.Get(0);
       if (Number(face.Id()) !== entityId || Number(face.GetBody().Id()) !== Number(item.model.Id())) {
@@ -186,7 +187,11 @@ function validateNativeResult(result: NativeFaceProperties, reference: FaceRefer
   if (!Number.isFinite(result.areaM2) || result.areaM2 <= 0) throw new Error(`Invalid native area for ${reference.bodyId}:${reference.faceId}`);
   if (!Number.isFinite(result.boundaryLengthM) || result.boundaryLengthM <= 0) throw new Error(`Invalid native boundary length for ${reference.bodyId}:${reference.faceId}`);
   if (result.areaCentroidM.length !== 3 || !result.areaCentroidM.every(Number.isFinite)) throw new Error(`Invalid native area centroid for ${reference.bodyId}:${reference.faceId}`);
-  if (!Number.isInteger(result.loopCount) || !Number.isInteger(result.innerLoopCount) || result.loopCount < 1 || result.innerLoopCount < 0 || result.innerLoopCount >= result.loopCount) {
+  // A bounded planar face needs an outer loop. Periodic carriers such as a
+  // complete cylindrical side can classify both end loops as native inner loops.
+  if (!Number.isInteger(result.loopCount) || !Number.isInteger(result.innerLoopCount)
+    || result.loopCount < 1 || result.innerLoopCount < 0 || result.innerLoopCount > result.loopCount
+    || (result.planar && result.innerLoopCount === result.loopCount)) {
     throw new Error(`Invalid native face-loop counts for ${reference.bodyId}:${reference.faceId}`);
   }
   if (!Array.isArray(result.nativeCheckCodes) || result.nativeCheckCodes.some((code) => !Number.isInteger(code))) {

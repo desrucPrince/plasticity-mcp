@@ -3,10 +3,16 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { hydrateNativeState } from "./native-live-state.ts";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 import { hasSceneContentChanges, sanitizeEvidence } from "./verify-section-strength-live.ts";
+
+import { isolatedAcceptanceEnvironment } from "./native-live-environment.ts";
+import { permitsNativeFailureRecovery } from "./native-live-recovery.ts";
+import { isDisposableEmptyDocument } from "./verify-strength-live.ts";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -69,7 +75,7 @@ async function main(): Promise<void> {
     const windows = await call(live.client, "plasticity_list_windows", {});
     requireCondition(windows.some((window: { targetId: string }) => window.targetId === options.target), "Explicit Plasticity target was not found");
     initialState = await call(live.client, "plasticity_connect", { targetId: options.target });
-    requireCondition(initialState.bodies.length === 0, "Refusing disposable mutations in a nonempty Plasticity document");
+    requireCondition(isDisposableEmptyDocument(initialState), "Refusing disposable mutations unless the document and Undo/Redo history are completely empty");
     evidence.initial = stateSummary(initialState);
     const snapshot = await call(live.client, "plasticity_capture_snapshot", { label: "fastener-pockets-live-initial-empty" });
 
@@ -480,9 +486,10 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({ ok: true, output, evidence: join(output, "evidence.json") }, null, 2));
   } catch (error) {
     evidence.failure = boundedError(error);
-    if (live && initialState && !evidence.cleanup) {
+    if (live && initialState && !evidence.cleanup && permitsNativeFailureRecovery(error)) {
       evidence.cleanup = await recover(live.client, initialState).catch((cleanupError) => ({ restoredEmptyDocument: false, reason: boundedError(cleanupError) }));
     }
+    if (!permitsNativeFailureRecovery(error)) evidence.cleanup = { restoredEmptyDocument: false, reason: "uncertain-outcome-read-only-inspection-required" };
     await writeExclusive(join(output, "failure.json"), sanitizeEvidence(evidence)).catch(() => {});
     throw error;
   } finally {
@@ -850,7 +857,7 @@ async function startMcp(storeRoot: string): Promise<LiveMcp> {
     command: process.execPath,
     args: [join(projectRoot, "scripts", "run-server.ts")],
     cwd: projectRoot,
-    env: { ...selectedEnvironment(process.env), PLASTICITY_STRENGTH_ROOT: storeRoot, PLASTICITY_CDP_URL: process.env.PLASTICITY_CDP_URL ?? "http://127.0.0.1:9223" },
+    env: isolatedAcceptanceEnvironment(storeRoot, process.env),
     stderr: "pipe",
   });
   const stderr: string[] = [];
@@ -864,7 +871,7 @@ async function call(client: Client, name: string, args: Record<string, unknown>)
   const response = await client.callTool({ name, arguments: args });
   const text = toolText(response);
   if ("isError" in response && response.isError) throw new Error(text);
-  return JSON.parse(text);
+  return await hydrateNativeState(JSON.parse(text), id => call(client, "plasticity_body_info", { id }), (offset, revision) => call(client, "plasticity_list_bodies", { bodyOffset: offset, bodyLimit: 100, expectedRevision: revision }));
 }
 
 function toolText(response: unknown): string {
@@ -909,9 +916,6 @@ function requireCondition(condition: unknown, message: string): asserts conditio
   if (!condition) throw new Error(message);
 }
 
-function selectedEnvironment(environment: NodeJS.ProcessEnv): Record<string, string> {
-  return Object.fromEntries(["PATH", "HOME", "TMPDIR", "PLASTICITY_CDP_URL"].flatMap((key) => typeof environment[key] === "string" ? [[key, environment[key]!]] : []));
-}
 
 function boundedError(error: unknown): string { return (error instanceof Error ? error.message : String(error)).slice(0, 4000); }
 

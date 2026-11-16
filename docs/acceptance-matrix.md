@@ -1,11 +1,63 @@
 # Матрица готовности Plasticity MCP и Workbench
 
+После PR #25: [STEP и кабельный канал с консервативными bounds](legacy-bounds-qualification.md) прошли независимую геометрическую проверку на обеих версиях (2/2 каждой): топология/опорные Plane, масса/площадь/центроид STEP, provenance после перезапуска MCP, шесть внешних B-Rep-проб канала с положительным контролем, Undo/Redo и история. Строгие bbox-сценарии 26.1.3 остаются непринятыми; значения адаптера не менялись. Покрытие: 303/371 на 26.2.1, 266/371 на 26.1.3. Проверки: 1478 тестов адаптера и typecheck прошли.
+
+После PR #24: [явный WebGL viewport capture](viewport-screenshots.md) проверен на обеих экспериментальных копиях. Свежесть кадра подтверждается нативными счётчиками; скрытие групп и clipping сечений прошли сравнение пикселей, восстановление дало нулевую разницу. Оконный режим по умолчанию сохранил проверку видимости; HTML-подписи/панели и видимость окна ОС этими прогонами не подтверждены. Покрытие: 303/371 на 26.2.1, 261/371 на 26.1.3. Проверки: 1475 тестов адаптера, 23 web + 90 server Workbench, оба typecheck и сборка.
+
+После PR #23: [явная normal-проекция imprint](curve-imprint-projection.md) прошла на обеих экспериментальных версиях для окружности над обычным и повёрнутым на 30° кубом. Проверены аналитический Circle, объём, границы, Undo/Redo и постоянная история. Существующий vector-режим сохранён; его исходный SPCurve/объёмный провал остаётся непринятым. Normal требует отсутствия direction; автоматической подмены метода нет. Покрытие: 302/371 на 26.2.1 и 260/371 на 26.1.3. Проверки: 1468 тестов адаптера, 23 web и 90 server тестов Workbench; оба typecheck и сборка Workbench прошли.
+
+Дополнение после PR #22: [нативные группы](plasticity-26-2-catalog-audit.md#native-group-hierarchy-continuation) прошли на обеих экспериментальных копиях с Undo/Redo, точным выбором топологии, выравниванием и сверкой списка групп. Явный `--native-state-only` сохраняет прежний режим проверки пикселей по умолчанию и не подтверждает рендеринг. После ручной фокусировки на обеих версиях прошёл и сценарий пяти определений сохранённых плоскостей: координаты/оси, создание и удаление с Undo/Redo, активация рабочей плоскости и локальные профили. Покрытие: 301/371 на 26.2.1 и 259/371 на 26.1.3. Повтор полного теста групп на 26.1.3 по-прежнему заблокирован `renderer is hidden`; рендеринг не принят. Автотесты: 1467, typecheck прошёл. Остальные дополнения ниже — исторические срезы.
+
+Актуализация 2026-10-26: [границы и целые витки](plasticity-26-2-catalog-audit.md#bounds-and-whole-turn-thread-correction). На каждой экспериментальной копии прошли 7/7 сценариев резьбы с Undo/Redo и durable history, а также M5-пара и калибровочный набор M5x10 с явно заданным overshoot 1 мм. Дробные витки отклоняются до создания геометрии. На 26.2.1 Solid/Sheet используют native-extrema; на 26.1.3 остаётся консервативный native-box. STEP и кабельный канал на 26.2.1 прошли повторно; прежние строгие legacy bbox-проверки остаются непринятыми. Совокупно принято 289/371 инструментов на 26.2.1 и 247/371 на 26.1.3. Автотесты: 1466 + 90, typecheck и сборка прошли. Исторические дополнения ниже описывают состояние на момент каждого прогона.
+
+Первоначальный прогон 2026-10-26 (до исправления): [отдельные инструменты печатной резьбы](plasticity-26-2-catalog-audit.md#standalone-printed-thread-qualification)
+проверены на обеих экспериментальных версиях: **0/6 приняты**. Native Check,
+объёмные границы и выборочные направления Helix прошли, но все сценарии вышли
+за объявленные bounds; 2,5-витковый Helix также дал длину/конец сверх запроса.
+Допуски 0,01 мм для envelope и 0,001 мм для Helix сохранены. Полная проверка
+Undo/Redo этих рецептов не достигнута. Прежние результаты пары с другими
+параметрами не распространяются на новые сценарии. Принятое покрытие осталось
+279/371 для 26.2.1 и 237/371 для 26.1.3; четыре новых инструмента отмечены
+attempted-unaccepted.
+
+
+Дополнение 2026-10-26: [native lifecycle и материалы](plasticity-26-2-catalog-audit.md#appearance-annotation-and-native-lifecycle-continuation)
+прошли 7/7 сценариев на каждой экспериментальной версии 26.2.1/26.1.3.
+Исправлены чтение material-info объектов 26.2 и снятие назначения материала
+через нативный unset. Проверены удаление измерений с Undo/Redo, состояние
+наклонного сечения, многоплоскостное разрезание и публичный Surface Bridge.
+Проверки сечений и внешнего вида подтверждают нативные данные, а не рендеринг.
+Совокупное покрытие: 279/371 инструментов на 26.2.1 и 237/371 на 26.1.3;
+прежние STEP/circular-imprint/cable-channel и визуальные пробелы остаются.
+
+
+Дополнение 2026-10-26: [аудит рецептов соединений и вентиляции](plasticity-26-2-catalog-audit.md#joint-recipes-vents-and-cable-channels)
+проверил по 8 сценариев на экспериментальных 26.2.1 и 26.1.3: на каждой прошли
+7/8. Кабельный канал не принят: native bounds дают Z=10,112742414248142 мм
+при номинале 10 мм; допуск 0,00001 мм сохранён. Пройдены отверстия, карман
+под вставку, штифты, защёлка, «ласточкин хвост» и соединение корпуса с native
+валидацией, объёмами и Undo/Redo. Синтетические зазоры не квалифицируют посадку,
+прочность защёлки или удержание вставки. Подтверждённое покрытие каталога:
+271/371 инструментов на 26.2.1 и 229/371 на 26.1.3.
+
+
+Дополнение 2026-10-25: [аудит каталога 26.2.1/26.1.3](plasticity-26-2-catalog-audit.md)
+добавляет строгие проверки измерений, datum и файлового цикла: по 7 из 8
+выполненных сценариев прошли на каждой экспериментальной версии. STEP round-trip
+не принят из-за расширения native bounds на 0,00005 мм с каждой стороны при
+допуске 0,00001 мм; проверка provenance/history после перезапуска в этом
+сценарии ещё не достигнута. Saved-plane/workplane сценарий не выполнялся:
+управление UI не получило окно экспериментальной копии.
+
+
 Основная дата проверки: 2026-09-27; центроиды и кэш топологии дополнительно проверены 2026-10-11. Матрица отделяет фактически выполненные живые
 проверки от функций, для которых на этом Mac нет нужного устройства или
 приложения.
 
 | Требование | Статус | Проверка |
 | --- | --- | --- |
+| Аудит каталога на копиях 26.1.3 и 26.2.1 | Частичное живое покрытие; ошибки и пробелы отмечены отдельно | [Построчный аудит всех 371 инструментов](plasticity-26-2-catalog-audit.md): 254 инструмента с успешной живой проверкой на 26.2.1 и 212 на 26.1.3. В новой группе девять сценариев прошли на обеих копиях; круговой imprint не засчитан по строгому допуску номинальных измерений. Полноценная приёмка всего каталога не заявляется; визуальные блокеры и непокрытые сценарии перечислены в аудите |
+| Экспериментальный адаптер Plasticity 26.2.1 | Проверены отдельные сценарии на отдельной подготовленной копии | [Матрица совместимости двух версий](plasticity-26-2-compatibility.md): запуск, stores, selection, изменённые фабрики и одинаковые регрессии на 26.1.3. Официальный неизменённый 26.2.1 по-прежнему не проходит fuse-preflight; остальные исторические строки ниже не означают повторную приёмку на 26.2.1 |
 | Нативный доступ Plasticity 26.1.3 | Проверено | CDP только на loopback; native editor и factories обнаружены без изменения `.app` |
 | PNG-снимок видимого окна Plasticity через MCP | Проверено сквозным живым MCP | Успешно снят PNG через production MCP screenshot tool из видимого Plasticity 26.1.3 окна; `npm run accept:plasticity-screenshot -- --target TARGET_ID --output /tmp/plasticity-mcp-output --test-solid` создал временный нативный Solid 20 × 10 × 5 мм, сверил размеры по B-Rep, установил изометрическую камеру с fit, проверил валидный PNG 2800 × 2048 и отменил Solid одним Undo. До и после теста документ содержал 0 тел, Undo depth восстановлен до 3; скриншот показывает сам Solid. Доказательство: `/tmp/plasticity-mcp-output` |
 | Box, Undo и Redo через историю Plasticity | Проверено | B-Rep 80 × 40 × 8 мм, удаление и восстановление стабильного тела |
@@ -162,7 +214,7 @@
 | Trim открытого Sheet через Cut и Delete | Проверено | Реальный stdio MCP разделил плоский Sheet 20 × 10 мм гранью X=8 на точные Sheet 8 × 10 и 12 × 10 мм, удалил правую часть, затем Undo/Redo восстановили разрез; очистка вернула пустой документ. Cut и Delete остаются двумя операциями истории |
 | Материалы внешнего вида Plasticity | Проверено | Реальный stdio MCP создал и назначил телу нативный материал `#3366cc`, roughness 0,42, metalness 0,1 и opacity 0,8; состояние прочитало material ID и каталог, Undo удалил назначение и материал, Redo восстановил оба. Эти поля не считаются свойствами пластика или доказательством прочности |
 | Сохранение `.plasticity`, STEP, Parasolid, STL, OBJ и 3MF | Проверено; повторяемость 3MF дополнительно проверена live | Сохранение, повторное открытие, STEP round-trip, точные Parasolid `.x_t`/`.x_b` round-trip, бинарный STL, нативный OBJ и нативный 3MF. Оба Parasolid-файла вернули Solid 20 × 10 × 5 мм с 6 гранями, 12 рёбрами, `nativeValid=true` и `printableSolid=true`; текстовый импорт прошёл Undo/Redo с тем же stable ID. Свежий production stdio MCP экспортировал 3MF 20 × 10 × 5 мм: валидный ZIP/OPC, unit meter, 1 объект/build item, 8 вершин, 12 треугольников; bounds совпали с B-Rep с ошибкой менее 0,000001 мм, ревизия и история не изменились. Затем на той же коробке 20 раз подряд экспортировали STL и следом 3MF; все 20 пакетов прошли независимую ZIP/mesh-проверку, после Undo пустая сцена и исходная глубина истории восстановились. Один предшествующий live-вызов однократно вернул ошибку отсутствующего ZIP EOCD; причина не установлена и в 28 последующих экспортах ошибка не воспроизвелась. Доказательства: `[local acceptance artifact omitted]`, `[local acceptance artifact omitted]`, `[local acceptance artifact omitted]`. OBJ того же Solid записан в миллиметрах с Z вверх; обратный разбор файла подтвердил 1 объект, 8 вершин, 24 нормали, 24 UV, 12 треугольных граней и bounds 20 × 10 × 5 мм. Оба mesh-экспорта сохранили ревизию и Undo/Redo, очистка вернула пустой документ |
-| STL/OBJ как приблизительные референсы | Проверено сквозным live MCP | `plasticity_import_reference_mesh` через нативный `MeshImportFactory` импортировал STL-брусок 20 × 10 × 5 мм при явной единице `millimeter` как отдельный `ReferenceMesh`, а не B-Rep: 36 буферных вершин, 12 треугольников и `measurementSource=reference-mesh`. Stable ID прошёл выбор и переименование, помещение в нативную группу, lock/unlock, hide/show, Move на [10,20,30] мм, Rotate 90° и Scale [2,0.5,1] с чтением фактических world-space bounds; Delete прошёл Undo/Redo. Отдельный OBJ-треугольник с координатами 20 × 10 при явной единице `inch` дал границы 508 × 254 мм, 3 вершины и 1 треугольник; второй reference mesh был перемещён в существующую группу, где оба объекта вернулись как `referenceMeshIds`. Production stdio MCP скачал выбранный публичный ASCII STL с HTTPS через `plasticity_download_and_import_reference_mesh`: SHA-256 `a4a9047b3cf354b12c8cf865db985a5fdecee77b9aae86fe7034977a01714dce`, 12 треугольников, Plasticity world bounds [−20,−20,0]…[20,20,40] мм, `approximateReference=true`; запись истории совпала с hash. Одним Undo исходная сцена с прежним телом восстановлена без изменения document token, журнал `in-sync`. Повторяемая приёмка: `npm run accept:reference-mesh-download -- --target TARGET_ID --source-url https://raw.githubusercontent.com/Buildbee/example-stl/main/ascii-cube.stl --source-page-url https://github.com/Buildbee/example-stl --format stl --source-unit millimeter --output /tmp/plasticity-mcp-output`; evidence: `/tmp/plasticity-mcp-output` |
+| STL/OBJ как приблизительные референсы | Проверено сквозным live MCP | `plasticity_import_reference_mesh` через нативный `MeshImportFactory` импортировал STL-брусок 20 × 10 × 5 мм при явной единице `millimeter` как отдельный `ReferenceMesh`, а не B-Rep: 36 буферных вершин, 12 треугольников и `measurementSource=reference-mesh`. Stable ID прошёл выбор и переименование, помещение в нативную группу, lock/unlock, hide/show, Move на [10,20,30] мм, Rotate 90° и Scale [2,0.5,1] с чтением фактических world-space bounds; Delete прошёл Undo/Redo. Отдельный OBJ-треугольник с координатами 20 × 10 при явной единице `inch` дал границы 508 × 254 мм, 3 вершины и 1 треугольник; второй reference mesh был перемещён в существующую группу, где оба объекта вернулись как `referenceMeshIds`. Production stdio MCP скачал выбранный публичный ASCII STL с HTTPS через `plasticity_download_and_import_reference_mesh`: SHA-256 `a4a9047b3cf354b12c8cf865db985a5fdecee77b9aae86fe7034977a01714dce`, 12 треугольников, Plasticity world bounds [−20,−20,0]…[20,20,40] мм, `approximateReference=true`; запись истории совпала с hash. Одним Undo исходная сцена с прежним телом восстановлена без изменения document token, журнал `in-sync`. Повторяемая приёмка: `npm run accept:reference-mesh-download -- --target TARGET_ID --allow-disposable-mutations --source-url https://raw.githubusercontent.com/Buildbee/example-stl/main/ascii-cube.stl --source-page-url https://github.com/Buildbee/example-stl --format stl --source-unit millimeter --output /tmp/plasticity-mcp-output`; evidence: `/tmp/plasticity-mcp-output` |
 | Удалённая загрузка OBJ с явной единицей | Проверено сквозным live MCP | Production stdio MCP скачал OBJ через публичный HTTPS direct-asset URL и передал в Plasticity как approximate `ReferenceMesh`; явное `sourceUnit=centimeter` преобразовало исходные ±1 cm вершины в exact native mesh bounds [−10,−10,−10]…[10,10,10] мм и 12 треугольников. SHA-256 `814138317972aadaff2b155e869cc515a3a8d667d798543c8279cbf7f58f1d7d`; durable history сохранил тот же hash, Undo вернул точную исходную сцену, document token остался прежним, журнал `in-sync`. Evidence: `[local acceptance artifact omitted]` |
 | Удалённая загрузка OBJ с явной единицей | Проверено сквозным live MCP | Production stdio MCP скачал OBJ через публичный HTTPS direct-asset URL и передал в Plasticity как approximate `ReferenceMesh`; явное `sourceUnit=centimeter` преобразовало исходные ±1 cm вершины в mesh bounds [−10,−10,−10]…[10,10,10] мм и 12 треугольников. SHA-256 `814138317972aadaff2b155e869cc515a3a8d667d798543c8279cbf7f58f1d7d`; durable history сохранил тот же hash, Undo вернул точную исходную сцену, document token остался прежним, журнал `in-sync`. Evidence: `[local acceptance artifact omitted]` |
 | 3MF как unit-aware приблизительный reference mesh | Проверено через production stdio MCP и Plasticity 26.1.3 | `plasticity_import_reference_3mf` импортировал synthetic 4 × 4 × 4 мм 3MF в отдельное disposable-окно; native importer вернул `ReferenceMesh` с 8 вершинами, 12 треугольниками, `sourceFormat=3mf`, embedded-unit provenance и bounds 4 × 4 × 4 мм. `plasticity_download_and_import_reference_3mf` скачал CC0 fixture `unit_meters.3mf` из [SlicerTestModels](https://github.com/Ghostkeeper/SlicerTestModels) и преобразовал 0,01 × 0,02 × 0,03 м в mesh bounds 9,9999998 × 19,9999996 × 29,9999993 мм (допуск 0,000001 мм). Дополнительные живые приёмки импортировали `everything.3mf` как два `ReferenceMesh` компонента: (12 вершин, 4 треугольника) и (24 вершины, 8 треугольников), у обоих bounds 20 × 10 × 10 мм. Новый общий реестр CAD provenance сохраняет для 3MF artifact hash, источник с редактированными query-параметрами, acquisition, документ/revision и все mesh IDs, bounds и topology counts; MCP `list/get` возвращают эти исторические записи, явно отличая mesh count от B-Rep body count. Доказано в реальной Plasticity 26.1.3 и production stdio MCP: Undo/Redo и очистка восстановили исходную пустую сцену, journal остался `in-sync`, после закрытия и перезапуска MCP запись восстановилась с обоими mesh-компонентами. Evidence: `[local acceptance artifact omitted]`, `[local acceptance artifact omitted]`, `[local acceptance artifact omitted]`, `[local acceptance artifact omitted]`. Повторяемый verifier принимает `--source-fixture unit-meters|multi-mesh` вместе с `--source-url`, `--source-page-url` и `--license`. Mesh остаётся приблизительной reference-геометрией, не exact B-Rep. |
@@ -259,3 +311,101 @@
 кронштейнов, корпусов, подставок и печатных деталей
 агент использует проверенные операции и отмечает неизвестные размеры до
 построения посадочной геометрии.
+
+
+HTML distance labels: [guarded lifecycle acceptance](html-measurement-labels.md)
+passes on experimental 26.2.1 and 26.1.3. Text, viewport attachment, DOM rectangles,
+camera anchors, numeric updates, deletion and Undo/Redo are checked. This does
+not accept rasterized HTML glyphs/full-window capture; item-transform measurement names now survive the tested history lifecycle.
+Other command families/file serialization are not covered. External three-phase
+window review remains unaccepted on both versions because some captures show
+stale scene pixels.
+
+Separate manually focused 26.1.3/26.2.1 external-window reviews now pass creation,
+15 mm update and deletion glyph checks. Earlier stale captures remain failed.
+Background freshness and default full-window MCP capture remain outside acceptance.
+
+Local reference 3MF: [three guarded variants](reference-3mf-qualification.md)
+pass on experimental 26.2.1 and 26.1.3, covering millimeter/meter units, two
+meshes, native mesh counts/bounds, original artifact hash, provenance list/get,
+Undo/Redo, MCP restart and four completed durable events. Approximate mesh
+metadata does not qualify rendered pixels, editable B-Rep or physical accuracy.
+
+Pinned HTTPS references: [four real network fixtures](network-reference-qualification.md)
+pass on both experimental versions (meter 3MF, material/transform 3MF, indexed
+OBJ, multi-solid ASCII STL). Each checks artifact identity, native approximate
+mesh geometry, Undo/Redo, source restoration and restart durability. Sequential
+ASCII STL blocks now pass strict structural validation; the initial rejection
+is retained. Network/geometry evidence does not qualify rendered pixels or
+physical dimensions. Coverage becomes 309/371 modern and 273/371 legacy.
+
+Pinned HTTPS STEP/Parasolid: [two direct-file native CAD fixtures](network-cad-qualification.md)
+pass on both experimental versions, including native validity, provenance,
+Undo/Redo, restart and source restoration. Parasolid has independent planar-box
+and mass checks; STEP properties remain observations with conservative legacy
+bounds preserved. Four completed durable events stay in sync. Coverage becomes
+311/371 modern and 275/371 legacy; ZIP/binary/assembly and rendering scopes remain
+separate.
+
+Read-only reference discovery: [three guarded cases](reference-discovery-qualification.md)
+pass on each experimental version: availability reporting, selected-page asset
+listing with off-domain rejection and a known-page isolated live web search.
+Native scenes/history remain unchanged; no asset is downloaded or imported.
+Search and direct-link extraction are separate evidence scopes. The initial
+modern 120-second broad-search timeout remains unaccepted. Coverage becomes
+314/371 modern and 278/371 legacy; these host-tool cases do not qualify geometry,
+licensing, dimensions or arbitrary product-name search reliability.
+
+Synthetic material coupons: [registry and calculation cases](material-coupon-qualification.md)
+pass on each experimental version. They cover idempotent recording, exact-process
+matching, explicit consolidation, conflict rejection, conditional axial/cantilever
+formulae, discrete sizing and MCP restart persistence. Native scenes/history stay
+unchanged. Synthetic schema attestations are not real physical tests or material
+qualification. Initial modern out-of-method deflection refusal remains unaccepted;
+method limits are preserved and explicitly checked. Coverage becomes 321/371
+modern and 285/371 legacy. FEM and manufactured-part validation remain separate.
+
+Synthetic joint-test tools: [three guarded cases](joint-test-qualification.md)
+pass on each experimental version. Fastener registries, interface nominal-strength
+statistics and classified corrected-curve summaries/CSV previews preserve their
+records across MCP restart and leave native scenes/history unchanged. A public
+failure-location mapping defect is fixed (`material-a` no longer escapes instead
+of `printed-material`); its original failed fixture is retained. Source bytes/hash,
+statistical exclusions, explicit unit conversions and curve work are checked.
+Coverage becomes 331/371 modern and 295/371 legacy. These synthetic checks are
+not physical material/joint qualification, cohesive calibration or FEM acceptance.
+
+Synthetic fracture-energy tools: [DCB, ENF and MMB cases](fracture-energy-qualification.md)
+pass on both experimental copies, covering calculations, explicit CSV selections,
+immutable registries, conflicts and restart. MMB now uses the per-arm thickness
+directly (calculation version 2). Authenticated version-1 records expose annotated
+corrected views without rewriting bytes; unknown or altered results are rejected.
+Original live failure retained. Coverage becomes 349/371 modern and 313/371 legacy.
+No physical material, standards conformity, cohesive law or FEM result is qualified.
+
+Legacy native gap: the existing fastener-pocket/strength/group, plate, section and
+nonparallel planar-clearance verifiers pass on both experimental versions with
+isolated stores and empty-document guards. Uncertain outcomes prohibit recovery
+mutations; normal Undo restores the owned scenes with synthetic redo history.
+Coverage is now 349/371 on both versions. These checks do not qualify physical
+material properties or rendered pixels. The remaining 22 tools per version and
+retained-failure disposition audit are tracked in [full completion audit](catalog-completion-audit.md).
+
+
+Дополнение: [прочность, FEM и live-анализ](strength-fem-catalog-qualification.md)
+прошли на обеих экспериментальных версиях: три сценария расчётов/реестров,
+Gmsh/CalculiX с сопоставлением перекрывающихся сеток, одноинтерфейсный Code_Aster,
+интервью прочности и анализ двух синтетических видов с сохранением после
+перезапуска MCP. Покрытие каталога: **371/371 на каждой версии**; это покрытие
+сценариев, не всех параметров и не физическая квалификация. Полный двухинтерфейсный
+кронштейн на обеих версиях остаётся непринятым: воспроизведён CPU-limit при нелинейных
+итерациях; сохраняется подробный журнал. Отказы сведены в [отдельный аудит](catalog-failure-dispositions.md); проверка
+редактирования мышью ждёт доступного окна. Локально: 1520 тестов, typecheck — PASS.
+
+
+Дополнение: [устранена гонка отмены Codex-процесса](codex-cancellation-qualification.md)
+до получения turn ID. Поздний ответ при закрытии больше не создаёт необработанный
+reject; реальные ошибки процесса по-прежнему возвращаются вызывающему коду.
+Две новые регрессии падали до патча и проходят после него. Локально: 1522 теста,
+typecheck — PASS. Это проверка жизненного цикла дочернего процесса; ручное
+редактирование CAD мышью на обеих экспериментальных версиях остаётся открытым.

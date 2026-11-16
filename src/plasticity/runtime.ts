@@ -1,6 +1,9 @@
 import { CdpClient } from "../cdp/client.ts";
 import type { PlasticityTarget } from "../cdp/discovery.ts";
 import type { ConstructionPlaneDescriptor } from "./construction.ts";
+import { NATIVE_BODY_BOUNDS } from "./native-bounds.ts";
+import { nativeFunction } from "./native-function.ts";
+import { discoverStoreBindings } from "./native-discovery.ts";
 
 export const NATIVE_STATE_READ_TIMEOUT_MS = 300_000;
 export const LONG_NATIVE_IMPORT_TIMEOUT_MS = 300_000;
@@ -136,6 +139,7 @@ export interface RuntimeState {
     hidden?: boolean;
     locked?: boolean;
     boundsMm: { min: [number, number, number]; max: [number, number, number] } | null;
+    boundsMethod?: "native-box" | "native-extrema";
     faceIds: string[];
     edgeIds: string[];
     faces: Array<{
@@ -288,7 +292,7 @@ export class PlasticityRuntime {
   }
 
   async getState(timeoutMs = NATIVE_STATE_READ_TIMEOUT_MS): Promise<RuntimeState> {
-    const result = await this.readNative<Omit<RuntimeState, "targetId" | "title">>(`function (ConstructionPlaneDatabase, Vector, Quaternion) {
+    const result = await this.readNative<Omit<RuntimeState, "targetId" | "title">>(nativeFunction`function (ConstructionPlaneDatabase, Vector, Quaternion, pk_default) {
       const mm = value => value * 1000;
       const vector = value => [mm(value.x), mm(value.y), mm(value.z)];
       const direction = value => [value.x, value.y, value.z];
@@ -366,16 +370,21 @@ export class PlasticityRuntime {
       // every walk of a large document's topology costs hundreds of MB. A
       // body version's topology is immutable: read it once per body view
       // and versionId and reuse it across state reads.
+      // Invalidate descriptors from an older adapter even when the body view is unchanged.
+      const topologyFormat = 3;
+      const readBodyBounds = (${NATIVE_BODY_BOUNDS})(pk_default.a);
       const topologyCacheKey = Symbol.for('plasticity-mcp.body-topology');
       const topologyCache = globalThis[topologyCacheKey] ?? (globalThis[topologyCacheKey] = new WeakMap());
       const readTopology = (item, bodyType) => {
         const isBrepShell = bodyType === 'Solid' || bodyType === 'Sheet';
         const isWire = bodyType === 'Wire';
         let box = null;
-        if (typeof item.model?.FindBox === 'function') {
-          if (isWire) {
-            try { box = item.model.FindBox(); } catch {}
-          } else box = item.model.FindBox();
+        let boundsMethod = 'native-box';
+        if (isWire) {
+          try { box = item.model.FindBox(); } catch {}
+        } else {
+          const measured = readBodyBounds(item.model, bodyType);
+          box = measured.box; boundsMethod = measured.method;
         }
         // Wire B-curve segments have their own segmentEntityId API. Some
         // Plasticity rebuild results expose transient high-edge views that are
@@ -498,9 +507,11 @@ export class PlasticityRuntime {
             if (!Number.isInteger(vertexId) || verticesById.has(vertexId)) continue;
             const vertexEdges = vertex.GetEdges?.();
             const adjacentVertexEdgeIds = [];
-            for (let edgeIndex = 0; edgeIndex < (vertexEdges?.Size?.() ?? 0); edgeIndex += 1) {
-              const adjacentId = edgeIdByEntity.get(vertexEdges.Get(edgeIndex).Id());
-              if (adjacentId) adjacentVertexEdgeIds.push(adjacentId);
+            for (const collection of vertexEdges?.in && vertexEdges?.out ? [vertexEdges.in, vertexEdges.out] : [vertexEdges]) {
+              for (let edgeIndex = 0; edgeIndex < (collection?.Size?.() ?? 0); edgeIndex += 1) {
+                const adjacentId = edgeIdByEntity.get(collection.Get(edgeIndex).Id());
+                if (adjacentId && !adjacentVertexEdgeIds.includes(adjacentId)) adjacentVertexEdgeIds.push(adjacentId);
+              }
             }
             const vertexFaces = vertex.GetFaces?.();
             const adjacentVertexFaceIds = [];
@@ -533,6 +544,7 @@ export class PlasticityRuntime {
         const edgeIds = Array.from(edgeViews?.versionIds ?? []).map(String);
         return {
           boundsMm: box ? { min: vector(box.min), max: vector(box.max) } : null,
+          boundsMethod,
           faceIds,
           edgeIds,
           faces,
@@ -540,31 +552,38 @@ export class PlasticityRuntime {
           vertices: Array.from(verticesById.values()).sort((left, right) => left.id - right.id),
         };
       };
-      const bodies = [...this.geo.geometryModel].map(([versionId, item]) => {
+      const bodies = [...nativeApi.geo.geometryModel].map(([versionId, item]) => {
         const bodyType = item.view?.constructor?.name ?? 'Unknown';
         const view = item.view !== null && typeof item.view === 'object' ? item.view : null;
         const cached = view ? topologyCache.get(view) : undefined;
-        let topology = cached?.versionId === versionId ? cached.topology : null;
+        let topology = cached?.format === topologyFormat && cached.versionId === versionId ? cached.topology : null;
         if (!topology) {
           topology = readTopology(item, bodyType);
-          if (view) topologyCache.set(view, { versionId, topology });
+          if (view) topologyCache.set(view, { format: topologyFormat, versionId, topology });
         }
-        const key = this.db.nodes?.item2key?.(item.view);
-        const name = key === undefined ? null : (this.db.nodes?.getName?.(key) ?? null);
-        const materialId = key === undefined ? 0 : (this.db.nodes?.getMaterialId?.(key) ?? 0);
+        const key = nativeApi.db.nodes?.item2key?.(item.view);
+        const name = key === undefined ? null : (nativeApi.db.nodes?.getName?.(key) ?? null);
+        const materialId = key === undefined ? 0 : (nativeApi.db.nodes?.getMaterialId?.(key) ?? 0);
         return {
-          id: this.db.lookupStableId(versionId),
+          id: nativeApi.db.lookupStableId(versionId),
           versionId,
           type: bodyType,
           name,
           materialId,
-          visible: key === undefined ? true : Boolean(this.db.nodes?.isVisible?.(key)),
-          hidden: key === undefined ? false : Boolean(this.db.nodes?.isHidden?.(key)),
-          locked: key === undefined ? false : Boolean(this.db.nodes?.isLocked?.(key)),
+          visible: key === undefined ? true : Boolean(nativeApi.db.nodes?.isVisible?.(key)),
+          hidden: key === undefined ? false : Boolean(nativeApi.db.nodes?.isHidden?.(key)),
+          locked: key === undefined ? false : Boolean(nativeApi.db.nodes?.isLocked?.(key)),
           ...topology,
         };
       }).filter(item => Number.isInteger(item.id));
-      const materials = this.materials.list().map(([id, info]) => {
+      const materials = this.materials.list().map(entry => {
+        // 26.1 returns [id, info] pairs; 26.2 returns material-info objects.
+        const [id, info] = Array.isArray(entry) ? entry : [entry?.id, entry];
+        if ((typeof id !== 'number' && typeof id !== 'string') ||
+            (typeof id === 'string' && !id.trim()) || !Number.isInteger(Number(id)) ||
+            !info || typeof info !== 'object') {
+          throw new Error('Unsupported native appearance material entry');
+        }
         const material = this.materials.get(id);
         return {
           id: Number(id),
@@ -582,9 +601,9 @@ export class PlasticityRuntime {
         let topologyRefId = null;
         let positionMm = null;
         let radiusMm = null;
-        for (const [versionId, item] of this.geo.geometryModel) {
+        for (const [versionId, item] of nativeApi.geo.geometryModel) {
           if (item.model?.Id?.() !== target.bodyId) continue;
-          const stableId = this.db.lookupStableId(versionId);
+          const stableId = nativeApi.db.lookupStableId(versionId);
           bodyId = Number.isInteger(stableId) ? stableId : null;
           try {
             const vertices = item.model.GetVertices?.();
@@ -670,14 +689,14 @@ export class PlasticityRuntime {
           } : {}),
         };
       }).filter(measurement => Number.isInteger(measurement.id)).sort((left, right) => left.id - right.id);
-      const instanceSnapshot = this.db.empties.snapshot();
+      const instanceSnapshot = nativeApi.db.empties.snapshot();
       const instanceEmpties = Array.from(instanceSnapshot.empties ?? []);
       const instanceInfos = Array.from(instanceSnapshot.infos ?? []);
       const referenceMeshes = instanceEmpties.map((empty, index) => {
         const info = instanceInfos[index];
         if (!empty || info?.tag !== 'Object') return null;
-        const stable = this.db.lookupEmptyById(Number(empty.versionId));
-        if (stable?.constructor?.name !== 'Empties_ObjectEmpty') return null;
+        const stable = nativeApi.db.lookupEmptyById(Number(empty.versionId));
+        if (!nativeApi.isReferenceMesh(stable)) return null;
         const sourcePath = String(info.path ?? '');
         const lowerPath = sourcePath.toLowerCase();
         const sourceFormat = lowerPath.endsWith('.stl') ? 'stl' : lowerPath.endsWith('.obj') ? 'obj' : lowerPath.endsWith('.3mf') ? '3mf' : 'unknown';
@@ -697,12 +716,12 @@ export class PlasticityRuntime {
           const indexCount = Number(geometry.index?.count);
           triangles += Number.isFinite(indexCount) ? indexCount / 3 : Number(positions.count) / 3;
         });
-        const key = this.db.nodes?.item2key?.(stable);
+        const key = nativeApi.db.nodes?.item2key?.(stable);
         const pathName = sourcePath.split(/[\\/]/).pop() || null;
         return {
           id: Number(stable.versionId),
           type: 'ReferenceMesh',
-          name: key === undefined ? pathName : (this.db.nodes?.getName?.(key) ?? pathName),
+          name: key === undefined ? pathName : (nativeApi.db.nodes?.getName?.(key) ?? pathName),
           sourcePath,
           sourceFormat,
           measurementSource: 'reference-mesh',
@@ -712,18 +731,18 @@ export class PlasticityRuntime {
           sceneScaleToMeters: direction(scale),
           vertexEntries,
           triangles,
-          visible: key === undefined ? Boolean(stable.visible) : Boolean(this.db.nodes?.isVisible?.(key)),
-          hidden: key === undefined ? !stable.visible : Boolean(this.db.nodes?.isHidden?.(key)),
-          locked: key === undefined ? false : Boolean(this.db.nodes?.isLocked?.(key)),
+          visible: key === undefined ? Boolean(stable.visible) : Boolean(nativeApi.db.nodes?.isVisible?.(key)),
+          hidden: key === undefined ? !stable.visible : Boolean(nativeApi.db.nodes?.isHidden?.(key)),
+          locked: key === undefined ? false : Boolean(nativeApi.db.nodes?.isLocked?.(key)),
         };
       }).filter(mesh => mesh && Number.isInteger(mesh.id)).sort((left, right) => left.id - right.id);
       const instances = instanceEmpties.map((empty, index) => {
         const info = instanceInfos[index];
         if (!empty || info?.tag !== 'Instance') return null;
         const targetKey = Number(info.targetKey ?? empty.targetKey);
-        const sourceBodyIds = [...this.geo.geometryModel]
-          .filter(([, item]) => this.db.nodes?.item2key?.(item.view) === targetKey)
-          .map(([versionId]) => Number(this.db.lookupStableId(versionId)))
+        const sourceBodyIds = [...nativeApi.geo.geometryModel]
+          .filter(([, item]) => nativeApi.db.nodes?.item2key?.(item.view) === targetKey)
+          .map(([versionId]) => Number(nativeApi.db.lookupStableId(versionId)))
           .filter(Number.isInteger)
           .sort((left, right) => left - right);
         const sourceBodyName = sourceBodyIds
@@ -741,75 +760,75 @@ export class PlasticityRuntime {
           id: Number(empty.versionId),
           type: 'Instance',
           targetKey,
-          targetName: this.db.nodes?.getName?.(targetKey) || sourceBodyName,
+          targetName: nativeApi.db.nodes?.getName?.(targetKey) || sourceBodyName,
           sourceBodyIds,
           translationMm: vector(position),
           rotationQuaternion: [rotation.x, rotation.y, rotation.z, rotation.w],
           scale: direction(scale),
           matrixWorldMm,
-          visible: Boolean(this.db.nodes?.isVisible?.(this.db.nodes.item2key(empty))),
-          hidden: Boolean(this.db.nodes?.isHidden?.(this.db.nodes.item2key(empty))),
-          locked: Boolean(this.db.nodes?.isLocked?.(this.db.nodes.item2key(empty))),
+          visible: Boolean(nativeApi.db.nodes?.isVisible?.(nativeApi.db.nodes.item2key(empty))),
+          hidden: Boolean(nativeApi.db.nodes?.isHidden?.(nativeApi.db.nodes.item2key(empty))),
+          locked: Boolean(nativeApi.db.nodes?.isLocked?.(nativeApi.db.nodes.item2key(empty))),
         };
       }).filter(instance => instance && Number.isInteger(instance.id)).sort((left, right) => left.id - right.id);
       const bodyIdByNodeKey = new Map();
-      for (const [versionId, item] of this.geo.geometryModel) {
-        const stableId = Number(this.db.lookupStableId(versionId));
+      for (const [versionId, item] of nativeApi.geo.geometryModel) {
+        const stableId = Number(nativeApi.db.lookupStableId(versionId));
         if (!Number.isInteger(stableId)) continue;
-        bodyIdByNodeKey.set(Number(this.db.nodes.item2key(item.view)), stableId);
+        bodyIdByNodeKey.set(Number(nativeApi.db.nodes.item2key(item.view)), stableId);
       }
       const instanceIdByNodeKey = new Map();
       for (const empty of instanceEmpties) {
         if (!empty || empty.constructor?.name !== 'InstanceEmpty') continue;
-        instanceIdByNodeKey.set(Number(this.db.nodes.item2key(empty)), Number(empty.versionId));
+        instanceIdByNodeKey.set(Number(nativeApi.db.nodes.item2key(empty)), Number(empty.versionId));
       }
       const referenceMeshIdByNodeKey = new Map();
       for (const empty of instanceEmpties) {
         if (!empty) continue;
-        const stable = this.db.lookupEmptyById(Number(empty.versionId));
-        if (stable?.constructor?.name !== 'Empties_ObjectEmpty') continue;
-        referenceMeshIdByNodeKey.set(Number(this.db.nodes.item2key(stable)), Number(stable.versionId));
+        const stable = nativeApi.db.lookupEmptyById(Number(empty.versionId));
+        if (!nativeApi.isReferenceMesh(stable)) continue;
+        referenceMeshIdByNodeKey.set(Number(nativeApi.db.nodes.item2key(stable)), Number(stable.versionId));
       }
-      const groupSnapshot = this.db.groups.snapshot();
+      const groupSnapshot = nativeApi.db.groups.snapshot();
       const groupIds = Array.from(groupSnapshot.groupIds ?? [], Number);
       const groupChildren = Array.from(groupSnapshot.children ?? [], children => Array.from(children ?? [], Number));
       const groupIdByNodeKey = new Map();
       for (const id of groupIds) {
-        const group = this.db.groups.lookupById(id);
-        if (group) groupIdByNodeKey.set(Number(this.db.nodes.item2key(group)), id);
+        const group = nativeApi.db.groups.lookupById(id);
+        if (group) groupIdByNodeKey.set(Number(nativeApi.db.nodes.item2key(group)), id);
       }
       const groups = groupIds.map((id, index) => {
-        const group = this.db.groups.lookupById(id);
+        const group = nativeApi.db.groups.lookupById(id);
         if (!group) return null;
-        const nodeKey = Number(this.db.nodes.item2key(group));
+        const nodeKey = Number(nativeApi.db.nodes.item2key(group));
         const childKeys = groupChildren[index] ?? [];
         const childGroupIds = childKeys.map(key => groupIdByNodeKey.get(key)).filter(Number.isInteger).sort((left, right) => left - right);
         const bodyIds = childKeys.map(key => bodyIdByNodeKey.get(key)).filter(Number.isInteger).sort((left, right) => left - right);
         const instanceIds = childKeys.map(key => instanceIdByNodeKey.get(key)).filter(Number.isInteger).sort((left, right) => left - right);
         const referenceMeshIds = childKeys.map(key => referenceMeshIdByNodeKey.get(key)).filter(Number.isInteger).sort((left, right) => left - right);
         const knownKeys = new Set([
-          ...childGroupIds.map(childId => Number(this.db.nodes.item2key(this.db.groups.lookupById(childId)))),
+          ...childGroupIds.map(childId => Number(nativeApi.db.nodes.item2key(nativeApi.db.groups.lookupById(childId)))),
           ...childKeys.filter(key => bodyIdByNodeKey.has(key) || instanceIdByNodeKey.has(key) || referenceMeshIdByNodeKey.has(key)),
         ]);
         return {
           id,
-          name: this.db.nodes.getName(nodeKey) ?? null,
-          parentId: id === 0 ? null : Number(this.db.groups.getParentId(nodeKey)),
+          name: nativeApi.db.nodes.getName(nodeKey) ?? null,
+          parentId: id === 0 ? null : Number(nativeApi.db.groups.getParentId(nodeKey)),
           childGroupIds,
           bodyIds,
           instanceIds,
           referenceMeshIds,
           otherNodeKeys: childKeys.filter(key => !knownKeys.has(key)).sort((left, right) => left - right),
-          visible: Boolean(this.db.nodes.isVisible(nodeKey)),
-          hidden: Boolean(this.db.nodes.isHidden(nodeKey)),
-          locked: Boolean(this.db.nodes.isLocked(nodeKey)),
+          visible: Boolean(nativeApi.db.nodes.isVisible(nodeKey)),
+          hidden: Boolean(nativeApi.db.nodes.isHidden(nodeKey)),
+          locked: Boolean(nativeApi.db.nodes.isLocked(nodeKey)),
         };
       }).filter(group => group && Number.isInteger(group.id)).sort((left, right) => left.id - right.id);
       const activeGroupId = Number(groupSnapshot.currentGroupId ?? 0);
       const wireIdsBySketch = new Map();
-      for (const [versionId, item] of this.geo.geometryModel) {
+      for (const [versionId, item] of nativeApi.geo.geometryModel) {
         if (item.view?.constructor?.name !== 'Wire') continue;
-        const stableId = this.db.lookupStableId(versionId);
+        const stableId = nativeApi.db.lookupStableId(versionId);
         if (!Number.isInteger(stableId)) continue;
         let basis;
         try { basis = this.curves.lookup(item.view); } catch { continue; }
@@ -822,8 +841,8 @@ export class PlasticityRuntime {
         wireIdsBySketch.set(sketchId, ids);
       }
       const regions = [];
-      for (const [versionId, item] of this.geo.geometryModel) {
-        if (!this.geo.automatics.has(versionId) || item.view?.constructor?.name !== 'SketchIsland') continue;
+      for (const [versionId, item] of nativeApi.geo.geometryModel) {
+        if (!nativeApi.geo.automatics.has(versionId) || item.view?.constructor?.name !== 'SketchIsland') continue;
         let sketchId;
         try { sketchId = Number(this.sketches.getSketchId(item.view)); } catch { continue; }
         if (!Number.isInteger(sketchId)) continue;
@@ -860,10 +879,10 @@ export class PlasticityRuntime {
         registeredViewportCount: viewports.filter(viewport => viewport.sections?.includes(section)).length,
       })).sort((left, right) => left.id - right.id);
       const documentToken = String(this.document?.uuid ?? this.document?.filename ?? 'untitled');
-      const dbVersion = Number.isFinite(this.db?.version) ? this.db.version : null;
+      const dbVersion = Number.isFinite(nativeApi.db?.version) ? nativeApi.db.version : null;
       const undoDepth = this.history?.undoStack?.length ?? 0;
       const redoDepth = this.history?.redoStack?.length ?? 0;
-      const bodyToken = 'bodies:' + token(bodies.map(x => [x.id, x.versionId, x.materialId, x.visible, x.hidden, x.locked].join(':')).join(','));
+      const bodyToken = 'bodies:v' + topologyFormat + ':' + token(bodies.map(x => [x.id, x.versionId, x.materialId, x.visible, x.hidden, x.locked, x.boundsMethod].join(':')).join(','));
       const materialToken = 'materials:' + token(JSON.stringify(materials));
       const measurementToken = 'measurements:' + token(JSON.stringify(measurements));
       const instanceToken = 'instances:' + token(JSON.stringify(instances));
@@ -889,7 +908,7 @@ export class PlasticityRuntime {
         regions,
         bodies,
       };
-    }`, ["ConstructionPlaneDatabase", "Vector3", "Quaternion"], [], timeoutMs);
+    }`, ["ConstructionPlaneDatabase", "Vector3", "Quaternion", "pk_default"], [], timeoutMs);
     return { targetId: this.target.id, title: this.target.title, ...result };
   }
 
@@ -930,6 +949,15 @@ export class PlasticityRuntime {
     }) as CallResult;
     const handlerId = requireObjectId(handler.result, "Plasticity command log handler");
     const handlerProperties = await getProperties(this.client, handlerId);
+    if (!handlerProperties.internalProperties?.some((property) => property.name === "[[Scopes]]" && property.value?.objectId)) {
+      const discovered = await discoverStoreBindings(this.client);
+      const previous = [this.editorId, ...this.bindings.values()].filter(Boolean);
+      this.editorId = discovered.editorId;
+      this.bindings.clear();
+      for (const [name, id] of discovered.bindings) this.bindings.set(name, id);
+      await this.releaseObjects([handlerId, ...objectIds(handlerProperties.result), ...objectIds(handlerProperties.internalProperties ?? []), ...previous], new Set([this.editorId, ...this.bindings.values()]));
+      return;
+    }
     const scopesId = requireObjectId(handlerProperties.internalProperties?.find((property) => property.name === "[[Scopes]]")?.value, "Plasticity command scopes");
     const scopes = await getProperties(this.client, scopesId);
     const scopeIds = scopes.result
