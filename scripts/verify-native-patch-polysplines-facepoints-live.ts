@@ -58,7 +58,9 @@ type, topology counts, bounds and control points back through plasticity_status 
   - a two-face Sheet: per-face show, renumbering, a free second show, a move across both faces, hide, a free
     second hide; Plane and Cylinder faces are refused before any edit; grid shapes and the renumbered flag.
   - a coincident point on the edge two faces share: moved alone it is reported (one Undo step, read-back
-    fails and names the separation); moved together with its twin it succeeds.
+    fails and names the separation, the new revision and the undo / re-read / both-cvIds advice); moved together
+    with its twin it succeeds; with the twin face's points hidden, the move names that face and says to show it
+    first; a delta below the read-back resolution is refused before any edit.
   - a Sheet knife-split at its apex (two faces on one B-Surface): the show is refused before any edit.
 It undoes back to the baseline Undo depth, body count and reference-mesh count and never saves the document.
 Run it only against an isolated Plasticity instance.`;
@@ -410,13 +412,29 @@ async function main(): Promise<void> {
         await call(client, "plasticity_move_face_control_points", { bodyId: two.id, cvIds: [aEdge.cvId], deltaMm: [0, 0, 5], revision: (await status(client)).revision });
       } catch (error) { message = error instanceof Error ? error.message : String(error); }
       requireCondition(/separated coincident points of two faces/.test(message) && /include both cvIds/.test(message), `coincident: expected the separation to be reported, got "${message.slice(0, 300)}"`);
+      const afterLone = await status(client);
+      requireCondition(message.includes(`The document is now at revision ${afterLone.revision}; undo with plasticity_undo, re-read the cvIds with plasticity_show_face_control_points`), `coincident: the error must carry the new revision ${afterLone.revision} and the undo advice, got "${message.slice(0, 600)}"`);
       requireCondition((await status(client)).undoDepth === checkpoint + 1, "coincident: the lone move must stay one step in the Undo history");
       requireCondition((await status(client)).bodies.some((body: any) => body.id === two.id && body.faceCount === 2), "coincident: the body must survive the lone move");
       await undoTo(checkpoint);
       const together = await call(client, "plasticity_move_face_control_points", { bodyId: two.id, cvIds: [aEdge.cvId, bEdge.cvId], deltaMm: [0, 0, 5], revision: (await status(client)).revision });
       requireCondition(together.undoSteps === 1 && together.controlPoints.length === 2, "coincident: both points must move in one step");
       for (const point of together.controlPoints) requireNear(point.positionMm[2], aEdge.positionMm[2] + 5, `coincident: cv ${point.cvId} z`, 1e-3);
-      checks.face_points_coincident = { pair: [aEdge.cvId, bEdge.cvId], positionMm: aEdge.positionMm, aloneError: message.slice(0, 400), together: together.controlPoints };
+      await undoTo(checkpoint);
+      // A delta below the read-back resolution is refused before any edit.
+      await rejects("plasticity_move_face_control_points", { bodyId: two.id, cvIds: [aEdge.cvId], deltaMm: [0, 0, 0.0005] }, /below the verifiable resolution 0\.001 mm at this distance from the origin.*nothing was changed/, "sub-tolerance delta");
+      // The twin face's points hidden: the lone move names that face and says to show it first.
+      const hideB = await call(client, "plasticity_hide_face_control_points", { bodyId: two.id, faceIds: [fb], revision: (await status(client)).revision });
+      const aAlone = hideB.controlPoints.find((point: any) => at(point) === at(aEdge));
+      requireCondition(aAlone, "hidden twin: A's shared-edge point not found after hiding B");
+      let hiddenMessage = "";
+      try {
+        const movedAlone = await call(client, "plasticity_move_face_control_points", { bodyId: two.id, cvIds: [aAlone.cvId], deltaMm: [0, 0, 5], revision: (await status(client)).revision });
+        hiddenMessage = String(movedAlone.message ?? "");
+      } catch (error) { hiddenMessage = error instanceof Error ? error.message : String(error); }
+      requireCondition(/whose control points are not shown: .*first/.test(hiddenMessage) && /include both cvIds/.test(hiddenMessage) && hiddenMessage.includes(`${two.id}:${hideB.faces[0].faceId}`), `hidden twin: expected the show-that-face-first hint naming ${two.id}:${hideB.faces[0].faceId}, got "${hiddenMessage.slice(0, 500)}"`);
+      await undoTo(checkpoint);
+      checks.face_points_coincident = { pair: [aEdge.cvId, bEdge.cvId], positionMm: aEdge.positionMm, aloneError: message.slice(0, 600), together: together.controlPoints, hiddenTwin: hiddenMessage.slice(0, 600) };
       console.error("face_points_coincident: ok");
     }
 

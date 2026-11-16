@@ -1531,23 +1531,37 @@ delta instead. Verified on Plasticity 26.1.3 only.
   Plasticity measured before), `distanceMm`, `undoSteps`, `movedFaceId` (the
   moved face's new ID; face IDs change with the edit) and `planeOffsetMm` (the
   moved plane's offset along its outward normal) to the usual compact change.
-- After a commit the tool reads the body back. It counts the planes parallel to
-  the moving face (same direction) per offset, before and after. The edit is
-  confirmed when the moving face's own plane changed: its old offset lost a face
-  or the target offset gained one (a face that merges into a coplanar face at
-  the target, "make flush", only loses one), the body version changed, the plane
-  at the target lies `distanceMm` from the reference plane within 1e-6 mm, and a
-  given reference plane did not move. Either side of the reference is accepted;
-  live, Plasticity kept the moving face on its side in every case. A face that
-  already sat at the target does not count, and another face that moved there
-  while the moving face stayed is reported as "a different face moved".
-  Otherwise the session is marked uncertain and the error says what moved. A
-  stepped face moved past the bottom of its block (5 mm below the upper face set
-  to 12 mm) is removed by Plasticity; the tool reports that the moving face is
-  not at either distance and asks for `plasticity_reconcile`.
-- If Plasticity commits nothing (no Undo step, the body unchanged) although the
-  distance differs from `distanceMm`, the call fails with "Plasticity made no
-  change: distance is still X mm, requested Y mm"; the session stays certain.
+- Outcomes (one classifier, `src/plasticity/pick-command-outcome.ts`):
+  - committed, read back: success. Committed but the read-back does not match: a
+    certain error that says what changed, names the new revision and the one
+    Undo step, and `plasticity_undo` restores it (no reconcile needed).
+  - Rejected, unchanged: a certain error (or the equal-distance no-op), only when
+    `finish()` never ran, or when Plasticity answered "Operation has no effect"
+    and nothing landed or stayed active during the settle window.
+  - Anything else after `finish()`: undetermined; the session is uncertain, call
+    `plasticity_reconcile`.
+- After a commit the tool reads the body back, anchored on where the faces were
+  before the edit (face IDs change, so faces are found by plane and by
+  footprint: the face's bounds and the click point). It requires: (1) no face
+  with the moving normal remains at the old offset over the click point; (2) a
+  face with the moving normal at the target offset covers the click point
+  carried to the target (a merge into a larger coplanar face, "make flush", or a
+  split is fine; either side of the reference is accepted, the same side first);
+  (3) a face with the reference's normal still lies at the reference offset over
+  the reference's old centre (single-face mode: over Plasticity's reference
+  point, when a face lay there before); (4) the measured distance equals
+  `distanceMm` within 1e-6 mm; (5) along the normal no other plane appeared or
+  disappeared, except the old and the target offsets and offsets strictly
+  between them (a small step the move swallowed). The body version is not
+  checked: the planes and footprints prove the edit. A failed check after a clean
+  commit is the certain "committed but does not match" error. A stepped face
+  moved past the bottom of its block (5 mm below the upper face set to 12 mm) is
+  removed by Plasticity; the error names the removed face and the Undo step, and
+  one `plasticity_undo` restores the body (verified live).
+- If Plasticity ends after `finish()` without an Undo step and without its
+  no-effect rejection, the call fails with "Plasticity made no change: distance
+  is still X mm, requested Y mm" and the session is uncertain (round 4: only the
+  no-effect rejection proves that nothing will land).
 - If the distance already equals `distanceMm` within 1e-6 mm, nothing changes:
   `changed: false`, `undoSteps: 0` and a "distance already X mm" message. With a
   reference face the tool checks this before running anything, because
@@ -1572,26 +1586,26 @@ delta instead. Verified on Plasticity 26.1.3 only.
   without `Face.GetAnyPointOn` fails before anything starts with "not supported
   on this Plasticity build".
 - Lifecycle: everything runs in one native call. Plasticity's executor swallows
-  command errors, so the tool reads the error inside the command. The tool
-  records when its drive step calls the dialog's `finish()`. Three outcomes:
-  - committed: the commit is read back (above);
-  - cancelled before `finish()` (the dialog did not open, or the drive step did
-    not reach `finish()` in time) or rejected: the tool cancels its own command
-    (never another command) in the same call, and the document is unchanged;
-  - a timeout after `finish()`: undetermined. The tool cancels its own command,
-    then watches the Undo stack for a short window (250 ms, never past the
-    cancel budget). A commit seen to land in that window is read back as a
-    normal commit. Otherwise the session is marked uncertain for
-    `plasticity_reconcile`: a cancel cannot prove that a commit `finish()`
-    started will not land. Live on 26.1.3, a commit lands about 9 ms after
-    `finish()`, and a cancel 0-10 ms after `finish()` discarded the commit in
-    every trial ("Invalid state transition" or `PK_ERROR_aborted`;
-    `discovery/probes-2026-11-followups/probe-late-commit.json`). That is one
-    build, so the outcome stays undetermined.
-  A cancel that fails or throws, a command that never settles, a cleanup that
-  fails, or a commit of more than one Undo step also marks the session
+  command errors, so the tool reads the error inside the command. The native
+  source reports facts only (whether the drive step called `finish()`, how the
+  command settled and with which error, the Undo depth before and after a settle
+  window, what is active, how the cancel and the cleanup went); Node classifies
+  them. The drive step must call `finish()` before it returns: a later call is
+  refused and makes the outcome undetermined. After `finish()`, while no Undo
+  step has landed, the tool watches the Undo stack for 250 ms (never past the
+  cancel budget) before it decides. A commit seen to land is read back like any
+  other. A cancel of any kind after `finish()` (the tool's own after a timeout,
+  the user's Esc, a user command that pre-empts it: "invalid state: cancelled",
+  "Invalid state transition", `PK_ERROR_aborted`) never proves that nothing will
+  land, so it is undetermined: live on 26.1.3 a cancel 0-10 ms after `finish()`
+  discarded the commit in every trial
+  (`discovery/probes-2026-11-followups/probe-late-commit.json`), but that is one
+  build. A cancel that fails or throws, a command that never settles, a cleanup
+  that fails, or a commit of more than one Undo step also marks the session
   uncertain. A different command that is active at the end is left alone: it is
-  named in `warning` after a commit and in the error after any other outcome.
+  named in `warning` after a verified commit, and after `finish()` it makes any
+  other outcome undetermined. A plain "no effect" rejection is never reported as
+  "interrupted", even when a user command starts afterwards.
 - The tool clears the current Plasticity selection. Works as a
   `plasticity_batch` step (for example after `plasticity_create_box` and
   `plasticity_find_faces`). Live check: `npm run accept:native-driving-distance`.
@@ -2059,13 +2073,20 @@ on each axis each point must have moved by `deltaMm` within
 max(1e-3 mm, |coordinate| x 2e-7 x 4) (compared unrounded; positions are float32,
 so the tolerance is 0.032 mm at 40 m and 0.096 mm at 120 m), else the call
 reports what happened and the tolerance it used (the step stays in the Undo
-history). A show or hide whose read-back fails says so too and names the Undo
-steps it took. Moving one of two coincident points on the edge two faces share
-leaves the other in place; Plasticity then reshapes the moved face's surface (its
-grid grew from 4 x 2 to 7 x 2), the kernel still reports the body valid, and the
-read-back fails and names the separation (verified live,
-`probe-coincident-point.json`). Move both `cvId`s together to move a shared edge
-point. On 26.1.3 the move writes
+history). A delta the read-back could not tell from no move (inside the
+tolerance on every axis at that point) is refused before the edit: "below the
+verifiable resolution X mm at this distance from the origin". `undoSteps` is
+the measured Undo depth change; a verified move whose depth did not change
+reports `undoSteps: null` with a note. A show or hide whose read-back fails says
+so too and names the Undo steps it took. Moving one of two coincident points on
+the edge two faces share leaves the other in place; Plasticity then reshapes the
+moved face's surface (its grid grew from 4 x 2 to 7 x 2), the kernel still
+reports the body valid, and the read-back fails and names the separation
+(verified live, `probe-coincident-point.json`). That error names the new
+revision and says: undo with `plasticity_undo`, re-read the `cvId`s with
+`plasticity_show_face_control_points`, and move both points together. When the
+twin point's face is not shown, the hint names that face and says to show it
+first. Move both `cvId`s together to move a shared edge point. On 26.1.3 the move writes
 `factory.cvs`; the 26.2 control-point adapter (which writes `controlPoints` for
 Wire handles) is not used for face points because it is not verified there.
 Re-read exact B-Rep geometry afterward.

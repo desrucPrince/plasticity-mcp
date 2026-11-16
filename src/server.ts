@@ -2977,14 +2977,26 @@ function createServerWithCatalog(
         reuse.endStateReuse?.();
         const message = error instanceof Error ? error.message : String(error);
         let undone = 0;
+        // The step's own error always comes first. After an uncertain step the undo is not attempted (it would be
+        // refused, and its refusal used to replace the step's error); an undo that fails is reported next to it.
+        let undoNote: Record<string, string> = {};
         if (input.undoOnError) {
-          const undo = routedTools.get("plasticity_undo");
-          for (let remaining = (await session.get().state()).undoDepth - start.undoDepth; undo && remaining > 0; remaining -= 1) {
-            await undo.callback(await undo.inputSchema.parseAsync({ revision: (await session.get().state()).revision, intent: "plasticity_batch undoOnError" }), extra);
-            undone += 1;
+          const uncertain = (session.get() as { runtime?: { isUncertain?: () => boolean } }).runtime?.isUncertain?.() === true;
+          if (uncertain) {
+            undoNote = { undo: "not attempted because the result of the failed step is uncertain; call reconcile (plasticity_reconcile) first, then undo if needed" };
+          } else {
+            const undo = routedTools.get("plasticity_undo");
+            try {
+              for (let remaining = (await session.get().state()).undoDepth - start.undoDepth; undo && remaining > 0; remaining -= 1) {
+                await undo.callback(await undo.inputSchema.parseAsync({ revision: (await session.get().state()).revision, intent: "plasticity_batch undoOnError" }), extra);
+                undone += 1;
+              }
+            } catch (undoError) {
+              undoNote = { undoError: (undoError instanceof Error ? undoError.message : String(undoError)).slice(0, 1_000) };
+            }
           }
         }
-        throw new Error(JSON.stringify({ failedStep: index, toolName: step.toolName, error: message.slice(0, 4_000), completedSteps: renderSteps(), ...returnErrorsField(), undoneSteps: undone }));
+        throw new Error(JSON.stringify({ failedStep: index, toolName: step.toolName, error: message.slice(0, 4_000), completedSteps: renderSteps(), ...returnErrorsField(), undoneSteps: undone, ...undoNote }));
       }
     }
     reuse.beginStateReuseStep?.(); // the end state is probed like a step's first read
@@ -4046,7 +4058,7 @@ function createServerWithCatalog(
     });
     return { ...(result as unknown as Record<string, unknown>), ...hidden };
   }, false, { destructiveHint: false });
-  tool("plasticity_move_face_control_points", "Move shown face control points by a shared world-space millimeter delta in one Plasticity history step and return their new positions with their new cvId and faceId (both change with the move). cvIds are strings from plasticity_show_face_control_points or plasticity_hide_face_control_points on the same body at the current revision; unknown or stale IDs are rejected and ask for the show call first. Points of several faces of one body can move together. The result is read back: on every axis each point must have moved by deltaMm within max(1e-3 mm, |coordinate| x 8e-7) (positions are float32: 0.032 mm at 40 m), otherwise the call reports what happened and the tolerance used (the step stays in the Undo history). undoSteps is the measured Undo depth change. Moving only one of two coincident points on an edge shared by two faces leaves the other in place; Plasticity then reshapes that face's surface (the body stays valid) and the read-back reports it, so include both cvIds to move a shared edge point. Re-read exact B-Rep geometry afterward. Verified on Plasticity 26.1.3 only.", z.object({
+  tool("plasticity_move_face_control_points", "Move shown face control points by a shared world-space millimeter delta in one Plasticity history step and return their new positions with their new cvId and faceId (both change with the move). cvIds are strings from plasticity_show_face_control_points or plasticity_hide_face_control_points on the same body at the current revision; unknown or stale IDs are rejected and ask for the show call first. Points of several faces of one body can move together. The result is read back: on every axis each point must have moved by deltaMm within max(1e-3 mm, |coordinate| x 8e-7) (positions are float32: 0.032 mm at 40 m), otherwise the call reports what happened and the tolerance used (the step stays in the Undo history). A delta inside that tolerance on every axis cannot be verified and is refused before the edit. undoSteps is the measured Undo depth change (null with a note when a verified move did not change the Undo depth). Moving only one of two coincident points on an edge shared by two faces leaves the other in place; Plasticity then reshapes that face's surface (the body stays valid) and the read-back reports it with the new revision: undo, re-read the cvIds with plasticity_show_face_control_points and include both cvIds (show the other face first when its points are not shown). Re-read exact B-Rep geometry afterward. Verified on Plasticity 26.1.3 only.", z.object({
     bodyId: z.number().int().positive(),
     cvIds: z.array(z.string().min(1).max(64)).min(1).max(4096).refine((values) => new Set(values).size === values.length, "Control point IDs must be unique"),
     deltaMm: vector.refine((value) => Math.hypot(...value) > 0, "Face control point move delta must be nonzero"),
@@ -4061,7 +4073,7 @@ function createServerWithCatalog(
     });
     return { ...(result as unknown as Record<string, unknown>), ...moved };
   });
-  tool("plasticity_set_driving_distance", "Set the distance between two parallel planar faces of one Solid or Sheet to an exact millimeter value, as Plasticity's Dimension tool does: movingFaceId moves (with the geometry attached to it) and referenceFaceId stays fixed. The two faces may face opposite ways (a box's two ends) or the same way (two steps of a stepped block). Without referenceFaceId, Plasticity finds the opposite face itself. Use it to resize a part to an exact overall dimension (a 20 mm box to 30 mm, a cylinder to 16 mm tall) without computing an offset: plasticity_extrude_faces and plasticity_move need the delta, this takes the target distance. One Plasticity history step; it clears the current Plasticity selection. If the distance already equals distanceMm (within 1e-6 mm) nothing runs and the result has changed false and undoSteps 0. Returns previousDistanceMm (what Plasticity measured before), distanceMm, movedFaceId (the moved face's new ID: face IDs change with the edit) and planeOffsetMm (the moved plane's offset along its outward normal); the result is read back and checked: the moving face's own plane must have moved (or merged into a coplanar face at the target) to exactly distanceMm from the reference plane, on either side. Faces that face each other (the two walls of a slot) work too. Rejects non-planar faces, faces of another body, and a non-parallel reference. If Plasticity cannot dimension the pair (for example single-face mode where the surface behind the face is not a parallel plane), nothing changes. If Plasticity commits nothing although the distance differs, the call fails with 'Plasticity made no change'. Outcomes: committed (read back); cancelled before the dialog was finished, or rejected: the document is unchanged; a timeout after the dialog was finished: undetermined, call plasticity_reconcile (a commit may still land). Verified on Plasticity 26.1.3 only.", z.object({
+  tool("plasticity_set_driving_distance", "Set the distance between two parallel planar faces of one Solid or Sheet to an exact millimeter value, as Plasticity's Dimension tool does: movingFaceId moves (with the geometry attached to it) and referenceFaceId stays fixed. The two faces may face opposite ways (a box's two ends) or the same way (two steps of a stepped block). Without referenceFaceId, Plasticity finds the opposite face itself. Use it to resize a part to an exact overall dimension (a 20 mm box to 30 mm, a cylinder to 16 mm tall) without computing an offset: plasticity_extrude_faces and plasticity_move need the delta, this takes the target distance. One Plasticity history step; it clears the current Plasticity selection. If the distance already equals distanceMm (within 1e-6 mm) nothing runs and the result has changed false and undoSteps 0. Returns previousDistanceMm (what Plasticity measured before), distanceMm, movedFaceId (the moved face's new ID: face IDs change with the edit) and planeOffsetMm (the moved plane's offset along its outward normal); the result is read back where the faces were: the moving face must have left its old place and a face must sit over its click point exactly distanceMm from the reference (merging into a coplanar face or splitting is fine, either side), the reference must stay, and no other plane along the normal may appear or disappear. Faces that face each other (the two walls of a slot) work too. Rejects non-planar faces, faces of another body, and a non-parallel reference. If Plasticity cannot dimension the pair (for example single-face mode where the surface behind the face is not a parallel plane), nothing changes. Outcomes: (1) committed and read back: success; committed but the read-back does not match: a certain error that says what changed and names the new revision and the one Undo step, and plasticity_undo restores it. (2) Rejected, unchanged: only when the dialog was never finished, or Plasticity answered 'Operation has no effect' and nothing landed. (3) Anything else after the dialog was finished (a cancel, a timeout, a user command, no Undo step without the no-effect answer): undetermined, call plasticity_reconcile before any other edit and do not undo. Verified on Plasticity 26.1.3 only.", z.object({
     bodyId: z.number().int().positive(),
     movingFaceId: z.string().min(1),
     referenceFaceId: z.string().min(1).optional(),

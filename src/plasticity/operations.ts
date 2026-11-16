@@ -6,6 +6,7 @@ import { dirname, extname, join, resolve } from "node:path";
 
 import { NATIVE_VIEWPORT_CAPTURE } from "./viewport-capture.ts";
 import { nativeFunction } from "./native-function.ts";
+import { classifyPickOutcome, type PickCancelResult, type PickOutcome, type PickOutcomeFacts } from "./pick-command-outcome.ts";
 import { LONG_NATIVE_IMPORT_TIMEOUT_MS, NATIVE_STATE_READ_TIMEOUT_MS, PlasticityRuntime, type RevisionProbe, type RuntimeState } from "./runtime.ts";
 import { add, ConstructionGeometry, cross, dot, frameFromOriginNormalX, localPointToWorld, normalize, scale, subtract } from "./construction.ts";
 import {
@@ -486,6 +487,8 @@ interface FaceControlPointLayout {
   unattributed?: string | null;
   /** Number of shown control points of the body. */
   cvCount?: number;
+  /** When requested: the kernel control points of BSurf faces whose points are not shown (raw and weight-projected). */
+  hiddenPoints?: Array<{ faceId: string; index: number; rawMm: Vector3; projectedMm: Vector3 }>;
 }
 
 const publicPoint = ({ rawMm: _raw, ...point }: FaceControlPoint & { rawMm?: Vector3 }): FaceControlPoint => point;
@@ -607,10 +610,26 @@ const FACE_CONTROL_POINT_LAYOUT = `
       duplicates.push([grid.faceId, ...twins.map(twin => twin.faceId)]);
     }
   }
+  // Kernel points of faces whose points are not shown: a shared-edge twin of a moved point may sit there.
+  let hiddenPoints = undefined;
+  if (args.hiddenGrids) {
+    const shownFaces = new Set(blocks.map(block => block.faceId));
+    hiddenPoints = [];
+    for (const grid of grids) {
+      if (shownFaces.has(grid.faceId)) continue;
+      for (let index = 0; index < grid.count; index += 1) {
+        const base = index * grid.stride;
+        const weight = grid.stride === 4 ? grid.vertices[base + 3] : 1;
+        const raw = [0, 1, 2].map(axis => grid.vertices[base + axis] * 1000);
+        hiddenPoints.push({ faceId: grid.faceId, index, rawMm: raw, projectedMm: weight ? raw.map(value => value / weight) : raw });
+      }
+    }
+  }
   return {
     entities, blocks, points, cvCount: cvs.length, unattributed,
     grids: grids.map(grid => ({ faceId: grid.faceId, u: grid.u, v: grid.v })),
     ...(duplicates ? { duplicates } : {}),
+    ...(hiddenPoints ? { hiddenPoints } : {}),
   };`;
 
 // Maps the caller's face IDs to the same faces in a later layout: through the kernel entity ids the edit returned,
@@ -723,6 +742,27 @@ export interface PickCommandSpec {
   /** Short name for error messages. */
   label: string;
   timeouts?: PickCommandTimeouts;
+  /**
+   * The caller's read-back after the native call: whether the edited body changed and, for a one-step commit after
+   * finish(), the geometry check. Without it the helper compares the selected bodies before and after the call and
+   * treats a one-step commit as unverified (undetermined).
+   */
+  readBack?: (run: PickCommandRun<unknown>) => Promise<PickReadBack>;
+  /** A rejected-unchanged run the caller turns into a result (the equal-distance no-op) instead of an error. */
+  acceptUnchanged?: (run: PickCommandRun<unknown>) => boolean;
+}
+
+export interface PickReadBack {
+  bodyChanged: boolean | null;
+  geometry: "pass" | "fail" | null;
+  /** The document revision after the call. */
+  revision: string;
+  /** What the edit touches, for messages ("body 5"). */
+  subject: string;
+  /** The read-back result in words, for the one-step cases. */
+  readback: string;
+  /** "Plasticity made no change: ...", for the no-step cases. */
+  noChange: string;
 }
 
 export interface PickCommandEnd {
@@ -732,15 +772,20 @@ export interface PickCommandEnd {
   spaceInputFocused: boolean;
 }
 
+// The native record. It reports facts only; classifyPickOutcome (pick-command-outcome.ts) decides what they mean.
 interface PickCommandNativeResult {
-  /** "undetermined": the native function hit an unexpected error after the command started. */
+  /** What happened mechanically (not a verdict): "committed" = execute() resolved after the dialog. */
   outcome: "committed" | "rejected" | "cancelled" | "cancel-failed" | "failed" | "undetermined";
   phase: "dialog" | "drive" | "finish" | "chained" | "unexpected" | null;
+  /** The drive step's or the helper's own error (not the execute() error, which is execError). */
   error: string | null;
   drive: unknown;
   /** The drive step threw (as opposed to not returning in time). */
   driveThrew: boolean;
+  /** Undo depth change at the last measurement (after the settle window when one ran). */
   undoDelta: number;
+  /** Undo depth change when the command flow ended, before the settle window. */
+  undoDeltaAtReturn?: number;
   /** Our exec() promise settled. */
   settled: boolean;
   /** Our command (by identity) is still the executor's active command. */
@@ -749,27 +794,54 @@ interface PickCommandNativeResult {
   foreignActive: string | null;
   /** The drive step called dialog.finish(): a cancel after this point cannot prove the commit was discarded. */
   finishCalled?: boolean;
-  /** The commit landed after the cancel, inside the settle window. */
+  /** finish() was called after the drive step returned; the call was refused. */
+  lateFinish?: boolean;
+  /** The dialog's finish() threw after it started. */
+  finishThrew?: boolean;
+  /** The commit landed after a cancel, inside the settle window. */
   lateCommit?: boolean;
+  /** How long the settle window ran, in ms (0 when none ran). */
+  settleWaitMs?: number;
+  /** The execute() error (captured in the wrapped execute(); the 26.1.3 executor swallows it), or the exec() rejection. */
+  execError?: string | null;
   /** Constructor name of the execute() error, when there was one. */
   execErrorName?: string | null;
+  /** "not-needed", "ok", "failed" (did not settle in time) or "threw". */
+  cancel?: PickCancelResult;
   cancelError: string | null;
   cleanupError: string | null;
+  /** The hit points seeded, in meters (the kernel's own point on the face for onFace hits). */
+  hits?: Vector3[];
   end: PickCommandEnd | null;
 }
 
-export type PickCommandResult<T> =
-  | { committed: true; drive: T; undoDelta: number; end: PickCommandEnd | null; foreignActive: string | null; lateCommit?: boolean }
-  /** The command ran its dialog to finish() but Plasticity refused the commit; the Undo history is unchanged. */
-  | { committed: false; drive: T; error: string; end: PickCommandEnd | null };
+/** A pick-command run as Node sees it: the validated native record plus the classifier facts it supports. */
+export interface PickCommandRun<T> {
+  native: PickCommandNativeResult;
+  drive: T;
+  /** Facts for classifyPickOutcome; bodyChanged and geometry come from the read-back. */
+  facts: Omit<PickOutcomeFacts, "bodyChanged" | "geometry">;
+  timeouts: PickCommandTimeouts;
+}
+
+/** What runPickCommand returns: a verified commit, or a rejected-unchanged run the caller accepted (acceptUnchanged). */
+export interface PickCommandResult<T> extends PickCommandRun<T> {
+  outcome: PickOutcome;
+}
 
 // Generic renderer source for runPickCommand. The drive step is spliced in as the body of an async function, so
 // one source serves every pick command; everything else comes from the bindings and args.
-// Lifecycle contract: once the command has started, the function never throws. Every path returns an outcome,
-// and a cancel that throws counts as "cancel-failed". The executor swallows errors from execute() and resolves
-// exec() (26.1.3, discovery/probes-2026-11-pick/prove-driving-distance.json trials 9 and 11), so the error is
-// captured inside the wrapped execute(), not only from an exec() rejection. cancel() only ever cancels OUR command
+// Lifecycle contract: once the command has started, the function never throws. Every path returns facts, and a
+// cancel that throws is reported as such. The executor swallows errors from execute() and resolves exec()
+// (26.1.3, discovery/probes-2026-11-pick/prove-driving-distance.json trials 9 and 11), so the error is captured
+// inside the wrapped execute(), not only from an exec() rejection. cancel() only ever cancels OUR command
 // (identity check); a different active command is reported, never cancelled.
+// Drive contract: the drive step must call finish() before it returns (synchronously, or before its promise
+// settles). Once the drive step has returned or timed out, finish() is refused and the late call is reported, so a
+// commit can never start after the helper stopped watching.
+// Settle window: after finish(), whenever no Undo step has landed yet, the helper watches the Undo stack for
+// settleMs (never past the cancelMs budget) and measures it again, so a no-effect rejection is only reported
+// after the window shows nothing landed.
 function pickCommandSource(drive: string): string {
   return nativeFunction`async function (Command, Dialog, Vector3, args) {
     const editor = this;
@@ -830,41 +902,37 @@ function pickCommandSource(drive: string): string {
     };
     const clear = () => { selection.selected.removeAll(); selection.hits.clear(); };
     const undoBefore = this.history.undoStack.length;
+    const undoDelta = () => this.history.undoStack.length - undoBefore;
     const result = {
-      outcome: 'undetermined', phase: null, error: null, drive: null, driveThrew: false, undoDelta: 0, settled: false,
-      ourActive: false, foreignActive: null, cancelError: null, cleanupError: null, end: null,
-      finishCalled: false, lateCommit: false, execErrorName: null,
+      outcome: 'undetermined', phase: null, error: null, drive: null, driveThrew: false, undoDelta: 0, undoDeltaAtReturn: 0, settled: false,
+      ourActive: false, foreignActive: null, cancel: 'not-needed', cancelError: null, cleanupError: null, end: null,
+      finishCalled: false, lateFinish: false, finishThrew: false, lateCommit: false, settleWaitMs: 0, execError: null, execErrorName: null,
       hits: hitSeeds.map(seed => seed.pointM),
     };
     let started = false, settled = false, execError = null, execErrorName = null, command = null, finishCalled = false;
+    let driveOpen = false, lateFinish = false, finishThrew = false, cancelStart = null;
     const ourActive = () => command !== null && executor.active?.command === command;
     // Cancels OUR command only, then waits until it has settled and is no longer active. Never throws.
     const cancel = async () => {
+      if (cancelStart === null) cancelStart = Date.now();
       try {
         if (ourActive()) executor.cancelActiveCommand();
       } catch (error) {
         result.cancelError = message(error);
+        result.cancel = 'threw';
         return false;
       }
       const deadline = Date.now() + args.timeouts.cancelMs;
       while ((!settled || ourActive()) && Date.now() < deadline) await sleep(10);
-      return settled && !ourActive();
+      const ok = settled && !ourActive();
+      result.cancel = ok ? 'ok' : 'failed';
+      return ok;
     };
-    // After finish() a cancel may race a commit that is already running. Cancel OUR command, then watch the Undo
-    // stack for a bounded window (never past the cancelMs budget). A commit seen to land is reported as committed so
-    // the caller reads it back; otherwise the outcome stays undetermined: a cancel cannot prove nothing will land.
+    // After finish() a cancel may race a commit that is already running: cancel OUR command and report the facts.
+    // The settle window below watches for a late commit; the classifier decides what the facts mean.
     const cancelAfterFinish = async phase => {
       result.phase = phase;
-      const cancelStart = Date.now();
-      if (!(await cancel())) { result.outcome = 'cancel-failed'; return; }
-      const windowEnd = Math.min(cancelStart + args.timeouts.cancelMs, Date.now() + args.settleMs);
-      while (this.history.undoStack.length === undoBefore && Date.now() < windowEnd) await sleep(10);
-      if (this.history.undoStack.length !== undoBefore && settled && !ourActive()) {
-        result.outcome = 'committed';
-        result.lateCommit = true;
-      } else {
-        result.outcome = 'undetermined';
-      }
+      result.outcome = (await cancel()) ? 'cancelled' : 'cancel-failed';
     };
     try {
       clear();
@@ -904,15 +972,24 @@ function pickCommandSource(drive: string): string {
           result.outcome = (await cancel()) ? 'cancelled' : 'cancel-failed';
         }
       } else {
-        // Record that the drive step called finish(): from then on a commit may be running.
+        // Record that the drive step called finish(): from then on a commit may be running. A finish() call after
+        // the drive step returned (or timed out) is refused and reported: the helper no longer watches then.
         if (typeof dialog.finish === 'function') {
           const finish = dialog.finish;
-          dialog.finish = function (...finishArgs) { finishCalled = true; return finish.apply(this, finishArgs); };
+          dialog.finish = function (...finishArgs) {
+            if (!driveOpen) { lateFinish = true; throw new Error('finish() was called after the drive step returned; it was refused'); }
+            finishCalled = true;
+            try { return finish.apply(this, finishArgs); } catch (error) { finishThrew = true; throw error; }
+          };
         }
         const finishDeadline = Date.now() + args.timeouts.finishMs;
         let driveError = null, driveDone = false;
-        drive(dialog, args.driveArgs).then(value => { result.drive = value ?? null; driveDone = true; }, error => { driveError = message(error); driveDone = true; });
+        driveOpen = true;
+        let driving;
+        try { driving = Promise.resolve(drive(dialog, args.driveArgs)); } catch (error) { driving = Promise.reject(error); }
+        driving.then(value => { result.drive = value ?? null; driveDone = true; }, error => { driveError = message(error); driveDone = true; });
         while (!driveDone && Date.now() < finishDeadline) await sleep(10);
+        driveOpen = false;
         if (driveError !== null || !driveDone) {
           result.driveThrew = driveError !== null;
           result.error = driveError ?? 'the drive step did not return';
@@ -940,19 +1017,36 @@ function pickCommandSource(drive: string): string {
       }
     } catch (error) {
       if (!started) throw error;
+      driveOpen = false;
       result.error = message(error);
-      if (finishCalled && !(settled && !ourActive())) await cancelAfterFinish('unexpected');
-      else if (finishCalled) { result.phase = 'unexpected'; result.outcome = 'undetermined'; }
-      else {
-        result.phase = 'unexpected';
-        result.outcome = settled && !ourActive() ? 'failed' : (await cancel()) ? 'failed' : 'cancel-failed';
-      }
+      result.phase = 'unexpected';
+      if (settled && !ourActive()) result.outcome = 'failed';
+      else result.outcome = (await cancel()) ? 'failed' : 'cancel-failed';
     } finally {
+      driveOpen = false;
       try { clear(); focusedInput()?.blur?.(); } catch (error) { result.cleanupError = message(error); }
     }
     try {
-      result.undoDelta = this.history.undoStack.length - undoBefore;
+      result.undoDeltaAtReturn = undoDelta();
+      // Settle window: once finish() was called and no Undo step has landed, watch the Undo stack (never past the
+      // cancelMs budget, counted from the cancel when there was one) before the last measurement.
+      if (finishCalled && undoDelta() === 0) {
+        const windowStart = Date.now();
+        const windowEnd = Math.min(windowStart + args.settleMs, (cancelStart ?? windowStart) + args.timeouts.cancelMs);
+        while (!(undoDelta() !== 0 && settled && !ourActive()) && Date.now() < windowEnd) await sleep(10);
+        result.settleWaitMs = Date.now() - windowStart;
+      }
+      // A commit that is in the Undo history although the helper had to cancel: it landed after (or during) the cancel.
+      result.lateCommit = finishCalled && cancelStart !== null && undoDelta() !== 0;
+    } catch (error) {
+      result.cleanupError = (result.cleanupError ? result.cleanupError + '; ' : '') + message(error);
+    }
+    try {
+      result.undoDelta = undoDelta();
       result.finishCalled = finishCalled;
+      result.lateFinish = lateFinish;
+      result.finishThrew = finishThrew;
+      result.execError = execError;
       result.execErrorName = execErrorName;
       result.settled = settled;
       result.ourActive = ourActive();
@@ -965,6 +1059,129 @@ function pickCommandSource(drive: string): string {
     }
     return result;
   }`;
+}
+
+const PICK_RECONCILE = "the result is uncertain. Call plasticity_reconcile before any other edit";
+const PICK_NATIVE_OUTCOMES = new Set(["committed", "rejected", "cancelled", "cancel-failed", "failed", "undetermined"]);
+
+// Facts for classifyPickOutcome from a native record. A record without the facts this source reports (an older or
+// hand-made record) is malformed: it is never trusted for an "unchanged" claim.
+function pickCommandFacts(native: PickCommandNativeResult): Omit<PickOutcomeFacts, "bodyChanged" | "geometry"> {
+  const missing = [
+    typeof native.finishCalled === "boolean" ? null : "finishCalled",
+    typeof native.lateFinish === "boolean" ? null : "lateFinish",
+    typeof native.settled === "boolean" ? null : "settled",
+    typeof native.ourActive === "boolean" ? null : "ourActive",
+    Number.isInteger(native.undoDelta) ? null : "undoDelta",
+    Number.isInteger(native.undoDeltaAtReturn) ? null : "undoDeltaAtReturn",
+    native.execError === null || typeof native.execError === "string" ? null : "execError",
+    typeof native.cancel === "string" && ["not-needed", "ok", "failed", "threw"].includes(native.cancel) ? null : "cancel",
+  ].filter((name): name is string => name !== null);
+  const execError = typeof native.execError === "string" ? native.execError : null;
+  return {
+    malformed: missing.length > 0 ? `the native record lacks ${missing.join(", ")}` : null,
+    finishCalled: native.finishCalled === true,
+    lateFinish: native.lateFinish === true,
+    settle: native.settled !== true ? "never" : execError !== null ? "rejected" : "resolved",
+    errorText: execError,
+    errorName: typeof native.execErrorName === "string" ? native.execErrorName : null,
+    undoDeltaAtReturn: Number.isInteger(native.undoDeltaAtReturn) ? native.undoDeltaAtReturn! : native.undoDelta,
+    undoDeltaAfterSettle: native.undoDelta,
+    ourActive: native.ourActive === true,
+    foreignActive: typeof native.foreignActive === "string" && native.foreignActive !== "" ? native.foreignActive : null,
+    cancel: native.cancel ?? (native.cancelError ? "threw" : "not-needed"),
+    cleanup: native.cleanupError ? "threw" : "ok",
+  };
+}
+
+// The note on a verified commit that did not end the plain way. "after the N ms finish wait" only when the helper
+// really waited that long; a drive step that threw after an instant commit says so.
+function pickVerifiedNote(native: PickCommandNativeResult, timeouts: PickCommandTimeouts): string | null {
+  if (native.lateCommit === true) {
+    if (native.phase === "finish") return `the commit landed after the ${timeouts.finishMs} ms finish wait; it was read back like any other`;
+    if (native.phase === "drive" && native.driveThrew) return `the drive step threw after finish() (${native.error ?? "no message"}); the commit landed and was read back like any other`;
+    if (native.phase === "drive") return `the drive step did not return within ${timeouts.finishMs} ms after finish(); the commit landed and was read back like any other`;
+    return `the helper cancelled the command after finish()${native.error ? ` (${native.error})` : ""}; the commit landed and was read back like any other`;
+  }
+  if (native.execError) return `Plasticity reported "${native.execError}" after the dialog was finished, but the commit landed and was read back like any other`;
+  if (native.phase === "drive" && native.driveThrew) return `the drive step threw after finish() (${native.error ?? "no message"}); the commit landed and was read back like any other`;
+  return null;
+}
+
+// A rejected-unchanged outcome: finish() never called (any reason), or Plasticity's no-effect rejection after it.
+function pickRejectedMessage(spec: { label: string; rejectedMessage: string }, run: PickCommandRun<unknown>, outcome: PickOutcome): string {
+  const { native, timeouts } = run;
+  const { label } = spec;
+  const detail = native.error ? `: ${native.error}` : "";
+  const execDetail = native.execError ? `: ${native.execError}` : "";
+  const foreign = native.foreignActive ? `; another Plasticity command (${native.foreignActive}) is active and was left alone` : "";
+  if (run.facts.finishCalled) return `${label} failed${execDetail}${foreign}; the document is unchanged`;
+  if (outcome.reason === "no-effect") return `${spec.rejectedMessage}${execDetail}${foreign}`;
+  if (outcome.reason === "interrupted") {
+    const by = native.foreignActive ? ` by another Plasticity command (${native.foreignActive}), which was left alone` : "";
+    const when = native.outcome === "rejected" ? "before its dialog opened" : "before its dialog was finished";
+    return `${label} was interrupted ${when}${by}${execDetail}; the document is unchanged`;
+  }
+  if (outcome.reason === "cancelled") {
+    if (native.phase === "unexpected") return `${label} failed${detail}; the document is unchanged${foreign}`;
+    if (native.phase === "drive" && native.driveThrew) return `${label} drive step threw (drive phase)${detail}; Plasticity cancelled it and the document is unchanged${foreign}`;
+    const limit = native.phase === "dialog" ? timeouts.dialogMs : timeouts.finishMs;
+    return `${label} did not finish within ${limit} ms (${native.phase ?? "unknown"} phase)${detail}; Plasticity cancelled it and the document is unchanged${foreign}`;
+  }
+  if (native.outcome === "rejected") return `${label} ended before its dialog opened${execDetail || ": the command ended without opening its dialog"}; the document is unchanged${foreign}`;
+  return `${label} failed${detail || execDetail}; the document is unchanged${foreign}`;
+}
+
+// An undetermined outcome: the runtime is marked uncertain by the caller; the message says why and asks for reconcile.
+function pickUndeterminedMessage(label: string, run: PickCommandRun<unknown>, outcome: PickOutcome, context: PickReadBack): string {
+  const { native, timeouts, facts } = run;
+  const detail = native.error ? `: ${native.error}` : "";
+  const foreign = facts.foreignActive ? `; another Plasticity command (${facts.foreignActive}) is active and was left alone` : "";
+  const still = native.end?.activeCommand ?? (native.ourActive ? "our command" : "unknown");
+  const delta = native.undoDelta;
+  let reason = outcome.reason;
+  if (reason === "malformed") {
+    // A record without the full facts: say the most specific thing it does show.
+    if (native.cleanupError) reason = "cleanup-failed";
+    else if (native.outcome === "cancel-failed") reason = "cancel-failed";
+    else if (native.settled !== true) reason = "never-settled";
+    else if (native.ourActive === true) reason = "still-active";
+    else if (!Number.isInteger(delta) || delta < 0 || delta > 1 || (native.outcome !== "committed" && delta !== 0)) reason = "too-many-steps";
+  }
+  switch (reason) {
+    case "cleanup-failed": return `${label} ended in an undetermined state (cleanup failed: ${native.cleanupError}); ${PICK_RECONCILE}`;
+    case "cancel-failed": return `${label} did not finish and Plasticity could not cancel it (still active: ${still}); ${PICK_RECONCILE}.${native.cancelError ? ` Cancel error: ${native.cancelError}.` : ""}`;
+    case "never-settled": return `${label} ended in an undetermined state (the command never settled)${foreign}; ${PICK_RECONCILE}`;
+    case "still-active": return `${label} ended in an undetermined state (still active: ${still}); ${PICK_RECONCILE}`;
+    case "late-finish": return `${label} drive step called finish() after it had returned; the call was refused, but the helper no longer watched the command${foreign}; ${PICK_RECONCILE}`;
+    case "too-many-steps":
+    case "history-shrank":
+    case "history-changed-before-finish":
+      return native.outcome === "committed" && Number.isInteger(delta) && delta >= 0
+        ? `${label} committed ${delta} Undo steps instead of 1; ${PICK_RECONCILE}`
+        : `${label} ended as ${native.outcome} but changed the Undo history by ${delta}; ${PICK_RECONCILE}`;
+    case "body-changed-before-finish": return `${label} ended before its dialog was finished (${native.outcome}${detail}), but ${context.subject} changed${foreign}; ${PICK_RECONCILE}`;
+    case "body-unknown": return `${label} ended before its dialog was finished, but ${context.subject} could not be compared; ${PICK_RECONCILE}`;
+    case "body-changed-no-step": return `${label} committed no Undo step but ${context.subject} changed${foreign}; ${PICK_RECONCILE}`;
+    case "readback-missing":
+    case "mismatch-unclean": {
+      const why = facts.errorText ? ` although Plasticity reported "${facts.errorText}"` : facts.foreignActive ? ` while another Plasticity command (${facts.foreignActive}) is active` : facts.cancel !== "not-needed" ? " after the helper cancelled it" : "";
+      return `${label} committed one Undo step${why}, but the read-back does not match: ${context.readback}; ${PICK_RECONCILE}`;
+    }
+    case "no-commit": return `${label} ended after its dialog was finished without an Undo step and without Plasticity's no-effect rejection (${context.noChange}); a commit that finish() started may still land${foreign}; ${PICK_RECONCILE}`;
+    case "no-effect-unclean": {
+      const why = facts.foreignActive ? `another Plasticity command (${facts.foreignActive}) is active` : "the helper had to cancel it";
+      return `${label} was refused after its dialog was finished (${facts.errorText}), but ${why}, so a commit may still land; ${PICK_RECONCILE}`;
+    }
+    case "error-after-finish": {
+      if (facts.cancel === "ok" && native.phase === "finish") return `${label} did not finish within ${timeouts.finishMs} ms after its dialog was finished (finish phase)${detail}; Plasticity cancelled it, but a commit that finish() started may still land${foreign}; ${PICK_RECONCILE}`;
+      if (native.phase === "drive" && native.driveThrew) return `${label} drive step threw after its dialog was finished (drive phase)${detail}; Plasticity cancelled it, but a commit that finish() started may still land${foreign}; ${PICK_RECONCILE}`;
+      if (native.phase === "drive") return `${label} did not finish within ${timeouts.finishMs} ms after its dialog was finished (drive phase)${detail}; Plasticity cancelled it, but a commit that finish() started may still land${foreign}; ${PICK_RECONCILE}`;
+      if (native.phase === "unexpected") return `${label} failed after its dialog was finished${detail}; a commit that finish() started may still land${foreign}; ${PICK_RECONCILE}`;
+      return `${label} failed${facts.errorText ? `: ${facts.errorText}` : detail}${foreign}; its dialog was finished, so a commit may still land; ${PICK_RECONCILE}`;
+    }
+    default: return `${label} ended in an undetermined state (outcome ${native.outcome}${detail}); ${PICK_RECONCILE}`;
+  }
 }
 
 // Driving distance (Dimension tool, FINDINGS probes-2026-11-pick): sets the dialog's distance in meters, finishes
@@ -1000,6 +1217,225 @@ export interface DrivingDistanceResult {
   planeOffsetMm: number;
   message?: string;
   warning?: string;
+}
+
+/**
+ * A certain error after an edit that DID change the document in a known way (an Undo step was added). The document
+ * is readable and the runtime stays certain: `revision` is the new revision and plasticity_undo restores the change.
+ */
+export class CommittedChangeError extends Error {
+  readonly revision: string;
+  readonly undoSteps: number | null;
+  constructor(message: string, revision: string, undoSteps: number | null) {
+    super(message);
+    // name stays "Error": callers and replies read String(error) as before.
+    this.revision = revision;
+    this.undoSteps = undoSteps;
+  }
+}
+
+/** A face as the driving-distance geometry check reads it (the read model's face descriptor). */
+export interface DrivingDistanceGeometryFace {
+  id: string;
+  planar: boolean;
+  centerMm: Vector3;
+  normal: Vector3;
+  boundsMm?: { min: Vector3; max: Vector3 } | null;
+}
+
+export interface DrivingDistanceGeometryInput {
+  bodyId: number;
+  movingFaceId: string;
+  /** The reference face (pair mode). Without it, referencePointMm (Plasticity's own `to`) or referenceOffsetMm is used. */
+  referenceFaceId?: string | undefined;
+  distanceMm: number;
+  /** Point on the moving face (the seeded hit), mm; defaults to the face's centre. */
+  hitPointMm?: Vector3 | null;
+  /** Single-face mode: the reference point Plasticity measured to, mm. */
+  referencePointMm?: Vector3 | null;
+  /** Single-face mode without a reference point: the reference plane offset along the moving normal, mm. */
+  referenceOffsetMm?: number | null;
+  /** The body's faces before the edit (a by-value snapshot) and after it. */
+  before: readonly DrivingDistanceGeometryFace[];
+  after: readonly DrivingDistanceGeometryFace[];
+}
+
+export interface DrivingDistanceGeometryCheck {
+  ok: boolean;
+  /** The first failed condition, naming what changed; null when ok. */
+  problem: string | null;
+  /** (1) the moving face left its old place, (2) a face reached the target over the hit point, (3) the reference stayed
+   * (null: single-face mode with no verifiable reference face), (4) the distance matches, (5) no other plane changed. */
+  conditions: { left: boolean; reached: boolean; reference: boolean | null; distance: boolean; others: boolean };
+  normal: Vector3;
+  movingOffsetMm: number;
+  referenceOffsetMm: number;
+  /** The same-side target offset. */
+  expectedOffsetMm: number;
+  /** The face at the target that covers the projected hit point, and its offset. */
+  movedFace: DrivingDistanceGeometryFace | null;
+  reachedOffsetMm: number | null;
+  measuredMm: number | null;
+  /** Parallel planes after the edit, as "id@offset". */
+  planesNow: string;
+  /** The parallel planes (direction and offset) are the same as before the edit. */
+  nothingMoved: boolean;
+}
+
+// Lateral slack for footprint tests, mm. Face bounds come from the display mesh (float32): 2.4e-4 mm at 2 m.
+const DRIVING_DISTANCE_LATERAL_TOLERANCE_MM = 0.01;
+
+/**
+ * The post-commit read-back of plasticity_set_driving_distance, anchored on WHERE the faces were before the edit.
+ * Face IDs change with the edit, so faces are found by plane and footprint: a face "covers" a point when the point
+ * lies inside its bounds (a missing bounds box cannot refute coverage). Conditions:
+ * (1) no face with the moving normal remains at the old offset over the hit point (the moving face left);
+ * (2) a face with the moving normal at the target offset covers the projected hit point (a merge into a larger
+ *     coplanar face, or a split, is fine); either side of the reference is accepted, the same side first;
+ * (3) a face with the reference's normal still lies at the reference offset over the reference's pre-edit centre
+ *     (single-face mode: over Plasticity's reference point, when a face was found there before the edit);
+ * (4) the measured distance (moved plane minus reference plane) equals distanceMm within 1e-6 mm;
+ * (5) along the normal, no other plane offset appeared or disappeared, except the moving face's old offset, the
+ *     target offset, and offsets strictly between them (a small step the move swallowed).
+ * The body version is not part of the check: the planes and footprints prove the edit.
+ */
+export function checkDrivingDistanceGeometry(input: DrivingDistanceGeometryInput): DrivingDistanceGeometryCheck {
+  const tolerance = DRIVING_DISTANCE_TOLERANCE_MM;
+  const near = (value: number, target: number) => Math.abs(value - target) <= tolerance;
+  const moving = input.before.find((face) => face.id === input.movingFaceId);
+  if (!moving) throw new Error(`Driving distance read-back: moving face ${input.bodyId}:${input.movingFaceId} is not in the pre-edit snapshot`);
+  const normal = normalize(moving.normal, "Moving face normal");
+  const unit = (face: DrivingDistanceGeometryFace): Vector3 | null => {
+    const length = Math.hypot(...face.normal);
+    return Number.isFinite(length) && length > 0 ? face.normal.map((value) => value / length) as Vector3 : null;
+  };
+  const parallel = (face: DrivingDistanceGeometryFace) => {
+    const direction = unit(face);
+    return face.planar && direction !== null && 1 - Math.abs(dot(direction, normal)) <= 1e-9;
+  };
+  const same = (face: DrivingDistanceGeometryFace) => dot(face.normal, normal) > 0;
+  const offset = (face: DrivingDistanceGeometryFace) => dot(normal, face.centerMm);
+  const covers = (face: DrivingDistanceGeometryFace, point: Vector3) => {
+    const bounds = face.boundsMm;
+    if (!bounds) return true;
+    return [0, 1, 2].every((axis) => point[axis]! >= bounds.min[axis]! - DRIVING_DISTANCE_LATERAL_TOLERANCE_MM && point[axis]! <= bounds.max[axis]! + DRIVING_DISTANCE_LATERAL_TOLERANCE_MM);
+  };
+  const onPlane = (point: Vector3, planeOffset: number): Vector3 => add(point, scale(normal, planeOffset - dot(normal, point)));
+  const movingOffset = offset(moving);
+  const hit = onPlane(input.hitPointMm ?? moving.centerMm, movingOffset);
+
+  // The reference: a face of the pair, or (single-face mode) the face under Plasticity's reference point.
+  let referenceOffset: number;
+  let referenceFace: DrivingDistanceGeometryFace | undefined;
+  let referencePoint: Vector3 | null = null;
+  if (input.referenceFaceId !== undefined) {
+    referenceFace = input.before.find((face) => face.id === input.referenceFaceId);
+    if (!referenceFace) throw new Error(`Driving distance read-back: reference face ${input.bodyId}:${input.referenceFaceId} is not in the pre-edit snapshot`);
+    referenceOffset = offset(referenceFace);
+    referencePoint = referenceFace.centerMm;
+  } else if (input.referencePointMm) {
+    referenceOffset = dot(normal, input.referencePointMm);
+    referencePoint = input.referencePointMm;
+    referenceFace = input.before.find((face) => face.id !== moving.id && parallel(face) && near(offset(face), referenceOffset) && covers(face, referencePoint!));
+  } else if (typeof input.referenceOffsetMm === "number" && Number.isFinite(input.referenceOffsetMm)) {
+    referenceOffset = input.referenceOffsetMm;
+  } else {
+    throw new Error("Driving distance read-back: Plasticity reported no reference plane to check the edit against");
+  }
+
+  const after = input.after;
+  const side = Math.sign(movingOffset - referenceOffset) || 1;
+  const expected = referenceOffset + side * input.distanceMm;
+  const targets = [expected, referenceOffset - side * input.distanceMm];
+  const atHit = (target: number) => add(hit, scale(normal, target - movingOffset));
+  const facesAt = (list: readonly DrivingDistanceGeometryFace[], planeOffset: number, point: Vector3, sameDirection = true) =>
+    list.filter((face) => parallel(face) && same(face) === sameDirection && near(offset(face), planeOffset) && covers(face, point));
+
+  // (1) the moving face left its old place.
+  const left = near(expected, movingOffset) || facesAt(after, movingOffset, hit).length === 0;
+  // (2) a face reached the target over the projected hit point.
+  let reachedOffset: number | null = null;
+  let movedFace: DrivingDistanceGeometryFace | null = null;
+  for (const target of targets) {
+    const candidates = facesAt(after, target, atHit(target));
+    if (candidates.length === 0) continue;
+    reachedOffset = target;
+    const point = atHit(target);
+    movedFace = candidates.reduce((best, face) => Math.hypot(...subtract(face.centerMm, point)) < Math.hypot(...subtract(best.centerMm, point)) ? face : best);
+    break;
+  }
+  // (3) the reference stayed.
+  const referenceSame = referenceFace ? same(referenceFace) : true;
+  const referenceNow = referenceFace && referencePoint ? facesAt(after, referenceOffset, referencePoint, referenceSame) : [];
+  const reference = referenceFace ? referenceNow.length > 0 : null;
+  // (4) the measured distance.
+  const referenceNowOffset = referenceNow[0] ? offset(referenceNow[0]) : referenceOffset;
+  const measured = movedFace ? Math.abs(offset(movedFace) - referenceNowOffset) : null;
+  const distance = measured !== null && Math.abs(measured - input.distanceMm) <= tolerance;
+  // (5) no other plane offset along the normal appeared or disappeared.
+  type Plane = { same: boolean; offset: number; count: number };
+  const planes = (list: readonly DrivingDistanceGeometryFace[]): Plane[] => {
+    const result: Plane[] = [];
+    for (const face of list.filter(parallel)) {
+      const key = { same: same(face), offset: offset(face) };
+      const found = result.find((plane) => plane.same === key.same && near(plane.offset, key.offset));
+      if (found) found.count += 1;
+      else result.push({ ...key, count: 1 });
+    }
+    return result;
+  };
+  const planesBefore = planes(input.before);
+  const planesAfter = planes(after);
+  const has = (list: Plane[], plane: Plane) => list.some((candidate) => candidate.same === plane.same && near(candidate.offset, plane.offset));
+  const disappeared = planesBefore.filter((plane) => !has(planesAfter, plane));
+  const appeared = planesAfter.filter((plane) => !has(planesBefore, plane));
+  const goal = reachedOffset ?? expected;
+  const between = (value: number) => value > Math.min(movingOffset, goal) + tolerance && value < Math.max(movingOffset, goal) - tolerance;
+  const strayGone = disappeared.filter((plane) => !(plane.same && near(plane.offset, movingOffset)) && !between(plane.offset));
+  const strayNew = appeared.filter((plane) => !(plane.same && reachedOffset !== null && near(plane.offset, reachedOffset)));
+  const others = strayGone.length === 0 && strayNew.length === 0;
+
+  const ok = left && reachedOffset !== null && reference !== false && distance && others;
+  const mm = (value: number) => `${roundMicro(value)} mm`;
+  const id = (faceId: string) => `${input.bodyId}:${faceId}`;
+  const normalText = `[${normal.join(", ")}]`;
+  let problem: string | null = null;
+  if (!left) {
+    // Other same-direction planes that lost a face while the moving face stayed: a different face moved.
+    const lostElsewhere = planesBefore
+      .filter((plane) => plane.same && !near(plane.offset, movingOffset) && !(reachedOffset !== null && near(plane.offset, reachedOffset)))
+      .filter((plane) => (planesAfter.find((candidate) => candidate.same && near(candidate.offset, plane.offset))?.count ?? 0) < plane.count)
+      .map((plane) => roundMicro(plane.offset));
+    const elsewhere = facesAt(after, expected, atHit(expected)).length === 0 && after.some((face) => parallel(face) && same(face) && near(offset(face), expected));
+    problem = lostElsewhere.length > 0
+      ? `a different face moved (planes at ${lostElsewhere.join(", ")} mm lost a face; the moving face at ${mm(movingOffset)} did not move)`
+      : `no face moved to ${mm(expected)} (the moving face ${id(input.movingFaceId)} is still at ${mm(movingOffset)} over its footprint${elsewhere ? `; a face at ${mm(expected)} exists, but not over the moving face's footprint` : ""})`;
+  } else if (reachedOffset === null) {
+    const landed = appeared.filter((plane) => plane.same).map((plane) => plane.offset).find((planeOffset) => facesAt(after, planeOffset, atHit(planeOffset)).length > 0);
+    problem = after.length === 0
+      ? `body ${input.bodyId} has no faces left (the moving face ${id(input.movingFaceId)} was at ${mm(movingOffset)})`
+      : landed !== undefined
+        ? `no face moved to ${mm(expected)}: the moving face ${id(input.movingFaceId)} left ${mm(movingOffset)} and is at ${mm(landed)}, which is ${mm(Math.abs(landed - referenceOffset))} from the reference, not ${mm(input.distanceMm)}`
+        : `no face moved to ${mm(expected)}: the moving face ${id(input.movingFaceId)} was removed (no face facing ${normalText} remains at ${mm(movingOffset)} over its footprint, and none reached either distance from the reference)`;
+  } else if (reference === false) {
+    problem = input.referenceFaceId !== undefined
+      ? `the reference face ${id(input.referenceFaceId)} moved (no face remains at ${mm(referenceOffset)} over its centre)`
+      : `the reference plane Plasticity measured to (${mm(referenceOffset)}) moved`;
+  } else if (!distance) {
+    problem = `the moved plane lies ${measured === null ? "nowhere" : mm(measured)} from the reference, not ${mm(input.distanceMm)}`;
+  } else if (!others) {
+    const list = (items: Plane[]) => items.map((plane) => `${plane.same ? "" : "opposite "}${mm(plane.offset)}`).join(", ");
+    problem = `other faces changed along the normal (${[strayNew.length > 0 ? `new planes at ${list(strayNew)}` : "", strayGone.length > 0 ? `planes gone from ${list(strayGone)}` : ""].filter(Boolean).join("; ")})`;
+  }
+  const signature = (list: Plane[]) => list.map((plane) => `${plane.same ? "+" : "-"}${roundMicro(plane.offset)}`).sort().join(",");
+  return {
+    ok, problem,
+    conditions: { left, reached: reachedOffset !== null, reference, distance, others },
+    normal, movingOffsetMm: movingOffset, referenceOffsetMm: referenceOffset, expectedOffsetMm: expected,
+    movedFace, reachedOffsetMm: reachedOffset, measuredMm: measured,
+    planesNow: after.filter(parallel).map((face) => `${face.id}@${roundMicro(offset(face))}`).join(", ") || "none",
+    nothingMoved: signature(planesBefore) === signature(planesAfter),
+  };
 }
 
 export interface ExtrudeOptions {
@@ -7965,18 +8401,21 @@ export class PlasticityOperations {
   // Moves shown face control points by a shared world-space delta (FINDINGS gap 5). cvIds come from the show tool at
   // the current revision; unknown IDs are rejected before any native edit. Points of several faces move in one
   // step. The result is read back: each point must have moved by the delta on every axis within
-  // faceControlPointTolerance (positions are float32, so the tolerance grows with the distance from the origin).
-  // Moving one of two coincident points on an edge shared by two faces leaves the other point in place; on 26.1.3
-  // Plasticity then rebuilds that face's surface (its grid grew from 4 x 2 to 7 x 2), the kernel still reports the
-  // body valid, and the shown points no longer match the face's grid, so the read-back reports it
-  // (probe-coincident-point.json). Moving both points together keeps the edge closed. undoSteps is measured.
+  // faceControlPointTolerance (positions are float32, so the tolerance grows with the distance from the origin). A
+  // delta the read-back could not tell from no move (every axis within the tolerance at that point) is refused
+  // before the edit. Moving one of two coincident points on an edge shared by two faces leaves the other point in
+  // place; on 26.1.3 Plasticity then rebuilds that face's surface (its grid grew from 4 x 2 to 7 x 2), the kernel
+  // still reports the body valid, and the shown points no longer match the face's grid, so the read-back reports it
+  // (probe-coincident-point.json). The error names the new revision, the undo, and both cvIds; when the twin face's
+  // points are not shown it says to show that face first. undoSteps is measured; a verified move whose Undo depth did
+  // not change reports undoSteps null with a note.
   // 26.1.3 writes factory.cvs directly; 26.2 face points are not verified (MultiMoveControlPointFactory is aliased).
   async moveFaceControlPoints(
     bodyId: number,
     cvIds: string[],
     deltaMm: Vector3,
     revision: string,
-  ): Promise<{ state: RuntimeState; controlPoints: FaceControlPoint[]; undoSteps: number }> {
+  ): Promise<{ state: RuntimeState; controlPoints: FaceControlPoint[]; undoSteps: number | null; message?: string }> {
     const state = await this.assertRevision(revision);
     const body = state.bodies.find((candidate) => candidate.id === bodyId);
     if (!body || (body.type !== "Sheet" && body.type !== "Solid")) throw new Error(`Face control points need a current Sheet or Solid body: ${bodyId}`);
@@ -7984,7 +8423,7 @@ export class PlasticityOperations {
     if (deltaMm.length !== 3 || deltaMm.some((value) => !Number.isFinite(value)) || Math.hypot(...deltaMm) === 0) {
       throw new Error("Face control point move delta must be a finite nonzero vector");
     }
-    const before = await this.readFaceControlPointLayout(bodyId, { tolerant: true });
+    const before = await this.readFaceControlPointLayout(bodyId, { tolerant: true, hiddenGrids: true });
     if (before.unattributed) {
       throw new Error(`The shown control points of body ${bodyId} cannot be attributed to faces (${before.unattributed}), so a move could not be checked. Hide them with plasticity_hide_face_control_points; nothing was changed`);
     }
@@ -7993,13 +8432,33 @@ export class PlasticityOperations {
     if (missing.length > 0) {
       throw new Error(`Unknown face control point IDs on body ${bodyId}: ${missing.join(", ")}. Call plasticity_show_face_control_points first and use the cvId values it returns.`);
     }
-    // Shown points of other faces that sit where a moved point sits (a shared edge) and are not moved with it.
+    // The read-back passes when every axis is within the tolerance, so a delta inside the tolerance on every axis of
+    // a point could not be told from no move at all: refuse it before the edit.
+    const unverifiable = cvIds.flatMap((cvId) => {
+      const expected = add(byId.get(cvId)!.rawMm, deltaMm);
+      if (deltaMm.some((value, axis) => Math.abs(value) > faceControlPointTolerance(expected[axis]!))) return [];
+      const axis = deltaMm.reduce((best, value, index) => Math.abs(value) > Math.abs(deltaMm[best]!) ? index : best, 0);
+      return [{ cvId, resolution: faceControlPointTolerance(expected[axis]!) }];
+    });
+    if (unverifiable.length > 0) {
+      const resolution = Math.max(...unverifiable.map((entry) => entry.resolution));
+      throw new Error(`Face control point move delta [${deltaMm.join(", ")}] mm is below the verifiable resolution ${Number(resolution.toPrecision(3))} mm at this distance from the origin (cv ${unverifiable.map((entry) => entry.cvId).join(", ")}): the read-back could not tell the move from no move; nothing was changed`);
+    }
+    // Points of other faces that sit where a moved point sits (a shared edge) and are not moved with it: shown ones
+    // (by cvId) and, from the kernel grids, ones of faces whose points are not shown.
     const moving = new Set(cvIds);
+    const coincident = (a: Vector3, b: Vector3) => a.every((value, axis) => Math.abs(value - b[axis]!) <= faceControlPointTolerance(value));
     const separated = cvIds.flatMap((cvId) => {
       const point = byId.get(cvId)!;
       return before.points
-        .filter((other) => !moving.has(other.cvId) && other.faceId !== point.faceId && other.rawMm.every((value, axis) => Math.abs(value - point.rawMm[axis]!) <= faceControlPointTolerance(value)))
+        .filter((other) => !moving.has(other.cvId) && other.faceId !== point.faceId && coincident(other.rawMm, point.rawMm))
         .map((other) => `${cvId} and ${other.cvId}`);
+    });
+    const hiddenTwins = cvIds.flatMap((cvId) => {
+      const point = byId.get(cvId)!;
+      return (before.hiddenPoints ?? [])
+        .filter((other) => other.faceId !== point.faceId && (coincident(other.rawMm, point.rawMm) || coincident(other.projectedMm, point.rawMm)))
+        .map((other) => ({ cvId, faceId: other.faceId }));
     });
     await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
@@ -8013,14 +8472,23 @@ export class PlasticityOperations {
       ${commandEnd}
     }`, ["MultiMoveControlPointFactory"], [{ bodyId, cvIds, delta: toMeters(deltaMm) }]);
     const afterState = await this.state();
-    const undoSteps = afterState.undoDepth - state.undoDepth;
-    const steps = undoStepsText(undoSteps);
-    const separatedNote = separated.length > 0
-      ? `. The move separated coincident points of two faces (${separated.join("; ")}): Plasticity reshapes the moved face when one point of a shared edge moves alone; include both cvIds to move a shared edge point`
+    const measuredSteps = afterState.undoDepth - state.undoDepth;
+    const steps = undoStepsText(measuredSteps);
+    const twinFaces = [...new Set(hiddenTwins.map((twin) => `${bodyId}:${twin.faceId}`))];
+    const twinParts = [
+      ...(separated.length > 0 ? [`The move separated coincident points of two faces (${separated.join("; ")}): Plasticity reshapes the moved face when one point of a shared edge moves alone`] : []),
+      ...(hiddenTwins.length > 0 ? [`cv ${[...new Set(hiddenTwins.map((twin) => twin.cvId))].join(", ")} sits on an edge shared with face ${twinFaces.join(", ")}, whose control points are not shown: Plasticity reshapes the moved face when one point of a shared edge moves alone; show ${twinFaces.length === 1 ? "that face" : "those faces"} with plasticity_show_face_control_points first`] : []),
+    ];
+    const separatedNote = twinParts.length > 0
+      ? `. ${twinParts.join(". ")}. The document is now at revision ${afterState.revision}; undo with plasticity_undo, re-read the cvIds with plasticity_show_face_control_points, then include both cvIds to move a shared edge point`
       : "";
-    const after = await this.readFaceControlPointLayout(bodyId).catch((error: unknown) => {
-      throw new Error(`Moving face control points took ${steps}, but the points could not be read back (${error instanceof Error ? error.message : String(error)})${separatedNote}; inspect the body or undo`);
-    });
+    const committed = (message: string) => new CommittedChangeError(message, afterState.revision, measuredSteps);
+    let after: FaceControlPointLayout;
+    try {
+      after = await this.readFaceControlPointLayout(bodyId);
+    } catch (error) {
+      throw committed(`Moving face control points took ${steps}, but the points could not be read back (${error instanceof Error ? error.message : String(error)})${separatedNote}; inspect the body or undo`);
+    }
     const entityOf = new Map(before.entities);
     const faceOfEntity = new Map(after.entities.map(([id, entity]) => [entity, id]));
     const blockOf = (faceId: string | undefined) => after.blocks.find((block) => block.faceId === faceId);
@@ -8048,9 +8516,16 @@ export class PlasticityOperations {
     });
     if (problems.length > 0) {
       const used = tolerances.length > 0 ? ` (read-back tolerance per axis: ${tolerances.join("; ")})` : "";
-      throw new Error(`Moving face control points took ${steps}, but the read-back does not match: ${problems.join("; ")}${separatedNote}; inspect the body or undo${used}`);
+      throw committed(`Moving face control points took ${steps}, but the read-back does not match: ${problems.join("; ")}${separatedNote}; inspect the body or undo${used}`);
     }
-    return { state: afterState, controlPoints: moved as FaceControlPoint[], undoSteps };
+    const notes = [
+      ...(measuredSteps === 0 ? ["the move was read back, but the Undo depth did not change, so the number of Undo steps is unknown (undoSteps null)"] : []),
+      ...(twinParts.length > 0 ? [`${twinParts.join("; ")}; include both cvIds to move a shared edge point`] : []),
+    ];
+    return {
+      state: afterState, controlPoints: moved as FaceControlPoint[], undoSteps: measuredSteps === 0 ? null : measuredSteps,
+      ...(notes.length > 0 ? { message: notes.join("; ") } : {}),
+    };
   }
 
   // Body, face and surface checks shared by show and hide. A face the read model knows as a non-BSurf surface has
@@ -8093,10 +8568,10 @@ export class PlasticityOperations {
 
   // tolerant: report points that cannot be attributed (unattributed) instead of failing; duplicates: also find faces
   // whose control grids are identical.
-  private async readFaceControlPointLayout(bodyId: number, options: { tolerant?: boolean; duplicates?: boolean } = {}): Promise<FaceControlPointLayout> {
+  private async readFaceControlPointLayout(bodyId: number, options: { tolerant?: boolean; duplicates?: boolean; hiddenGrids?: boolean } = {}): Promise<FaceControlPointLayout> {
     return await this.runtime.read<FaceControlPointLayout>(nativeFunction`function (args) {
       ${FACE_CONTROL_POINT_LAYOUT}
-    }`, [{ bodyId, ...(options.tolerant ? { tolerant: true } : {}), ...(options.duplicates ? { duplicates: true } : {}) }]);
+    }`, [{ bodyId, ...(options.tolerant ? { tolerant: true } : {}), ...(options.duplicates ? { duplicates: true } : {}), ...(options.hiddenGrids ? { hiddenGrids: true } : {}) }]);
   }
 
   private async readFaceControlPoints(bodyId: number): Promise<FaceControlPoint[]> {
@@ -8105,18 +8580,21 @@ export class PlasticityOperations {
 
   // Runs a native command that reads the selection click point and waits for its own dialog (FINDINGS
   // probes-2026-11-pick). Everything runs inside ONE mutate call whose CDP timeout outlives the internal waits, so
-  // the in-call cancel always runs before Node gives up. After any path, either no command of ours is active and
-  // the selection and hits are clear, or the runtime is marked uncertain and the error asks for plasticity_reconcile.
-  // Three outcomes: committed (the caller reads it back); cancelled before the drive step called finish(), or
-  // rejected: the document is unchanged and the runtime certain; cancelled AFTER finish(): undetermined, because a
-  // commit finish() started may still land (it is reported as committed only when it is seen to land within the
-  // settle window). A commit returns its Undo delta (0 or 1) to the caller; more than one step marks the runtime
-  // uncertain. A different command left active after a non-commit outcome is named in the error.
+  // the in-call cancel always runs before Node gives up. The native source reports facts (finish() called, how
+  // execute() settled and with which error, the Undo delta before and after the settle window, what is active, how
+  // the cancel and the cleanup went); the caller's read-back adds whether the body changed and the geometry check;
+  // classifyPickOutcome decides. committed-verified returns; committed-mismatch throws a certain CommittedChangeError
+  // (plasticity_undo restores it); rejected-unchanged throws a certain error (or returns when acceptUnchanged says
+  // so); undetermined marks the runtime uncertain and throws with plasticity_reconcile.
   private async runPickCommand<T>(spec: PickCommandSpec): Promise<PickCommandResult<T>> {
     const timeouts = spec.timeouts ?? PICK_COMMAND_TIMEOUTS;
     for (const [name, value] of Object.entries(timeouts)) {
       if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`Pick command ${name} must be a positive whole number of milliseconds`);
     }
+    // Without a caller read-back, the selected bodies are compared before and after the call.
+    const bodyIds = [...new Set(spec.select.map((item) => item.bodyId))];
+    const bodiesOf = (state: RuntimeState) => JSON.stringify(bodyIds.map((id) => state.bodies.find((body) => body.id === id) ?? null));
+    const before = spec.readBack ? null : bodiesOf(await this.state());
     const native = await this.runtime.mutate<PickCommandNativeResult>(pickCommandSource(spec.drive), [spec.command, spec.dialog, "Vector3"], [{
       select: spec.select,
       hits: spec.hits,
@@ -8126,71 +8604,43 @@ export class PlasticityOperations {
       settleMs: timeouts.settleMs ?? PICK_COMMAND_SETTLE_MS,
       label: spec.label,
     }], pickCommandCdpTimeoutMs(timeouts));
-    const reconcile = "the result is uncertain. Call plasticity_reconcile before any other edit";
     if (!native || typeof native !== "object" || typeof native.outcome !== "string") {
       this.runtime.markUncertain();
-      throw new Error(`${spec.label} returned no outcome; ${reconcile}`);
+      throw new Error(`${spec.label} returned no outcome; ${PICK_RECONCILE}`);
     }
-    const detail = native.error ? `: ${native.error}` : "";
-    const still = native.end?.activeCommand ?? (native.ourActive ? spec.command : "unknown");
-    // A different command left active (a chained or user command) is never cancelled; name it in a failure.
-    const foreign = typeof native.foreignActive === "string" && native.foreignActive !== "" && native.outcome !== "committed"
-      ? `; another Plasticity command (${native.foreignActive}) is active and was left alone`
-      : "";
-    if (native.finishCalled === true && native.outcome === "undetermined") {
+    if (!PICK_NATIVE_OUTCOMES.has(native.outcome)) {
       this.runtime.markUncertain();
-      const limit = native.phase === "unexpected" ? "" : ` within ${timeouts.finishMs} ms`;
-      throw new Error(`${spec.label} did not finish${limit} after its dialog was finished (${native.phase ?? "unknown"} phase)${detail}; Plasticity cancelled it, but a commit that finish() started may still land${foreign}; ${reconcile}`);
+      throw new Error(`${spec.label} returned an unknown outcome ${String(native.outcome)}; ${PICK_RECONCILE}`);
     }
-    if (native.outcome === "cancel-failed") {
-      this.runtime.markUncertain();
-      const cancelDetail = native.cancelError ? ` Cancel error: ${native.cancelError}.` : "";
-      throw new Error(`${spec.label} did not finish and Plasticity could not cancel it (still active: ${still}); ${reconcile}.${cancelDetail}`);
-    }
-    // Started but not settled, still active, or cleanup failed: the command may still change the document.
-    if (native.outcome === "undetermined" || native.settled !== true || native.ourActive === true || native.cleanupError) {
-      this.runtime.markUncertain();
-      const why = native.cleanupError ? `cleanup failed: ${native.cleanupError}` : native.ourActive ? `still active: ${still}` : native.settled !== true ? "the command never settled" : `outcome ${native.outcome}${detail}`;
-      throw new Error(`${spec.label} ended in an undetermined state (${why}); ${reconcile}`);
-    }
-    if (native.outcome !== "committed" && native.undoDelta !== 0) {
-      this.runtime.markUncertain();
-      throw new Error(`${spec.label} ended as ${native.outcome} but changed the Undo history by ${native.undoDelta}; ${reconcile}`);
-    }
-    if (native.outcome === "rejected") {
-      // A command that ends before its dialog because another command interrupted it is not "no effect".
-      const interruptedBy = native.foreignActive ?? null;
-      const interrupted = interruptedBy !== null || /^(Cancel|Interrupt|Abort)/.test(native.execErrorName ?? "") || /\b(cancell?ed|interrupted|invalid state)/i.test(native.error ?? "");
-      if (interrupted) {
-        throw new Error(`${spec.label} was interrupted before its dialog opened${interruptedBy ? ` by another Plasticity command (${interruptedBy}), which was left alone` : ""}${detail}; the document is unchanged`);
+    const run: PickCommandRun<T> = { native, drive: native.drive as T, facts: pickCommandFacts(native), timeouts };
+    let readBack: PickReadBack;
+    try {
+      if (spec.readBack) readBack = await spec.readBack(run as PickCommandRun<unknown>);
+      else {
+        const after = await this.state();
+        readBack = {
+          bodyChanged: bodiesOf(after) !== before, geometry: null, revision: after.revision,
+          subject: `bodies ${bodyIds.join(", ")}`, readback: "the helper has no read-back for this command", noChange: "no Undo step was added",
+        };
       }
-      throw new Error(`${spec.rejectedMessage}${detail}`);
-    }
-    if (native.outcome === "cancelled") {
-      if (native.finishCalled === true) {
-        // Not produced by the native source (a cancel after finish() is undetermined or a seen commit); guard anyway.
-        this.runtime.markUncertain();
-        throw new Error(`${spec.label} was cancelled after its dialog was finished${detail}${foreign}; ${reconcile}`);
-      }
-      if (native.phase === "drive" && native.driveThrew) {
-        throw new Error(`${spec.label} drive step threw (drive phase)${detail}; Plasticity cancelled it and the document is unchanged${foreign}`);
-      }
-      const limit = native.phase === "dialog" ? timeouts.dialogMs : timeouts.finishMs;
-      throw new Error(`${spec.label} did not finish within ${limit} ms (${native.phase ?? "unknown"} phase)${detail}; Plasticity cancelled it and the document is unchanged${foreign}`);
-    }
-    if (native.outcome === "failed") {
-      if (native.phase === "finish") return { committed: false, drive: native.drive as T, error: `${native.error ?? "Plasticity refused the commit"}${foreign}`, end: native.end };
-      throw new Error(`${spec.label} failed${detail}; the document is unchanged${foreign}`);
-    }
-    if (native.outcome !== "committed") {
+    } catch (error) {
       this.runtime.markUncertain();
-      throw new Error(`${spec.label} returned an unknown outcome ${String(native.outcome)}; ${reconcile}`);
+      throw new Error(`${spec.label} ran, but the document could not be read back (${error instanceof Error ? error.message : String(error)}); ${PICK_RECONCILE}`);
     }
-    if (!Number.isInteger(native.undoDelta) || native.undoDelta < 0 || native.undoDelta > 1) {
-      this.runtime.markUncertain();
-      throw new Error(`${spec.label} committed ${native.undoDelta} Undo steps instead of 1; ${reconcile}`);
+    const outcome = classifyPickOutcome({ ...run.facts, bodyChanged: readBack.bodyChanged, geometry: readBack.geometry });
+    if (outcome.kind === "committed-verified") return { ...run, outcome };
+    if (outcome.kind === "committed-mismatch") {
+      throw new CommittedChangeError(
+        `${spec.label} committed one Undo step, but the read-back does not match: ${readBack.readback}. The document is in a known state at revision ${readBack.revision}: one Undo step was added, and plasticity_undo restores the previous geometry`,
+        readBack.revision, 1,
+      );
     }
-    return { committed: true, drive: native.drive as T, undoDelta: native.undoDelta, end: native.end, foreignActive: native.foreignActive ?? null, ...(native.lateCommit === true ? { lateCommit: true } : {}) };
+    if (outcome.kind === "rejected-unchanged") {
+      if (spec.acceptUnchanged?.(run as PickCommandRun<unknown>)) return { ...run, outcome };
+      throw new Error(pickRejectedMessage(spec, run as PickCommandRun<unknown>, outcome));
+    }
+    this.runtime.markUncertain();
+    throw new Error(pickUndeterminedMessage(spec.label, run as PickCommandRun<unknown>, outcome, readBack));
   }
 
   // Sets the distance between a planar face and a reference face by moving movingFaceId, as Plasticity's Dimension
@@ -8198,7 +8648,9 @@ export class PlasticityOperations {
   // the last selected face moves, so the selection is [reference, moving]; the hit location does not decide it
   // (probes-2026-11-followups/probe-driving.json). The seeded hit is the kernel's own point on the moving face
   // (a washer's midpoint lies in its hole), with the face's outward normal; it never comes from the caller.
-  // Verified on Plasticity 26.1.3 only.
+  // runPickCommand classifies the run: committed-verified (success), committed-mismatch (a certain error: one Undo
+  // step, plasticity_undo restores it), rejected-unchanged (a certain error, or the equal-distance no-op),
+  // undetermined (runtime uncertain, plasticity_reconcile). Verified on Plasticity 26.1.3 only.
   async setDrivingDistance(
     input: { bodyId: number; movingFaceId: string; referenceFaceId?: string | undefined; distanceMm: number },
     revision: string,
@@ -8218,7 +8670,6 @@ export class PlasticityOperations {
     const moving = faceOf(movingFaceId, "moving");
     const movingNormal = normalize(moving.normal, "Moving face normal");
     const movingOffset = dot(movingNormal, moving.centerMm);
-    let referenceOffset: number | undefined;
     let pairDistance: number | undefined;
     if (referenceFaceId !== undefined) {
       if (referenceFaceId === movingFaceId) throw new Error("The reference face must differ from the moving face");
@@ -8229,8 +8680,7 @@ export class PlasticityOperations {
       if (1 - Math.abs(dot(movingNormal, referenceNormal)) > 1e-9) {
         throw new Error(`The moving and reference faces must be parallel planes: ${bodyId}:${movingFaceId} and ${bodyId}:${referenceFaceId} are not`);
       }
-      referenceOffset = dot(movingNormal, reference.centerMm);
-      const current = Math.abs(movingOffset - referenceOffset);
+      const current = Math.abs(movingOffset - dot(movingNormal, reference.centerMm));
       pairDistance = current;
       if (current < 1e-6) {
         throw new Error(`The moving and reference faces lie in the same plane: ${bodyId}:${movingFaceId} and ${bodyId}:${referenceFaceId}`);
@@ -8244,13 +8694,25 @@ export class PlasticityOperations {
         };
       }
     }
-    // Planes parallel to the moving face, snapshotted before the edit for the read-back.
-    const parallelPlanes = (faces: typeof body.faces) => faces
-      .filter((face) => face.planar && 1 - Math.abs(dot(normalize(face.normal, "Face normal"), movingNormal)) <= 1e-9)
-      .map((face) => ({ id: face.id, sameDirection: dot(face.normal, movingNormal) > 0, offset: dot(movingNormal, face.centerMm), centerMm: [...face.centerMm] as Vector3 }));
-    const planesBefore = parallelPlanes(body.faces);
+    // The body before the edit, by value: the read model may hand back the same objects after the edit.
+    const snapshot = (faces: typeof body.faces): DrivingDistanceGeometryFace[] => faces.map((face) => ({
+      id: face.id, planar: face.planar, centerMm: [...face.centerMm] as Vector3, normal: [...face.normal] as Vector3,
+      boundsMm: face.boundsMm ? { min: [...face.boundsMm.min] as Vector3, max: [...face.boundsMm.max] as Vector3 } : null,
+    }));
+    const facesBefore = snapshot(body.faces);
+    const versionBefore = body.versionId;
+    const signatureOf = (faces: DrivingDistanceGeometryFace[]) => JSON.stringify(faces.map((face) => [face.id, face.centerMm, face.normal, face.boundsMm ?? null]));
+    const signatureBefore = signatureOf(facesBefore);
+    type Drive = { previousDistanceM: number | null; referencePointM?: Vector3 | null };
+    const previousOf = (run: PickCommandRun<unknown>) => {
+      const previousM = (run.drive as Drive | null)?.previousDistanceM;
+      return typeof previousM === "number" && Number.isFinite(previousM) ? roundMicro(previousM * 1000) : null;
+    };
+    const currentOf = (run: PickCommandRun<unknown>) => previousOf(run) ?? (pairDistance !== undefined ? roundMicro(pairDistance) : null);
+    let after: RuntimeState | undefined;
+    let geometry: DrivingDistanceGeometryCheck | null = null;
     const movingRef: PickItemReference = { kind: "face", bodyId, id: movingFaceId };
-    const picked = await this.runPickCommand<{ previousDistanceM: number | null; referencePointM?: Vector3 | null }>({
+    const run = await this.runPickCommand<Drive>({
       command: "DimensionDistanceCommand",
       dialog: "DimensionDistanceSpaceDialog",
       select: referenceFaceId === undefined ? [movingRef] : [{ kind: "face", bodyId, id: referenceFaceId }, movingRef],
@@ -8260,101 +8722,59 @@ export class PlasticityOperations {
       rejectedMessage: "Plasticity could not dimension these faces (no effect)",
       label: "Driving distance",
       timeouts,
-    });
-    const previousM = picked.drive?.previousDistanceM;
-    const previousDistanceMm = typeof previousM === "number" && Number.isFinite(previousM) ? roundMicro(previousM * 1000) : null;
-    const after = await this.state();
-    const bodyAfter = after.bodies.find((candidate) => candidate.id === bodyId);
-    const bodyUnchanged = bodyAfter !== undefined && bodyAfter.versionId === body.versionId;
-    const currentMm = previousDistanceMm ?? (pairDistance !== undefined ? roundMicro(pairDistance) : null);
-    const sameDistance = currentMm !== null && Math.abs(currentMm - distanceMm) <= DRIVING_DISTANCE_TOLERANCE_MM;
-    const noChange = `Plasticity made no change: distance is still ${currentMm === null ? "unknown" : `${currentMm} mm`}, requested ${distanceMm} mm`;
-    const noOp = (): DrivingDistanceResult => ({
-      state: after, changed: false, previousDistanceMm, distanceMm, undoSteps: 0, movedFaceId: null, movingFaceId, planeOffsetMm: roundMicro(movingOffset),
-      message: `distance already ${currentMm} mm; nothing changed`,
-    });
-    if (!picked.committed) {
+      readBack: async (picked) => {
+        after = await this.state();
+        const bodyAfter = after.bodies.find((candidate) => candidate.id === bodyId);
+        const facesAfter = bodyAfter ? snapshot(bodyAfter.faces) : [];
+        const currentMm = currentOf(picked);
+        const noChange = `Plasticity made no change: distance is still ${currentMm === null ? "unknown" : `${currentMm} mm`}, requested ${distanceMm} mm`;
+        let readback = "the read-back did not run";
+        // The geometry check runs for a one-step commit after finish(): face IDs change, so it tracks planes and footprints.
+        if (picked.facts.finishCalled && picked.native.undoDelta === 1) {
+          const hitM = Array.isArray(picked.native.hits?.[0]) ? picked.native.hits![0] : null;
+          const referencePoint = (picked.drive as Drive | null)?.referencePointM;
+          const previousMm = previousOf(picked);
+          try {
+            geometry = checkDrivingDistanceGeometry({
+              bodyId, movingFaceId, referenceFaceId, distanceMm,
+              hitPointMm: hitM && hitM.every(Number.isFinite) ? hitM.map((value) => value * 1000) as Vector3 : null,
+              referencePointMm: Array.isArray(referencePoint) && referencePoint.every(Number.isFinite) ? referencePoint.map((value) => value * 1000) as Vector3 : null,
+              referenceOffsetMm: previousMm !== null ? movingOffset - previousMm : null,
+              before: facesBefore, after: facesAfter,
+            });
+            if (!geometry.ok) readback = `${geometry.problem} along [${geometry.normal.join(", ")}] (planes now: ${geometry.planesNow})${geometry.nothingMoved ? `; ${noChange}` : ""}`;
+          } catch (error) {
+            readback = error instanceof Error ? error.message : String(error);
+          }
+        }
+        return {
+          bodyChanged: !bodyAfter || bodyAfter.versionId !== versionBefore || signatureOf(facesAfter) !== signatureBefore,
+          geometry: geometry === null ? null : geometry.ok ? "pass" : "fail",
+          revision: after.revision, subject: `body ${bodyId}`, readback, noChange,
+        };
+      },
       // Single-face mode with an equal distance: the dialog opens, finish() gives "Operation has no effect" and
       // nothing changes (probes-2026-11-followups/probe-driving.json, equal_single_face_pz_5mm).
-      if (!bodyUnchanged) {
-        this.runtime.markUncertain();
-        throw new Error(`Driving distance failed (${picked.error}) but body ${bodyId} changed; the result is uncertain. Call plasticity_reconcile before any other edit`);
-      }
-      if (sameDistance) return noOp();
-      throw new Error(`Driving distance failed: ${picked.error}; the document is unchanged`);
+      acceptUnchanged: (picked) => {
+        const currentMm = currentOf(picked);
+        return picked.facts.finishCalled && currentMm !== null && Math.abs(currentMm - distanceMm) <= DRIVING_DISTANCE_TOLERANCE_MM;
+      },
+    });
+    const previousDistanceMm = previousOf(run as PickCommandRun<unknown>);
+    if (run.outcome.kind === "rejected-unchanged") {
+      return {
+        state: after!, changed: false, previousDistanceMm, distanceMm, undoSteps: 0, movedFaceId: null, movingFaceId, planeOffsetMm: roundMicro(movingOffset),
+        message: `distance already ${currentOf(run as PickCommandRun<unknown>)} mm; nothing changed`,
+      };
     }
-    if (picked.undoDelta === 0) {
-      if (!bodyUnchanged) {
-        this.runtime.markUncertain();
-        throw new Error(`Driving distance committed no Undo step but body ${bodyId} changed; the result is uncertain. Call plasticity_reconcile before any other edit`);
-      }
-      // Nothing changed and nothing is active: a no-op only when the distance already matches the request.
-      if (sameDistance) return noOp();
-      throw new Error(noChange);
-    }
-    // One Undo step: read the body back. Face IDs change with the edit, so the moving face is tracked by its plane:
-    // the planes parallel to it that face the same way are counted per offset before and after. The edit is
-    // confirmed when the body version changed, the moving face's old offset lost a face or a target offset gained one
-    // (a face that merges into an existing coplanar face at the target, "make flush", only loses one), and the plane
-    // found at the target lies exactly distanceMm from the reference plane, which must not move. Either side of the
-    // reference is accepted: the read-back never assumes the moving face kept its side.
-    if (!bodyAfter) {
-      this.runtime.markUncertain();
-      throw new Error(`Driving distance committed one Undo step but body ${bodyId} is gone; the result is uncertain. Call plasticity_reconcile before any other edit`);
-    }
-    const referencePoint = picked.drive?.referencePointM;
-    if (referenceOffset === undefined) {
-      if (Array.isArray(referencePoint) && referencePoint.every(Number.isFinite)) referenceOffset = dot(movingNormal, referencePoint.map((value) => value * 1000) as Vector3);
-      else if (previousDistanceMm !== null) referenceOffset = movingOffset - previousDistanceMm;
-    }
-    const planes = parallelPlanes(bodyAfter.faces);
-    const describe = () => planes.map((plane) => `${plane.id}@${roundMicro(plane.offset)}`).join(", ") || "none";
-    const reconcileNow = "the result is uncertain. Call plasticity_reconcile before any other edit";
-    if (referenceOffset === undefined) {
-      this.runtime.markUncertain();
-      throw new Error(`Driving distance committed one Undo step, but Plasticity reported no reference plane to check it against (planes along the normal now: ${describe()}); ${reconcileNow}`);
-    }
-    const near = (value: number, target: number) => Math.abs(value - target) <= DRIVING_DISTANCE_TOLERANCE_MM;
-    const count = (list: typeof planes, offset: number) => list.filter((plane) => plane.sameDirection && near(plane.offset, offset)).length;
-    const side = Math.sign(movingOffset - referenceOffset) || 1;
-    const expected = referenceOffset + side * distanceMm;
-    const versionChanged = bodyAfter.versionId !== body.versionId;
-    const oldLost = count(planes, movingOffset) < count(planesBefore, movingOffset);
-    // Same side first; the opposite side only if Plasticity put the face there.
-    const targets = [expected, referenceOffset - side * distanceMm];
-    const gained = (offset: number) => count(planes, offset) > count(planesBefore, offset);
-    const target = targets.find((offset) => count(planes, offset) > 0 && (oldLost || gained(offset)));
-    // Another same-direction plane lost a face while the moving face's plane kept all of its faces: a different face moved.
-    const lostElsewhere = [...new Set(planesBefore.filter((plane) => plane.sameDirection).map((plane) => roundMicro(plane.offset)))]
-      .filter((offset) => !near(offset, movingOffset) && !targets.some((candidate) => near(offset, candidate)) && count(planes, offset) < count(planesBefore, offset));
-    const referenceNow = planes.filter((plane) => near(plane.offset, referenceOffset!));
-    // The reference plane is checked when the caller named it; in single-face mode Plasticity picks it itself.
-    const referenceStays = referenceFaceId === undefined || referenceNow.length > 0;
-    const movedPlanes = target === undefined ? [] : planes.filter((plane) => plane.sameDirection && near(plane.offset, target));
-    const measured = movedPlanes.length > 0 ? Math.abs(movedPlanes[0]!.offset - (referenceNow[0]?.offset ?? referenceOffset)) : undefined;
-    // The body version must change, unless the planes prove the move on both ends (the old offset lost a face AND the
-    // target gained one): that cannot happen without an edit.
-    const confirmed = (versionChanged || (target !== undefined && oldLost && gained(target))) && target !== undefined && (oldLost || lostElsewhere.length === 0) && referenceStays
-      && measured !== undefined && Math.abs(measured - distanceMm) <= DRIVING_DISTANCE_TOLERANCE_MM;
-    if (!confirmed) {
-      this.runtime.markUncertain();
-      // Nothing moved along the normal: the parallel planes (both directions) sit where they sat before.
-      const signature = (list: typeof planes) => list.map((plane) => `${plane.sameDirection ? "+" : "-"}${roundMicro(plane.offset)}`).sort().join(",");
-      const nothingMoved = !versionChanged || signature(planes) === signature(planesBefore);
-      const what = target === undefined
-        ? `no face moved to ${roundMicro(expected)} mm${oldLost ? ` (the moving face left ${roundMicro(movingOffset)} mm and is not at either distance from the reference)` : ""}`
-        : !referenceStays ? `the reference plane at ${roundMicro(referenceOffset)} mm moved`
-        : lostElsewhere.length > 0 && !oldLost ? `a different face moved (planes at ${lostElsewhere.join(", ")} mm lost a face; the moving face at ${roundMicro(movingOffset)} mm did not move)`
-        : !versionChanged && !(oldLost && gained(target)) ? "the body version did not change"
-        : `the moved plane lies ${measured === undefined ? "nowhere" : roundMicro(measured)} mm from the reference, not ${distanceMm} mm`;
-      throw new Error(`Driving distance committed one Undo step, but the read-back does not match: ${what} along [${movingNormal.join(", ")}] (planes now: ${describe()})${nothingMoved ? `; ${noChange}` : ""}; ${reconcileNow}`);
-    }
-    const targetPoint = add(moving.centerMm, scale(movingNormal, target! - movingOffset));
-    const moved = movedPlanes.reduce((best, plane) => Math.hypot(...subtract(plane.centerMm, targetPoint)) < Math.hypot(...subtract(best.centerMm, targetPoint)) ? plane : best);
+    const check = geometry as DrivingDistanceGeometryCheck | null;
+    const moved = check!.movedFace!;
+    const note = pickVerifiedNote(run.native, run.timeouts);
     return {
-      state: after, changed: true, previousDistanceMm, distanceMm, undoSteps: 1, movedFaceId: moved.id, movingFaceId: moved.id, planeOffsetMm: roundMicro(moved.offset),
-      ...(picked.lateCommit ? { message: `the commit landed after the ${timeouts.finishMs} ms finish wait; it was read back like any other` } : {}),
-      ...(picked.foreignActive ? { warning: `Another Plasticity command (${picked.foreignActive}) is active; it is not part of this edit and was left alone` } : {}),
+      state: after!, changed: true, previousDistanceMm, distanceMm, undoSteps: 1, movedFaceId: moved.id, movingFaceId: moved.id,
+      planeOffsetMm: roundMicro(dot(check!.normal, moved.centerMm)),
+      ...(note ? { message: note } : {}),
+      ...(run.native.foreignActive ? { warning: `Another Plasticity command (${run.native.foreignActive}) is active; it is not part of this edit and was left alone` } : {}),
     };
   }
 
