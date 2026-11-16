@@ -1,0 +1,29 @@
+{
+ "start": {
+  "undoDepth": 0,
+  "bodyCount": 4
+ },
+ "directBytes": 1560,
+ "lean": {
+  "replyBytes": 1704,
+  "stepResultBytes": 1560,
+  "truncated": false,
+  "whole": true
+ },
+ "standard": {
+  "replyBytes": 1759,
+  "stepResultBytes": 1560,
+  "truncated": false,
+  "whole": true
+ },
+ "restored": {
+  "ok": true,
+  "undoDepth": 0,
+  "bodyCount": 4,
+  "redoDepth": 19
+ },
+ "end": {
+  "undoDepth": 0,
+  "bodyCount": 4
+ }
+}

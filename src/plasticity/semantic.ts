@@ -334,19 +334,29 @@ function boundsArea(face: DescribedBody["faces"][number]): number {
 }
 
 type PlaneOffset = { mm: number; count: number; face: string; area: number };
+type AxisPoint = { point: number[]; lo: number; hi: number; index: number | undefined };
 type CylinderGroup = {
-  radiusMm: number; axis: string | number[]; kind?: "hole" | "boss"; count: number;
-  // Distinct axes, keyed by their position across the axis. For an axis-aligned one, lo and hi are the faces' extent along it.
-  points: Map<string, { point: number[]; lo: number; hi: number; index: number | undefined }>;
+  radiusMm: number; rep: number; axis: string | number[]; kind?: "hole" | "boss" | "arc"; sweepDeg?: number; faces: number;
+  // Distinct axes (within 0.001 mm across the axis). For an axis-aligned one, lo and hi are the faces' extent along it.
+  points: AxisPoint[]; grid: Map<string, number[]>; across: number[][];
   // Full-turn faces only (two circle edges): their axial extent, and for holes whether a floor closes one end.
   closed: number; extents: Array<[number, number] | undefined>; floored: boolean[];
 };
+type DescribedEdge = DescribedBody["edges"][number];
+
+const AXIS_ZERO = 1e-6; // direction components below this count as 0 before the sign is chosen
+const AXIS_POINT_TOLERANCE = 1e-3; // mm: axis points closer than this are one axis
+const RADIUS_TOLERANCE = 1e-4; // mm: radii closer than this to a group's first radius join it
+const DESCRIBE_MAX_NAME = 120;
+const DESCRIBE_MAX_BLENDS = 12;
+const DESCRIBE_MAX_HALF_ANGLES = 8;
+const DESCRIBE_MAX_GROUPS = 50; // a cylinder group needs about 75 bytes: more than this never fits 4 KB
 
 type PlaneEntry = { normal?: number[]; mm: number; count?: number; face: string }; // count is left out when it is 1
 export interface BodyDescription {
   id: number;
   type: string;
-  name: string | null;
+  name: string | null; // cut to 120 characters
   revision: string;
   boundsMm: { min: number[]; max: number[] } | null;
   sizeMm: number[] | null;
@@ -355,18 +365,46 @@ export interface BodyDescription {
   vertexCount: number;
   // xPos, xNeg, yPos, yNeg, zPos, zNeg and slanted each hold a list of plane entries; `more` maps a direction to the number of offsets left out.
   planes: { [direction: string]: PlaneEntry[] | Record<string, number> | undefined; more?: Record<string, number> };
-  // through and extentMm appear only when every face of the group is a full-turn face (two circle edges) and they agree.
-  cylinders: Array<{ radiusMm: number; axis: string | number[]; kind?: "hole" | "boss"; count: number; axisPointsMm: number[][]; more?: number; through?: boolean; extentMm?: number[] }>;
-  otherSurfaces: Record<string, { count: number; halfAngleDeg?: number[] }>;
+  // count is the number of distinct axes; faces appears only when it differs. kind is hole or boss for full-turn faces (two circle edges)
+  // and arc for a part turn, with sweepDeg when the circle edges give it. through and extentMm appear only when every face of the group
+  // is a full-turn face and they agree.
+  cylinders: Array<{ radiusMm: number; axis: string | number[]; kind?: "hole" | "boss" | "arc"; sweepDeg?: number; count: number; faces?: number; axisPointsMm: number[][]; more?: number; through?: boolean; extentMm?: number[] }>;
+  cylindersMore?: number; // groups left out (the groups with the fewest faces go first)
+  otherSurfaces: Record<string, { count: number; halfAngleDeg?: number[]; more?: number }>;
+  otherSurfacesMore?: number;
   blendRadii: Record<string, number>; // radius mm -> face count
+  blendRadiiMore?: number;
   // An open-top pocket read from the planes: the widest inward-facing wall pair on x and on y, and the floor z. Left out when not clear.
   cavity?: { xMm: number[]; yMm: number[]; floorZMm: number };
+  planesMore?: number; // every plane offset, when the planes section itself was left out
   truncated?: true;
+}
+
+const sizeOf = (value: unknown): number => Buffer.byteLength(JSON.stringify(value));
+const distance3 = (left: readonly number[], right: readonly number[]): number => Math.hypot(left[0]! - right[0]!, left[1]! - right[1]!, left[2]! - right[2]!);
+
+// The angle an arc edge sweeps about its circle's centre, from its start, midpoint and end; 360 for a closed circle.
+function circleSweepDeg(edge: DescribedEdge): number | undefined {
+  const geometry = edge.circleGeometry;
+  if (!geometry) return undefined;
+  const { centerMm: center, startMm: start, midpointMm: middle, endMm: end } = geometry;
+  if (distance3(start, end) < AXIS_POINT_TOLERANCE) return 360;
+  const first = [0, 1, 2].map((index) => start[index]! - center[index]!);
+  const last = [0, 1, 2].map((index) => end[index]! - center[index]!);
+  const mid = [0, 1, 2].map((index) => middle[index]! - center[index]!);
+  const lengths = Math.hypot(first[0]!, first[1]!, first[2]!) * Math.hypot(last[0]!, last[1]!, last[2]!);
+  if (lengths < 1e-12) return undefined;
+  const short = Math.acos(Math.max(-1, Math.min(1, dot3(first, last) / lengths))) * 180 / Math.PI;
+  // The midpoint lies on the short side of the chord for an arc of 180 degrees or less.
+  const onShortSide = dot3(mid, [first[0]! + last[0]!, first[1]! + last[1]!, first[2]! + last[2]!]) >= 0;
+  return Math.round((onShortSide || short > 179.95 ? short : 360 - short) * 10) / 10;
 }
 
 export function describeBody(body: DescribedBody, revision: string): BodyDescription {
   const planes = new Map<string, { slanted?: number[]; offsets: Map<number, PlaneOffset> }>();
-  const cylinders = new Map<string, CylinderGroup>();
+  const cylinderGroups: CylinderGroup[] = [];
+  // Groups of one axis, kind and sweep, found by their first radius: radii within 0.0001 mm of it join, whatever bucket they fall in.
+  const groupsBySubKey = new Map<string, Map<number, CylinderGroup[]>>();
   const others = new Map<string, { count: number; halfAngles: Set<number> }>();
   const blends = new Map<number, number>();
   const edgeById = new Map((body.edges ?? []).map((edge) => [edge.id, edge]));
@@ -396,32 +434,47 @@ export function describeBody(body: DescribedBody, revision: string): BodyDescrip
     // A cylindrical blend is reported under blendRadii only, not as a hole or boss.
     if (face.surfaceType === "Cylinder" && blend !== undefined) continue;
     if (face.surfaceType === "Cylinder" && face.radiusMm !== null && face.axisOriginMm && face.axisDirection) {
-      // One sign per axis, so a hole and its mirrored description group together.
-      const first = face.axisDirection.find((component) => Math.abs(component) > 1e-9) ?? 1;
-      const direction = (first < 0 ? face.axisDirection.map((component) => -component) : face.axisDirection) as [number, number, number];
+      // One sign per axis, so a hole and its mirrored description group together; components near zero count as zero before the sign is chosen.
+      const zeroed = face.axisDirection.map((component) => (Math.abs(component) < AXIS_ZERO ? 0 : component));
+      const first = zeroed.find((component) => component !== 0) ?? 1;
+      const direction = (first < 0 ? zeroed.map((component) => (component === 0 ? 0 : -component)) : zeroed) as [number, number, number];
       const offset = [0, 1, 2].map((index) => face.centerMm[index]! - face.axisOriginMm![index]!);
       const along = dot3(offset, direction);
       const point = [0, 1, 2].map((index) => face.axisOriginMm![index]! + along * direction[index]!);
       const radial = [0, 1, 2].map((index) => face.centerMm[index]! - point[index]!);
       const radialLength = Math.hypot(radial[0]!, radial[1]!, radial[2]!);
       const facing = radialLength > 1e-9 ? dot3(face.normal, radial) / radialLength : 0;
-      const kind = facing > 0.5 ? "boss" : facing < -0.5 ? "hole" : undefined;
+      // A full turn has two circle edges (or one closed circle). One circle edge and no more is a part turn: an arc, never a hole or boss.
+      // With no circle edge at all the faces cannot say, so the facing decides, as before.
+      const circleEdges = face.edgeIds.map((edgeId) => edgeById.get(edgeId)).filter((edge): edge is DescribedEdge => edge?.circle === true);
+      const fullTurn = circleEdges.length >= 2 || circleEdges.some((edge) => (circleSweepDeg(edge) ?? 0) >= 360);
+      const partial = circleEdges.length >= 1 && !fullTurn;
+      const kind = partial ? "arc" as const : facing > 0.5 ? "boss" as const : facing < -0.5 ? "hole" as const : undefined;
+      const sweeps = partial ? circleEdges.map(circleSweepDeg).filter((value): value is number => value !== undefined) : [];
+      const sweepDeg = sweeps.length > 0 ? Math.max(...sweeps) : undefined;
       const principal = principalKey(direction);
       const axis: string | number[] = principal ? principal.slice(0, 1) : round4Vector(direction);
-      const radiusMm = round4(face.radiusMm);
-      const key = `${radiusMm}|${Array.isArray(axis) ? axis.join(",") : axis}|${kind ?? ""}`;
-      const group: CylinderGroup = cylinders.get(key) ?? { radiusMm, axis, ...(kind ? { kind } : {}), count: 0, points: new Map(), closed: 0, extents: [], floored: [] };
-      cylinders.set(key, group);
-      group.count += 1;
-      // A full-turn face has two circle edges; only then do its bounds give its true length along the axis.
-      const circleEdges = face.edgeIds.map((edgeId) => edgeById.get(edgeId)).filter((edge) => edge?.circle === true);
+      const subKey = `${Array.isArray(axis) ? axis.join(",") : axis}|${kind ?? ""}|${kind === "arc" ? (sweepDeg === undefined ? "?" : Math.round(sweepDeg)) : ""}`;
+      const buckets = groupsBySubKey.get(subKey) ?? new Map<number, CylinderGroup[]>();
+      groupsBySubKey.set(subKey, buckets);
+      const bucket = Math.round(face.radiusMm / RADIUS_TOLERANCE);
+      let group: CylinderGroup | undefined;
+      for (let neighbour = bucket - 1; neighbour <= bucket + 1 && !group; neighbour += 1) {
+        group = buckets.get(neighbour)?.find((candidate) => Math.abs(candidate.rep - face.radiusMm!) <= RADIUS_TOLERANCE + 1e-9);
+      }
+      if (!group) {
+        group = { radiusMm: round4(face.radiusMm), rep: face.radiusMm, axis, ...(kind ? { kind } : {}), ...(kind === "arc" && sweepDeg !== undefined ? { sweepDeg } : {}), faces: 0, points: [], grid: new Map(), across: [], closed: 0, extents: [], floored: [] };
+        buckets.set(bucket, [...(buckets.get(bucket) ?? []), group]);
+        cylinderGroups.push(group);
+      }
+      group.faces += 1;
       if (circleEdges.length >= 2) {
         group.closed += 1;
         const axisIndex = [0, 1, 2].find((candidate) => Math.abs(direction[candidate]!) >= AXIS_ALIGNED);
         group.extents.push(axisIndex === undefined ? undefined : [round4(face.boundsMm.min[axisIndex]!), round4(face.boundsMm.max[axisIndex]!)]);
         if (kind === "hole") {
           // A flat floor (one edge) or an apex closes a blind hole; anything else at both ends leaves it through.
-          group.floored.push(circleEdges.some((edge) => edge!.faceIds.some((otherId) => {
+          group.floored.push(circleEdges.some((edge) => edge.faceIds.some((otherId) => {
             const other = otherId === face.id ? undefined : faceById.get(otherId);
             if (!other) return false;
             if (other.planar) return other.edgeIds.length === 1;
@@ -429,16 +482,24 @@ export function describeBody(body: DescribedBody, revision: string): BodyDescrip
           })));
         }
       }
-      // Distinct axes by their position across the axis (0.001 mm), not along it.
+      // Distinct axes by their position across the axis (within 0.001 mm, found through a grid so the cost stays linear), not along it.
       const alongPoint = dot3(point, direction);
       const across = point.map((value, index) => value - alongPoint * direction[index]!);
-      const pointKey = across.map((value) => Math.round(value * 1000)).join(",");
+      const cell = across.map((value) => Math.floor(value / AXIS_POINT_TOLERANCE));
+      let known: AxisPoint | undefined;
+      for (let dx = -1; dx <= 1 && !known; dx += 1) for (let dy = -1; dy <= 1 && !known; dy += 1) for (let dz = -1; dz <= 1 && !known; dz += 1) {
+        const found = group.grid.get(`${cell[0]! + dx},${cell[1]! + dy},${cell[2]! + dz}`)?.find((at) => distance3(group!.across[at]!, across) <= AXIS_POINT_TOLERANCE);
+        if (found !== undefined) known = group.points[found];
+      }
       const index = [0, 1, 2].find((candidate) => Math.abs(direction[candidate]!) >= AXIS_ALIGNED);
-      const known = group.points.get(pointKey);
       const lo = index === undefined ? 0 : face.boundsMm.min[index]!;
       const hi = index === undefined ? 0 : face.boundsMm.max[index]!;
-      if (!known) group.points.set(pointKey, { point, lo, hi, index });
-      else { known.lo = Math.min(known.lo, lo); known.hi = Math.max(known.hi, hi); }
+      if (!known) {
+        const at = group.points.push({ point, lo, hi, index }) - 1;
+        group.across.push(across);
+        const cellKey = cell.join(",");
+        group.grid.set(cellKey, [...(group.grid.get(cellKey) ?? []), at]);
+      } else { known.lo = Math.min(known.lo, lo); known.hi = Math.max(known.hi, hi); }
       continue;
     }
 
@@ -451,7 +512,7 @@ export function describeBody(body: DescribedBody, revision: string): BodyDescrip
   const header = {
     id: body.id,
     type: body.type,
-    name: body.name,
+    name: body.name === null || body.name === undefined || body.name.length <= DESCRIBE_MAX_NAME ? body.name : Array.from(body.name).slice(0, DESCRIBE_MAX_NAME).join(""),
     revision,
     boundsMm: body.boundsMm ? { min: round4Vector(body.boundsMm.min), max: round4Vector(body.boundsMm.max) } : null,
     sizeMm: body.boundsMm ? [0, 1, 2].map((index) => round4(body.boundsMm!.max[index]! - body.boundsMm!.min[index]!)) : null,
@@ -470,71 +531,145 @@ export function describeBody(body: DescribedBody, revision: string): BodyDescrip
   }
   if (slanted.length > 0) directions.set("slanted", slanted);
 
-  const cylinderGroups = [...cylinders.values()]
-    .sort((left, right) => left.radiusMm - right.radiusMm || String(left.axis).localeCompare(String(right.axis)) || (left.kind ?? "").localeCompare(right.kind ?? ""))
-    .map(({ points, closed, extents, floored, ...group }) => {
-      const described = { ...group, axisPointsMm: [...points.values()].map((entry) => {
-        // An axis-aligned axis is placed at the middle of its faces' extent, so a hole through a wall reads at mid-wall.
-        const at = [...entry.point];
-        if (entry.index !== undefined) at[entry.index] = (entry.lo + entry.hi) / 2;
-        return round4Vector(at);
-      }).sort((left, right) => left[0]! - right[0]! || left[1]! - right[1]! || left[2]! - right[2]!) } as BodyDescription["cylinders"][number];
+  // One entry per cylinder group, shown by radius; `ranked` is the same list with the most faces first (the keepers when space runs out).
+  const describedGroups = [...cylinderGroups]
+    .sort((left, right) => left.radiusMm - right.radiusMm || String(left.axis).localeCompare(String(right.axis)) || (left.kind ?? "").localeCompare(right.kind ?? "") || (left.sweepDeg ?? 0) - (right.sweepDeg ?? 0))
+    .map((group) => {
+      const count = group.points.length;
+      const described = {
+        radiusMm: group.radiusMm, axis: group.axis, ...(group.kind ? { kind: group.kind } : {}), ...(group.sweepDeg !== undefined ? { sweepDeg: group.sweepDeg } : {}),
+        count, ...(group.faces !== count ? { faces: group.faces } : {}),
+        axisPointsMm: group.points.map((entry) => {
+          // An axis-aligned axis is placed at the middle of its faces' extent, so a hole through a wall reads at mid-wall.
+          const at = [...entry.point];
+          if (entry.index !== undefined) at[entry.index] = (entry.lo + entry.hi) / 2;
+          return round4Vector(at);
+        }).sort((left, right) => left[0]! - right[0]! || left[1]! - right[1]! || left[2]! - right[2]!),
+      } as BodyDescription["cylinders"][number];
       // Reported only when every face of the group is a full-turn face and they all agree.
-      if (closed === group.count) {
-        if (group.kind === "hole" && floored.length === closed && floored.every((value) => value === floored[0])) described.through = !floored[0];
-        const first = extents[0];
-        if (first && extents.length === closed && extents.every((extent) => extent && Math.abs(extent[0] - first[0]) < 1e-3 && Math.abs(extent[1] - first[1]) < 1e-3)) described.extentMm = [...first];
+      if (group.closed === group.faces) {
+        if (group.kind === "hole" && group.floored.length === group.closed && group.floored.every((value) => value === group.floored[0])) described.through = !group.floored[0];
+        const firstExtent = group.extents[0];
+        if (firstExtent && group.extents.length === group.closed && group.extents.every((extent) => extent && Math.abs(extent[0] - firstExtent[0]) < 1e-3 && Math.abs(extent[1] - firstExtent[1]) < 1e-3)) described.extentMm = [...firstExtent];
       }
-      return described;
+      return { described, faces: group.faces };
     });
+  let shownGroups = describedGroups;
+  let cylindersMore = 0;
+  const dropGroups = (keep: ReadonlyArray<(typeof describedGroups)[number]>) => {
+    const kept = new Set(keep);
+    cylindersMore += shownGroups.length - kept.size;
+    shownGroups = shownGroups.filter((group) => kept.has(group));
+  };
+  const rank = (): typeof describedGroups => [...shownGroups].sort((left, right) => right.faces - left.faces || left.described.radiusMm - right.described.radiusMm);
+  if (shownGroups.length > DESCRIBE_MAX_GROUPS) dropGroups(rank().slice(0, DESCRIBE_MAX_GROUPS));
 
   const otherSurfaces: BodyDescription["otherSurfaces"] = {};
   for (const [type, entry] of [...others].sort((left, right) => left[0].localeCompare(right[0]))) {
-    otherSurfaces[type] = { count: entry.count, ...(entry.halfAngles.size > 0 ? { halfAngleDeg: [...entry.halfAngles].sort((left, right) => left - right) } : {}) };
+    const angles = [...entry.halfAngles].sort((left, right) => left - right);
+    otherSurfaces[type] = {
+      count: entry.count,
+      ...(angles.length > 0 ? { halfAngleDeg: angles.slice(0, DESCRIBE_MAX_HALF_ANGLES) } : {}),
+      ...(angles.length > DESCRIBE_MAX_HALF_ANGLES ? { more: angles.length - DESCRIBE_MAX_HALF_ANGLES } : {}),
+    };
   }
-  const blendEntries = [...blends].sort((left, right) => left[0] - right[0]);
+  // Blend radii: the radii with the most faces stay, shown by radius.
+  const allBlends = [...blends];
+  const blendEntries = (allBlends.length > DESCRIBE_MAX_BLENDS ? [...allBlends].sort((left, right) => right[1] - left[1] || left[0] - right[0]).slice(0, DESCRIBE_MAX_BLENDS) : allBlends)
+    .sort((left, right) => left[0] - right[0]);
+  const blendMoreAtStart = allBlends.length - blendEntries.length;
   const cavity = body.boundsMm ? cavityFromPlanes(planes, body.boundsMm) : undefined;
 
   // Caps: at most 12 offsets per direction and 16 axis points per group, each with a `more` count.
   const planeMore = new Map<string, number>();
-  const cutOffsets = (direction: string, keep: number) => {
+  const cutOffsets = (direction: string, keep: number): number => {
     const list = directions.get(direction)!;
+    // The bytes freed, less the `more` entry a first cut adds.
+    const freed = list.slice(keep).reduce((sum, entry) => sum + sizeOf(entry) + 1, 0) - (planeMore.has(direction) ? 0 : direction.length + 8);
     planeMore.set(direction, (planeMore.get(direction) ?? 0) + list.length - keep);
     list.length = keep;
+    return freed;
   };
   for (const [direction, list] of directions) if (list.length > DESCRIBE_MAX_OFFSETS) cutOffsets(direction, DESCRIBE_MAX_OFFSETS);
-  for (const group of cylinderGroups) {
-    if (group.axisPointsMm.length > DESCRIBE_MAX_AXES) { group.more = group.axisPointsMm.length - DESCRIBE_MAX_AXES; group.axisPointsMm.length = DESCRIBE_MAX_AXES; }
+  for (const { described } of shownGroups) {
+    if (described.axisPointsMm.length > DESCRIBE_MAX_AXES) { described.more = described.axisPointsMm.length - DESCRIBE_MAX_AXES; described.axisPointsMm.length = DESCRIBE_MAX_AXES; }
   }
 
-  let truncated = false;
   let keptBlends = blendEntries.length;
-  const assemble = (): BodyDescription => ({
-    ...header,
-    planes: {
-      ...Object.fromEntries(directions),
-      ...(planeMore.size > 0 ? { more: Object.fromEntries(planeMore) } : {}),
-    },
-    cylinders: cylinderGroups,
-    otherSurfaces,
-    blendRadii: Object.fromEntries(blendEntries.slice(0, keptBlends).map(([radius, count]) => [String(radius), count])),
-    ...(cavity ? { cavity } : {}),
-    ...(truncated ? { truncated: true as const } : {}),
-  });
+  let leftOut: { otherSurfaces?: number; blendRadii?: number; cylinders?: number; planes?: number } = {};
+  const assemble = (): BodyDescription => {
+    const planesMore = leftOut.planes;
+    const blendMore = leftOut.blendRadii !== undefined ? leftOut.blendRadii : blendMoreAtStart + (blendEntries.length - keptBlends);
+    const groupsMore = leftOut.cylinders !== undefined ? leftOut.cylinders : cylindersMore;
+    const otherMore = leftOut.otherSurfaces;
+    const out: BodyDescription = {
+      ...header,
+      planes: planesMore !== undefined ? {} : {
+        ...Object.fromEntries(directions),
+        ...(planeMore.size > 0 ? { more: Object.fromEntries(planeMore) } : {}),
+      },
+      cylinders: leftOut.cylinders !== undefined ? [] : shownGroups.map((group) => group.described),
+      ...(groupsMore > 0 ? { cylindersMore: groupsMore } : {}),
+      otherSurfaces: otherMore !== undefined ? {} : otherSurfaces,
+      blendRadii: leftOut.blendRadii !== undefined ? {} : Object.fromEntries(blendEntries.slice(0, keptBlends).map(([radius, count]) => [String(radius), count])),
+      ...(blendMore > 0 ? { blendRadiiMore: blendMore } : {}),
+      ...(cavity ? { cavity } : {}),
+      ...(otherMore !== undefined ? { otherSurfacesMore: otherMore } : {}),
+      ...(planesMore !== undefined ? { planesMore } : {}),
+    };
+    if (out.cylindersMore || out.blendRadiiMore || out.otherSurfacesMore || out.planesMore) out.truncated = true;
+    return out;
+  };
 
-  // Hard cap 4 KB: drop the tail of the longest list first, keeping the `more` counts true.
-  while (Buffer.byteLength(JSON.stringify(assemble())) > DESCRIBE_MAX_BYTES) {
-    const lists: Array<{ length: number; drop: () => void }> = [];
-    for (const [direction, list] of directions) {
-      if (list.length > 1) lists.push({ length: list.length, drop: () => cutOffsets(direction, list.length - 1) });
+  // Hard cap 4 KB. One serialisation tells the size; after that item sizes are subtracted, so the work stays linear.
+  // The tail of the longest list goes first (the groups with the fewest faces last of all), keeping every `more` count true.
+  let total = sizeOf(assemble());
+  if (total > DESCRIBE_MAX_BYTES) {
+    let moreKeyCost = (planeMore.size > 0 ? 0 : 10) + (blendMoreAtStart > 0 ? 0 : 24) + (cylindersMore > 0 ? 0 : 24) + 17;
+    total += moreKeyCost; // reserved once for the keys and flag that trimming may add
+    let guard = 0;
+    while (total > DESCRIBE_MAX_BYTES && guard++ < 100_000) {
+      const lists: Array<{ length: number; drop: () => number }> = [];
+      for (const [direction, list] of directions) {
+        if (list.length > 1) lists.push({ length: list.length, drop: () => cutOffsets(direction, list.length - 1) });
+      }
+      for (const { described } of shownGroups) {
+        if (described.axisPointsMm.length > 1) {
+          lists.push({ length: described.axisPointsMm.length, drop: () => {
+            const freed = sizeOf(described.axisPointsMm[described.axisPointsMm.length - 1]) + 1;
+            described.axisPointsMm.pop();
+            const costs = described.more === undefined ? 12 : 0;
+            described.more = (described.more ?? 0) + 1;
+            return freed - costs;
+          } });
+        }
+      }
+      if (keptBlends > 1) lists.push({ length: keptBlends, drop: () => { const [radius, count] = blendEntries[keptBlends - 1]!; keptBlends -= 1; return String(radius).length + String(count).length + 5; } });
+      if (shownGroups.length > 1) {
+        lists.push({ length: 1, drop: () => {
+          const lowest = rank().at(-1)!;
+          shownGroups = shownGroups.filter((group) => group !== lowest);
+          cylindersMore += 1;
+          return sizeOf(lowest.described) + 1;
+        } });
+      }
+      if (lists.length === 0) break;
+      total -= lists.sort((left, right) => right.length - left.length)[0]!.drop();
     }
-    for (const group of cylinderGroups) {
-      if (group.axisPointsMm.length > 1) lists.push({ length: group.axisPointsMm.length, drop: () => { group.axisPointsMm.pop(); group.more = (group.more ?? 0) + 1; } });
+    // Last resort: leave whole sections out, least useful first, each as <section>More: <count>.
+    const sections: Array<[keyof typeof leftOut, () => number]> = [
+      ["otherSurfaces", () => Object.keys(otherSurfaces).length],
+      ["blendRadii", () => allBlends.length],
+      ["cylinders", () => shownGroups.length + cylindersMore],
+      ["planes", () => [...directions.values()].reduce((sum, list) => sum + list.length, 0) + [...planeMore.values()].reduce((sum, value) => sum + value, 0)],
+    ];
+    let result = assemble();
+    for (const [section, count] of sections) {
+      if (sizeOf(result) <= DESCRIBE_MAX_BYTES) break;
+      leftOut = { ...leftOut, [section]: count() };
+      result = assemble();
     }
-    if (keptBlends > 1) lists.push({ length: keptBlends, drop: () => { keptBlends -= 1; truncated = true; } });
-    if (cylinderGroups.length > 1) lists.push({ length: 1, drop: () => { cylinderGroups.pop(); truncated = true; } });
-    if (lists.length === 0) break;
-    lists.sort((left, right) => right.length - left.length)[0]!.drop();
+    return result;
   }
   return assemble();
 }

@@ -2202,19 +2202,34 @@ function leanBody(body: RuntimeState["bodies"][number]) {
 }
 
 // Rounds length values in a reply to the given decimals: numbers under a key ending in Mm or Mm2 (lengthMm,
-// radiusMm, areaMm2, a return key like "matches[*].lengthMm"), including everything nested under it (boundsMm.min,
-// positionMm[0]). Normals, tangents, axes, angles, quaternions, counts and ids keep full precision. It copies, so
-// stored results keep full precision.
+// radiusMm, areaMm2), including everything nested under it (boundsMm.min, positionMm[0]). A return key is a path
+// ("matches[*].boundsMm.min", "matches[*].centerMm[0]"): the nearest segment ending in Mm or Mm2 decides. Keys that end
+// in Mm or Mm2 but are rates (a name with "Per" before a capital: curvaturePerMm, tractionNPerMm2) keep full precision,
+// and so does matrixWorldMm except its translation (elements 12-14 of the column-major 4x4). Normals, tangents, axes,
+// angles, quaternions, counts and ids keep full precision. It copies, so stored results keep full precision.
 const LENGTH_KEY = /Mm2?$/;
-function roundReplyNumbers(value: unknown, decimals: number, lengthLike = false): unknown {
-  if (typeof value === "number") {
-    if (!lengthLike || !Number.isFinite(value)) return value;
-    const factor = 10 ** decimals;
-    return Math.round(value * factor) / factor + 0;
+const RATE_KEY = /Per[A-Z0-9]/;
+const MATRIX_KEY = "matrixWorldMm";
+const MATRIX_TRANSLATION = (index: number) => index >= 12 && index <= 14;
+function lengthRule(key: string, inherited: { lengthLike: boolean; matrix: boolean }): { lengthLike: boolean; matrix: boolean } {
+  const names = key.match(/[A-Za-z_$][\w$]*/g) ?? [];
+  const nearest = [...names].reverse().find((name) => LENGTH_KEY.test(name));
+  if (nearest === undefined) return inherited;
+  if (nearest === MATRIX_KEY) {
+    const element = /matrixWorldMm\[(\d+)\]$/.exec(key);
+    return element ? { lengthLike: MATRIX_TRANSLATION(Number(element[1])), matrix: false } : { lengthLike: false, matrix: true };
   }
-  if (Array.isArray(value)) return value.map((item) => roundReplyNumbers(item, decimals, lengthLike));
+  return { lengthLike: !RATE_KEY.test(nearest), matrix: false };
+}
+function roundReplyNumbers(value: unknown, decimals: number, state: { lengthLike: boolean; matrix: boolean } = { lengthLike: false, matrix: false }): unknown {
+  const round = (number: number) => (Number.isFinite(number) ? Math.round(number * 10 ** decimals) / 10 ** decimals + 0 : number);
+  if (typeof value === "number") return state.lengthLike ? round(value) : value;
+  if (Array.isArray(value)) {
+    if (state.matrix && value.length === 16 && value.every((item) => typeof item === "number")) return value.map((item, index) => (MATRIX_TRANSLATION(index) ? round(item as number) : item));
+    return value.map((item) => roundReplyNumbers(item, decimals, state));
+  }
   if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, roundReplyNumbers(item, decimals, lengthLike || LENGTH_KEY.test(key))]));
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, roundReplyNumbers(item, decimals, lengthRule(key, state))]));
   }
   return value;
 }
@@ -2884,6 +2899,9 @@ function createServerWithCatalog(
     const stepChanges: Array<BatchStepRecord> = [];
     const completed: Array<BatchReplyStep> = [];
     const render = (value: unknown) => (input.roundMm === undefined ? value : roundReplyNumbers(value, input.roundMm));
+    // Top-level count of steps that carry returnError, so a bad return path on a step that changed the document is not missed.
+    const returnErrorCount = () => completed.filter((entry) => entry.returnError !== undefined).length;
+    const returnErrorsField = () => (returnErrorCount() > 0 ? { returnErrors: returnErrorCount() } : {});
     const lean = input.detail === "lean";
     const referencedLater = lean ? batchStepsReferencedLater(input.steps) : new Set<number>();
     const renderSteps = () => render(renderBatchSteps(completed, input.detail));
@@ -2916,6 +2934,8 @@ function createServerWithCatalog(
         });
         // What the caller sees: the asked-for projection, else the read result (or the tool's own fields), never cut silently.
         const unprojected = () => {
+          // plasticity_describe_body has its own 4 KB hard cap, so the 1,500 B read rule does not apply to it (either detail mode).
+          if (readOnly && step.toolName === "plasticity_describe_body") return stepResult;
           if (readOnly && lean && step.toolName === "plasticity_status" && (JSON.stringify(stepResult)?.length ?? 0) > BATCH_REPLY_LIMIT) return leanStatusSummary(stepResult);
           if (readOnly) return lean && referencedLater.has(index) ? referencedReadSummary(stepResult) : summarizeBatchResult(stepResult);
           const own = toolSpecificFields(stepResult, after);
@@ -2964,18 +2984,19 @@ function createServerWithCatalog(
             undone += 1;
           }
         }
-        throw new Error(JSON.stringify({ failedStep: index, toolName: step.toolName, error: message.slice(0, 4_000), completedSteps: renderSteps(), undoneSteps: undone }));
+        throw new Error(JSON.stringify({ failedStep: index, toolName: step.toolName, error: message.slice(0, 4_000), completedSteps: renderSteps(), ...returnErrorsField(), undoneSteps: undone }));
       }
     }
     reuse.beginStateReuseStep?.(); // the end state is probed like a step's first read
     const end = await session.get().state();
     const undoSteps = end.undoDepth - start.undoDepth;
-    if (input.verbose) return render({ ...compactMutationResult<Record<string, unknown>>(end, diffScenes(start, end)), steps: renderBatchSteps(completed, input.detail), undoSteps });
+    if (input.verbose) return render({ ...compactMutationResult<Record<string, unknown>>(end, diffScenes(start, end)), steps: renderBatchSteps(completed, input.detail), undoSteps, ...returnErrorsField() });
     // Default reply: what changed, not the whole scene. Use plasticity_status for the rest.
     const change = diffScenes(start, end);
     if (input.detail === "lean") {
       return render({
         steps: renderBatchSteps(completed, "lean"),
+        ...returnErrorsField(),
         summary: {
           revision: end.revision,
           undoSteps,
@@ -2997,6 +3018,7 @@ function createServerWithCatalog(
         regionsAdded: change.regionsAdded.map((region) => region.id),
       },
       steps: renderBatchSteps(completed, "standard"),
+      ...returnErrorsField(),
     });
   };
   tool("plasticity_list_windows", "List Plasticity document windows exposed on loopback CDP. If no Plasticity process is running, opens Plasticity with loopback CDP first (disable with PLASTICITY_AUTO_LAUNCH=0); a running instance without CDP is never restarted.", z.object({}), async () =>
@@ -3157,7 +3179,7 @@ function createServerWithCatalog(
     }
     return reply;
   }, true);
-  tool("plasticity_describe_body", "Describe bodies compactly to size against them and verify them: bounds and size; planar faces by outward normal (xPos, xNeg, yPos, yNeg, zPos, zNeg, slanted) with each plane's coordinate mm (walls, cavity floor); face count and largest face; cylinders by radius and axis, hole or boss, axis points, through or blind and axial extent when known; an open-top cavity; other surfaces; blend radii. Includes hole and boss axis positions: no face search needed for those. id: one body; ids (1-8): several, plus the revision; neither: every body when there are at most 8, else the body list. Millimetres. Use plasticity_body_info for exact topology.", z.object({ id: z.number().int().positive().optional(), ids: z.array(z.number().int().positive()).min(1).max(8).optional() }).strict().superRefine((input, context) => {
+  tool("plasticity_describe_body", "Describe bodies compactly to size against them and verify them: bounds and size; planar faces by outward normal (xPos, xNeg, yPos, yNeg, zPos, zNeg, slanted) with each plane's mm (the coordinate on that axis; for slanted, the signed offset along the normal) and its face (the largest bounding box at that offset, not exact area); face count; cylinders by radius and axis with kind hole or boss (full turn) or arc (part turn, sweepDeg when known), count (distinct axes; faces only when different), axis points (coaxial holes through opposite walls merge into one point), through or blind and axial extent when known; an open-top cavity; other surfaces; blend radii. Includes hole and boss axis positions: no face search needed for those. id: one body; ids (1-8): several; neither: every body when there are at most 8, else the body list. Always returns revision. At most 4 KB, with more counts for what is left out; a batch step without return gets it whole. Millimetres. Use plasticity_body_info for exact topology.", z.object({ id: z.number().int().positive().optional(), ids: z.array(z.number().int().positive()).min(1).max(8).optional() }).strict().superRefine((input, context) => {
     if (input.id !== undefined && input.ids !== undefined) context.addIssue({ code: "custom", path: ["ids"], message: "Pass id or ids, not both" });
   }), async ({ id, ids: bodyIds }) => {
     const state = await session.get().state();
@@ -3187,7 +3209,7 @@ function createServerWithCatalog(
     await session.get().inspectFastenerGroup(request), true);
   tool("plasticity_check_fastener_group_layout", "Measure and optionally check a fastener group on one exact rectangular planar face. Returns center-to-edge and hole-edge distances, every pair's center spacing and remaining ligament, plus clearance for supplied circular head, washer, nut, or driver envelopes. Optionally provide opposedFaceId to verify the matching perforated opposite face and exact native B-rep plate thickness. A pass is returned only when explicit layout requirements with a recorded basis are supplied. Geometry verification remains a layout check, not a strength or tool-motion analysis.", fastenerGroupLayoutInputSchema, async (request) =>
     await session.get().inspectFastenerGroupLayout(request), true);
-  tool("plasticity_find_faces", "Find current B-Rep faces semantically by body, surface type, normal, radius, center, bounds, edge count, or adjacency. boundsMm matches by overlap. sortBy (x, y or z of the face center, or area), order and limit pick among the matches; count is the total before limit. sortBy \"area\" (largest first by default) measures the exact trimmed area of every match (at most 256; narrow the query otherwise) and adds areaMm2 to each, e.g. limit: 1 picks the main floor face over small fragments.", z.object({
+  tool("plasticity_find_faces", "Find current B-Rep faces semantically by body, surface type, normal, radius, center, bounds, edge count, or adjacency. boundsMm matches by overlap. sortBy (x, y or z of the face center, or area), order and limit pick among the matches; count is the total before limit. A direct reply over 8 KB is cut unless limit is set (sortBy alone does not lift the cut). sortBy \"area\" (largest first by default) measures the exact trimmed area of every match (at most 256; narrow the query otherwise) and adds areaMm2 to each, e.g. limit: 1 picks the main floor face over small fragments.", z.object({
     revision,
     query: faceQuerySchema,
     sortBy: z.enum(["x", "y", "z", "area"]).optional(),
@@ -3213,7 +3235,7 @@ function createServerWithCatalog(
     const matches = orderMatches(found, sortBy, order, limit, (face, key) => face.centerMm[COORDINATE_AXIS[key]!]!);
     return directFindReply({ documentToken: state.documentToken, revision: state.revision, measurementSource: "native-brep", count: found.length, matches }, limit);
   }, true);
-  tool("plasticity_find_edges", "Find current B-Rep edges semantically by body, curve type, direction, exact length, center, bounds, or adjacent faces. boundsMm matches by overlap. sortBy (length, or x, y or z of the edge center), order (length defaults to desc) and limit pick among the matches; count is the total before limit.", z.object({
+  tool("plasticity_find_edges", "Find current B-Rep edges semantically by body, curve type, direction, exact length, center, bounds, or adjacent faces. boundsMm matches by overlap. sortBy (length, or x, y or z of the edge center), order (length defaults to desc) and limit pick among the matches; count is the total before limit. A direct reply over 8 KB is cut unless limit is set (sortBy alone does not lift the cut).", z.object({
     revision,
     query: edgeQuerySchema,
     sortBy: z.enum(["length", "x", "y", "z"]).optional(),

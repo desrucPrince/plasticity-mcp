@@ -316,7 +316,7 @@ test("extrude_faces faceQuery resolves like find_faces; exactly one of faceIds a
 
 // ---------- describe_body ----------
 
-const GOLDEN_SINGLE = '{"id":1,"type":"Solid","name":"part","revision":"r1","boundsMm":{"min":[0,0,0],"max":[40,30,10]},"sizeMm":[40,30,10],"faceCount":9,"edgeCount":3,"vertexCount":4,"planes":{"xNeg":[{"mm":0,"face":"left"}],"xPos":[{"mm":40,"face":"right"}],"yNeg":[{"mm":0,"face":"front"}],"yPos":[{"mm":30,"face":"back"}],"zNeg":[{"mm":0,"face":"bottom"}],"zPos":[{"mm":10,"face":"top"}]},"cylinders":[{"radiusMm":2.25,"axis":"z","kind":"hole","count":3,"axisPointsMm":[[7.5,7.5,5],[32.5,7.5,5]]}],"otherSurfaces":{},"blendRadii":{}}';
+const GOLDEN_SINGLE = '{"id":1,"type":"Solid","name":"part","revision":"r1","boundsMm":{"min":[0,0,0],"max":[40,30,10]},"sizeMm":[40,30,10],"faceCount":9,"edgeCount":3,"vertexCount":4,"planes":{"xNeg":[{"mm":0,"face":"left"}],"xPos":[{"mm":40,"face":"right"}],"yNeg":[{"mm":0,"face":"front"}],"yPos":[{"mm":30,"face":"back"}],"zNeg":[{"mm":0,"face":"bottom"}],"zPos":[{"mm":10,"face":"top"}]},"cylinders":[{"radiusMm":2.25,"axis":"z","kind":"hole","count":2,"faces":3,"axisPointsMm":[[7.5,7.5,5],[32.5,7.5,5]]}],"otherSurfaces":{},"blendRadii":{}}';
 
 function cylinderFace(id: string, axisPoint: Vec, radius: number, outward: boolean, extra: Partial<Face> = {}): Face {
   const center: Vec = [axisPoint[0] + radius, axisPoint[1], axisPoint[2]];
