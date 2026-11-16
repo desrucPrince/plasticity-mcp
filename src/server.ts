@@ -3580,6 +3580,26 @@ function createServerWithCatalog(
     });
     return { ...(result as unknown as Record<string, unknown>), controlPoints };
   });
+  tool("plasticity_set_driving_distance", "Set the distance between two parallel planar faces of one Solid or Sheet to an exact millimeter value, as Plasticity's Dimension tool does: movingFaceId moves (with the geometry attached to it) and referenceFaceId stays fixed. Without referenceFaceId, Plasticity finds the opposite face itself. Use it to resize a part to an exact overall dimension (a 20 mm box to 30 mm, a cylinder to 16 mm tall) without computing an offset: plasticity_extrude_faces and plasticity_move need the delta, this takes the target distance. One Plasticity history step. Returns previousDistanceMm (what Plasticity measured before) and distanceMm. Rejects non-planar faces, faces of another body, and a non-parallel reference. If Plasticity cannot dimension the pair, nothing changes. Re-read faces afterward: face IDs change with the edit.", z.object({
+    bodyId: z.number().int().positive(),
+    movingFaceId: z.string().min(1),
+    referenceFaceId: z.string().min(1).optional(),
+    distanceMm: z.number().finite().positive(),
+    intent,
+    revision,
+  }).strict().superRefine((input, context) => {
+    if (input.referenceFaceId !== undefined && input.referenceFaceId === input.movingFaceId) {
+      context.addIssue({ code: "custom", path: ["referenceFaceId"], message: "referenceFaceId must differ from movingFaceId" });
+    }
+  }), async ({ bodyId, movingFaceId, referenceFaceId, distanceMm, intent: purpose, revision: current }) => {
+    let measured: { previousDistanceMm: number | null; distanceMm: number; undoSteps: 1 } | undefined;
+    const result = await journaled("set-driving-distance", purpose, { bodyId, movingFaceId, referenceFaceId, distanceMm }, async () => {
+      const done = await session.get().setDrivingDistance({ bodyId, movingFaceId, referenceFaceId, distanceMm }, current);
+      measured = { previousDistanceMm: done.previousDistanceMm, distanceMm: done.distanceMm, undoSteps: done.undoSteps };
+      return done.state;
+    });
+    return { ...(result as unknown as Record<string, unknown>), ...measured };
+  });
   tool("plasticity_slide_curve_control_points", "Slide one or more exact current Wire handles by a positive millimeter distance along each handle's local positive-U or negative-U control-polygon direction. Use the unit directions returned by plasticity_list_curve_control_points to predict the world-space result. All handles share one direction sense and distance, and the edit occupies one Plasticity history step. Re-read handles and exact B-Rep geometry afterward.", z.object({
     points: curveControlPointRefs,
     direction: z.enum(["positive-u", "negative-u"]),

@@ -121,6 +121,7 @@ Risks:
 
 ## Gap 4. Dimensions: MoveMeasurement DRIVABLE; DimensionDistance BLOCKED; DimensionPolyline BLOCKED
 Scripts `probe-dimension-command.ts`, `probe-dimensions.ts`, `probe-move-measurement.ts`, with JSON next to them.
+Update 2026-11-16: DimensionDistance is no longer blocked. Seeding the selection click point unblocks it; see `discovery/probes-2026-11-pick/FINDINGS.md` (tool `plasticity_set_driving_distance`).
 
 Routing (`probe-dimension-command.json`). The test traps `DimensionFactory.collection` during `editor.commands.DimensionCommand.execute()`. The generic DimensionCommand picks the factory from the selection:
 

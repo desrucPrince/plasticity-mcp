@@ -474,6 +474,218 @@ const sweepGuides = `
         if (guideMethod !== undefined) factory.guideMethod = guideMethod;
       }`;
 
+// ---- Viewport-pick commands (discovery/probes-2026-11-pick/FINDINGS.md)
+// Some commands read the selection click point (editor.selection.hits) and then wait for their own space dialog.
+// runPickCommand seeds the selection and the hits, runs the real command, drives its dialog and always cleans up.
+
+export interface PickItemReference {
+  kind: "body" | "face" | "edge";
+  bodyId: number;
+  /** Face or edge id; not used for kind "body". */
+  id?: string;
+}
+
+export interface PickHitSeed {
+  item: PickItemReference;
+  pointM: Vector3;
+  normalM?: Vector3;
+}
+
+export interface PickCommandTimeouts {
+  /** Wait for the command's dialog to appear. */
+  dialogMs: number;
+  /** Shared deadline for the drive step and for the command to settle after it. */
+  finishMs: number;
+  /** Wait for executor.cancelActiveCommand() to settle the command. */
+  cancelMs: number;
+}
+
+export const PICK_COMMAND_TIMEOUTS: Readonly<PickCommandTimeouts> = Object.freeze({ dialogMs: 3_000, finishMs: 8_000, cancelMs: 3_000 });
+
+// The CDP call outlives every internal wait by this margin, so a Node-side timeout cannot leave a command awaiting.
+export const PICK_COMMAND_CDP_MARGIN_MS = 6_000;
+
+export function pickCommandCdpTimeoutMs(timeouts: PickCommandTimeouts): number {
+  return timeouts.dialogMs + timeouts.finishMs + timeouts.cancelMs + PICK_COMMAND_CDP_MARGIN_MS;
+}
+
+export interface PickCommandSpec {
+  /** Native command binding, e.g. DimensionDistanceCommand. */
+  command: string;
+  /** Native dialog class binding the command opens, e.g. DimensionDistanceSpaceDialog. */
+  dialog: string;
+  /** Items to select, in order. */
+  select: PickItemReference[];
+  /** Selection click points to record, in meters. */
+  hits: PickHitSeed[];
+  /** Renderer source of the drive step: the body of `async (dialog, driveArgs) => result`. It must finish the dialog. */
+  drive: string;
+  driveArgs?: unknown;
+  /** Error message when the command rejects before it opens its dialog (for example "Operation has no effect"). */
+  rejectedMessage: string;
+  /** Short name for error messages. */
+  label: string;
+  timeouts?: PickCommandTimeouts;
+}
+
+export interface PickCommandEnd {
+  activeCommand: string | null;
+  selectedCount: number | null;
+  hitCount: number | null;
+  spaceInputFocused: boolean;
+}
+
+interface PickCommandNativeResult {
+  outcome: "committed" | "rejected" | "cancelled" | "cancel-failed" | "failed";
+  phase: "dialog" | "drive" | "finish" | "chained" | null;
+  error: string | null;
+  drive: unknown;
+  undoDelta: number;
+  chainedCancelled: boolean;
+  end: PickCommandEnd;
+}
+
+export interface PickCommandResult<T> {
+  drive: T;
+  undoDelta: number;
+  end: PickCommandEnd;
+}
+
+// Generic renderer source for runPickCommand. The drive step is spliced in as the body of an async function, so
+// one source serves every pick command; everything else comes from the bindings and args. Once the command has
+// started it never throws: it returns an outcome, and a returned value proves the in-call cancel ran.
+function pickCommandSource(drive: string): string {
+  return nativeFunction`async function (Command, Dialog, Vector3, args) {
+    ${findView}
+    const editor = this;
+    const executor = this.executor;
+    const selection = this.selection;
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const activeName = () => executor.active ? (executor.active.command?.constructor?.name ?? 'unknown') : null;
+    // isBusy is false while a command awaits its dialog, so the active command is checked too.
+    if (executor.isBusy || executor.active) {
+      throw new Error('Plasticity is busy' + (activeName() ? ' (' + activeName() + ' is active)' : '') + '; finish or cancel it first');
+    }
+    const resolveItem = reference => {
+      const view = find(reference.bodyId);
+      if (reference.kind === 'body') return view;
+      const collection = reference.kind === 'face' ? view.high?.faces : reference.kind === 'edge' ? view.high?.edges : undefined;
+      if (!collection) throw new Error('Unsupported pick item: ' + reference.kind);
+      const index = collection.versionIds.indexOf(reference.id);
+      if (index < 0) throw new Error('Stale or unknown ' + reference.kind + ': ' + reference.bodyId + ':' + reference.id);
+      return collection.get(index);
+    };
+    const selectItems = args.select.map(resolveItem);
+    const hitSeeds = args.hits.map(hit => ({
+      item: resolveItem(hit.item),
+      point: new Vector3(hit.pointM[0], hit.pointM[1], hit.pointM[2]),
+      normal: hit.normalM ? new Vector3(hit.normalM[0], hit.normalM[1], hit.normalM[2]) : undefined,
+    }));
+    const drive = async (dialog, driveArgs) => { ${drive} };
+    const focusedInput = () => typeof document === 'undefined' ? null : document.querySelector('input.z-space-input-focused');
+    const selectedCount = () => {
+      let count = 0, known = false;
+      for (const value of Object.values(selection.selected)) {
+        if ((value instanceof Set || value instanceof Map) && typeof value.size === 'number') { count += value.size; known = true; }
+      }
+      return known ? count : null;
+    };
+    const clear = () => { selection.selected.removeAll(); selection.hits.clear(); };
+    const undoBefore = this.history.undoStack.length;
+    const result = { outcome: 'failed', phase: null, error: null, drive: null, undoDelta: 0, chainedCancelled: false, end: null };
+    let started = false, settled = false, execError = null;
+    // Cancels whatever command is active, then waits until ours has settled and the executor is idle.
+    const cancel = async () => {
+      if (executor.active) executor.cancelActiveCommand();
+      const deadline = Date.now() + args.timeouts.cancelMs;
+      while ((!settled || executor.active) && Date.now() < deadline) await sleep(10);
+      return settled && !executor.active;
+    };
+    try {
+      clear();
+      for (const item of selectItems) selection.selected.add(item);
+      for (const seed of hitSeeds) selection.hits.record(seed.item, seed.point, seed.normal);
+      const command = new Command(editor);
+      command.remember = false;
+      const original = command.execute.bind(command);
+      // Clearing the selection before execute() returns stops the executor from chaining the default command
+      // for the still-selected items (PushFace, then OffsetFace), which would keep exec() pending.
+      command.execute = async function () {
+        try { return await original(); } finally { selection.selected.removeAll(); }
+      };
+      started = true;
+      editor.exec(command).then(() => { settled = true; }, error => { settled = true; execError = String(error?.message ?? error); });
+
+      const findDialog = () => {
+        let found = null;
+        editor.helpers.scene.traverse(object => { if (!found && object instanceof Dialog && object.params) found = object; });
+        return found;
+      };
+      let dialog = null;
+      const dialogDeadline = Date.now() + args.timeouts.dialogMs;
+      while (!settled && Date.now() < dialogDeadline) {
+        dialog = findDialog();
+        if (dialog) break;
+        await sleep(10);
+      }
+      if (!dialog) {
+        if (settled) {
+          result.outcome = 'rejected';
+          result.error = execError ?? 'the command ended without opening its dialog';
+        } else {
+          result.phase = 'dialog';
+          result.outcome = (await cancel()) ? 'cancelled' : 'cancel-failed';
+        }
+      } else {
+        const finishDeadline = Date.now() + args.timeouts.finishMs;
+        let driveError = null, driveDone = false;
+        drive(dialog, args.driveArgs).then(value => { result.drive = value ?? null; driveDone = true; }, error => { driveError = String(error?.message ?? error); driveDone = true; });
+        while (!driveDone && Date.now() < finishDeadline) await sleep(10);
+        if (driveError !== null || !driveDone) {
+          result.phase = 'drive';
+          result.error = driveError ?? 'the drive step did not return';
+          result.outcome = (await cancel()) ? 'cancelled' : 'cancel-failed';
+        } else {
+          while (!settled && Date.now() < finishDeadline) await sleep(10);
+          if (!settled) {
+            result.phase = 'finish';
+            result.outcome = (await cancel()) ? 'cancelled' : 'cancel-failed';
+          } else if (execError !== null) {
+            result.outcome = 'failed';
+            result.error = execError;
+          } else {
+            result.outcome = 'committed';
+            if (executor.active) {
+              result.phase = 'chained';
+              result.chainedCancelled = true;
+              if (!(await cancel())) result.outcome = 'cancel-failed';
+            }
+          }
+        }
+      }
+    } catch (error) {
+      if (!started) throw error;
+      result.error = String(error?.message ?? error);
+      result.outcome = (settled && !executor.active) || (await cancel()) ? 'failed' : 'cancel-failed';
+    } finally {
+      clear();
+      focusedInput()?.blur?.();
+    }
+    result.undoDelta = this.history.undoStack.length - undoBefore;
+    result.end = { activeCommand: activeName(), selectedCount: selectedCount(), hitCount: selection.hits.hits?.size ?? null, spaceInputFocused: Boolean(focusedInput()) };
+    return result;
+  }`;
+}
+
+// Driving distance (Dimension tool, FINDINGS probes-2026-11-pick): sets the dialog's distance in meters, finishes
+// it and returns the distance the command measured before the edit (refDistance, meters).
+const DRIVING_DISTANCE_DRIVE = `
+      const params = dialog.params;
+      const previous = params.refDistance;
+      params.distance = driveArgs.distanceM;
+      dialog.finish();
+      return { previousDistanceM: Number.isFinite(previous) ? previous : null };`;
+
 export interface ExtrudeOptions {
   reverseDistanceMm?: number;
   draftAngleDeg?: number;
@@ -7326,6 +7538,100 @@ export class PlasticityOperations {
       ${findView}
       ${FACE_CONTROL_POINT_READ}
     }`, [{ bodyId }]);
+  }
+
+  // Runs a native command that reads the selection click point and waits for its own dialog (FINDINGS
+  // probes-2026-11-pick). Everything runs inside ONE mutate call whose CDP timeout outlives the internal waits, so
+  // the in-call cancel always runs before Node gives up. A rejected or cancelled command leaves the document
+  // unchanged and the runtime certain; a cancel that fails marks the runtime uncertain for plasticity_reconcile.
+  private async runPickCommand<T>(spec: PickCommandSpec): Promise<PickCommandResult<T>> {
+    const timeouts = spec.timeouts ?? PICK_COMMAND_TIMEOUTS;
+    for (const [name, value] of Object.entries(timeouts)) {
+      if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`Pick command ${name} must be a positive whole number of milliseconds`);
+    }
+    const native = await this.runtime.mutate<PickCommandNativeResult>(pickCommandSource(spec.drive), [spec.command, spec.dialog, "Vector3"], [{
+      select: spec.select,
+      hits: spec.hits,
+      driveArgs: spec.driveArgs ?? null,
+      timeouts,
+    }], pickCommandCdpTimeoutMs(timeouts));
+    if (!native || typeof native !== "object" || typeof native.outcome !== "string") {
+      this.runtime.markUncertain();
+      throw new Error(`${spec.label} returned no outcome; the result is uncertain. Call plasticity_reconcile before any other edit`);
+    }
+    const detail = native.error ? `: ${native.error}` : "";
+    if (native.outcome === "cancel-failed") {
+      this.runtime.markUncertain();
+      throw new Error(`${spec.label} did not finish and Plasticity could not cancel it (still active: ${native.end?.activeCommand ?? "unknown"}); the result is uncertain. Call plasticity_reconcile before any other edit`);
+    }
+    if (native.outcome !== "committed" && native.undoDelta !== 0) {
+      this.runtime.markUncertain();
+      throw new Error(`${spec.label} ended as ${native.outcome} but changed the Undo history by ${native.undoDelta}; the result is uncertain. Call plasticity_reconcile before any other edit`);
+    }
+    if (native.outcome === "rejected") throw new Error(`${spec.rejectedMessage}${detail}`);
+    if (native.outcome === "cancelled") {
+      const limit = native.phase === "dialog" ? timeouts.dialogMs : timeouts.finishMs;
+      throw new Error(`${spec.label} did not finish within ${limit} ms (${native.phase ?? "unknown"} phase)${detail}; Plasticity cancelled it and the document is unchanged`);
+    }
+    if (native.outcome === "failed") throw new Error(`${spec.label} failed${detail}; the document is unchanged`);
+    if (native.undoDelta !== 1) {
+      throw new Error(`${spec.label} committed ${native.undoDelta} Undo steps instead of 1; inspect the document before continuing`);
+    }
+    return { drive: native.drive as T, undoDelta: native.undoDelta, end: native.end };
+  }
+
+  // Sets the distance between a planar face and a reference face by moving movingFaceId, as Plasticity's Dimension
+  // tool does (DimensionDistanceCommand; FINDINGS probes-2026-11-pick). Selection order decides which face moves:
+  // the last selected face moves, so the selection is [reference, moving]. The seeded click point sits on the
+  // moving face's center with its outward normal; it never comes from the caller.
+  async setDrivingDistance(
+    input: { bodyId: number; movingFaceId: string; referenceFaceId?: string | undefined; distanceMm: number },
+    revision: string,
+    timeouts: PickCommandTimeouts = PICK_COMMAND_TIMEOUTS,
+  ): Promise<{ state: RuntimeState; previousDistanceMm: number | null; distanceMm: number; undoSteps: 1 }> {
+    const state = await this.assertRevision(revision);
+    const { bodyId, movingFaceId, referenceFaceId, distanceMm } = input;
+    requirePositiveFinite(distanceMm, "Driving distance");
+    const body = state.bodies.find((candidate) => candidate.id === bodyId);
+    if (!body || (body.type !== "Solid" && body.type !== "Sheet")) throw new Error(`Driving distance needs a current Solid or Sheet body: ${bodyId}`);
+    const faceOf = (faceId: string, role: string) => {
+      const face = body.faces.find((candidate) => candidate.id === faceId);
+      if (!face) throw new Error(`Stale or unknown ${role} face: ${bodyId}:${faceId}`);
+      if (!face.planar) throw new Error(`The ${role} face must be planar: ${bodyId}:${faceId}`);
+      return face;
+    };
+    const moving = faceOf(movingFaceId, "moving");
+    const movingNormal = normalize(moving.normal, "Moving face normal");
+    if (referenceFaceId !== undefined) {
+      if (referenceFaceId === movingFaceId) throw new Error("The reference face must differ from the moving face");
+      const reference = faceOf(referenceFaceId, "reference");
+      const referenceNormal = normalize(reference.normal, "Reference face normal");
+      if (1 - Math.abs(dot(movingNormal, referenceNormal)) > 1e-9) {
+        throw new Error(`The moving and reference faces must be parallel planes: ${bodyId}:${movingFaceId} and ${bodyId}:${referenceFaceId} are not`);
+      }
+      if (Math.abs(dot(movingNormal, subtract(reference.centerMm, moving.centerMm))) < 1e-6) {
+        throw new Error(`The moving and reference faces lie in the same plane: ${bodyId}:${movingFaceId} and ${bodyId}:${referenceFaceId}`);
+      }
+    }
+    const movingRef: PickItemReference = { kind: "face", bodyId, id: movingFaceId };
+    const picked = await this.runPickCommand<{ previousDistanceM: number | null }>({
+      command: "DimensionDistanceCommand",
+      dialog: "DimensionDistanceSpaceDialog",
+      select: referenceFaceId === undefined ? [movingRef] : [{ kind: "face", bodyId, id: referenceFaceId }, movingRef],
+      hits: [{ item: movingRef, pointM: toMeters(moving.centerMm), normalM: movingNormal }],
+      drive: DRIVING_DISTANCE_DRIVE,
+      driveArgs: { distanceM: millimetersToMeters(distanceMm) },
+      rejectedMessage: "Plasticity could not dimension these faces (no effect)",
+      label: "Driving distance",
+      timeouts,
+    });
+    const previous = picked.drive?.previousDistanceM;
+    return {
+      state: await this.state(),
+      previousDistanceMm: typeof previous === "number" && Number.isFinite(previous) ? Math.round(previous * 1000 * 1e6) / 1e6 : null,
+      distanceMm,
+      undoSteps: 1,
+    };
   }
 
   async bridgeSurface(
