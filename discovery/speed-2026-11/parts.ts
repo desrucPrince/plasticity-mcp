@@ -5,6 +5,9 @@
 // Add --tier1 to run a1 a2 b c d e the way an agent builds them once the tier-1 server work is in: detail "lean",
 // `return` on verify reads, sortBy/limit instead of matches[0], recipe and check tools used directly (no catalog
 // lookups). Results go to part-<name>-tier1.json; the baseline part-<name>.json files are untouched.
+// --tier1b runs the same tier-1 parts with the workarounds tier 1b makes unnecessary taken out (no return: ["count"]
+// on reads a later step references, no return: ["status"] on recipes, sortBy "area" for the lid's floor face) and
+// writes part-<name>-tier1b.json. --tag=<t> writes part-<name>-<t>-tier1b.json instead (same-session before/after runs).
 // Each scenario restores the document to the starting undo depth and body ids and asserts it.
 import { bytes, openInProcess, Recorder, restore, save, status } from "./lib.ts";
 
@@ -15,6 +18,9 @@ class Steps {
   add(toolName: string, args: Record<string, unknown>, ret?: string[]) { this.list.push({ toolName, arguments: args, ...(ret ? { return: ret } : {}) }); return this.list.length - 1; }
 }
 const ref = (i: number, k = 0) => `$${i}.added[${k}]`;
+const T1B = process.argv.includes("--tier1b");
+// A tier-1 return list that only kept the reply small; tier 1b's lean replies make it unnecessary.
+const workaround = (paths: string[]) => (T1B ? undefined : paths);
 const ids = (i: number) => `$${i}.result.matches[*].id`;
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 
@@ -33,7 +39,7 @@ function bossCenters(p: EnclosureParams): Array<[number, number]> {
 function enclosureShell(s: Steps, p: EnclosureParams, t1 = false) {
   const box = s.add("plasticity_create_box", { originMm: [p.x0, p.y0, 0], sizeMm: [p.L, p.W, p.H], name: "enclosure-base" });
   const B = ref(box);
-  const refOnly = t1 ? ["count"] : undefined; // a read that only feeds a later $n reference: send back just its count
+  const refOnly = t1 ? workaround(["count"]) : undefined; // a read that only feeds a later $n reference: send back just its count
   const v = s.add("plasticity_find_edges", { query: { bodyIds: [B], line: true, direction: { vector: [0, 0, 1] } } }, refOnly);
   s.add("plasticity_fillet", { id: B, edgeIds: ids(v), radiusMm: p.rOut });
   const top = s.add("plasticity_find_faces", { query: { bodyIds: [B], planar: true, normal: { vector: [0, 0, 1] } }, ...(t1 ? { sortBy: "z", order: "desc", limit: 1 } : {}) }, refOnly);
@@ -57,7 +63,7 @@ function enclosureCompact(p: EnclosureParams, t1 = false) {
   s.add("plasticity_boolean", { targetIds: [B], toolIds: pilots.map((i) => ref(i)), operation: "difference" });
   const zc = r3(p.t + (bossTop - p.t) / 2);
   const cut = s.add("plasticity_create_box", { originMm: [r3(p.x0 + p.L / 2 - p.open.w / 2), p.y0 - 0.5, r3(zc - p.open.h / 2)], sizeMm: [p.open.w, p.t + 1, p.open.h] });
-  const ce = s.add("plasticity_find_edges", { query: { bodyIds: [ref(cut)], line: true, direction: { vector: [0, 1, 0] } } }, t1 ? ["count"] : undefined);
+  const ce = s.add("plasticity_find_edges", { query: { bodyIds: [ref(cut)], line: true, direction: { vector: [0, 1, 0] } } }, t1 ? workaround(["count"]) : undefined);
   s.add("plasticity_fillet", { id: ref(cut), edgeIds: ids(ce), radiusMm: p.open.r });
   s.add("plasticity_boolean", { targetIds: [B], toolIds: [ref(cut)], operation: "difference" });
   // Verification read appended to the same batch (compact tool).
@@ -69,9 +75,9 @@ function enclosureRecipes(p: EnclosureParams, t1 = false) {
   const s = new Steps();
   const { box, B } = enclosureShell(s, p, t1);
   const bossTop = p.H - p.lipDepth - 0.5;
-  s.add("plasticity_create_screw_boss_pattern", { targetId: B, baseCentersMm: bossCenters(p).map(([x, y]) => [x, y, p.t]), axis: [0, 0, 1], outerDiameterMm: p.bossOd, heightMm: r3(bossTop - p.t), holeDiameterMm: p.pilotD, holeDepthMm: p.pilotDepth }, t1 ? ["status"] : undefined);
+  s.add("plasticity_create_screw_boss_pattern", { targetId: B, baseCentersMm: bossCenters(p).map(([x, y]) => [x, y, p.t]), axis: [0, 0, 1], outerDiameterMm: p.bossOd, heightMm: r3(bossTop - p.t), holeDiameterMm: p.pilotD, holeDepthMm: p.pilotDepth }, t1 ? workaround(["status"]) : undefined);
   const zc = r3(p.t + (bossTop - p.t) / 2);
-  s.add("plasticity_create_connector_opening", { targetId: B, entryCenterMm: [p.x0 + p.L / 2, p.y0, zc], axis: [0, 1, 0], widthDirection: [1, 0, 0], widthMm: p.open.w, heightMm: p.open.h, cornerRadiusMm: p.open.r, throughDepthMm: p.t }, t1 ? ["status"] : undefined);
+  s.add("plasticity_create_connector_opening", { targetId: B, entryCenterMm: [p.x0 + p.L / 2, p.y0, zc], axis: [0, 1, 0], widthDirection: [1, 0, 0], widthMm: p.open.w, heightMm: p.open.h, cornerRadiusMm: p.open.r, throughDepthMm: p.t }, t1 ? workaround(["status"]) : undefined);
   s.add("plasticity_find_faces", { query: { bodyIds: [B], radiusMm: { value: p.pilotD / 2 } } }, t1 ? ["matches[*].axisOriginMm"] : undefined);
   return { steps: s.list, box, zc };
 }
@@ -331,13 +337,13 @@ tier1.b = async (h, rec) => {
   const B = ref(base);
   const vert = s.add("plasticity_create_box", { originMm: [x0, 0, 0], sizeMm: [t, Wd, Lv] });
   s.add("plasticity_boolean", { targetIds: [B], toolIds: [ref(vert)], operation: "union" });
-  const bend = s.add("plasticity_find_edges", { query: { bodyIds: [B], line: true, center: { pointMm: [x0 + t, Wd / 2, t] } } }, ["count"]);
+  const bend = s.add("plasticity_find_edges", { query: { bodyIds: [B], line: true, center: { pointMm: [x0 + t, Wd / 2, t] } } }, workaround(["count"]));
   s.add("plasticity_fillet", { id: B, edgeIds: ids(bend), radiusMm: 5 });
-  const tipA = s.add("plasticity_find_edges", { query: { bodyIds: [B], line: true, direction: { vector: [0, 0, 1] }, boundsMm: { min: [x0 + Lb - 0.01, -1, -1], max: [x0 + Lb + 0.01, Wd + 1, t + 1] } } }, ["count"]);
-  const tipB = s.add("plasticity_find_edges", { query: { bodyIds: [B], line: true, direction: { vector: [1, 0, 0] }, boundsMm: { min: [x0 - 1, -1, Lv - 0.01], max: [x0 + t + 1, Wd + 1, Lv + 0.01] } } }, ["count"]);
+  const tipA = s.add("plasticity_find_edges", { query: { bodyIds: [B], line: true, direction: { vector: [0, 0, 1] }, boundsMm: { min: [x0 + Lb - 0.01, -1, -1], max: [x0 + Lb + 0.01, Wd + 1, t + 1] } } }, workaround(["count"]));
+  const tipB = s.add("plasticity_find_edges", { query: { bodyIds: [B], line: true, direction: { vector: [1, 0, 0] }, boundsMm: { min: [x0 - 1, -1, Lv - 0.01], max: [x0 + t + 1, Wd + 1, Lv + 0.01] } } }, workaround(["count"]));
   s.add("plasticity_fillet", { id: B, edgeIds: [ids(tipA), ids(tipB)], radiusMm: 3 });
   const gy = Wd / 2 - t / 2;
-  s.add("plasticity_create_rib", { targetId: B, profilePointsMm: [[x0 + t - 0.5, gy, t - 0.5], [x0 + t + 25, gy, t - 0.5], [x0 + t - 0.5, gy, t + 25]], thicknessMm: t }, ["status"]);
+  s.add("plasticity_create_rib", { targetId: B, profilePointsMm: [[x0 + t - 0.5, gy, t - 0.5], [x0 + t + 25, gy, t - 0.5], [x0 + t - 0.5, gy, t + 25]], thicknessMm: t }, workaround(["status"]));
   const holesBase = [[x0 + 26, 7.5], [x0 + 26, 22.5]] as Array<[number, number]>;
   const holesVert = [[7.5, 26], [22.5, 26]] as Array<[number, number]>; // (y, z)
   const hb = holesBase.map(([x, y]) => s.add("plasticity_create_cylinder", { centerMm: [x, y, -0.5], radiusMm: 2.25, heightMm: t + 1 }));
@@ -370,8 +376,8 @@ tier1.c = async (h, rec) => {
   const hs = centers.map(([x, y]) => s.add("plasticity_create_cylinder", { centerMm: [x, y, -0.5], radiusMm: hole, heightMm: T + 1 }));
   s.add("plasticity_boolean", { targetIds: [B], toolIds: [b, ...hs].map((i) => ref(i)), operation: "difference" });
   // return: ["count"] keeps the reply small; the later chamfer still resolves the ids from the stored result.
-  const outer = s.add("plasticity_find_edges", { query: { bodyIds: [B], circle: true, lengthMm: { value: r3(2 * Math.PI * R), tolerance: 0.01 } } }, ["count"]);
-  const inner = s.add("plasticity_find_edges", { query: { bodyIds: [B], circle: true, lengthMm: { value: r3(2 * Math.PI * bore), tolerance: 0.01 } } }, ["count"]);
+  const outer = s.add("plasticity_find_edges", { query: { bodyIds: [B], circle: true, lengthMm: { value: r3(2 * Math.PI * R), tolerance: 0.01 } } }, workaround(["count"]));
+  const inner = s.add("plasticity_find_edges", { query: { bodyIds: [B], circle: true, lengthMm: { value: r3(2 * Math.PI * bore), tolerance: 0.01 } } }, workaround(["count"]));
   s.add("plasticity_chamfer", { id: B, edgeIds: [ids(outer), ids(inner)], distanceMm: 1 });
   s.add("plasticity_find_faces", { query: { bodyIds: [B], radiusMm: { value: hole } } }, ["matches[*].axisOriginMm"]);
   const out: Lean = await rec.call(1, "build flange + verify read (one lean batch)", "plasticity_batch", { steps: s.list, detail: "lean", undoOnError: true });
@@ -395,7 +401,10 @@ tier1.d = async (h, rec) => {
   // Turn 1: one read-only lean batch. The cavity floor is split into fragments by the bosses (the trap that sank
   // attempt 1 with matches[0]); area is not in the read model, so the main floor face is picked by its centre.
   const reads: Lean = await rec.call(1, "read cavity floor + boss pilot axes (one batch, return lists)", "plasticity_batch", { detail: "lean", steps: [
-    { toolName: "plasticity_find_faces", arguments: { query: { bodyIds: [baseId], planar: true, normal: { vector: [0, 0, 1] }, center: { pointMm: [A.x0 + A.L / 2, A.y0 + A.W / 2, A.t], toleranceMm: 3 } }, limit: 1 }, return: ["matches[0].boundsMm"] },
+    T1B
+      // Tier 1b: the largest upward face at floor height is the main floor (the boss fragments are tiny).
+      ? { toolName: "plasticity_find_faces", arguments: { query: { bodyIds: [baseId], planar: true, normal: { vector: [0, 0, 1] }, boundsMm: { min: [-1e6, -1e6, A.t - 0.01], max: [1e6, 1e6, A.t + 0.01] } }, sortBy: "area", limit: 1 }, return: ["matches[0].boundsMm"] }
+      : { toolName: "plasticity_find_faces", arguments: { query: { bodyIds: [baseId], planar: true, normal: { vector: [0, 0, 1] }, center: { pointMm: [A.x0 + A.L / 2, A.y0 + A.W / 2, A.t], toleranceMm: 3 } }, limit: 1 }, return: ["matches[0].boundsMm"] },
     { toolName: "plasticity_find_faces", arguments: { query: { bodyIds: [baseId], radiusMm: { value: A.pilotD / 2 } } }, return: ["matches[*].axisOriginMm"] },
   ] }, { forced: "lid dimensions and hole positions come from (a); a batch has no arithmetic on read results" });
   const fl = reads.steps[0]!.result!["matches[0].boundsMm"] as { min: number[]; max: number[] };
@@ -407,15 +416,15 @@ tier1.d = async (h, rec) => {
   const s = new Steps();
   const p0 = s.add("plasticity_create_box", { originMm: [plateMin[0], plateMin[1], zRim], sizeMm: [r3(plateMax[0]! - plateMin[0]!), r3(plateMax[1]! - plateMin[1]!), plate], name: "lid" });
   const P = ref(p0);
-  const pv = s.add("plasticity_find_edges", { query: { bodyIds: [P], line: true, direction: { vector: [0, 0, 1] } } }, ["count"]);
+  const pv = s.add("plasticity_find_edges", { query: { bodyIds: [P], line: true, direction: { vector: [0, 0, 1] } } }, workaround(["count"]));
   s.add("plasticity_fillet", { id: P, edgeIds: ids(pv), radiusMm: A.rOut });
   const l0 = s.add("plasticity_create_box", { originMm: [r3(inMin[0]! + clr), r3(inMin[1]! + clr), r3(zRim - lip)], sizeMm: [r3(inMax[0]! - inMin[0]! - 2 * clr), r3(inMax[1]! - inMin[1]! - 2 * clr), lip + 0.5] });
-  const lv = s.add("plasticity_find_edges", { query: { bodyIds: [ref(l0)], line: true, direction: { vector: [0, 0, 1] } } }, ["count"]);
+  const lv = s.add("plasticity_find_edges", { query: { bodyIds: [ref(l0)], line: true, direction: { vector: [0, 0, 1] } } }, workaround(["count"]));
   s.add("plasticity_fillet", { id: ref(l0), edgeIds: ids(lv), radiusMm: r3(A.rOut - A.t - clr) });
   s.add("plasticity_boolean", { targetIds: [P], toolIds: [ref(l0)], operation: "union" });
   const hs = axes.map(([x, y]) => s.add("plasticity_create_cylinder", { centerMm: [x, y, r3(zRim - lip - 0.5)], radiusMm: 1.7, heightMm: plate + lip + 1 }));
   s.add("plasticity_boolean", { targetIds: [P], toolIds: hs.map((i) => ref(i)), operation: "difference" });
-  const topEdges = s.add("plasticity_find_edges", { query: { bodyIds: [P], circle: true, boundsMm: { min: [-1e6, -1e6, zRim + plate - 0.01], max: [1e6, 1e6, zRim + plate + 0.01] }, lengthMm: { value: r3(2 * Math.PI * 1.7), tolerance: 0.01 } } }, ["count"]);
+  const topEdges = s.add("plasticity_find_edges", { query: { bodyIds: [P], circle: true, boundsMm: { min: [-1e6, -1e6, zRim + plate - 0.01], max: [1e6, 1e6, zRim + plate + 0.01] }, lengthMm: { value: r3(2 * Math.PI * 1.7), tolerance: 0.01 } } }, workaround(["count"]));
   s.add("plasticity_chamfer", { id: P, edgeIds: ids(topEdges), distanceMm: 1.45 });
   s.add("plasticity_check_interference", { pairs: [{ firstBodyId: P, secondBodyId: baseId }] }, ["pairs[*].status"]);
   const lipFace = s.add("plasticity_find_faces", { query: { bodyIds: [P], planar: true, normal: { vector: [0, -1, 0] }, boundsMm: { min: [-1e6, inMin[1]! + clr - 0.01, -1e6], max: [1e6, inMin[1]! + clr + 0.01, 1e6] } }, limit: 1 }, ["matches[*].id"]);
@@ -437,7 +446,10 @@ tier1.d = async (h, rec) => {
 };
 
 // ---------- runner ----------
-const T1 = process.argv.includes("--tier1");
+const T1 = process.argv.includes("--tier1") || T1B;
+const TAG = process.argv.find((arg) => arg.startsWith("--tag="))?.slice("--tag=".length);
+// A tagged run is tier-1b evidence (e.g. --tag=before1 from a pre-change tree): part-<name>-<tag>-tier1b.json.
+const outName = (base: string, name: string) => (TAG ? `part-${name}-${TAG}-tier1b.json` : `${base}.json`);
 const names = process.argv.slice(2).filter((n) => !n.startsWith("--"));
 if (names[0] === "dump-steps") {
   save("steps-a1.json", enclosureCompact(A).steps);
@@ -450,7 +462,7 @@ const summary: Record<string, unknown> = {};
 try {
   const start = await status(h);
   console.error(`start: undoDepth ${start.undoDepth}, bodies ${start.bodies.length}`);
-  if (T1) {
+  if (T1 && !T1B && !TAG) {
     // Compact tools/list and instructions size with the tier-1 compact list (baseline: fixed-costs.json).
     const listed = await h.client.listTools();
     const fixed = JSON.parse((await import("node:fs")).readFileSync(new URL("./fixed-costs.json", import.meta.url), "utf8"));
@@ -467,8 +479,8 @@ try {
     try { detail = await run(h, rec); } catch (e) { error = (e as Error).message.slice(0, 4000); console.error(name, "FAILED", error); }
     const scenarioMs = Math.round(performance.now() - t0);
     const restored = await restore(h, start);
-    const record = { scenario: name, ...(T1 ? { tier: 1 } : {}), measuredAt: new Date().toISOString(), scenarioMs, totals: rec.totals(), detail, error, calls: rec.calls, responses: rec.results, restored, startUndoDepth: start.undoDepth, startBodyCount: start.bodies.length };
-    save(T1 ? `part-${name}-tier1.json` : `part-${name}.json`, record);
+    const record = { scenario: name, ...(T1 ? { tier: T1B ? "1b" : 1 } : {}), ...(TAG ? { tag: TAG } : {}), measuredAt: new Date().toISOString(), scenarioMs, totals: rec.totals(), detail, error, calls: rec.calls, responses: rec.results, restored, startUndoDepth: start.undoDepth, startBodyCount: start.bodies.length };
+    save(outName(T1B ? `part-${name}-tier1b` : T1 ? `part-${name}-tier1` : `part-${name}`, name), record);
     summary[name] = { totals: record.totals, error, restored, checks: (detail as { checks?: unknown })?.checks };
     console.error(name, JSON.stringify(summary[name]));
     if (!restored.ok) throw new Error(`document not restored after ${name}: ${JSON.stringify(restored)}`);

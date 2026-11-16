@@ -34,7 +34,7 @@ export function guardEnv(extra: Record<string, string> = {}): Record<string, str
   return env;
 }
 
-export type OpEvent = { kind: "step" | "state" | "mutate" | "read" | "journal" | "cdp"; t0: number; ms: number; bytes?: number };
+export type OpEvent = { kind: "step" | "state" | "probe" | "mutate" | "read" | "journal" | "cdp"; t0: number; ms: number; bytes?: number };
 
 export const bytes = (value: unknown) => Buffer.byteLength(typeof value === "string" ? value : JSON.stringify(value));
 
@@ -51,22 +51,26 @@ export async function openInProcess() {
   const patchRuntime = (runtime: Record<string, unknown>) => {
     if (patched.has(runtime)) return;
     patched.add(runtime);
+    // A full state read and the tier-1b revision probe both run readNative inside; count only the outer call.
+    const outer = (kind: OpEvent["kind"]) => kind === "state" || kind === "probe";
     const wrap = (name: string, kind: OpEvent["kind"], measureBytes = false) => {
+      if (typeof runtime[name] !== "function") return; // readRevisionProbe exists from tier 1b on
       const original = (runtime[name] as (...args: unknown[]) => Promise<unknown>).bind(runtime);
       runtime[name] = async (...args: unknown[]) => {
-        const nested = stateDepth > 0 && kind !== "state";
-        if (kind === "state") stateDepth += 1;
+        const nested = stateDepth > 0 && !outer(kind);
+        if (outer(kind)) stateDepth += 1;
         const t0 = performance.now();
         try {
           const value = await original(...args);
           if (!nested) events.push({ kind, t0, ms: performance.now() - t0, ...(measureBytes ? { bytes: bytes(value) } : {}) });
           return value;
         } finally {
-          if (kind === "state") stateDepth -= 1;
+          if (outer(kind)) stateDepth -= 1;
         }
       };
     };
     wrap("getState", "state", true);
+    wrap("readRevisionProbe", "probe", true);
     wrap("mutate", "mutate");
     wrap("read", "read");
     wrap("readNative", "read");
@@ -121,6 +125,8 @@ export function summarizeOps(events: OpEvent[]) {
     stateReads: states.length,
     stateMs: ms(states),
     stateBytesMax: states.reduce((m, e) => Math.max(m, e.bytes ?? 0), 0),
+    probes: sum("probe").length,
+    probeMs: ms(sum("probe")),
     mutates: sum("mutate").length,
     mutateMs: ms(sum("mutate")),
     reads: sum("read").length,
@@ -189,7 +195,7 @@ function segmentSteps(slice: OpEvent[]) {
     const t0 = slice[start]!.t0;
     const t1 = s + 1 < markers.length ? slice[markers[s + 1]!]!.t0 : (part.length ? Math.max(...part.map((e) => e.t0 + e.ms)) : t0);
     const ops = summarizeOps(part);
-    out.push({ step: s - 1, ...ops, wallMs: Math.round((t1 - t0) * 10) / 10, residualMs: Math.round((t1 - t0 - ops.stateMs - ops.mutateMs - ops.readMs - ops.journalMs) * 10) / 10 });
+    out.push({ step: s - 1, ...ops, wallMs: Math.round((t1 - t0) * 10) / 10, residualMs: Math.round((t1 - t0 - ops.stateMs - ops.probeMs - ops.mutateMs - ops.readMs - ops.journalMs) * 10) / 10 });
   }
   return out;
 }

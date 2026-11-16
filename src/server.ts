@@ -1808,6 +1808,7 @@ export class PlasticitySession {
   async captureSnapshot(label?: string) {
     if (!this.runtime) throw new Error("Connect to an explicit Plasticity window first");
     await this.runtime.reconnect();
+    this.get().beginStateReuseStep(); // inside a batch: probe before reusing, as a snapshot must see UI edits
     const state = await this.get().state();
     const construction = await this.get().listConstructionGeometry();
     const datums: TrackedDatum[] = [...construction.points, ...construction.axes]
@@ -1829,6 +1830,7 @@ export class PlasticitySession {
     if (!snapshot) throw new Error(`Unknown or expired scene snapshot: ${snapshotId}`);
     if (!this.runtime) throw new Error("Connect to an explicit Plasticity window first");
     await this.runtime.reconnect();
+    this.get().beginStateReuseStep(); // each wait_for_change poll inside a batch probes for UI edits
     const current = await this.get().state();
     return {
       snapshotId,
@@ -2145,11 +2147,46 @@ function roundReplyNumbers(value: unknown, decimals: number): unknown {
   return value;
 }
 
+// Steps whose stored result a later step reads through "$<n>.result...". Lean mode answers such a read step with
+// its count (and ids when there are few), since the caller already gets the values into the later step.
+function batchStepsReferencedLater(steps: ReadonlyArray<{ arguments: unknown }>): Set<number> {
+  const referenced = new Set<number>();
+  const visit = (value: unknown, laterThan: number) => {
+    if (typeof value === "string") {
+      const match = BATCH_RESULT_REFERENCE.exec(value);
+      if (match && Number(match[1]) < laterThan) referenced.add(Number(match[1]));
+    } else if (Array.isArray(value)) for (const item of value) visit(item, laterThan);
+    else if (value && typeof value === "object") for (const item of Object.values(value)) visit(item, laterThan);
+  };
+  steps.forEach((step, index) => visit(step.arguments, index));
+  return referenced;
+}
+
+const LEAN_REFERENCED_READ_IDS = 8;
+function referencedReadSummary(value: unknown): unknown {
+  const record = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+  const matches = Array.isArray(record?.matches) ? record.matches as Array<{ id?: unknown }> : undefined;
+  const count = typeof record?.count === "number" ? record.count : matches?.length;
+  // A read with neither count nor matches keeps the usual small-or-noted reply.
+  if (count === undefined) return summarizeBatchResult(value);
+  const ids = matches && matches.length <= LEAN_REFERENCED_READ_IDS && matches.every((match) => match?.id !== undefined)
+    ? matches.map((match) => match.id)
+    : undefined;
+  return { count, ...(ids ? { ids } : {}) };
+}
+
+// A recipe's reply carries its own history journal (each native step with revisions, 1-2 KB). Lean mode keeps only
+// its status; the bodies it created are already in the step's added/addedBodies.
+function isRecipeResult(value: unknown): value is { recipe: string; status: unknown } {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value)
+    && typeof (value as { recipe?: unknown }).recipe === "string" && "status" in value);
+}
+
 // Sorting and limiting for plasticity_find_faces / plasticity_find_edges. Ties keep the original order.
 function orderMatches<T>(matches: T[], sortBy: string | undefined, order: "asc" | "desc" | undefined, limit: number | undefined, value: (item: T, sortBy: string) => number): T[] {
   let ordered = matches;
   if (sortBy !== undefined) {
-    const direction = (order ?? (sortBy === "length" ? "desc" : "asc")) === "desc" ? -1 : 1;
+    const direction = (order ?? (sortBy === "length" || sortBy === "area" ? "desc" : "asc")) === "desc" ? -1 : 1;
     ordered = matches
       .map((item, index) => ({ item, index, key: value(item, sortBy) }))
       .sort((left, right) => (left.key - right.key) * direction || left.index - right.index)
@@ -2158,6 +2195,8 @@ function orderMatches<T>(matches: T[], sortBy: string | undefined, order: "asc" 
   return limit === undefined ? ordered : ordered.slice(0, limit);
 }
 const COORDINATE_AXIS: Record<string, number> = { x: 0, y: 1, z: 2 };
+// plasticity_measure_face_properties measures at most 256 faces per call (MAX_FACES in plasticity/face-properties.ts).
+const FACE_AREA_SORT_LIMIT = 256;
 
 function parseToolText(response: { content?: Array<{ type: string; text?: string }> }): unknown {
   const text = response.content?.find((part) => part.type === "text")?.text;
@@ -2661,7 +2700,7 @@ function createServerWithCatalog(
   }).strict();
   rawRegisterTool("plasticity_batch", {
     title: "Run several Plasticity operations in one call",
-    description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all); addedSolids, addedSheets and addedWires filter by type (create_cone adds a Solid and its profile Wire); likewise removed and regionsAdded. Read any step's output with \"$<step>.result.path\" using .key, [i] and [*], e.g. \"$3.result.matches[*].id\" after plasticity_find_edges or \"$2.result.createdEdges[*].edgeId\" after plasticity_boolean. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many. The reply lists what changed (new bodies with bounds); verbose=true adds the full scene summary. A step may carry return: [paths] (e.g. [\"matches[*].id\", \"matches[*].axisOriginMm\"]) to get exactly those values back; without it a read result over 1,500 bytes is cut to ids with truncated: true. detail: \"lean\" leaves out the createdEdges echo (createdEdgeCount stays), bodies a later step consumed and empty lists, and ends with one summary of what survives. roundMm rounds numbers in the reply only.",
+    description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all); addedSolids, addedSheets and addedWires filter by type (create_cone adds a Solid and its profile Wire); likewise removed and regionsAdded. Read any step's output with \"$<step>.result.path\" using .key, [i] and [*], e.g. \"$3.result.matches[*].id\" after plasticity_find_edges or \"$2.result.createdEdges[*].edgeId\" after plasticity_boolean. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many. The reply lists what changed (new bodies with bounds); verbose=true adds the full scene summary. A step may carry return: [paths] (e.g. [\"matches[*].id\", \"matches[*].axisOriginMm\"]) to get exactly those values back; without it a read result over 1,500 bytes is cut to ids with truncated: true. detail: \"lean\" leaves out the createdEdges echo (createdEdgeCount stays), bodies a later step consumed and empty lists, a recipe's step journal (its status stays), and the matches of a read a later step references (count, plus ids up to 8, stay), and ends with one summary of what survives. roundMm rounds numbers in the reply only.",
     inputSchema: batchSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, async (rawInput, extra) => result(await exclusive(async () => {
@@ -2676,18 +2715,34 @@ function createServerWithCatalog(
       throw error;
     }
   })));
+  // Only a batch turns on state reuse (PlasticityOperations.state): it holds the lock for every step, so the state
+  // read after step k can stand in for step k+1's journal-before, revision check and before-state. Fakes without the
+  // hooks, and every direct tool call, read exactly as before.
+  type StateReuseHooks = { beginStateReuse?(): void; beginStateReuseStep?(): void; endStateReuse?(): void };
   const runBatch = async (input: z.output<typeof batchSchema>, extra: ToolExtra) => {
     await session.ensureConnected?.();
+    const reuse = session.get() as unknown as StateReuseHooks;
+    reuse.beginStateReuse?.();
+    try {
+      return await runBatchSteps(input, extra, reuse);
+    } finally {
+      reuse.endStateReuse?.();
+    }
+  };
+  const runBatchSteps = async (input: z.output<typeof batchSchema>, extra: ToolExtra, reuse: StateReuseHooks) => {
     const start = await session.get().state();
     if (input.revision !== undefined && input.revision !== start.revision) throw new Error(`Stale reference: expected revision ${input.revision}, current revision is ${start.revision}`);
     const stepChanges: Array<BatchStepRecord> = [];
     const completed: Array<BatchReplyStep> = [];
     const render = (value: unknown) => (input.roundMm === undefined ? value : roundReplyNumbers(value, input.roundMm));
+    const lean = input.detail === "lean";
+    const referencedLater = lean ? batchStepsReferencedLater(input.steps) : new Set<number>();
     const renderSteps = () => render(renderBatchSteps(completed, input.detail));
     let current = start;
     for (const [index, step] of input.steps.entries()) {
       hud.step(index, input.steps.length, step.toolName.replace(/^plasticity_/, ""));
       const selected = routedTools.get(step.toolName);
+      reuse.beginStateReuseStep?.();
       try {
         if (!selected || step.toolName === "plasticity_call" || step.toolName === "plasticity_batch") throw new Error(`Unknown Plasticity MCP operation: ${step.toolName}`);
         let args = resolveBatchReferences(step.arguments, stepChanges) as Record<string, unknown>;
@@ -2714,10 +2769,10 @@ function createServerWithCatalog(
         let shown: unknown;
         try {
           if (step.return) shown = projectBatchResult(stepResult, step.return);
-          else if (readOnly) shown = summarizeBatchResult(stepResult);
+          else if (readOnly) shown = lean && referencedLater.has(index) ? referencedReadSummary(stepResult) : summarizeBatchResult(stepResult);
           else {
             const own = toolSpecificFields(stepResult, after);
-            shown = own === undefined ? undefined : summarizeBatchResult(own);
+            shown = own === undefined ? undefined : lean && isRecipeResult(own) ? { status: own.status } : summarizeBatchResult(own);
           }
         } catch (error) {
           throw new Error(`step ${index} (${step.toolName}): ${error instanceof Error ? error.message : String(error)}`);
@@ -2735,6 +2790,8 @@ function createServerWithCatalog(
         });
         current = after;
       } catch (error) {
+        // After a failed (possibly uncertain) step nothing cached is reused: undoOnError and the reply read fresh, as before.
+        reuse.endStateReuse?.();
         const message = error instanceof Error ? error.message : String(error);
         let undone = 0;
         if (input.undoOnError) {
@@ -2747,6 +2804,7 @@ function createServerWithCatalog(
         throw new Error(JSON.stringify({ failedStep: index, toolName: step.toolName, error: message.slice(0, 4_000), completedSteps: renderSteps(), undoneSteps: undone }));
       }
     }
+    reuse.beginStateReuseStep?.(); // the end state is probed like a step's first read
     const end = await session.get().state();
     const undoSteps = end.undoDepth - start.undoDepth;
     if (input.verbose) return { ...compactMutationResult<Record<string, unknown>>(end, diffScenes(start, end)), steps: renderSteps(), undoSteps };
@@ -2922,16 +2980,29 @@ function createServerWithCatalog(
     await session.get().inspectFastenerGroup(request), true);
   tool("plasticity_check_fastener_group_layout", "Measure and optionally check a fastener group on one exact rectangular planar face. Returns center-to-edge and hole-edge distances, every pair's center spacing and remaining ligament, plus clearance for supplied circular head, washer, nut, or driver envelopes. Optionally provide opposedFaceId to verify the matching perforated opposite face and exact native B-rep plate thickness. A pass is returned only when explicit layout requirements with a recorded basis are supplied. Geometry verification remains a layout check, not a strength or tool-motion analysis.", fastenerGroupLayoutInputSchema, async (request) =>
     await session.get().inspectFastenerGroupLayout(request), true);
-  tool("plasticity_find_faces", "Find current B-Rep faces semantically by body, surface type, normal, radius, center, bounds, edge count, or adjacency. boundsMm matches by overlap. sortBy (x, y or z of the face center), order and limit pick among the matches; count is the total before limit.", z.object({
+  tool("plasticity_find_faces", "Find current B-Rep faces semantically by body, surface type, normal, radius, center, bounds, edge count, or adjacency. boundsMm matches by overlap. sortBy (x, y or z of the face center, or area), order and limit pick among the matches; count is the total before limit. sortBy \"area\" (largest first by default) measures the exact trimmed area of every match (at most 256; narrow the query otherwise) and adds areaMm2 to each, e.g. limit: 1 picks the main floor face over small fragments.", z.object({
     revision,
     query: faceQuerySchema,
-    sortBy: z.enum(["x", "y", "z"]).optional(),
+    sortBy: z.enum(["x", "y", "z", "area"]).optional(),
     order: z.enum(["asc", "desc"]).optional(),
     limit: z.number().int().min(1).max(1000).optional(),
   }), async ({ revision: expected, query, sortBy, order, limit }) => {
     const state = await session.get().state();
     if (state.revision !== expected) throw new Error(`Stale reference: expected revision ${expected}, current revision is ${state.revision}`);
     const found = findFaces(state, query);
+    if (sortBy === "area") {
+      // Area is not in the read model: one native read (the one behind plasticity_measure_face_properties) for the matches only.
+      if (found.length > FACE_AREA_SORT_LIMIT) throw new Error(`sortBy "area" measures at most ${FACE_AREA_SORT_LIMIT} faces, and ${found.length} match this query. Narrow it (bodyIds, planar, normal, boundsMm) and try again.`);
+      const measured = found.length === 0 ? [] : (await session.get().measureFaceProperties(found.map((face) => ({ bodyId: face.bodyId, faceId: face.id })), state.revision)).faces;
+      const areas = new Map(measured.map((face) => [`${face.face.bodyId}:${face.face.faceId}`, face.areaMm2]));
+      const withArea = found.map((face) => {
+        const areaMm2 = areas.get(`${face.bodyId}:${face.id}`);
+        if (areaMm2 === undefined) throw new Error(`No measured area for face ${face.id} of body ${face.bodyId}`);
+        return { ...face, areaMm2 };
+      });
+      const matches = orderMatches(withArea, sortBy, order, limit, (face) => face.areaMm2);
+      return { documentToken: state.documentToken, revision: state.revision, measurementSource: "native-brep", count: found.length, matches };
+    }
     const matches = orderMatches(found, sortBy, order, limit, (face, key) => face.centerMm[COORDINATE_AXIS[key]!]!);
     return { documentToken: state.documentToken, revision: state.revision, measurementSource: "native-brep", count: found.length, matches };
   }, true);

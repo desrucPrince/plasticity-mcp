@@ -1,0 +1,809 @@
+{
+ "scenario": "a2",
+ "tier": "1b",
+ "measuredAt": "2026-11-16T17:22:15.841Z",
+ "scenarioMs": 670,
+ "totals": {
+  "turns": 1,
+  "calls": 1,
+  "reqBytes": 1962,
+  "respBytes": 2133,
+  "outTokens": 491,
+  "inTokens": 533,
+  "serverMs": 669,
+  "forcedExtra": []
+ },
+ "detail": {
+  "baseId": 960,
+  "revision": "r27.189b56ce2868e1d7",
+  "out": {
+   "steps": [
+    {
+     "step": 0,
+     "toolName": "plasticity_create_box",
+     "added": [
+      960
+     ],
+     "addedBodies": [
+      {
+       "id": 960,
+       "versionId": 1587,
+       "type": "Solid",
+       "name": "enclosure-base",
+       "boundsMm": {
+        "min": [
+         2000,
+         0,
+         0
+        ],
+        "max": [
+         2080,
+         50,
+         25
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 6,
+       "edgeCount": 12,
+       "vertexCount": 8
+      }
+     ]
+    },
+    {
+     "step": 1,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 4,
+      "ids": [
+       "1587e186519",
+       "1587e186515",
+       "1587e186511",
+       "1587e186507"
+      ]
+     }
+    },
+    {
+     "step": 2,
+     "toolName": "plasticity_fillet"
+    },
+    {
+     "step": 3,
+     "toolName": "plasticity_find_faces",
+     "result": {
+      "count": 1,
+      "ids": [
+       "1588f186541"
+      ]
+     }
+    },
+    {
+     "step": 4,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 8,
+      "ids": [
+       "1588e186778",
+       "1588e186772",
+       "1588e186766",
+       "1588e186760",
+       "1588e186732",
+       "1588e186700",
+       "1588e186752",
+       "1588e186742"
+      ]
+     }
+    },
+    {
+     "step": 5,
+     "toolName": "plasticity_chamfer"
+    },
+    {
+     "step": 6,
+     "toolName": "plasticity_create_box",
+     "added": [
+      961
+     ]
+    },
+    {
+     "step": 7,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 4,
+      "ids": [
+       "1590e187267",
+       "1590e187263",
+       "1590e187259",
+       "1590e187255"
+      ]
+     }
+    },
+    {
+     "step": 8,
+     "toolName": "plasticity_fillet"
+    },
+    {
+     "step": 9,
+     "toolName": "plasticity_boolean",
+     "removed": [
+      961
+     ],
+     "createdEdgeCount": 16
+    },
+    {
+     "step": 10,
+     "toolName": "plasticity_create_screw_boss_pattern",
+     "result": {
+      "status": "completed"
+     }
+    },
+    {
+     "step": 11,
+     "toolName": "plasticity_create_connector_opening",
+     "added": [
+      970
+     ],
+     "regionsAdded": [
+      "1605r189043"
+     ],
+     "addedBodies": [
+      {
+       "id": 970,
+       "versionId": 1603,
+       "type": "Wire",
+       "name": "Polyline.001",
+       "boundsMm": {
+        "min": [
+         2033.9999999999998,
+         -0.5,
+         9.5
+        ],
+        "max": [
+         2045.9999999999998,
+         -0.5,
+         15.5
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 0,
+       "edgeCount": 0,
+       "vertexCount": 0
+      }
+     ],
+     "result": {
+      "status": "completed"
+     }
+    },
+    {
+     "step": 12,
+     "toolName": "plasticity_find_faces",
+     "result": {
+      "matches[*].axisOriginMm": [
+       [
+        2004.5000000000002,
+        4.5,
+        23.5
+       ],
+       [
+        2004.5000000000002,
+        45.5,
+        23.5
+       ],
+       [
+        2075.5,
+        45.5,
+        23.5
+       ],
+       [
+        2075.5,
+        4.5,
+        23.5
+       ]
+      ]
+     }
+    }
+   ],
+   "summary": {
+    "revision": "r27.189b56ce2868e1d7",
+    "undoSteps": 20,
+    "bodyCount": 6,
+    "added": [
+     {
+      "id": 970,
+      "type": "Wire",
+      "name": "Polyline.001",
+      "boundsMm": {
+       "min": [
+        2033.9999999999998,
+        -0.5,
+        9.5
+       ],
+       "max": [
+        2045.9999999999998,
+        -0.5,
+        15.5
+       ]
+      },
+      "faceCount": 0,
+      "edgeCount": 0
+     },
+     {
+      "id": 960,
+      "type": "Solid",
+      "name": "enclosure-base",
+      "boundsMm": {
+       "min": [
+        2000,
+        -8.673617379884035e-16,
+        0
+       ],
+       "max": [
+        2080,
+        50,
+        25
+       ]
+      },
+      "faceCount": 59,
+      "edgeCount": 144
+     }
+    ]
+   }
+  },
+  "checks": [
+   {
+    "check": "base bounds",
+    "expected": {
+     "min": [
+      2000,
+      0,
+      0
+     ],
+     "max": [
+      2080,
+      50,
+      25
+     ]
+    },
+    "actual": {
+     "min": [
+      2000,
+      -8.673617379884035e-16,
+      0
+     ],
+     "max": [
+      2080,
+      50,
+      25
+     ]
+    },
+    "ok": true
+   },
+   {
+    "check": "pilot hole axes",
+    "expected": [
+     [
+      2004.5,
+      4.5
+     ],
+     [
+      2075.5,
+      4.5
+     ],
+     [
+      2004.5,
+      45.5
+     ],
+     [
+      2075.5,
+      45.5
+     ]
+    ],
+    "actual": [
+     [
+      2004.5,
+      4.5
+     ],
+     [
+      2004.5,
+      45.5
+     ],
+     [
+      2075.5,
+      45.5
+     ],
+     [
+      2075.5,
+      4.5
+     ]
+    ],
+    "count": 4,
+    "ok": true
+   },
+   {
+    "check": "face/edge counts",
+    "actual": {
+     "faces": 59,
+     "edges": 144
+    },
+    "ok": true
+   }
+  ],
+  "steps": 13,
+  "batchReplyBytes": 2133
+ },
+ "calls": [
+  {
+   "turn": 1,
+   "label": "build enclosure (recipes, tier 1): lean batch with verify read",
+   "tool": "plasticity_batch",
+   "reqBytes": 1962,
+   "respBytes": 2133,
+   "wallMs": 669.3,
+   "isError": false,
+   "ops": {
+    "stateReads": 21,
+    "stateMs": 267.5,
+    "stateBytesMax": 135339,
+    "probes": 14,
+    "probeMs": 38.6,
+    "mutates": 20,
+    "mutateMs": 271.3,
+    "reads": 0,
+    "readMs": 0,
+    "journalWrites": 8,
+    "journalMs": 54.3
+   },
+   "stepOps": [
+    {
+     "step": 0,
+     "stateReads": 1,
+     "stateMs": 10.8,
+     "stateBytesMax": 27967,
+     "probes": 1,
+     "probeMs": 2.1,
+     "mutates": 1,
+     "mutateMs": 6.9,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 8.2,
+     "wallMs": 30.7,
+     "residualMs": 2.7
+    },
+    {
+     "step": 1,
+     "stateReads": 0,
+     "stateMs": 0,
+     "stateBytesMax": 0,
+     "probes": 1,
+     "probeMs": 2.5,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 3,
+     "residualMs": 0.5
+    },
+    {
+     "step": 2,
+     "stateReads": 1,
+     "stateMs": 8,
+     "stateBytesMax": 37445,
+     "probes": 1,
+     "probeMs": 12.1,
+     "mutates": 1,
+     "mutateMs": 17.9,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.5,
+     "wallMs": 45.4,
+     "residualMs": 0.9
+    },
+    {
+     "step": 3,
+     "stateReads": 0,
+     "stateMs": 0,
+     "stateBytesMax": 0,
+     "probes": 1,
+     "probeMs": 1.9,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 2.3,
+     "residualMs": 0.4
+    },
+    {
+     "step": 4,
+     "stateReads": 0,
+     "stateMs": 0,
+     "stateBytesMax": 0,
+     "probes": 1,
+     "probeMs": 1.6,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 2,
+     "residualMs": 0.4
+    },
+    {
+     "step": 5,
+     "stateReads": 1,
+     "stateMs": 10.3,
+     "stateBytesMax": 50338,
+     "probes": 1,
+     "probeMs": 1.6,
+     "mutates": 1,
+     "mutateMs": 23.3,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7.5,
+     "wallMs": 45,
+     "residualMs": 2.3
+    },
+    {
+     "step": 6,
+     "stateReads": 1,
+     "stateMs": 9.9,
+     "stateBytesMax": 59110,
+     "probes": 1,
+     "probeMs": 2.3,
+     "mutates": 1,
+     "mutateMs": 6.7,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6,
+     "wallMs": 26.7,
+     "residualMs": 1.8
+    },
+    {
+     "step": 7,
+     "stateReads": 0,
+     "stateMs": 0,
+     "stateBytesMax": 0,
+     "probes": 1,
+     "probeMs": 2.3,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 3.6,
+     "residualMs": 1.3
+    },
+    {
+     "step": 8,
+     "stateReads": 1,
+     "stateMs": 10,
+     "stateBytesMax": 69841,
+     "probes": 1,
+     "probeMs": 2,
+     "mutates": 1,
+     "mutateMs": 8.5,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 5.8,
+     "wallMs": 28.9,
+     "residualMs": 2.6
+    },
+    {
+     "step": 9,
+     "stateReads": 1,
+     "stateMs": 14.6,
+     "stateBytesMax": 68606,
+     "probes": 1,
+     "probeMs": 2.3,
+     "mutates": 1,
+     "mutateMs": 10.2,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.5,
+     "wallMs": 35,
+     "residualMs": 1.4
+    },
+    {
+     "step": 10,
+     "stateReads": 10,
+     "stateMs": 141.4,
+     "stateBytesMax": 118823,
+     "probes": 1,
+     "probeMs": 1.9,
+     "mutates": 10,
+     "mutateMs": 127.2,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.8,
+     "wallMs": 291.1,
+     "residualMs": 13.8
+    },
+    {
+     "step": 11,
+     "stateReads": 4,
+     "stateMs": 59.5,
+     "stateBytesMax": 135339,
+     "probes": 1,
+     "probeMs": 1.9,
+     "mutates": 4,
+     "mutateMs": 70.6,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.8,
+     "wallMs": 146.2,
+     "residualMs": 7.4
+    },
+    {
+     "step": 12,
+     "stateReads": 0,
+     "stateMs": 0,
+     "stateBytesMax": 0,
+     "probes": 2,
+     "probeMs": 4.2,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 5.3,
+     "residualMs": 1.1
+    }
+   ]
+  }
+ ],
+ "responses": [
+  {
+   "steps": [
+    {
+     "step": 0,
+     "toolName": "plasticity_create_box",
+     "added": [
+      960
+     ],
+     "addedBodies": [
+      {
+       "id": 960,
+       "versionId": 1587,
+       "type": "Solid",
+       "name": "enclosure-base",
+       "boundsMm": {
+        "min": [
+         2000,
+         0,
+         0
+        ],
+        "max": [
+         2080,
+         50,
+         25
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 6,
+       "edgeCount": 12,
+       "vertexCount": 8
+      }
+     ]
+    },
+    {
+     "step": 1,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 4,
+      "ids": [
+       "1587e186519",
+       "1587e186515",
+       "1587e186511",
+       "1587e186507"
+      ]
+     }
+    },
+    {
+     "step": 2,
+     "toolName": "plasticity_fillet"
+    },
+    {
+     "step": 3,
+     "toolName": "plasticity_find_faces",
+     "result": {
+      "count": 1,
+      "ids": [
+       "1588f186541"
+      ]
+     }
+    },
+    {
+     "step": 4,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 8,
+      "ids": [
+       "1588e186778",
+       "1588e186772",
+       "1588e186766",
+       "1588e186760",
+       "1588e186732",
+       "1588e186700",
+       "1588e186752",
+       "1588e186742"
+      ]
+     }
+    },
+    {
+     "step": 5,
+     "toolName": "plasticity_chamfer"
+    },
+    {
+     "step": 6,
+     "toolName": "plasticity_create_box",
+     "added": [
+      961
+     ]
+    },
+    {
+     "step": 7,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 4,
+      "ids": [
+       "1590e187267",
+       "1590e187263",
+       "1590e187259",
+       "1590e187255"
+      ]
+     }
+    },
+    {
+     "step": 8,
+     "toolName": "plasticity_fillet"
+    },
+    {
+     "step": 9,
+     "toolName": "plasticity_boolean",
+     "removed": [
+      961
+     ],
+     "createdEdgeCount": 16
+    },
+    {
+     "step": 10,
+     "toolName": "plasticity_create_screw_boss_pattern",
+     "result": {
+      "status": "completed"
+     }
+    },
+    {
+     "step": 11,
+     "toolName": "plasticity_create_connector_opening",
+     "added": [
+      970
+     ],
+     "regionsAdded": [
+      "1605r189043"
+     ],
+     "addedBodies": [
+      {
+       "id": 970,
+       "versionId": 1603,
+       "type": "Wire",
+       "name": "Polyline.001",
+       "boundsMm": {
+        "min": [
+         2033.9999999999998,
+         -0.5,
+         9.5
+        ],
+        "max": [
+         2045.9999999999998,
+         -0.5,
+         15.5
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 0,
+       "edgeCount": 0,
+       "vertexCount": 0
+      }
+     ],
+     "result": {
+      "status": "completed"
+     }
+    },
+    {
+     "step": 12,
+     "toolName": "plasticity_find_faces",
+     "result": {
+      "matches[*].axisOriginMm": [
+       [
+        2004.5000000000002,
+        4.5,
+        23.5
+       ],
+       [
+        2004.5000000000002,
+        45.5,
+        23.5
+       ],
+       [
+        2075.5,
+        45.5,
+        23.5
+       ],
+       [
+        2075.5,
+        4.5,
+        23.5
+       ]
+      ]
+     }
+    }
+   ],
+   "summary": {
+    "revision": "r27.189b56ce2868e1d7",
+    "undoSteps": 20,
+    "bodyCount": 6,
+    "added": [
+     {
+      "id": 970,
+      "type": "Wire",
+      "name": "Polyline.001",
+      "boundsMm": {
+       "min": [
+        2033.9999999999998,
+        -0.5,
+        9.5
+       ],
+       "max": [
+        2045.9999999999998,
+        -0.5,
+        15.5
+       ]
+      },
+      "faceCount": 0,
+      "edgeCount": 0
+     },
+     {
+      "id": 960,
+      "type": "Solid",
+      "name": "enclosure-base",
+      "boundsMm": {
+       "min": [
+        2000,
+        -8.673617379884035e-16,
+        0
+       ],
+       "max": [
+        2080,
+        50,
+        25
+       ]
+      },
+      "faceCount": 59,
+      "edgeCount": 144
+     }
+    ]
+   }
+  }
+ ],
+ "restored": {
+  "ok": true,
+  "undoDepth": 7,
+  "bodyCount": 4,
+  "redoDepth": 20
+ },
+ "startUndoDepth": 7,
+ "startBodyCount": 4
+}

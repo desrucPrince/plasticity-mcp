@@ -6,7 +6,7 @@ import { dirname, extname, join, resolve } from "node:path";
 
 import { NATIVE_VIEWPORT_CAPTURE } from "./viewport-capture.ts";
 import { nativeFunction } from "./native-function.ts";
-import { LONG_NATIVE_IMPORT_TIMEOUT_MS, NATIVE_STATE_READ_TIMEOUT_MS, PlasticityRuntime, type RuntimeState } from "./runtime.ts";
+import { LONG_NATIVE_IMPORT_TIMEOUT_MS, NATIVE_STATE_READ_TIMEOUT_MS, PlasticityRuntime, type RevisionProbe, type RuntimeState } from "./runtime.ts";
 import { add, ConstructionGeometry, cross, dot, frameFromOriginNormalX, localPointToWorld, normalize, scale, subtract } from "./construction.ts";
 import {
   DatumRegistry,
@@ -750,7 +750,51 @@ export class PlasticityOperations {
     this.constructionGeometry = new ConstructionGeometry(runtime);
   }
 
+  // Batch state reuse. plasticity_batch holds the server lock for all its steps, so nothing in this process can
+  // change the document between a state read and the next mutate(). While reuse is on, state() hands back the last
+  // state it read when no mutate() has started since (runtime.mutationCount() unchanged) and the runtime is not
+  // uncertain. The first reuse in each batch step (beginStateReuseStep) first runs readRevisionProbe(): the exact
+  // revision plus the fields the revision does not hash must equal the cached state's, or the cache is dropped and a
+  // full read follows, so an edit made in the Plasticity UI between steps still fails the step as a stale revision.
+  // Off (the default, and for every direct tool call) state() behaves exactly as before.
+  private stateReuse: { cached: { state: RuntimeState; mutations: number } | undefined; probeDue: boolean } | undefined;
+
+  beginStateReuse(): void {
+    if (typeof this.runtime.mutationCount !== "function" || typeof this.runtime.readRevisionProbe !== "function") return;
+    this.stateReuse = { cached: undefined, probeDue: true };
+  }
+
+  beginStateReuseStep(): void {
+    if (this.stateReuse) this.stateReuse.probeDue = true;
+  }
+
+  endStateReuse(): void {
+    this.stateReuse = undefined;
+  }
+
   async state(timeoutMs = NATIVE_STATE_READ_TIMEOUT_MS): Promise<RuntimeState> {
+    const reuse = this.stateReuse;
+    if (!reuse) return await this.readState(timeoutMs);
+    const cached = reuse.cached;
+    if (cached && cached.mutations === this.runtime.mutationCount() && this.runtime.isUncertain?.() !== true) {
+      if (!reuse.probeDue) return cached.state;
+      const probe = await this.runtime.readRevisionProbe(timeoutMs);
+      if (probeMatches(probe, cached.state)) {
+        reuse.probeDue = false;
+        return cached.state;
+      }
+    }
+    reuse.cached = undefined;
+    const state = await this.readState(timeoutMs);
+    // Recorded after readState, whose measurement-overlay refresh is itself a mutate() that leaves the document as read.
+    if (this.stateReuse === reuse && this.runtime.isUncertain?.() !== true) {
+      reuse.cached = { state, mutations: this.runtime.mutationCount() };
+      reuse.probeDue = false;
+    }
+    return state;
+  }
+
+  private async readState(timeoutMs: number): Promise<RuntimeState> {
     const state = await this.runtime.getState(timeoutMs);
     const measurements = (state.measurements ?? []).filter((measurement) =>
       measurement.type === "DistanceMeasurement"
@@ -10757,6 +10801,17 @@ export class PlasticityOperations {
     if (current.revision !== expected) throw new Error(`Stale reference: expected revision ${expected}, current revision is ${current.revision}`);
     return current;
   }
+}
+
+// A cached state may stand in for a fresh read only when the probe shows the same revision and the same values for
+// every field the revision does not hash. Body topology is immutable per body versionId, which the revision covers.
+function probeMatches(probe: RevisionProbe, state: RuntimeState): boolean {
+  return probe.documentToken === state.documentToken
+    && probe.revision === state.revision
+    && probe.viewStateToken === state.construction?.viewStateToken
+    && (probe.activePlaneId ?? null) === (state.construction?.activePlaneId ?? null)
+    && JSON.stringify(probe.bodyNames) === JSON.stringify(state.bodies.map((body) => [body.id, body.name]))
+    && JSON.stringify(probe.regions) === JSON.stringify(state.regions);
 }
 
 function toMeters(vector: Vector3): Vector3 {

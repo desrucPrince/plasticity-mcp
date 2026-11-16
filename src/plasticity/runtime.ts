@@ -29,6 +29,16 @@ export function mutationOutcomeIsUncertain(error: unknown): boolean {
   return /^(?:CDP request timed out:|CDP connection (?:is closed|closed before the request completed))/i.test(error.message);
 }
 
+// readRevisionProbe(): the parts of a state read that a cached state must match to be reused.
+export interface RevisionProbe {
+  documentToken: string;
+  revision: string;
+  viewStateToken: string;
+  activePlaneId: string | null;
+  bodyNames: Array<[number, string | null]>;
+  regions: RuntimeState["regions"];
+}
+
 export interface RuntimeState {
   targetId: string;
   title: string;
@@ -194,6 +204,9 @@ export class PlasticityRuntime {
   private readonly bindings = new Map<string, string>();
   private operationTail: Promise<void> = Promise.resolve();
   private uncertain = false;
+  // Counts mutate() calls, bumped before each one starts. A state read taken at one count is known to predate no
+  // mutation of this process while the count is unchanged (the batch state reuse in PlasticityOperations).
+  private mutations = 0;
   private readonly connectClient: (url: string) => Promise<CdpClient>;
 
   private constructor(client: CdpClient, target: PlasticityTarget, editorId: string, connectClient = CdpClient.connect) {
@@ -274,6 +287,7 @@ export class PlasticityRuntime {
     values: unknown[] = [],
     timeoutMs?: number,
   ): Promise<T> {
+    this.mutations += 1;
     return await this.enqueue(async () => {
       if (this.uncertain) throw new Error("Previous mutation outcome is uncertain; call reconcile before another mutation");
       try {
@@ -291,8 +305,25 @@ export class PlasticityRuntime {
     return state;
   }
 
+  mutationCount(): number {
+    return this.mutations;
+  }
+
   async getState(timeoutMs = NATIVE_STATE_READ_TIMEOUT_MS): Promise<RuntimeState> {
-    const result = await this.readNative<Omit<RuntimeState, "targetId" | "title">>(nativeFunction`function (ConstructionPlaneDatabase, Vector, Quaternion, pk_default) {
+    const result = await this.readStateNative<Omit<RuntimeState, "targetId" | "title">>(timeoutMs, []);
+    return { targetId: this.target.id, title: this.target.title, ...result };
+  }
+
+  // The same native read as getState, but it sends back only what tells two reads apart: the revision (which hashes
+  // the document, db version, undo/redo depth, body versions and flags, planes, materials, measurements, instances,
+  // reference meshes, sections and groups) plus the state fields the revision does not hash (active workplane, body
+  // names, regions). No topology crosses the wire, so it costs a fraction of a full read.
+  async readRevisionProbe(timeoutMs = NATIVE_STATE_READ_TIMEOUT_MS): Promise<RevisionProbe> {
+    return await this.readStateNative<RevisionProbe>(timeoutMs, [{ probe: true }]);
+  }
+
+  private async readStateNative<T>(timeoutMs: number, values: unknown[]): Promise<T> {
+    return await this.readNative<T>(nativeFunction`function (ConstructionPlaneDatabase, Vector, Quaternion, pk_default, options) {
       const mm = value => value * 1000;
       const vector = value => [mm(value.x), mm(value.y), mm(value.z)];
       const direction = value => [value.x, value.y, value.z];
@@ -891,6 +922,9 @@ export class PlasticityRuntime {
       const groupToken = 'groups:' + token(JSON.stringify([activeGroupId, groups]));
       // Hash every component into a short token: agents echo the revision on every edit.
       const revision = 'r' + undoDepth + '.' + token([documentToken, dbVersion, undoDepth, redoDepth, bodyToken, planeStateToken, materialToken, measurementToken, instanceToken, referenceMeshToken, sectionToken, groupToken].join('|'));
+      if (options?.probe === true) {
+        return { documentToken, revision, viewStateToken, activePlaneId, bodyNames: bodies.map(body => [body.id, body.name]), regions };
+      }
       return {
         documentToken,
         revision,
@@ -908,8 +942,7 @@ export class PlasticityRuntime {
         regions,
         bodies,
       };
-    }`, ["ConstructionPlaneDatabase", "Vector3", "Quaternion", "pk_default"], [], timeoutMs);
-    return { targetId: this.target.id, title: this.target.title, ...result };
+    }`, ["ConstructionPlaneDatabase", "Vector3", "Quaternion", "pk_default"], values, timeoutMs);
   }
 
   close(): void {

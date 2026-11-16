@@ -109,6 +109,13 @@ and `$<step>.removed` references.
   empty list. Its reply is `{ steps, summary }`. `summary` holds `revision`,
   `undoSteps`, `bodyCount` and the bodies that survive (`added`, `modified`:
   id, type, name, `boundsMm`, face and edge counts), plus `removed` ids.
+  In `lean`, a recipe step (create_rib, screw_boss_pattern, connector_opening
+  and the other recipes) replies `result: { status }` without its step journal;
+  the bodies it created stay in `added`/`addedBodies`. A read step without
+  `return` whose result a later step references (`$n.result...`) replies
+  `{ count }`, plus `ids` when it returned 8 matches or fewer. A read no later
+  step references keeps the 1,500-byte rule. `return` still projects from the
+  full stored result in both cases. `standard` is unchanged.
 - `roundMm: 0-6`: rounds every number in the reply to that many decimals. Stored
   results are not rounded. Off by default.
 
@@ -117,8 +124,25 @@ and `$<step>.removed` references.
 `length` defaults to `desc`, the rest to `asc`) and `limit` (1-1000). `count`
 is the number of matches before `limit`. Ties keep the engine's order. With
 none of these inputs the result is unchanged. `boundsMm` in a query matches by
-overlap, not containment. Sorting faces by area is not offered: the read model
-has no face area (use `plasticity_measure_face_properties`).
+overlap, not containment. `plasticity_find_faces` also takes `sortBy: "area"`
+(default order `desc`): the read model has no face area, so the tool measures
+the exact trimmed area of the matched faces in one native read (the one behind
+`plasticity_measure_face_properties`), adds `areaMm2` to each match, then sorts
+and limits. At most 256 faces can be measured; a query that matches more fails
+and asks for a narrower one. `sortBy: "area", limit: 1` picks the main face
+over small fragments (for example an enclosure floor split by bosses). No
+other query makes that extra read.
+
+Inside a batch the server reads the document once per edit step instead of
+5-7 times. The state read after step k stands in for step k+1's
+journal-before, revision check and before-state. Before reusing it, each step
+runs one small native probe (the exact revision plus the active workplane,
+body names and regions, with no topology). If anything changed, for example an
+edit in the Plasticity UI, the step reads the document again and fails as a
+stale revision, as before. A mutation, an uncertain outcome or a failed step
+ends the reuse. Direct tool calls read as before. Journal entries and replies
+are the same as without reuse. Each journal entry is still written and
+flushed when its step completes.
 
 The compact tool list also names `plasticity_create_rib`,
 `plasticity_create_screw_boss_pattern`, `plasticity_create_connector_opening`,
