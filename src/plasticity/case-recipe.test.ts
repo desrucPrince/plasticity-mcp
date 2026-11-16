@@ -6,6 +6,7 @@ import {
   BoardCaseRecipeError,
   BoardCaseValidationError,
   deriveBoardCase,
+  maxBossOverhangDeg,
   planBoardCase,
   requireBoardCaseInvariants,
   type BoardCaseInput,
@@ -55,6 +56,13 @@ function fakeRuntime(options: { fail?: (operation: string, index: number) => Err
     },
     async boolean(targetIds: number[], toolIds: number[], kind: string, keepTools: boolean, given: string) {
       return mutate("boolean", [targetIds, toolIds, kind, keepTools], given, () => { if (!options.keepTools?.(calls.length)) bodies = bodies.filter((body) => !toolIds.includes(body.id)); });
+    },
+    // A pointed cone leaves its profile Wire and one Solid, like the native command.
+    async createCone(bottomCenterMm: V3, bottomRadiusMm: number, topRadiusMm: number, heightMm: number, axis: V3, radialDirection: V3, _name: string | undefined, given: string) {
+      return mutate("createCone", [bottomCenterMm, bottomRadiusMm, topRadiusMm, heightMm, axis, radialDirection], given, () => {
+        bodies.push({ ...solid(nextId++, null, []), type: "Wire" });
+        bodies.push(solid(nextId++, null, []));
+      });
     },
     async createPolyline(pointsMm: V3[], closed: boolean, given: string) {
       return mutate("createPolyline", [pointsMm, closed], given, () => {
@@ -119,7 +127,7 @@ const REF: BoardCaseInput = {
   originMm: [0, 0, 0],
   board: { lengthMm: 30, widthMm: 20, holes: [{ xMm: 3, yMm: 3, diameterMm: 2.5 }, { xMm: 27, yMm: 17, diameterMm: 2.5 }], componentHeightMm: 5 },
   standoffs: { heightMm: 3, fastener: { screw: "M2.5", mode: "pilot", pilotDiameterMm: 2 } },
-  lid: { fasteners: { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 5 } },
+  lid: { fasteners: { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 5, bossStyle: "hanging" } },
   openings: [{ wall: "y+", shape: "rect", widthMm: 8, heightMm: 3, alongMm: 15, aboveBoardMm: 1, label: "port" }],
   vents: { on: "lid", slots: 2, slotWidthMm: 1.5, slotLengthMm: 6, pitchMm: 4 },
   boardStandIn: true,
@@ -132,7 +140,7 @@ const BENCHMARK: BoardCaseInput = {
   originMm: [2000, 0, 0],
   board: { lengthMm: 51.5, widthMm: 28.3, holes: [[2.6, 2.6], [48.9, 2.6], [2.6, 25.7], [48.9, 25.7]].map(([xMm, yMm]) => ({ xMm: xMm!, yMm: yMm!, diameterMm: 3 })), componentHeightMm: 8 },
   standoffs: { heightMm: 4, fastener: { screw: "M3", mode: "pilot", pilotDiameterMm: 2.5 } },
-  lid: { fasteners: { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 6 } },
+  lid: { fasteners: { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 6, bossStyle: "hanging" } },
   openings: [{ wall: "x-", shape: "rounded-rect", widthMm: 9.2, heightMm: 3.4, cornerRadiusMm: 1.2, alongMm: 14.15, aboveBoardMm: 1.6, label: "usb" }],
   vents: { on: "lid", slots: 5, slotWidthMm: 2, slotLengthMm: 12, pitchMm: 4 },
   boardStandIn: true,
@@ -142,7 +150,7 @@ const AUDIT: BoardCaseInput = {
   originMm: [0, 0, 0],
   board: { lengthMm: 75, widthMm: 45, holes: [[4, 4], [71, 4], [4, 41], [71, 41]].map(([xMm, yMm]) => ({ xMm: xMm!, yMm: yMm!, diameterMm: 2.7 })), componentHeightMm: 10.4 },
   standoffs: { heightMm: 5, outerDiameterMm: 7.5, fastener: { screw: "M2.5", mode: "heat-set-insert" } },
-  lid: { fasteners: { screw: "M3", base: "heat-set-insert", insertLengthMm: 3, bossDiameterMm: 8 } },
+  lid: { fasteners: { screw: "M3", base: "heat-set-insert", insertLengthMm: 3, bossDiameterMm: 8, bossStyle: "hanging" } },
   revision: "r0",
 };
 const POD: BoardCaseInput = { originMm: [0, 0, 0], board: { lengthMm: 17.8, widthMm: 15.2, componentHeightMm: 3 }, fit: { boardClearanceMm: 0.15 }, revision: "r0" };
@@ -444,4 +452,278 @@ test("a native step whose read-back check fails is still reported and undone", a
   assert.equal(error.completedSteps.at(-1)!.operation, "cut-cavity");
   assert.equal(error.undoneSteps, 5);
   assert.equal(error.restored, true);
+});
+
+// ------------------------------------------------------------------------------------------------- boss styles
+const styled = (base: BoardCaseInput, bossStyle?: "tapered" | "hanging" | "floor"): BoardCaseInput => {
+  const input = structuredClone(base);
+  if (bossStyle === undefined) delete input.lid!.fasteners!.bossStyle;
+  else input.lid!.fasteners!.bossStyle = bossStyle;
+  return input;
+};
+const REACH = 2.5 * Math.SQRT2 + 3; // farthest boss point from its wall corner: bossInset x sqrt 2 + bossRadius (Ø6 boss)
+const RISE = 0.5 * (Math.SQRT2 - 1); // lowest cone point inside the 0.5 mm rounded cavity corner above the apex
+
+test("derived values per boss style (table, benchmark board and reference board)", () => {
+  const table: Array<{ name: string; input: BoardCaseInput; expected: Record<string, unknown> }> = [
+    {
+      name: "benchmark hanging",
+      input: styled(BENCHMARK, "hanging"),
+      expected: {
+        wallTopZMm: 23.6, lidBossBottomZMm: 16.6, bossStyle: "hanging", boardWallClearanceMm: { xNeg: 0.5, xPos: 0.5, yNeg: 0.5, yPos: 0.5 },
+        printability: { baseOrientation: "floor-down", maxBossOverhangDeg: 90 }, outerMm: { min: [2000, 0, 0], max: [2056.5, 33.3, 23.6] },
+      },
+    },
+    {
+      name: "benchmark tapered: wall top rises by reach - rise, taper bottom = component top + 1",
+      input: styled(BENCHMARK, "tapered"),
+      expected: {
+        wallTopZMm: 29.928427, lidBossBottomZMm: 22.928427, bossStyle: "tapered", boardWallClearanceMm: { xNeg: 0.5, xPos: 0.5, yNeg: 0.5, yPos: 0.5 },
+        bossTaper: { angleDeg: 45, bottomZMm: 16.6, addedHeightMm: 6.328427 },
+        printability: { baseOrientation: "floor-down", maxBossOverhangDeg: 45 }, outerMm: { min: [2000, 0, 0], max: [2056.5, 33.3, 29.928427] },
+        lidBossAxesMm: [[2004.5, 4.5], [2052, 4.5], [2004.5, 28.8], [2052, 28.8]],
+      },
+    },
+    {
+      name: "benchmark floor: cavity grows 11 mm in x, bosses stand on the floor to the lower wall top",
+      input: styled(BENCHMARK, "floor"),
+      expected: {
+        wallTopZMm: 18.1, lidBossBottomZMm: 2, bossStyle: "floor", cavityGrowthMm: [11, 0], boardWallClearanceMm: { xNeg: 6, xPos: 6, yNeg: 0.5, yPos: 0.5 },
+        printability: { baseOrientation: "floor-down", maxBossOverhangDeg: 0 }, outerMm: { min: [2000, 0, 0], max: [2067.5, 33.3, 18.1] },
+        cavityMm: { min: [2002, 2, 2], max: [2065.5, 31.3, 18.1] }, boardMm: { min: [2008, 2.5, 6], max: [2059.5, 30.8, 7.6] },
+        lidBossAxesMm: [[2004.5, 4.5], [2063, 4.5], [2004.5, 28.8], [2063, 28.8]],
+        standoffAxesMm: [[2010.6, 5.1], [2056.9, 5.1], [2010.6, 28.2], [2056.9, 28.2]],
+        openings: [{ label: "usb", wall: "x-", shape: "rounded-rect", centerMm: [2000, 16.65, 10.9], sizeMm: [9.2, 3.4], cornerRadiusMm: 1.2 }],
+      },
+    },
+    {
+      name: "reference tapered",
+      input: styled(REF, "tapered"),
+      expected: { wallTopZMm: 24.928427, lidBossBottomZMm: 18.928427, bossTaper: { angleDeg: 45, bottomZMm: 12.6, addedHeightMm: 6.328427 }, outerMm: { min: [0, 0, 0], max: [35, 25, 24.928427] } },
+    },
+    {
+      name: "reference floor: x grows because growing x adds less floor area",
+      input: styled(REF, "floor"),
+      expected: { wallTopZMm: 14.1, cavityGrowthMm: [11, 0], boardWallClearanceMm: { xNeg: 6, xPos: 6, yNeg: 0.5, yPos: 0.5 }, outerMm: { min: [0, 0, 0], max: [46, 25, 14.1] }, standoffAxesMm: [[11, 5.5], [35, 19.5]] },
+    },
+    {
+      name: "no lid screws: no boss fields, wall clearance still reported",
+      input: POD,
+      expected: { boardWallClearanceMm: { xNeg: 0.15, xPos: 0.15, yNeg: 0.15, yPos: 0.15 }, bossStyle: undefined, bossTaper: undefined, cavityGrowthMm: undefined, printability: undefined },
+    },
+  ];
+  for (const { name, input, expected } of table) {
+    const derived = deriveBoardCase(input) as unknown as Record<string, unknown>;
+    for (const [key, value] of Object.entries(expected)) assert.deepEqual(rounded(derived[key]), value, `${name}: ${key}`);
+  }
+  // Only the style that uses a field reports it.
+  assert.equal(deriveBoardCase(styled(BENCHMARK, "hanging")).bossTaper, undefined);
+  assert.equal(deriveBoardCase(styled(BENCHMARK, "floor")).bossTaper, undefined);
+  assert.equal(deriveBoardCase(styled(BENCHMARK, "tapered")).cavityGrowthMm, undefined);
+  assert.equal(deriveBoardCase(styled(BENCHMARK, "hanging")).cavityGrowthMm, undefined);
+});
+
+test("the default boss style is tapered", () => {
+  assert.deepEqual(deriveBoardCase(styled(BENCHMARK)), deriveBoardCase(styled(BENCHMARK, "tapered")));
+  assert.equal(deriveBoardCase(styled(BENCHMARK)).bossStyle, "tapered");
+  assert.deepEqual(planBoardCase(styled(REF)).taper, planBoardCase(styled(REF, "tapered")).taper);
+});
+
+test("the hanging style keeps today's geometry: heights and bosses do not depend on the taper", () => {
+  for (const input of [REF, BENCHMARK, AUDIT]) {
+    const hanging = deriveBoardCase(input);
+    assert.equal(hanging.bossStyle, "hanging");
+    const expectedWall = hanging.componentTopZMm + 1 + Math.max(input.lid?.lipDepthMm ?? 1.5, hanging.fasteners.lid!.bossLengthMm);
+    assert.ok(Math.abs(hanging.wallTopZMm - expectedWall) < 1e-9);
+    assert.equal(hanging.lidBossBottomZMm, r(hanging.wallTopZMm - hanging.fasteners.lid!.bossLengthMm));
+  }
+});
+function r(value: number): number { return Math.round(value * 1e9) / 1e9; }
+
+test("maxBossOverhangDeg is computed from the geometry: 90 hanging, 45 tapered, 0 floor, and it catches a shallow or short cone", () => {
+  const base = { bossRadiusMm: 3, bossInsetMm: 2.5, bossBottomZMm: 20, floorTopZMm: 2 };
+  assert.equal(maxBossOverhangDeg({ ...base, style: "hanging" }), 90);
+  assert.equal(maxBossOverhangDeg({ ...base, style: "tapered" }), 90, "a tapered boss without a cone has a flat underside");
+  assert.equal(maxBossOverhangDeg({ ...base, style: "floor", bossBottomZMm: 2 }), 0);
+  assert.equal(maxBossOverhangDeg({ ...base, style: "floor", bossBottomZMm: 5 }), 90, "a floor boss that does not reach the floor has an underside");
+  assert.ok(Math.abs(maxBossOverhangDeg({ ...base, style: "tapered", taper: { apexZMm: 20 - REACH, topZMm: 20, topRadiusMm: REACH } }) - 45) < 1e-9);
+  // a taller cone is steeper: fewer degrees from vertical
+  const steep = maxBossOverhangDeg({ ...base, style: "tapered", taper: { apexZMm: 20 - 2 * REACH, topZMm: 20, topRadiusMm: REACH } });
+  assert.ok(steep < 45 && Math.abs(steep - (Math.atan(0.5) * 180) / Math.PI) < 1e-9);
+  // a cone that is too short for its radius leans more than 45 degrees
+  const shallow = maxBossOverhangDeg({ ...base, style: "tapered", taper: { apexZMm: 20 - REACH * 0.8, topZMm: 20, topRadiusMm: REACH } });
+  assert.ok(shallow > 45 + 1e-6, `shallow cone gives ${shallow}`);
+  // a cone whose top disc does not cover the boss footprint leaves a flat underside
+  assert.equal(maxBossOverhangDeg({ ...base, style: "tapered", taper: { apexZMm: 20 - REACH + 1, topZMm: 20, topRadiusMm: REACH - 1 } }), 90);
+  // a cone that ends below the boss bottom does not carry it
+  assert.equal(maxBossOverhangDeg({ ...base, style: "tapered", taper: { apexZMm: 10 - REACH, topZMm: 10, topRadiusMm: REACH } }), 90);
+});
+
+test("derived.printability reports the checked overhang: at most 45 degrees (+1e-6) for tapered and floor, exactly 90 for hanging", () => {
+  const inputs = [REF, BENCHMARK, AUDIT, with_((value) => { value.lid!.fasteners!.bossDiameterMm = 9; })];
+  for (const input of inputs) {
+    for (const style of ["tapered", "floor"] as const) {
+      const printability = deriveBoardCase(styled(input, style)).printability!;
+      assert.equal(printability.baseOrientation, "floor-down");
+      assert.ok(printability.maxBossOverhangDeg <= 45 + 1e-6, `${style}: ${printability.maxBossOverhangDeg}`);
+    }
+    assert.equal(deriveBoardCase(styled(input, "hanging")).printability!.maxBossOverhangDeg, 90);
+  }
+  assert.equal(deriveBoardCase(styled(BENCHMARK, "tapered")).printability!.maxBossOverhangDeg, 45);
+  assert.equal(deriveBoardCase(styled(BENCHMARK, "floor")).printability!.maxBossOverhangDeg, 0);
+});
+
+test("the taper stays out of the board keep-out: its lowest point is at least component top + 1, and the wall top rises to make it so", () => {
+  const cases: Array<[string, BoardCaseInput]> = [
+    ["reference", styled(REF, "tapered")],
+    ["benchmark", styled(BENCHMARK, "tapered")],
+    ["audit, 8 mm bosses", styled(AUDIT, "tapered")],
+    ["tall parts", with_((value) => { value.board.componentHeightMm = 25; value.lid!.fasteners!.bossStyle = "tapered"; })],
+    ["square outer corners (no rounded cavity corner, apex is exposed)", with_((value) => { value.walls = { outerCornerRadiusMm: 0 }; value.lid!.fasteners!.bossStyle = "tapered"; })],
+  ];
+  for (const [name, input] of cases) {
+    const tapered = deriveBoardCase(input);
+    const hanging = deriveBoardCase(styled(input, "hanging"));
+    const taper = tapered.bossTaper!;
+    assert.ok(taper.bottomZMm >= tapered.componentTopZMm + 1 - 1e-9, `${name}: bottom ${taper.bottomZMm} vs component top ${tapered.componentTopZMm}`);
+    assert.ok(Math.abs(taper.bottomZMm - (tapered.componentTopZMm + 1)) < 1e-9, `${name}: the wall top rises by exactly the amount needed`);
+    assert.ok(taper.addedHeightMm > 0, `${name}: the headroom had to grow`);
+    assert.ok(Math.abs(taper.addedHeightMm - (tapered.wallTopZMm - hanging.wallTopZMm)) < 1e-9, `${name}: addedHeightMm = wall top difference`);
+    const rise = (tapered.innerCornerRadiusMm) * (Math.SQRT2 - 1);
+    const reach = ((input.lid!.fasteners!.bossDiameterMm ?? 6) / 2 - 0.5) * Math.SQRT2 + (input.lid!.fasteners!.bossDiameterMm ?? 6) / 2;
+    assert.ok(Math.abs(taper.addedHeightMm - (reach - rise)) < 1e-8, `${name}: added height = reach ${reach} - rise ${rise}`);
+    // the boss and the taper keep the existing 1 mm headroom; the lip does too
+    assert.ok(tapered.lidBossBottomZMm! >= tapered.componentTopZMm + 1 - 1e-9);
+    assert.ok(tapered.lipOuterMm.min[2] >= tapered.componentTopZMm + 1 - 1e-9);
+  }
+  assert.throws(() => requireBoardCaseInvariants({ lipDepthMm: 1.5, innerHeightMm: 20, lipBottomZMm: 10, componentTopZMm: 5, taperBottomZMm: 5.5 }), /lid boss taper bottom z 5\.5 reaches into the component space/);
+  assert.doesNotThrow(() => requireBoardCaseInvariants({ lipDepthMm: 1.5, innerHeightMm: 20, lipBottomZMm: 10, componentTopZMm: 5, taperBottomZMm: 6 }));
+  // A deep lid lip no longer fits the tapered style (the lip would meet the gusset), but the hanging style still accepts it.
+  assert.equal(deriveBoardCase(with_((value) => { value.lid!.lipDepthMm = 5.5; })).wallTopZMm > 0, true);
+});
+
+test("floor style: the cavity grows in one axis by 2 x (inset + radius); ties go to the axis that adds less floor area; the board stays centred", () => {
+  const noOpenings = (patch: (value: BoardCaseInput) => void) => with_((value) => { value.openings = undefined; patch(value); });
+  const long = deriveBoardCase(styled(REF, "floor")); // 30 x 20: growing x adds 11 x 21, growing y would add 11 x 31
+  assert.deepEqual(long.cavityGrowthMm, [11, 0]);
+  const tall = deriveBoardCase(noOpenings((value) => { value.board = { lengthMm: 20, widthMm: 30, holes: [{ xMm: 3, yMm: 3, diameterMm: 2.5 }, { xMm: 17, yMm: 27, diameterMm: 2.5 }], componentHeightMm: 5 }; value.lid!.fasteners!.bossStyle = "floor"; }));
+  assert.deepEqual(tall.cavityGrowthMm, [0, 11]);
+  assert.deepEqual(tall.boardWallClearanceMm, { xNeg: 0.5, xPos: 0.5, yNeg: 6, yPos: 6 });
+  const square = deriveBoardCase(noOpenings((value) => { value.board = { lengthMm: 24, widthMm: 24, holes: [{ xMm: 3, yMm: 3, diameterMm: 2.5 }, { xMm: 21, yMm: 21, diameterMm: 2.5 }], componentHeightMm: 5 }; value.lid!.fasteners!.bossStyle = "floor"; }));
+  assert.deepEqual(square.cavityGrowthMm, [11, 0], "equal area: x");
+  // A bigger boss grows the cavity by 2 x (inset + radius) = 4 x radius - 1.
+  const wide = deriveBoardCase(noOpenings((value) => { value.lid!.fasteners!.bossDiameterMm = 8; value.lid!.fasteners!.bossStyle = "floor"; }));
+  assert.deepEqual(wide.cavityGrowthMm, [15, 0]);
+  assert.deepEqual(wide.boardWallClearanceMm, { xNeg: 8, xPos: 8, yNeg: 0.5, yPos: 0.5 });
+  for (const derived of [long, tall, square, wide]) {
+    // The board is centred, the other axis keeps boardClearance exactly, and every boss lies outside board + boardClearance.
+    const c = derived.boardWallClearanceMm;
+    assert.ok(Math.abs(c.xNeg - c.xPos) < 1e-9 && Math.abs(c.yNeg - c.yPos) < 1e-9);
+    const bossR = derived.fasteners.lid!.bossDiameterMm / 2;
+    const keepOut = { min: [derived.boardMm.min[0] - 0.5, derived.boardMm.min[1] - 0.5], max: [derived.boardMm.max[0] + 0.5, derived.boardMm.max[1] + 0.5] };
+    for (const [x, y] of derived.lidBossAxesMm) {
+      const dx = Math.max(keepOut.min[0]! - x, 0, x - keepOut.max[0]!);
+      const dy = Math.max(keepOut.min[1]! - y, 0, y - keepOut.max[1]!);
+      assert.ok(Math.hypot(dx, dy) >= bossR - 1e-9, `boss at ${x}, ${y} is inside the keep-out`);
+    }
+    const growth = derived.cavityGrowthMm!;
+    assert.ok(Math.abs(c.xNeg - (0.5 + growth[0] / 2)) < 1e-9 && Math.abs(c.yNeg - (0.5 + growth[1] / 2)) < 1e-9);
+    assert.ok(Math.abs(derived.cavityMm.max[0] - derived.cavityMm.min[0] - ((derived.boardMm.max[0] - derived.boardMm.min[0]) + 1 + growth[0])) < 1e-9);
+  }
+  // Openings stay referenced to the board: the x- wall opening centre along y does not change, a lid opening follows the board.
+  const lidOpening = (style: "hanging" | "floor") => deriveBoardCase(with_((value) => { value.openings = [{ wall: "lid", shape: "rect", widthMm: 4, heightMm: 4, alongMm: 15, acrossMm: 10, label: "window" }]; value.vents = undefined; value.lid!.fasteners!.bossStyle = style; })).openings[0]!.centerMm;
+  assert.deepEqual(lidOpening("hanging").slice(0, 2), [17.5, 12.5]);
+  assert.deepEqual(lidOpening("floor").slice(0, 2), [23, 12.5], "shifted by half the 11 mm growth, with the board");
+  // Wall height and the lip use the lower floor-style wall top, and the boss length is the floor-to-wall-top length.
+  const floor = deriveBoardCase(styled(BENCHMARK, "floor"));
+  assert.equal(floor.fasteners.lid!.bossLengthMm, floor.wallTopZMm - floor.floorTopZMm);
+  assert.equal(floor.lipOuterMm.min[2] - floor.componentTopZMm >= 1 - 1e-9, true);
+});
+
+for (const [name, patch, pattern] of [
+  ["a bossStyle outside the list", (input: BoardCaseInput) => { (input.lid!.fasteners as { bossStyle?: string }).bossStyle = "pillar"; }, /lid\.fasteners\.bossStyle must be one of tapered, hanging, floor \(got pillar\)/],
+  ["a lid lip deeper than the boss with the tapered style", (input: BoardCaseInput) => { input.lid!.fasteners!.bossStyle = "tapered"; input.lid!.lipDepthMm = 5.6; }, /lid\.lipDepthMm 5\.6 must be at most the boss length 6 minus 0\.5 mm with the tapered style/],
+  ["a thin wall with a big outer radius with the tapered style", (input: BoardCaseInput) => { input.lid!.fasteners!.bossStyle = "tapered"; input.walls = { wallMm: 0.8, outerCornerRadiusMm: 3 }; }, /the tapered boss gusset is clipped 0\.5 mm into each wall; with walls\.wallMm 0\.8 and walls\.outerCornerRadiusMm 3 that corner would show/],
+  ["a wall opening on the taper", (input: BoardCaseInput) => { input.lid!.fasteners!.bossStyle = "tapered"; input.openings = [{ wall: "x-", shape: "rect", widthMm: 2, heightMm: 2, alongMm: 1.5, aboveBoardMm: 7.4, label: "low" }]; }, /low on wall x- collides with the 45 degree gusset under a lid boss/],
+  ["a wall vent slot on the taper", (input: BoardCaseInput) => { input.lid!.fasteners!.bossStyle = "tapered"; input.openings = []; input.vents = { on: "x-", slots: 1, slotWidthMm: 1.5, slotLengthMm: 4, pitchMm: 3, centerAlongMm: 1.5, centerAcrossMm: 9 }; }, /vent slot 0 on wall x- collides with the 45 degree gusset under a lid boss/],
+  ["a floor boss that would stand on a standoff", (input: BoardCaseInput) => { input.lid!.fasteners!.bossStyle = "floor"; input.board.holes = [{ xMm: 3, yMm: 3, diameterMm: 2.5 }, { xMm: 27, yMm: 17, diameterMm: 2.5 }]; input.standoffs!.outerDiameterMm = 12; }, /lid boss 0 collides with standoff 0/],
+  ["a floor opening under a floor boss", (input: BoardCaseInput) => { input.lid!.fasteners!.bossStyle = "floor"; input.openings = [{ wall: "floor", shape: "circle", widthMm: 2, alongMm: -3.5, acrossMm: 2, label: "drain" }]; }, /drain on the floor collides with lid boss 0/],
+  ["a wall opening through a floor boss", (input: BoardCaseInput) => { input.lid!.fasteners!.bossStyle = "floor"; input.openings = [{ wall: "x-", shape: "rect", widthMm: 2, heightMm: 2, alongMm: 2, aboveBoardMm: 3, label: "side" }]; }, /side on wall x- collides with lid boss 0/],
+] as Array<[string, (input: BoardCaseInput) => void, RegExp]>) {
+  test(`validation rejects ${name} before any native call`, async () => {
+    const input = with_(patch);
+    assert.throws(() => planBoardCase(input), pattern);
+    const fake = fakeRuntime();
+    await assert.rejects(new BoardCaseRecipe(fake.operations).create(input), pattern);
+    assert.equal(fake.calls.length, 0, "no native mutation");
+    assert.equal(fake.reads, 0, "not even a state read");
+  });
+}
+
+test("the same far-from-the-corner opening is accepted in all three styles", () => {
+  for (const style of ["tapered", "hanging", "floor"] as const) {
+    const input = with_((value) => { value.lid!.fasteners!.bossStyle = style; value.openings = [{ wall: "x-", shape: "rect", widthMm: 2, heightMm: 2, alongMm: 9, aboveBoardMm: 3, label: "far" }]; });
+    assert.ok(planBoardCase(input), style);
+  }
+});
+
+test("the tapered case composes clip box, cone, clip and one join before the bosses, with exact arguments", async () => {
+  const fake = fakeRuntime();
+  const result = await new BoardCaseRecipe(fake.operations).create(styled(REF, "tapered"));
+  const names = fake.calls.map((entry) => entry.operation === "boolean" ? `boolean:${(entry.args[2] as string)}` : entry.operation);
+  const repeat = (list: string[], count: number) => Array.from({ length: count }, () => list).flat();
+  assert.deepEqual(names.slice(0, 11), [
+    "createBox", "fillet", "createBox", "fillet", "boolean:difference",
+    ...repeat(["createCylinder"], 2), "boolean:union", ...repeat(["createCylinder"], 2), "boolean:difference",
+  ]);
+  const taperCalls = names.slice(11, 11 + 4 * 3 + 1);
+  assert.deepEqual(taperCalls, [...repeat(["createBox", "createCone", "boolean:intersection"], 4), "boolean:union"]);
+  const at = (index: number) => rounded(fake.calls[index]!.args);
+  // corner 0 at the cavity min corner (2, 2): clip box 0.5 mm into the walls; pointed cone with its top disc 0.5 mm above the
+  // boss bottom (radius = height = 7.035534, so 45 degrees) and its apex straight down on the corner at z 12.392893
+  assert.deepEqual(at(11), [[1.5, 1.5, 11.892893], [32, 22, 8.035534], null]);
+  assert.deepEqual(at(12), [[2, 2, 19.428427], 7.035534, 0, 7.035534, [0, 0, -1], [1, 0, 0]]);
+  assert.deepEqual(at(13), [[108], [106], "intersection", false]);
+  // corner 3 at the cavity max corner (33, 23)
+  assert.deepEqual(at(21), [[33, 23, 19.428427], 7.035534, 0, 7.035534, [0, 0, -1], [1, 0, 0]]);
+  assert.deepEqual(fake.calls[23]!.args, [[100], [108, 111, 114, 117], "union", false]);
+  // the bosses follow the gusset, hung from 18.93 (0.5 mm into the cone) to the wall top 24.93
+  assert.deepEqual(at(24), [[4.5, 4.5, 18.928427], 3, 6, [0, 0, 1]]);
+  assert.equal(result.derived.bossTaper!.bottomZMm, 12.6);
+  assert.equal(result.undoSteps, fake.calls.length);
+  assert.ok(result.steps.some((step) => step.stage === "lid-boss-tapers" && step.operation === "clip-taper-cone"));
+  const final = fake.snapshot();
+  assert.deepEqual(final.bodies.map((body) => [body.type, body.name]), [["Solid", "existing"], ["Solid", "ref-base"], ["Solid", "ref-lid"], ["Solid", "ref-board"]]);
+  assert.equal(final.regions.length, 0);
+  assert.equal(names.at(-1), "remove");
+});
+
+test("the floor case grows the cavity cutter, stands the bosses on the floor and adds no taper steps", async () => {
+  const fake = fakeRuntime();
+  const result = await new BoardCaseRecipe(fake.operations).create(styled(REF, "floor"));
+  const at = (index: number) => rounded(fake.calls[index]!.args);
+  assert.deepEqual(at(0), [[0, 0, 0], [46, 25, 14.1], "ref-base"]);
+  assert.deepEqual(at(2), [[2, 2, 2], [42, 21, 12.6], null]);
+  assert.equal(fake.calls.filter((entry) => entry.operation === "boolean" && entry.args[2] === "intersection").length, 0);
+  // standoffs follow the board (x + 6), then the four floor bosses start at the floor top and rise to the wall top
+  assert.deepEqual(at(5), [[11, 5.5, 1.5], 2.75, 3.5, [0, 0, 1]]);
+  assert.deepEqual(at(11), [[4.5, 4.5, 1.5], 3, 12.6, [0, 0, 1]]);
+  assert.deepEqual(at(14), [[41.5, 20.5, 1.5], 3, 12.6, [0, 0, 1]]);
+  assert.deepEqual(at(16), [[4.5, 4.5, 14.6], 1.25, 5.5, [0, 0, -1]]);
+  assert.deepEqual(result.derived.cavityGrowthMm, [11, 0]);
+  assert.equal(result.undoSteps, fake.calls.length);
+  assert.deepEqual(result.steps.filter((step) => step.stage === "lid-boss-tapers"), []);
+});
+
+test("a failure in the tapered gusset stage undoes every step and names the stage", async () => {
+  const fake = fakeRuntime({ fail: (operation) => operation === "createCone" ? new Error("Plasticity command failed: cone rejected") : undefined });
+  const before = fake.snapshot();
+  const error = await new BoardCaseRecipe(fake.operations).create(styled(REF, "tapered")).then(() => undefined, (caught: unknown) => caught);
+  assert.ok(error instanceof BoardCaseRecipeError);
+  assert.equal(error.failedStage, "lid-boss-tapers");
+  assert.equal(error.restored, true);
+  // 11 steps before the gusset, then the first corner's clip box
+  assert.equal(error.completedSteps.length, 12);
+  assert.equal(error.undoneSteps, 12);
+  assert.deepEqual(fake.snapshot().bodies, before.bodies);
 });

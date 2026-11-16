@@ -40,6 +40,9 @@ function fakeOperations() {
     async createCylinder(_center: V3, _radius: number, _height: number, _name: string | undefined, given: string) { return mutate("createCylinder", given, () => { bodies.push(solid(nextId++, null, [])); }); },
     async fillet(_id: number, _edges: string[], _radius: number, given: string) { return mutate("fillet", given, () => {}); },
     async boolean(_targets: number[], tools: number[], _kind: string, _keep: boolean, given: string) { return mutate("boolean", given, () => { bodies = bodies.filter((body) => !tools.includes(body.id)); }); },
+    async createCone(_center: V3, _radius: number, _topRadius: number, _height: number, _axis: V3, _radial: V3, _name: string | undefined, given: string) {
+      return mutate("createCone", given, () => { bodies.push({ ...solid(nextId++, null, []), type: "Wire" }); bodies.push(solid(nextId++, null, [])); });
+    },
     async createPolyline(points: V3[], _closed: boolean, given: string) {
       return mutate("createPolyline", given, () => {
         const id = nextId++;
@@ -185,4 +188,28 @@ test("the board case works as a lean plasticity_batch step and return projects b
     assert.equal(reply.summary.undoSteps, calls.length);
     assert.deepEqual(reply.summary.added.map((body: { name: string }) => body.name).sort(), ["case-base", "case-lid", "second-base", "second-lid"]);
   });
+});
+
+test("lid.fasteners.bossStyle is a strict enum defaulting to tapered; each style builds through the server", async () => {
+  await withClient(async (client, calls) => {
+    const tools = (await client.listTools()).tools;
+    const schema = tools.find((entry) => entry.name === "plasticity_create_board_case")!.inputSchema as unknown as { properties: { lid: { properties: { fasteners: { properties: { bossStyle: { enum?: string[] } } } } } } };
+    assert.deepEqual(schema.properties.lid.properties.fasteners.properties.bossStyle.enum, ["tapered", "hanging", "floor"]);
+    const bad = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...CASE, lid: { fasteners: { ...CASE.lid.fasteners, bossStyle: "pillar" } }, revision: "r0" } });
+    assert.equal(bad.isError, true);
+    assert.deepEqual(calls, []);
+  });
+  for (const [style, expectedWallTop] of [[undefined, 24.928427], ["tapered", 24.928427], ["hanging", 18.6], ["floor", 14.1]] as const) {
+    await withClient(async (client) => {
+      const fasteners = style === undefined ? CASE.lid.fasteners : { ...CASE.lid.fasteners, bossStyle: style };
+      const result = json(await client.callTool({ name: "plasticity_create_board_case", arguments: { ...CASE, lid: { fasteners }, revision: "r0" } }));
+      assert.equal(result.derived.bossStyle, style ?? "tapered");
+      assert.equal(Math.round(result.derived.wallTopZMm * 1e6) / 1e6, expectedWallTop, String(style));
+      assert.equal(result.derived.printability.baseOrientation, "floor-down");
+      assert.equal(result.derived.printability.maxBossOverhangDeg, { tapered: 45, hanging: 90, floor: 0 }[style ?? "tapered"]);
+      assert.deepEqual(result.derived.boardWallClearanceMm, style === "floor" ? { xNeg: 6, xPos: 6, yNeg: 0.5, yPos: 0.5 } : { xNeg: 0.5, xPos: 0.5, yNeg: 0.5, yPos: 0.5 });
+      assert.equal(result.derived.bossTaper !== undefined, (style ?? "tapered") === "tapered");
+      assert.deepEqual(result.derived.cavityGrowthMm, style === "floor" ? [11, 0] : undefined);
+    });
+  }
 });

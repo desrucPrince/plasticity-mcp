@@ -22,7 +22,7 @@ type Bounds = { min: V3; max: V3 };
 type Face = { id: string; bodyId: number; surfaceType: string; planar: boolean; normal: V3; radiusMm: number | null; axisOriginMm: V3 | null; axisDirection: V3 | null; boundsMm: Bounds; centerMm: V3; coneSemiAngleRad?: number };
 type Edge = { id: string; bodyId: number; curveType: string; circle: boolean; boundsMm: Bounds; centerMm: V3; circleGeometry?: { centerMm: V3; radiusMm: number; normal: V3 } };
 
-export const BOARD_CASES = ["benchmark", "audit", "pod", "failure"] as const;
+export const BOARD_CASES = ["benchmark", "benchmark-hanging", "benchmark-floor", "audit", "pod", "failure"] as const;
 type CaseName = typeof BOARD_CASES[number];
 
 interface Options { help: boolean; target?: string; output?: string; allowDisposableMutations: boolean; cases: CaseName[] }
@@ -55,26 +55,28 @@ export function parseBoardCaseAcceptanceArgs(argv: string[]): Options {
 const HELP = `Usage:
   PLASTICITY_CDP_URL=http://127.0.0.1:<port> node scripts/verify-native-board-case-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY [--case ${BOARD_CASES.join(",")}]
 
-Builds the three board cases at x >= 2000 mm, verifies every derived field with independent reads, undoes each case with
+Builds the board cases at x >= 2000 mm (the benchmark board in all three lid-boss styles: tapered by default, hanging, floor; the audit enclosure; the pod), verifies every derived field with independent reads, undoes each case with
 one batched undo of the measured undoSteps, forces one native failure and checks that it undid itself. The document's
 Undo depth and body count are restored. Run only against an isolated instance (npm run start:plasticity-isolated).`;
 
 // ------------------------------------------------------------------------------------------------- the three cases
 const HOLES_BENCHMARK = [[2.6, 2.6], [48.9, 2.6], [2.6, 25.7], [48.9, 25.7]].map(([xMm, yMm]) => ({ xMm, yMm, diameterMm: 3 }));
 export function caseArguments(name: CaseName): Record<string, unknown> {
-  if (name === "benchmark") {
+  if (name === "benchmark" || name === "benchmark-hanging" || name === "benchmark-floor") {
     // The multi-part benchmark's board: 51.5 x 28.3 x 1.6, four Ø3 holes, 8 mm parts, 4 mm standoffs with Ø2.5 pilots,
     // a 9.2 x 3.4 r1.2 opening centred on the x- wall 1.6 mm above the board top, four M3 countersunk lid screws into
-    // Ø2.5 pilots, a five-slot lid vent, board stand-in.
+    // Ø2.5 pilots, a five-slot lid vent, board stand-in. "benchmark" leaves bossStyle out (the default, tapered);
+    // the two others name it.
+    const bossStyle = name === "benchmark-hanging" ? { bossStyle: "hanging" } : name === "benchmark-floor" ? { bossStyle: "floor" } : {};
     return {
       originMm: [2000, 0, 0],
       board: { lengthMm: 51.5, widthMm: 28.3, holes: HOLES_BENCHMARK, componentHeightMm: 8 },
       standoffs: { heightMm: 4, fastener: { screw: "M3", mode: "pilot", pilotDiameterMm: 2.5 } },
-      lid: { fasteners: { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 6 } },
+      lid: { fasteners: { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 6, ...bossStyle } },
       openings: [{ wall: "x-", shape: "rounded-rect", widthMm: 9.2, heightMm: 3.4, cornerRadiusMm: 1.2, alongMm: 14.15, aboveBoardMm: 1.6, label: "usb" }],
       vents: { on: "lid", slots: 5, slotWidthMm: 2, slotLengthMm: 12, pitchMm: 4 },
       boardStandIn: true,
-      name: "esp",
+      name: name === "benchmark" ? "esp" : name === "benchmark-hanging" ? "esp-hanging" : "esp-floor",
     };
   }
   if (name === "audit") {
@@ -162,6 +164,14 @@ async function verifyCase(client: Client, args: Record<string, unknown>, result:
   const planar = (list: Face[], normal: V3, coordinate: number, axis: 0 | 1 | 2) => list.filter((face) => face.planar && along(face.normal, normal) && near(face.boundsMm.min[axis], coordinate) && near(face.boundsMm.max[axis], coordinate));
   const cylinders = (list: Face[], radius: number) => list.filter((face) => /cylinder/i.test(face.surfaceType) && face.radiusMm !== null && near(face.radiusMm, radius, 1e-6) && face.axisDirection && Math.abs(Math.abs(face.axisDirection[2]) - 1) < 1e-6);
   const ids = [baseId, lidId, ...(boardId !== undefined ? [boardId] : [])];
+  // Boss gussets and floor bosses split a wall into several faces (and the rounded cavity corners trim its ends): pick the face that
+  // spans the given z range and overlaps the given along-wall range the most, else the first.
+  const wallSpanning = (list: Face[], normal: V3, coordinate: number, axis: 0 | 1 | 2, z: V2, along: V2): Face | undefined => {
+    const candidates = planar(list, normal, coordinate, axis);
+    const alongAxis = axis === 0 ? 1 : 0;
+    const overlap = (face: Face) => Math.min(face.boundsMm.max[alongAxis]!, along[1]) - Math.max(face.boundsMm.min[alongAxis]!, along[0]);
+    return candidates.filter((face) => face.boundsMm.min[2] <= z[0] + TOL && face.boundsMm.max[2] >= z[1] - TOL && overlap(face) > 0).sort((a, b) => overlap(b) - overlap(a))[0] ?? candidates[0];
+  };
 
   // Solids and validity.
   const validation = await call(client, "plasticity_validate_bodies", { ids, revision });
@@ -207,8 +217,10 @@ async function verifyCase(client: Client, args: Record<string, unknown>, result:
   // Lid lip clearance per side, measured face to face.
   const lc = (args.fit as { lidClearanceMm?: number } | undefined)?.lidClearanceMm ?? 0.2;
   for (const [index, [label, normal, coordinate, axis]] of lipFaces.entries()) {
-    const lipFace = planar(lidFaces, normal, coordinate, axis).filter((face) => near(face.boundsMm.min[2], lip.min[2]))[0];
-    const wall = planar(baseFaces, walls[index]![1], walls[index]![2], walls[index]![3])[0];
+    // The lip is split by the boss notches: measure its longest piece against the wall face under it.
+    const alongAxis = axis === 0 ? 1 : 0;
+    const lipFace = planar(lidFaces, normal, coordinate, axis).filter((face) => near(face.boundsMm.min[2], lip.min[2])).sort((a, b) => (b.boundsMm.max[alongAxis]! - b.boundsMm.min[alongAxis]!) - (a.boundsMm.max[alongAxis]! - a.boundsMm.min[alongAxis]!))[0];
+    const wall = lipFace ? wallSpanning(baseFaces, walls[index]![1], walls[index]![2], walls[index]![3], [lipFace.boundsMm.min[2], lipFace.boundsMm.max[2]], [lipFace.boundsMm.min[alongAxis]!, lipFace.boundsMm.max[alongAxis]!]) : undefined;
     if (!lipFace || !wall) { checks.add("lipOuterMm", `lip clearance ${label}`, false, lc, "faces missing"); continue; }
     const measured = await call(client, "plasticity_measure_parallel_planar_face_clearance", { first: { bodyId: lidId, faceId: lipFace.id }, second: { bodyId: baseId, faceId: wall.id }, revision });
     checks.near("lipOuterMm", `lip to wall clearance ${label} = lidClearance`, measured.minimumDistanceMm, lc);
@@ -229,14 +241,20 @@ async function verifyCase(client: Client, args: Record<string, unknown>, result:
     checks.add("standoffAxesMm", "no standoffs requested, none derived", derived.standoffAxesMm.length === 0);
   }
 
-  // Lid bosses: hanging corner posts, their holes, the coaxial lid holes and countersinks.
+  // Lid bosses: corner posts (hanging, hanging on a 45 degree gusset, or standing on the floor), their holes, the coaxial lid holes and countersinks.
   if (fasteners.lid) {
     const l = fasteners.lid;
+    const style = derived.bossStyle as "tapered" | "hanging" | "floor";
+    const overshoot = result.constants.overshootMm as number;
+    checks.add("bossStyle", `derived.bossStyle is ${style}`, style === ((args.lid as any).fasteners.bossStyle ?? "tapered"), (args.lid as any).fasteners.bossStyle ?? "tapered", style);
     // Inside the cavity only: the outer corner rounds can share the boss radius but run from the base bottom.
-    const posts = cylinders(baseFaces, l.bossDiameterMm / 2).filter((face) => near(face.boundsMm.max[2], derived.wallTopZMm) && face.boundsMm.min[2] > derived.floorTopZMm + TOL);
+    const posts = cylinders(baseFaces, l.bossDiameterMm / 2).filter((face) => near(face.boundsMm.max[2], derived.wallTopZMm) && (style === "floor" ? near(face.boundsMm.min[2], derived.floorTopZMm) : face.boundsMm.min[2] > derived.floorTopZMm + TOL));
     checks.axesNear("lidBossAxesMm", `corner boss cylinders Ø${l.bossDiameterMm}`, uniqueAxes(posts), derived.lidBossAxesMm);
-    checks.add("lidBossBottomZMm", "corner bosses start at the derived bottom z", posts.length > 0 && posts.every((face) => near(face.boundsMm.min[2], derived.lidBossBottomZMm)), derived.lidBossBottomZMm, posts.map((face) => r3(face.boundsMm.min[2])));
-    checks.add("componentTopZMm", "corner boss bottom is headroom (1 mm) above the component top", derived.lidBossBottomZMm - derived.componentTopZMm >= 1 - TOL);
+    // A tapered boss rises out of the top of its gusset (the joint is one overshoot above the boss bottom).
+    const exposedBottom = style === "tapered" ? derived.lidBossBottomZMm + overshoot : derived.lidBossBottomZMm;
+    checks.add("lidBossBottomZMm", style === "tapered" ? "tapered boss cylinders rise from the gusset top (boss bottom + overshoot)" : style === "floor" ? "floor boss cylinders start at the floor top" : "corner bosses start at the derived bottom z", posts.length > 0 && posts.every((face) => near(face.boundsMm.min[2], exposedBottom)), exposedBottom, posts.map((face) => r3(face.boundsMm.min[2])));
+    if (style !== "floor") checks.add("componentTopZMm", "corner boss bottom is headroom (1 mm) above the component top", derived.lidBossBottomZMm - derived.componentTopZMm >= 1 - TOL);
+    if (style === "floor") checks.add("fasteners.lid.bossLengthMm", "floor boss length = wall top - floor top", near(l.bossLengthMm, derived.wallTopZMm - derived.floorTopZMm), derived.wallTopZMm - derived.floorTopZMm, l.bossLengthMm);
     const baseHoles = cylinders(baseFaces, l.baseHole.diameterMm / 2).filter((face) => near(face.boundsMm.max[2], derived.wallTopZMm));
     checks.axesNear("lidBossAxesMm", `boss holes Ø${l.baseHole.diameterMm} (${l.base})`, uniqueAxes(baseHoles), derived.lidBossAxesMm);
     checks.add("fasteners.lid", `boss hole depth ${l.baseHole.depthMm}`, baseHoles.length > 0 && baseHoles.every((face) => near(face.boundsMm.min[2], derived.wallTopZMm - l.baseHole.depthMm)), derived.wallTopZMm - l.baseHole.depthMm, baseHoles.map((face) => r3(face.boundsMm.min[2])));
@@ -248,8 +266,38 @@ async function verifyCase(client: Client, args: Record<string, unknown>, result:
       const cones = lidFaces.filter((face) => /cone/i.test(face.surfaceType));
       checks.add("fasteners.lid.countersink", `four cones ${l.countersink.depthMm} deep, ${l.countersink.includedAngleDeg}° included`, cones.length === 4 && cones.every((face) => near(face.boundsMm.max[2] - face.boundsMm.min[2], l.countersink.depthMm) && (face.coneSemiAngleRad === undefined || near(face.coneSemiAngleRad * 360 / Math.PI, l.countersink.includedAngleDeg, 1e-6))), l.countersink.depthMm, cones.map((face) => ({ depth: r3(face.boundsMm.max[2] - face.boundsMm.min[2]), semiAngleRad: face.coneSemiAngleRad })));
     }
+
+    // Style-specific geometry, read from the faces.
+    const baseCones = baseFaces.filter((face) => /cone/i.test(face.surfaceType));
+    const cornerAxes = [[cav.min[0], cav.min[1]], [cav.max[0], cav.min[1]], [cav.min[0], cav.max[1]], [cav.max[0], cav.max[1]]] as V2[];
+    if (style === "tapered") {
+      const taper = derived.bossTaper as { angleDeg: number; bottomZMm: number; addedHeightMm: number };
+      checks.add("bossTaper", "one cone face under each boss (four on the base)", baseCones.length === 4, 4, baseCones.map((face) => ({ id: face.id, surface: face.surfaceType })));
+      checks.add("bossTaper", `every taper cone has a ${taper.angleDeg}° half-angle (read from the face data)`, baseCones.length === 4 && baseCones.every((face) => typeof face.coneSemiAngleRad === "number" && near((face.coneSemiAngleRad * 180) / Math.PI, taper.angleDeg, 1e-6)), taper.angleDeg, baseCones.map((face) => face.coneSemiAngleRad === undefined ? null : (face.coneSemiAngleRad * 180) / Math.PI));
+      checks.add("bossTaper", "taper cone axes are vertical lines through the four cavity corners", baseCones.length === 4 && baseCones.every((face) => !!face.axisDirection && Math.abs(Math.abs(face.axisDirection[2]) - 1) < 1e-6), cornerAxes, baseCones.map((face) => face.axisDirection));
+      checks.axesNear("bossTaper", "taper cone axes at the cavity corners", uniqueAxes(baseCones.filter((face) => face.axisOriginMm)), cornerAxes);
+      checks.add("bossTaper", `lowest point of each taper cone is bossTaper.bottomZMm ${taper.bottomZMm}`, baseCones.length === 4 && baseCones.every((face) => near(face.boundsMm.min[2], taper.bottomZMm)), taper.bottomZMm, baseCones.map((face) => r3(face.boundsMm.min[2])));
+      checks.add("bossTaper", `top of each taper cone is the boss bottom + overshoot ${r3(exposedBottom)}`, baseCones.length === 4 && baseCones.every((face) => near(face.boundsMm.max[2], exposedBottom)), exposedBottom, baseCones.map((face) => r3(face.boundsMm.max[2])));
+      checks.add("bossTaper", "taper bottom is at least componentTop + 1 mm (clear of the board keep-out)", taper.bottomZMm >= derived.componentTopZMm + 1 - TOL, derived.componentTopZMm + 1, taper.bottomZMm);
+      checks.add("bossTaper", "taper cones stay inside the cavity footprint (nothing protrudes past the inner walls)", baseCones.every((face) => face.boundsMm.min[0] >= cav.min[0] - TOL && face.boundsMm.max[0] <= cav.max[0] + TOL && face.boundsMm.min[1] >= cav.min[1] - TOL && face.boundsMm.max[1] <= cav.max[1] + TOL), cav, baseCones.map((face) => face.boundsMm));
+      checks.add("bossTaper", "taper top faces: an up-facing plane at the gusset top joins each cone to its boss", planar(baseFaces, [0, 0, 1], exposedBottom, 2).length >= 4, exposedBottom, planar(baseFaces, [0, 0, 1], exposedBottom, 2).length);
+      checks.add("bossTaper", "no base face leaves the outer bounds (nothing through the outer walls)", (() => { const all = union(baseFaces.map((face) => face.boundsMm)); return !!all && near(all.min[0], derived.outerMm.min[0]) && near(all.max[0], derived.outerMm.max[0]) && near(all.min[1], derived.outerMm.min[1]) && near(all.max[1], derived.outerMm.max[1]); })());
+    } else {
+      checks.add("bossTaper", `no taper cones on a ${style} case`, baseCones.length === 0 && derived.bossTaper === undefined, 0, baseCones.length);
+    }
+    if (style === "floor") {
+      const growth = derived.cavityGrowthMm as V2;
+      const board = args.board as { lengthMm: number; widthMm: number };
+      const bcMm = (args.fit as { boardClearanceMm?: number } | undefined)?.boardClearanceMm ?? 0.5;
+      checks.add("cavityGrowthMm", "cavity = board + 2 x boardClearance + growth, in x and y", near(cav.max[0] - cav.min[0], board.lengthMm + 2 * bcMm + growth[0]) && near(cav.max[1] - cav.min[1], board.widthMm + 2 * bcMm + growth[1]), growth, [r3(cav.max[0] - cav.min[0] - board.lengthMm - 2 * bcMm), r3(cav.max[1] - cav.min[1] - board.widthMm - 2 * bcMm)]);
+    } else {
+      checks.add("cavityGrowthMm", `no cavity growth on a ${style} case`, derived.cavityGrowthMm === undefined);
+    }
+    const printability = derived.printability as { baseOrientation: string; maxBossOverhangDeg: number };
+    checks.add("printability", `maxBossOverhangDeg ${printability.maxBossOverhangDeg} is ${style === "hanging" ? "90 (flat underside)" : style === "tapered" ? "45" : "0 (boss stands on the floor)"}, base floor-down`, printability.baseOrientation === "floor-down" && near(printability.maxBossOverhangDeg, { hanging: 90, tapered: 45, floor: 0 }[style], 1e-6), { hanging: 90, tapered: 45, floor: 0 }[style], printability.maxBossOverhangDeg);
   } else {
     checks.add("lidBossAxesMm", "no lid fasteners requested, none derived", derived.lidBossAxesMm.length === 0);
+    checks.add("printability", "no lid fasteners: no boss fields", derived.printability === undefined && derived.bossTaper === undefined && derived.cavityGrowthMm === undefined);
   }
 
   // Board stand-in: bounds, seat on the standoffs, clearance to each wall.
@@ -263,14 +311,15 @@ async function verifyCase(client: Client, args: Record<string, unknown>, result:
       for (const top of tops) gaps.push((await call(client, "plasticity_measure_parallel_planar_face_clearance", { first: { bodyId: boardId, faceId: bottom!.id }, second: { bodyId: baseId, faceId: top.id }, revision })).minimumDistanceMm);
       checks.add("boardMm", "board sits on every standoff (gap 0)", tops.length === derived.standoffAxesMm.length && gaps.every((gap) => near(gap, 0)), 0, gaps);
     }
-    const bc = (args.fit as { boardClearanceMm?: number } | undefined)?.boardClearanceMm ?? 0.5;
+    const wallClearance = derived.boardWallClearanceMm as { xNeg: number; xPos: number; yNeg: number; yPos: number };
+    const expectedClearance = [wallClearance.xNeg, wallClearance.xPos, wallClearance.yNeg, wallClearance.yPos];
     const boardSides: Array<[V3, number, 0 | 1]> = [[[-1, 0, 0], derived.boardMm.min[0], 0], [[1, 0, 0], derived.boardMm.max[0], 0], [[0, -1, 0], derived.boardMm.min[1], 1], [[0, 1, 0], derived.boardMm.max[1], 1]];
     for (const [index, [normal, coordinate, axis]] of boardSides.entries()) {
       const side = planar(boardFaces, normal, coordinate, axis)[0];
-      const wall = planar(baseFaces, walls[index]![1], walls[index]![2], walls[index]![3])[0];
-      if (!side || !wall) { checks.add("boardMm", `board clearance ${walls[index]![0]}`, false, bc, "faces missing"); continue; }
+      const wall = wallSpanning(baseFaces, walls[index]![1], walls[index]![2], walls[index]![3], [derived.boardMm.min[2], derived.boardMm.max[2]], walls[index]![3] === 0 ? [derived.boardMm.min[1], derived.boardMm.max[1]] : [derived.boardMm.min[0], derived.boardMm.max[0]]);
+      if (!side || !wall) { checks.add("boardMm", `board clearance ${walls[index]![0]}`, false, expectedClearance[index], "faces missing"); continue; }
       const measured = await call(client, "plasticity_measure_parallel_planar_face_clearance", { first: { bodyId: boardId, faceId: side.id }, second: { bodyId: baseId, faceId: wall.id }, revision });
-      checks.near("boardMm", `board to wall ${walls[index]![0]} clearance = boardClearance`, measured.minimumDistanceMm, bc);
+      checks.near("boardWallClearanceMm", `board to wall ${walls[index]![0]} clearance = derived.boardWallClearanceMm`, measured.minimumDistanceMm, expectedClearance[index]!);
     }
     const boardHoles = (args.board as { holes?: Array<{ diameterMm: number }> }).holes ?? [];
     if (boardHoles.length > 0) {
@@ -375,6 +424,8 @@ async function main(): Promise<void> {
       const result = JSON.parse(text);
       const serverMs = result.timing?.totalMs ?? null;
       const checks = await verifyCase(client, args, result, after.revision);
+      const baseFaceCount = (await call(client, "plasticity_find_faces", { revision: after.revision, query: { bodyIds: [result.bodies.baseId] }, limit: 1000 })).matches.length;
+      const baseEdgeCount = (await call(client, "plasticity_find_edges", { revision: after.revision, query: { bodyIds: [result.bodies.baseId] }, limit: 1000 })).matches.length;
       const measuredDepth = after.undoDepth - before.undoDepth;
       checks.push({ field: "undoSteps", check: "undoSteps equals the measured Undo depth change", ok: result.undoSteps === measuredDepth, expected: measuredDepth, actual: result.undoSteps });
       const expectedIds = [result.bodies.baseId, result.bodies.lidId, ...(result.bodies.boardId !== undefined ? [result.bodies.boardId] : [])].sort((a: number, b: number) => a - b);
@@ -388,11 +439,17 @@ async function main(): Promise<void> {
       if ("isError" in undo && undo.isError) throw new Error(`Batch undo failed: ${toolText(undo).slice(0, 1_000)}`);
       const restored = await call(client, "plasticity_status", {});
       checks.push({ field: "undoSteps", check: `one batch undo of ${result.undoSteps} steps restores the document`, ok: restored.undoDepth === baseline.undoDepth && sameBodies(restored, baseline), expected: { undoDepth: baseline.undoDepth, bodies: baseline.bodies.length }, actual: { undoDepth: restored.undoDepth, bodies: restored.bodies.length } });
-      cases[name] = { requestBytes, clientMs, serverMs, timing: result.timing ?? null, undoSteps: result.undoSteps, stepCount: result.steps.length, bodies: result.bodies, derived: result.derived, checks };
-      console.log(JSON.stringify({ case: name, requestBytes, serverMs, clientMs, undoSteps: result.undoSteps, passed: checks.filter((check) => check.ok).length, total: checks.length, failedChecks: checks.filter((check) => !check.ok) }));
+      cases[name] = { requestBytes, clientMs, serverMs, timing: result.timing ?? null, undoSteps: result.undoSteps, stepCount: result.steps.length, baseFaceCount, baseEdgeCount, bodies: result.bodies, derived: result.derived, checks };
+      console.log(JSON.stringify({ case: name, bossStyle: result.derived.bossStyle ?? null, requestBytes, serverMs, clientMs, undoSteps: result.undoSteps, baseFaces: baseFaceCount, baseEdges: baseEdgeCount, passed: checks.filter((check) => check.ok).length, total: checks.length, failedChecks: checks.filter((check) => !check.ok) }));
     }
     const end = await call(client, "plasticity_status", {});
     evidence.end = summary(end);
+    // Across styles: the tapered wall top is the hanging wall top plus the reported added height.
+    const tapered = cases["benchmark"] as any;
+    const hanging = cases["benchmark-hanging"] as any;
+    if (tapered?.derived?.bossTaper && hanging?.derived) {
+      tapered.checks.push({ field: "bossTaper.addedHeightMm", check: "added height = tapered wall top - hanging wall top (two live builds)", ok: Math.abs(tapered.derived.bossTaper.addedHeightMm - (tapered.derived.wallTopZMm - hanging.derived.wallTopZMm)) <= TOL, expected: tapered.derived.wallTopZMm - hanging.derived.wallTopZMm, actual: tapered.derived.bossTaper.addedHeightMm });
+    }
     const allChecks = Object.values(cases).flatMap((entry: any) => entry.checks as Check[]);
     evidence.ok = end.undoDepth === baseline.undoDepth && sameBodies(end, baseline) && allChecks.every((check) => check.ok);
     evidence.completedAt = new Date().toISOString();

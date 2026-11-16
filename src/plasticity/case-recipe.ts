@@ -26,6 +26,14 @@ type Rect = { min: Vector2; max: Vector2 };
 export type CaseWall = "x-" | "x+" | "y-" | "y+";
 export type CaseOpeningFace = CaseWall | "lid" | "floor";
 export type CaseOpeningShape = "rect" | "rounded-rect" | "circle";
+// How the four lid-screw bosses are carried: hung from the walls with a 45 degree gusset under each ("tapered", the default),
+// hung from the walls with a flat underside ("hanging"), or standing on the floor in a wider cavity ("floor").
+export type BossStyle = "tapered" | "hanging" | "floor";
+export const BOSS_STYLES: readonly BossStyle[] = ["tapered", "hanging", "floor"];
+// Self-supporting angle of the taper under a hanging boss, measured from vertical.
+export const BOSS_TAPER_ANGLE_DEG = 45;
+// The overhang check allows this much above the taper angle for floating-point noise.
+export const BOSS_OVERHANG_TOLERANCE_DEG = 1e-6;
 
 // Fixed geometric construction constants (not engineering values): they are stated in the docs and in `derived`.
 export const BOARD_CASE_CONSTANTS = {
@@ -70,6 +78,7 @@ export interface BoardCaseInput {
       screw: ScrewSize;
       count?: 4 | undefined;
       bossDiameterMm?: number | undefined;
+      bossStyle?: BossStyle | undefined;
       countersunk?: boolean | undefined;
       headDiameterMm?: number | undefined;
       base: "pilot" | "heat-set-insert";
@@ -131,6 +140,17 @@ export interface BoardCaseDerived {
   standoffTopZMm?: number;
   lidBossAxesMm: Vector2[];
   lidBossBottomZMm?: number;
+  // Present with lid fasteners.
+  bossStyle?: BossStyle;
+  // Free space between each board edge and the cavity wall. boardClearance on every side, plus half the cavity growth
+  // on the two sides of the grown axis for bossStyle "floor".
+  boardWallClearanceMm: { xNeg: number; xPos: number; yNeg: number; yPos: number };
+  // bossStyle "floor" only: how much the cavity grew in [x, y] beyond board + 2 x boardClearance.
+  cavityGrowthMm?: Vector2;
+  // bossStyle "tapered" only. bottomZMm is the lowest point of the taper inside the cavity.
+  bossTaper?: { angleDeg: 45; bottomZMm: number; addedHeightMm: number };
+  // Present with lid fasteners; says nothing about the rest of the part.
+  printability?: { baseOrientation: "floor-down"; maxBossOverhangDeg: number };
   lipOuterMm: Bounds;
   lipInnerMm: Bounds;
   openings: BoardCaseOpeningDerived[];
@@ -183,6 +203,8 @@ export interface BoardCasePlan {
   standoffGroups: CylinderPattern[];
   standoffFloorHoles?: { entryCentersMm: Vector3[]; diameterMm: number; depthMm: number };
   posts?: CylinderPattern;
+  // bossStyle "tapered": one clipped cone per corner (apex on the wall corner), joined to the base before the bosses.
+  taper?: { cones: Array<{ topCenterMm: Vector3; radiusMm: number; heightMm: number }>; clipOriginMm: Vector3; clipSizeMm: Vector3 };
   lid: {
     plateOriginMm: Vector3;
     plateSizeMm: Vector3;
@@ -265,9 +287,31 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
   });
   if (tl <= OV + EPS) fail(`walls.lidMm ${tl} must exceed ${OV} mm: the lid lip is joined ${OV} mm into the lid plate`);
 
+  // --- lid-screw boss style (decided first: "floor" widens the cavity) -----------------------------------------------
+  const lidFasteners = input.lid?.fasteners;
+  const bossStyle: BossStyle = lidFasteners?.bossStyle ?? "tapered";
+  if (!BOSS_STYLES.includes(bossStyle)) fail(`lid.fasteners.bossStyle must be one of ${BOSS_STYLES.join(", ")} (got ${String(bossStyle)})`);
+  const bossD = lidFasteners ? positive("lid.fasteners.bossDiameterMm", lidFasteners.bossDiameterMm ?? 6) : 0;
+  const bossR = bossD / 2;
+  // Each corner boss axis is this far from both adjoining inner walls, so the boss overlaps each wall by bossWallOverlapMm.
+  const bossInset = bossR - bossWallOverlapMm;
+  if (lidFasteners && bossInset <= 0) fail(`lid.fasteners.bossDiameterMm ${bossD} must exceed ${2 * bossWallOverlapMm} mm`);
+  // "floor": a boss standing on the floor must lie outside the board keep-out (board outline + boardClearance). The keep-out
+  // edge must be at least one boss radius from the boss axis, so the cavity grows by 2 x (bossInset + bossR) in ONE axis. Rule:
+  // grow the axis that needs less growth; the two corner-boss axes need the same, so the tie goes to the axis whose growth adds
+  // less floor area (x when growing x adds no more area than growing y). The other axis keeps boardClearance exactly.
+  let growth: Vector2 = [0, 0];
+  if (lidFasteners && bossStyle === "floor") {
+    const needX = 2 * (bossInset + bossR);
+    const needY = 2 * (bossInset + bossR);
+    const areaX = needX * (W + 2 * bc);
+    const areaY = needY * (L + 2 * bc);
+    growth = needX < needY - EPS ? [needX, 0] : needY < needX - EPS ? [0, needY] : areaX <= areaY + EPS ? [needX, 0] : [0, needY];
+  }
+
   // --- the shell -----------------------------------------------------------------------------------------------------
-  const cavityL = L + 2 * bc;
-  const cavityW = W + 2 * bc;
+  const cavityL = L + 2 * bc + growth[0];
+  const cavityW = W + 2 * bc + growth[1];
   const outerL = cavityL + 2 * w;
   const outerW = cavityW + 2 * w;
   if (Ro > 0 && Ro >= Math.min(outerL, outerW) / 2 - EPS) fail(`walls.outerCornerRadiusMm ${Ro} must be less than half the outer size (${r9(Math.min(outerL, outerW) / 2)})`);
@@ -277,7 +321,10 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
   const cavMin: Vector2 = [ox + w, oy + w];
   const cavMax: Vector2 = [ox + w + cavityL, oy + w + cavityW];
   const floorTopZ = oz + f;
-  const boardMin: Vector2 = [cavMin[0] + bc, cavMin[1] + bc];
+  const boardMin: Vector2 = [cavMin[0] + bc + growth[0] / 2, cavMin[1] + bc + growth[1] / 2];
+  if (lidFasteners && bossStyle === "tapered" && Ro > 0 && w - bossWallOverlapMm < Ro * (1 - Math.SQRT1_2) - EPS) {
+    fail(`the tapered boss gusset is clipped ${bossWallOverlapMm} mm into each wall; with walls.wallMm ${w} and walls.outerCornerRadiusMm ${Ro} that corner would show outside the rounded outer corner (needs wallMm - ${bossWallOverlapMm} >= ${r9(Ro * (1 - Math.SQRT1_2))}); thicken the wall, reduce the outer radius or use bossStyle "hanging"`);
+  }
 
   // --- standoffs -----------------------------------------------------------------------------------------------------
   const standoffInput = input.standoffs;
@@ -344,17 +391,15 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
 
   // --- lid-screw corner bosses ---------------------------------------------------------------------------------------
   // The cavity is board + clearance on every side, so a floor-standing corner boss would always overlap the board's
-  // corners. The bosses therefore hang from the two walls of each corner, above the component envelope (componentTop +
-  // headroom), and their tops are flush with the wall top so the lid plate clamps on them.
-  const lidFasteners = input.lid?.fasteners;
+  // corners ("floor" widens the cavity instead). "hanging" and "tapered" bosses hang from the two walls of each corner,
+  // above the component envelope (componentTop + headroom), and their tops are flush with the wall top so the lid plate
+  // clamps on them. "tapered" adds a 45 degree gusset under each boss so nothing overhangs more than 45 degrees.
   let lidFastener: BoardCaseDerived["fasteners"]["lid"];
   let postLength = 0;
   let postHole: { diameterMm: number; depthMm: number } | undefined;
-  let bossD = 0;
   let lidHoleSpec: BoardCasePlan["lid"]["holes"];
   if (lidFasteners) {
     if (lidFasteners.count !== undefined && lidFasteners.count !== 4) fail("lid.fasteners.count must be 4 (one boss per cavity corner)");
-    bossD = positive("lid.fasteners.bossDiameterMm", lidFasteners.bossDiameterMm ?? 6);
     const fit = lidFasteners.clearanceFit ?? "medium";
     const lidHole = clearanceHole(lidFasteners.screw, fit);
     let baseHole: NonNullable<BoardCaseDerived["fasteners"]["lid"]>["baseHole"];
@@ -412,14 +457,46 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
   }
 
   // --- heights -------------------------------------------------------------------------------------------------------
-  // wallTop = componentTop + headroom + max(lipDepth, bossLength): the lip and the corner bosses both stay above the
-  // component envelope plus headroom.
-  const wallTopZ = componentTopZ + headroomMm + Math.max(d, postLength);
+  // hanging: wallTop = componentTop + headroom + max(lipDepth, bossLength): the lip and the corner bosses both stay above
+  // the component envelope plus headroom.
+  // tapered: the boss sits on a 45 degree gusset whose apex is the wall corner. The gusset must cover the boss footprint
+  // (farthest point from the corner: bossInset x sqrt 2 + bossR), so it is that tall; its lowest point inside the cavity
+  // (the rounded cavity corner keeps the apex inside the wall) must stay above componentTop + headroom, so the wall top
+  // rises by the taper height. The lid lip must stay above the gusset's flared top.
+  // floor: the boss stands on the floor and rises to the wall top; the wall top only has to hold the lip and the hole depth.
+  const headroomTopZ = componentTopZ + headroomMm;
+  const hangingWallTopZ = headroomTopZ + Math.max(d, postLength);
+  const taperReach = bossInset * Math.SQRT2 + bossR;
+  // Lowest point of the cone inside the rounded cavity corner, above the cone apex on the wall corner.
+  const taperRise = Ri > 0 ? Ri * (Math.SQRT2 - 1) : 0;
+  let wallTopZ = hangingWallTopZ;
+  if (lidFasteners && bossStyle === "floor") wallTopZ = Math.max(headroomTopZ + d, floorTopZ + postLength);
+  if (lidFasteners && bossStyle === "tapered") {
+    if (d > postLength - OV + EPS) fail(`lid.lipDepthMm ${d} must be at most the boss length ${postLength} minus ${OV} mm with the tapered style, or the lid lip would meet the gusset under the boss; shorten the lip, deepen the boss hole or use bossStyle "hanging"`);
+    wallTopZ = Math.max(hangingWallTopZ, headroomTopZ + postLength + taperReach - taperRise);
+  }
   const innerHeight = wallTopZ - floorTopZ;
   const lipBottomZ = wallTopZ - d;
-  const postBottomZ = wallTopZ - postLength;
+  const postBottomZ = lidFasteners && bossStyle === "floor" ? floorTopZ : wallTopZ - postLength;
+  const taperApexZ = postBottomZ - taperReach;
+  const taperBottomZ = taperApexZ + taperRise;
   const lidTopZ = wallTopZ + tl + exploded;
-  requireBoardCaseInvariants({ lipDepthMm: d, innerHeightMm: innerHeight, lipBottomZMm: lipBottomZ, componentTopZMm: componentTopZ, bossBottomZMm: lidFasteners ? postBottomZ : undefined });
+  requireBoardCaseInvariants({
+    lipDepthMm: d, innerHeightMm: innerHeight, lipBottomZMm: lipBottomZ, componentTopZMm: componentTopZ,
+    bossBottomZMm: lidFasteners && bossStyle !== "floor" ? postBottomZ : undefined,
+    taperBottomZMm: lidFasteners && bossStyle === "tapered" ? taperBottomZ : undefined,
+  });
+  if (lidFasteners && bossStyle === "floor" && postLength > wallTopZ - floorTopZ + EPS) fail(`the ${postLength} mm boss hole does not fit the ${r9(wallTopZ - floorTopZ)} mm floor-standing boss`);
+  if (lidFastener && bossStyle === "floor") lidFastener.bossLengthMm = r9(wallTopZ - floorTopZ);
+  // The no-overhang property is computed from the derived geometry, never assumed.
+  const overhangGeometry: BossUndersideGeometry = {
+    style: bossStyle, bossRadiusMm: bossR, bossInsetMm: bossInset, bossBottomZMm: postBottomZ, floorTopZMm: floorTopZ,
+    ...(bossStyle === "tapered" ? { taper: { apexZMm: taperApexZ, topZMm: postBottomZ, topRadiusMm: taperReach } } : {}),
+  };
+  const maxBossOverhang = lidFasteners ? maxBossOverhangDeg(overhangGeometry) : undefined;
+  if (maxBossOverhang !== undefined && bossStyle !== "hanging" && maxBossOverhang > BOSS_TAPER_ANGLE_DEG + BOSS_OVERHANG_TOLERANCE_DEG) {
+    throw new BoardCaseValidationError(`internal: the ${bossStyle} boss underside overhangs ${maxBossOverhang} degrees, more than ${BOSS_TAPER_ANGLE_DEG}`);
+  }
 
   // --- lip ring ------------------------------------------------------------------------------------------------------
   const lipInset = lc + lw;
@@ -427,16 +504,20 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
   const lipRadius = Math.max(0, Ri - lc);
   const lipInnerRadius = Math.max(0, Ri - lipInset);
 
-  const s = bossD / 2 - bossWallOverlapMm;
+  const s = bossInset;
   const posts: Array<{ label: string; axis: Vector2; radius: number }> = [];
   if (lidFasteners) {
-    if (s <= 0) fail(`lid.fasteners.bossDiameterMm ${bossD} must exceed ${2 * bossWallOverlapMm} mm`);
     const reach = s + bossD / 2 + lc;
     if (2 * reach >= Math.min(cavityL, cavityW) - EPS) {
       fail(`the four ${bossD} mm corner bosses (plus lid clearance) overlap each other in the ${r9(cavityL)} x ${r9(cavityW)} cavity`);
     }
     const corners: Vector2[] = [[cavMin[0] + s, cavMin[1] + s], [cavMax[0] - s, cavMin[1] + s], [cavMin[0] + s, cavMax[1] - s], [cavMax[0] - s, cavMax[1] - s]];
     corners.forEach((axis, index) => posts.push({ label: `lid boss ${index}`, axis: [r9(axis[0]), r9(axis[1])], radius: bossD / 2 }));
+    if (bossStyle === "floor") {
+      standoffs.forEach((standoff) => posts.forEach((post) => {
+        if (Math.hypot(post.axis[0] - standoff.axis[0], post.axis[1] - standoff.axis[1]) < post.radius + standoff.radius - EPS) fail(`${post.label} collides with ${standoff.label}`);
+      }));
+    }
     lidHoleSpec!.entryCentersMm = posts.map((post) => [post.axis[0], post.axis[1], r9(wallTopZ + tl)] as Vector3);
   }
 
@@ -467,6 +548,29 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
   };
   const standoffZ: Vector2 = [floorTopZ - OV, boardBottomZ];
   const postZ: Vector2 = [postBottomZ, wallTopZ];
+  // Tapered gusset: a cone with its apex on each cavity corner, 45 degrees from vertical, flaring to the boss and a
+  // bossWallOverlap further (the joint above the boss bottom). At height z its plan is a disc of radius z - apexZ around the
+  // corner, clipped bossWallOverlap into the walls.
+  const taperTopZ = postBottomZ + OV;
+  const taperCorners: Vector2[] = posts.length > 0 && bossStyle === "tapered"
+    ? [[cavMin[0], cavMin[1]], [cavMax[0], cavMin[1]], [cavMin[0], cavMax[1]], [cavMax[0], cavMax[1]]]
+    : [];
+  const taperHitsRect = (rect: Rect, z: Vector2): boolean => {
+    if (taperCorners.length === 0 || !overlaps(z, [taperApexZ, taperTopZ])) return false;
+    const radius = Math.min(z[1], taperTopZ) - taperApexZ;
+    return taperCorners.some((corner, index) => {
+      const signX = index % 2 === 0 ? 1 : -1;
+      const signY = index < 2 ? 1 : -1;
+      const u = [signX * (rect.min[0] - corner[0]), signX * (rect.max[0] - corner[0])].sort((a, b) => a - b) as Vector2;
+      const v = [signY * (rect.min[1] - corner[1]), signY * (rect.max[1] - corner[1])].sort((a, b) => a - b) as Vector2;
+      const uc: Vector2 = [Math.max(u[0], -bossWallOverlapMm), u[1]];
+      const vc: Vector2 = [Math.max(v[0], -bossWallOverlapMm), v[1]];
+      if (uc[0] > uc[1] || vc[0] > vc[1]) return false;
+      const du = uc[0] > 0 ? uc[0] : uc[1] < 0 ? -uc[1] : 0;
+      const dv = vc[0] > 0 ? vc[0] : vc[1] < 0 ? -vc[1] : 0;
+      return Math.hypot(du, dv) < radius - EPS;
+    });
+  };
   type Feature = { label: string; face: CaseOpeningFace; plan: Rect; inPlane: Rect; z?: Vector2 };
   const features: Feature[] = [];
   const checkWallFeature = (label: string, wall: CaseWall, along: Vector2, z: Vector2) => {
@@ -484,6 +588,7 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
     for (const post of posts) {
       if (overlaps(z, postZ) && circleHitsRect(post.axis, post.radius, plan)) fail(`${label} on wall ${wall} collides with ${post.label}`);
     }
+    if (taperHitsRect(plan, z)) fail(`${label} on wall ${wall} collides with the 45 degree gusset under a lid boss`);
     features.push({ label, face: wall, plan, inPlane: { min: [along[0], z[0]], max: [along[1], z[1]] }, z });
   };
   const checkFlatFeature = (label: string, face: "lid" | "floor", rect: Rect) => {
@@ -495,6 +600,7 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
       for (const keepout of lidKeepouts) if (circleHitsRect(keepout.axis, keepout.radius, rect)) fail(`${label} on the lid collides with ${keepout.label}`);
     } else {
       for (const standoff of standoffs) if (circleHitsRect(standoff.axis, standoff.radius, rect)) fail(`${label} on the floor collides with ${standoff.label}`);
+      if (bossStyle === "floor") for (const post of posts) if (circleHitsRect(post.axis, post.radius, rect)) fail(`${label} on the floor collides with ${post.label}`);
     }
     features.push({ label, face, plan: rect, inPlane: rect });
   };
@@ -620,7 +726,14 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
     standoffAxesMm: standoffs.map((standoff) => [r9(standoff.axis[0]), r9(standoff.axis[1])]),
     ...(standoffInput ? { standoffTopZMm: r9(boardBottomZ) } : {}),
     lidBossAxesMm: posts.map((post) => post.axis),
-    ...(lidFasteners ? { lidBossBottomZMm: r9(postBottomZ) } : {}),
+    ...(lidFasteners ? { lidBossBottomZMm: r9(postBottomZ), bossStyle } : {}),
+    boardWallClearanceMm: {
+      xNeg: r9(boardMin[0] - cavMin[0]), xPos: r9(cavMax[0] - (boardMin[0] + L)),
+      yNeg: r9(boardMin[1] - cavMin[1]), yPos: r9(cavMax[1] - (boardMin[1] + W)),
+    },
+    ...(lidFasteners && bossStyle === "floor" ? { cavityGrowthMm: [r9(growth[0]), r9(growth[1])] as Vector2 } : {}),
+    ...(lidFasteners && bossStyle === "tapered" ? { bossTaper: { angleDeg: BOSS_TAPER_ANGLE_DEG, bottomZMm: r9(taperBottomZ), addedHeightMm: r9(wallTopZ - hangingWallTopZ) } } : {}),
+    ...(maxBossOverhang !== undefined ? { printability: { baseOrientation: "floor-down" as const, maxBossOverhangDeg: r9(maxBossOverhang) } } : {}),
     lipOuterMm: bounds([cavMin[0] + lc, cavMin[1] + lc, lipBottomZ + exploded], [cavMax[0] - lc, cavMax[1] - lc, wallTopZ + exploded]),
     lipInnerMm: bounds([lipInnerRect.min[0], lipInnerRect.min[1], lipBottomZ + exploded], [lipInnerRect.max[0], lipInnerRect.max[1], wallTopZ + exploded]),
     openings: openingsDerived,
@@ -643,12 +756,25 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
     ...(standoffFloorHoles ? { standoffFloorHoles } : {}),
     ...(lidFasteners && postHole ? {
       posts: {
-        centersMm: posts.map((post) => [post.axis[0], post.axis[1], r9(postBottomZ + OV)] as Vector3),
+        // Hung bosses start at postBottom (the cylinder reaches OV below its base centre); floor bosses stand on the floor top.
+        centersMm: posts.map((post) => [post.axis[0], post.axis[1], r9(bossStyle === "floor" ? floorTopZ : postBottomZ + OV)] as Vector3),
         outerDiameterMm: bossD,
-        heightMm: r9(postLength - OV),
+        heightMm: r9(bossStyle === "floor" ? wallTopZ - floorTopZ : postLength - OV),
         holeDiameterMm: postHole.diameterMm,
         holeDepthMm: postHole.depthMm,
         baseOverlapMm: OV,
+      },
+    } : {}),
+    ...(lidFasteners && bossStyle === "tapered" ? {
+      taper: {
+        // A pointed cone: top disc (radius = height, 45 degrees) at the joint height, apex straight down on the wall corner.
+        cones: taperCorners.map((corner) => ({
+          topCenterMm: [r9(corner[0]), r9(corner[1]), r9(taperTopZ)] as Vector3,
+          radiusMm: r9(taperTopZ - taperApexZ),
+          heightMm: r9(taperTopZ - taperApexZ),
+        })),
+        clipOriginMm: [r9(cavMin[0] - bossWallOverlapMm), r9(cavMin[1] - bossWallOverlapMm), r9(taperApexZ - OV)] as Vector3,
+        clipSizeMm: [r9(cavityL + 2 * bossWallOverlapMm), r9(cavityW + 2 * bossWallOverlapMm), r9(taperTopZ - taperApexZ + 2 * OV)] as Vector3,
       },
     } : {}),
     lid: {
@@ -672,20 +798,52 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
 
 // Structural invariants of the height formula. They hold for every accepted input; the check stays so a later formula
 // change cannot silently build a lip or a boss into the component space.
-export function requireBoardCaseInvariants(values: { lipDepthMm: number; innerHeightMm: number; lipBottomZMm: number; componentTopZMm: number; bossBottomZMm?: number | undefined }): void {
+export function requireBoardCaseInvariants(values: { lipDepthMm: number; innerHeightMm: number; lipBottomZMm: number; componentTopZMm: number; bossBottomZMm?: number | undefined; taperBottomZMm?: number | undefined }): void {
   if (!(values.lipDepthMm < values.innerHeightMm - EPS)) throw new BoardCaseValidationError(`lid.lipDepthMm ${values.lipDepthMm} must be less than the base inner height ${r9(values.innerHeightMm)}`);
   const headroom = BOARD_CASE_CONSTANTS.headroomMm;
   if (values.lipBottomZMm < values.componentTopZMm + headroom - EPS) throw new BoardCaseValidationError(`the lid lip bottom z ${r9(values.lipBottomZMm)} reaches into the component space (component top ${r9(values.componentTopZMm)} + ${headroom} mm headroom)`);
   if (values.bossBottomZMm !== undefined && values.bossBottomZMm < values.componentTopZMm + headroom - EPS) {
     throw new BoardCaseValidationError(`the lid boss bottom z ${r9(values.bossBottomZMm)} reaches into the component space (component top ${r9(values.componentTopZMm)} + ${headroom} mm headroom)`);
   }
+  if (values.taperBottomZMm !== undefined && values.taperBottomZMm < values.componentTopZMm + headroom - EPS) {
+    throw new BoardCaseValidationError(`the lid boss taper bottom z ${r9(values.taperBottomZMm)} reaches into the component space (component top ${r9(values.componentTopZMm)} + ${headroom} mm headroom)`);
+  }
+}
+
+// Geometry of one lid-screw boss underside, in the numbers the plan derives. For floor-down printing the overhang of a
+// surface is the angle between its inward-facing downward slope and vertical: 0 for a vertical wall, 90 for a flat underside.
+export interface BossUndersideGeometry {
+  style: BossStyle;
+  bossRadiusMm: number;
+  // Distance from the boss axis to each of the two walls of its corner.
+  bossInsetMm: number;
+  bossBottomZMm: number;
+  floorTopZMm: number;
+  // "tapered": a cone with its apex on the wall corner, ending at the boss bottom with this radius.
+  taper?: { apexZMm: number; topZMm: number; topRadiusMm: number };
+}
+
+// The largest overhang, in degrees from vertical, of the boss underside when the base prints floor-down.
+// - A boss standing on the floor has no underside: its wall is vertical (0).
+// - A hung boss with no gusset has a flat underside (90).
+// - A hung boss on a corner cone: the cone surface leans atan(radius / height) from vertical, but only when the cone's top
+//   disc covers the whole boss footprint (the point farthest from the wall corner); any uncovered footprint is a flat underside.
+export function maxBossOverhangDeg(geometry: BossUndersideGeometry): number {
+  if (geometry.style === "floor") return Math.abs(geometry.bossBottomZMm - geometry.floorTopZMm) <= EPS ? 0 : 90;
+  const taper = geometry.taper;
+  if (geometry.style === "hanging" || !taper) return 90;
+  const height = taper.topZMm - taper.apexZMm;
+  if (!(height > EPS) || !(taper.topRadiusMm > EPS)) return 90;
+  const footprintReach = geometry.bossInsetMm * Math.SQRT2 + geometry.bossRadiusMm;
+  if (taper.topRadiusMm < footprintReach - 1e-9 || Math.abs(taper.topZMm - geometry.bossBottomZMm) > 1e-9) return 90;
+  return r9((Math.atan2(taper.topRadiusMm, height) * 180) / Math.PI);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Native composition
 // ---------------------------------------------------------------------------------------------------------------------
 
-export type BoardCaseOperations = RecipeOperations & Pick<PlasticityOperations, "undo" | "remove" | "move" | "rename"> & {
+export type BoardCaseOperations = RecipeOperations & Pick<PlasticityOperations, "undo" | "remove" | "move" | "rename" | "createCone"> & {
   revolveProfile: NonNullable<RecipeOperations["revolveProfile"]>;
 };
 
@@ -809,6 +967,27 @@ export class BoardCaseRecipe {
         stage = "standoff-floor-holes";
         const holes = plan.standoffFloorHoles;
         await sub((revision) => throughHoles(recipes, baseId, holes.entryCentersMm, [0, 0, 1], holes.diameterMm, holes.depthMm, revision), baseId);
+      }
+      // Tapered style: a 45 degree gusset under each hanging boss. Each pointed cone (apex down, on the wall corner) is clipped to
+      // the cavity plus the 0.5 mm wall overlap, then all four are joined to the base before the bosses.
+      if (plan.taper) {
+        stage = "lid-boss-tapers";
+        const taper = plan.taper;
+        const coneIds: number[] = [];
+        for (const cone of taper.cones) {
+          const clipId = await create("create-taper-clip-box", (revision) => ops.createBox(taper.clipOriginMm, taper.clipSizeMm, undefined, revision));
+          // createCone also leaves its profile Wire; the cleanup stage deletes it with the other construction Wires.
+          let coneId = 0;
+          await native("create-taper-cone", (revision) => ops.createCone(cone.topCenterMm, cone.radiusMm, 0, cone.heightMm, [0, 0, -1], [1, 0, 0], undefined, revision), (before, after) => {
+            const solids = addedIds(before, after, "Solid");
+            if (solids.length !== 1) throw new Error(`${stage}: expected one Solid from the taper cone, found ${solids.length}`);
+            coneId = solids[0]!;
+            return addedIds(before, after, undefined);
+          });
+          await native("clip-taper-cone", (revision) => ops.boolean([coneId], [clipId], "intersection", false, revision), (_before, after) => { requireSolid(after, coneId, stage); requireAbsent(after, [clipId], stage); return [coneId]; });
+          coneIds.push(coneId);
+        }
+        await native("join-tapers", (revision) => ops.boolean([baseId], coneIds, "union", false, revision), (_before, after) => { requireSolid(after, baseId, stage); requireAbsent(after, coneIds, stage); return [baseId]; });
       }
       // Corner bosses for the lid screws.
       if (plan.posts) {

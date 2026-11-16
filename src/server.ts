@@ -3810,6 +3810,7 @@ function createServerWithCatalog(
         screw: boardCaseScrew,
         count: z.literal(4).optional().describe("Four corner bosses"),
         bossDiameterMm: boardCaseMm.optional().describe("Default 6"),
+        bossStyle: z.enum(["tapered", "hanging", "floor"]).optional().describe("Default tapered: hanging bosses on a 45 degree gusset (wall top rises). hanging: flat underside. floor: bosses on the floor, cavity widens in one axis"),
         countersunk: z.boolean().optional().describe("Default true; sourced head only for M3"),
         headDiameterMm: boardCaseMm.optional().describe("Countersink head diameter for M2/M2.5 (not sourced here)"),
         base: z.enum(["pilot", "heat-set-insert"]),
@@ -3845,7 +3846,7 @@ function createServerWithCatalog(
     intent,
     revision,
   }).strict();
-  tool("plasticity_create_board_case", "Build a two-part enclosure (base + lid) around a rectangular board in one call: shell, standoffs under the board holes, corner screw bosses, a lid with a locating lip and countersunk or plain screw holes, openings, a slot vent and an optional board stand-in. The reply's derived holds every dimension (cavity, heights, axes, lip, openings, fastener values with sources), computed from the parameters. Rules are checked before any edit; a failure part-way undoes the recipe's own steps. Millimetres. Full reference: docs/tool-reference.md.", boardCaseInputSchema, async ({ intent: purpose, ...input }) => {
+  tool("plasticity_create_board_case", "Build a two-part enclosure (base + lid) around a rectangular board in one call: shell, standoffs under the board holes, corner screw bosses (bossStyle tapered by default: 45° gusset; hanging; floor), a lid with a locating lip and countersunk or plain screw holes, openings, a slot vent and an optional board stand-in. The reply's derived holds every dimension (cavity, heights, axes, lip, openings, fastener values with sources), computed from the parameters. Rules are checked before any edit; a failure part-way undoes the recipe's own steps. Millimetres. Full reference: docs/tool-reference.md.", boardCaseInputSchema, async ({ intent: purpose, ...input }) => {
     const { BoardCaseRecipe } = await import("./plasticity/case-recipe.ts");
     return await journaled("recipe-board-case", purpose, input, () => new BoardCaseRecipe(session.get()).create(input));
   });
