@@ -1,0 +1,556 @@
+{
+ "assumptions": [
+  {
+   "name": "low",
+   "turnS": 2,
+   "outTokS": 80,
+   "reasoningX": 0.5,
+   "inTokS": 3000
+  },
+  {
+   "name": "mid",
+   "turnS": 3,
+   "outTokS": 70,
+   "reasoningX": 1,
+   "inTokS": 2000
+  },
+  {
+   "name": "high",
+   "turnS": 4,
+   "outTokS": 60,
+   "reasoningX": 1.5,
+   "inTokS": 1000
+  }
+ ],
+ "session": {
+  "turns": 1,
+  "reqBytes": 40,
+  "respBytes": 38361,
+  "serverMs": 817,
+  "seconds": {
+   "low": 6.2,
+   "mid": 8.9,
+   "high": 14.8
+  }
+ },
+ "today": {
+  "a": {
+   "turns": 2,
+   "calls": 2,
+   "reqBytes": 3247,
+   "respBytes": 18282,
+   "outTokens": 812,
+   "inTokens": 4571,
+   "serverMs": 1400,
+   "forcedExtra": [
+    {
+     "turn": 2,
+     "label": "verify pilot hole axes (batch read was truncated)",
+     "cause": "batch truncates read results >1500 B to ids; hole positions need a direct read"
+    }
+   ],
+   "seconds": {
+    "low": 22.1,
+    "mid": 32.9,
+    "high": 47.8
+   },
+   "stateReads": 112,
+   "stateMs": 954,
+   "mutateMs": 186,
+   "journalMs": 142,
+   "batchSteps": 25,
+   "restored": {
+    "ok": true,
+    "undoDepth": 7,
+    "bodyCount": 4,
+    "redoDepth": 19
+   }
+  },
+  "a (recipes)": {
+   "turns": 3,
+   "calls": 4,
+   "reqBytes": 2218,
+   "respBytes": 11219,
+   "outTokens": 555,
+   "inTokens": 2805,
+   "serverMs": 979,
+   "forcedExtra": [
+    {
+     "turn": 1,
+     "label": "schema lookup screw_boss_pattern",
+     "cause": "recipe tool not in compact list; needs schema lookup"
+    },
+    {
+     "turn": 1,
+     "label": "schema lookup connector_opening",
+     "cause": "recipe tool not in compact list; needs schema lookup (parallel with previous)"
+    },
+    {
+     "turn": 3,
+     "label": "verify pilot hole axes (batch read was truncated)",
+     "cause": "batch truncates read results >1500 B to ids; hole positions need a direct read"
+    }
+   ],
+   "seconds": {
+    "low": 18.3,
+    "mid": 27.2,
+    "high": 38.9
+   },
+   "stateReads": 76,
+   "stateMs": 636,
+   "mutateMs": 205,
+   "journalMs": 67,
+   "batchSteps": 13,
+   "restored": {
+    "ok": true,
+    "undoDepth": 7,
+    "bodyCount": 4,
+    "redoDepth": 20
+   }
+  },
+  "b": {
+   "turns": 4,
+   "calls": 4,
+   "reqBytes": 2439,
+   "respBytes": 15516,
+   "outTokens": 610,
+   "inTokens": 3879,
+   "serverMs": 725,
+   "forcedExtra": [
+    {
+     "turn": 1,
+     "label": "schema lookup create_rib",
+     "cause": "gusset needs create_rib (not in compact list); schema lookup"
+    },
+    {
+     "turn": 3,
+     "label": "verify hole axes (batch read truncated)",
+     "cause": "batch truncates read results >1500 B; hole positions need a direct read"
+    },
+    {
+     "turn": 4,
+     "label": "verify fillet radii (r5 bend, r3 tips)",
+     "cause": "fillet radii are not in the batch reply; separate read"
+    }
+   ],
+   "seconds": {
+    "low": 21.5,
+    "mid": 32.1,
+    "high": 46
+   },
+   "stateReads": 72,
+   "stateMs": 450,
+   "mutateMs": 115,
+   "journalMs": 88,
+   "batchSteps": 15,
+   "restored": {
+    "ok": true,
+    "undoDepth": 7,
+    "bodyCount": 4,
+    "redoDepth": 13
+   }
+  },
+  "c": {
+   "turns": 2,
+   "calls": 2,
+   "reqBytes": 1887,
+   "respBytes": 9628,
+   "outTokens": 472,
+   "inTokens": 2407,
+   "serverMs": 492,
+   "forcedExtra": [
+    {
+     "turn": 2,
+     "label": "verify bolt-circle axes (batch read truncated)",
+     "cause": "batch truncates read results >1500 B; hole positions need a direct read"
+    }
+   ],
+   "seconds": {
+    "low": 14.1,
+    "mid": 21.2,
+    "high": 30.6
+   },
+   "stateReads": 58,
+   "stateMs": 298,
+   "mutateMs": 104,
+   "journalMs": 71,
+   "batchSteps": 13,
+   "restored": {
+    "ok": true,
+    "undoDepth": 7,
+    "bodyCount": 4,
+    "redoDepth": 10
+   }
+  },
+  "d": {
+   "turns": 3,
+   "calls": 6,
+   "reqBytes": 3413,
+   "respBytes": 17941,
+   "outTokens": 853,
+   "inTokens": 4485,
+   "serverMs": 1118,
+   "forcedExtra": [
+    {
+     "turn": 1,
+     "label": "read cavity floor face (inner extents)",
+     "cause": "lid dimensions must come from (a) geometry; batch has no arithmetic on read results"
+    },
+    {
+     "turn": 1,
+     "label": "read boss pilot axes",
+     "cause": "hole transfer needs boss axes from (a)"
+    },
+    {
+     "turn": 1,
+     "label": "schema check_interference",
+     "cause": "fit check tool not in compact list"
+    },
+    {
+     "turn": 1,
+     "label": "schema parallel face clearance",
+     "cause": "clearance tool not in compact list"
+    },
+    {
+     "turn": 3,
+     "label": "verify lid hole axes (batch read truncated)",
+     "cause": "batch truncates read results >1500 B; hole positions need a direct read"
+    }
+   ],
+   "seconds": {
+    "low": 24.6,
+    "mid": 36.7,
+    "high": 53.2
+   },
+   "stateReads": 73,
+   "stateMs": 830,
+   "mutateMs": 96,
+   "journalMs": 69,
+   "batchSteps": 19,
+   "restored": {
+    "ok": true,
+    "undoDepth": 7,
+    "bodyCount": 4,
+    "redoDepth": 30
+   }
+  },
+  "e": {
+   "turns": 2,
+   "calls": 2,
+   "reqBytes": 3212,
+   "respBytes": 17072,
+   "outTokens": 803,
+   "inTokens": 4268,
+   "serverMs": 1231,
+   "forcedExtra": [
+    {
+     "turn": 2,
+     "label": "verify pilot hole axes (batch read was truncated)",
+     "cause": "batch truncates read results >1500 B to ids; hole positions need a direct read"
+    }
+   ],
+   "seconds": {
+    "low": 21.7,
+    "mid": 32.3,
+    "high": 47
+   },
+   "stateReads": 112,
+   "stateMs": 858,
+   "mutateMs": 185,
+   "journalMs": 125,
+   "batchSteps": 25,
+   "restored": {
+    "ok": true,
+    "undoDepth": 7,
+    "bodyCount": 4,
+    "redoDepth": 19
+   }
+  },
+  "a @44 bodies": {
+   "turns": 2,
+   "calls": 2,
+   "reqBytes": 3247,
+   "respBytes": 18627,
+   "outTokens": 812,
+   "inTokens": 4657,
+   "serverMs": 4495,
+   "forcedExtra": [
+    {
+     "turn": 2,
+     "label": "verify pilot hole axes (batch read was truncated)",
+     "cause": "batch truncates read results >1500 B to ids; hole positions need a direct read"
+    }
+   ],
+   "seconds": {
+    "low": 25.3,
+    "mid": 36,
+    "high": 51
+   },
+   "stateReads": 112,
+   "stateMs": 3583,
+   "mutateMs": 337,
+   "journalMs": 258,
+   "batchSteps": 25,
+   "restored": {
+    "ok": true,
+    "undoDepth": 7,
+    "bodyCount": 4,
+    "redoDepth": 59
+   }
+  },
+  "a, no batch": {
+   "turns": 25,
+   "calls": 25,
+   "reqBytes": 3642,
+   "respBytes": 90451,
+   "outTokens": 911,
+   "inTokens": 22613,
+   "serverMs": 1194,
+   "forcedExtra": [],
+   "seconds": {
+    "low": 75.8,
+    "mid": 113.5,
+    "high": 161.7
+   },
+   "stateReads": 90,
+   "stateMs": 775,
+   "mutateMs": 178,
+   "journalMs": 137,
+   "batchSteps": 0,
+   "restored": {
+    "ok": true,
+    "undoDepth": 7,
+    "bodyCount": 4,
+    "redoDepth": 19
+   }
+  }
+ },
+ "tier1": {
+  "a": {
+   "turns": 1,
+   "reqBytes": 1931,
+   "respBytes": 600,
+   "serverMs": 469,
+   "seconds": {
+    "low": 11.6,
+    "mid": 17.3,
+    "high": 24.7
+   }
+  },
+  "b": {
+   "turns": 1,
+   "reqBytes": 2320,
+   "respBytes": 800,
+   "serverMs": 381,
+   "seconds": {
+    "low": 13.3,
+    "mid": 20.1,
+    "high": 28.7
+   }
+  },
+  "c": {
+   "turns": 1,
+   "reqBytes": 1816,
+   "respBytes": 600,
+   "serverMs": 271,
+   "seconds": {
+    "low": 10.8,
+    "mid": 16.3,
+    "high": 23.3
+   }
+  },
+  "d": {
+   "turns": 2,
+   "reqBytes": 3240,
+   "respBytes": 1700,
+   "serverMs": 527,
+   "seconds": {
+    "low": 19.9,
+    "mid": 29.9,
+    "high": 42.7
+   }
+  },
+  "e": {
+   "turns": 1,
+   "reqBytes": 1931,
+   "respBytes": 600,
+   "serverMs": 469,
+   "seconds": {
+    "low": 11.6,
+    "mid": 17.3,
+    "high": 24.7
+   }
+  }
+ },
+ "tier2": {
+  "a": {
+   "turns": 1,
+   "reqBytes": 309,
+   "respBytes": 600,
+   "serverMs": 469,
+   "seconds": {
+    "low": 4,
+    "mid": 5.8,
+    "high": 7.8
+   }
+  },
+  "b": {
+   "turns": 1,
+   "reqBytes": 251,
+   "respBytes": 600,
+   "serverMs": 381,
+   "seconds": {
+    "low": 3.6,
+    "mid": 5.2,
+    "high": 7.1
+   }
+  },
+  "c": {
+   "turns": 1,
+   "reqBytes": 202,
+   "respBytes": 600,
+   "serverMs": 271,
+   "seconds": {
+    "low": 3.3,
+    "mid": 4.8,
+    "high": 6.5
+   }
+  },
+  "d": {
+   "turns": 1,
+   "reqBytes": 287,
+   "respBytes": 900,
+   "serverMs": 527,
+   "seconds": {
+    "low": 3.9,
+    "mid": 5.7,
+    "high": 7.7
+   }
+  },
+  "e": {
+   "turns": 1,
+   "reqBytes": 123,
+   "respBytes": 600,
+   "serverMs": 469,
+   "seconds": {
+    "low": 3.1,
+    "mid": 4.4,
+    "high": 5.9
+   }
+  }
+ },
+ "hypotheticalRequests": {
+  "a": {
+   "name": "plasticity_create_enclosure",
+   "arguments": {
+    "originMm": [
+     2000,
+     0,
+     0
+    ],
+    "sizeMm": [
+     80,
+     50,
+     25
+    ],
+    "wallMm": 2,
+    "outerCornerRadiusMm": 3,
+    "rimChamferMm": 1,
+    "bosses": {
+     "outerDiameterMm": 6,
+     "pilotDiameterMm": 2.5,
+     "pilotDepthMm": 8,
+     "topBelowRimMm": 2
+    },
+    "openings": [
+     {
+      "face": "front",
+      "widthMm": 12,
+      "heightMm": 6,
+      "cornerRadiusMm": 2
+     }
+    ]
+   }
+  },
+  "b": {
+   "name": "plasticity_create_l_bracket",
+   "arguments": {
+    "originMm": [
+     2200,
+     0,
+     0
+    ],
+    "legsMm": [
+     40,
+     40
+    ],
+    "widthMm": 30,
+    "thicknessMm": 4,
+    "bendRadiusMm": 5,
+    "tipCornerRadiusMm": 3,
+    "holes": {
+     "diameterMm": 4.5,
+     "perLeg": 2,
+     "fromBendMm": 22
+    },
+    "gusset": {
+     "legMm": 25,
+     "thicknessMm": 4
+    }
+   }
+  },
+  "c": {
+   "name": "plasticity_create_flange",
+   "arguments": {
+    "centerMm": [
+     2450,
+     30,
+     0
+    ],
+    "diameterMm": 60,
+    "thicknessMm": 6,
+    "boreDiameterMm": 20,
+    "boltCircle": {
+     "diameterMm": 45,
+     "count": 6,
+     "holeDiameterMm": 5
+    },
+    "edgeChamferMm": 1
+   }
+  },
+  "d": {
+   "name": "plasticity_create_lid_for_body",
+   "arguments": {
+    "baseId": 426,
+    "plateMm": 2,
+    "lipDepthMm": 1.5,
+    "clearanceMm": 0.2,
+    "holes": {
+     "from": "boss-pilots",
+     "throughDiameterMm": 3.4,
+     "countersink": {
+      "majorDiameterMm": 6.3,
+      "includedAngleDeg": 90
+     }
+    },
+    "verify": [
+     "interference",
+     "lipClearance",
+     "holeAlignment"
+    ]
+   }
+  },
+  "e": {
+   "name": "plasticity_replay_template",
+   "arguments": {
+    "template": "enclosure-base",
+    "params": {
+     "L": 100,
+     "W": 60,
+     "H": 30,
+     "wall": 2.5
+    }
+   }
+  }
+ }
+}

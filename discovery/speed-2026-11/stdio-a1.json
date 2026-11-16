@@ -1,0 +1,27 @@
+{
+ "measuredAt": "2026-11-16T16:30:18.232Z",
+ "runs": [
+  {
+   "wallMs": 1448,
+   "respBytes": 16542,
+   "undoSteps": 19
+  },
+  {
+   "wallMs": 1466,
+   "respBytes": 16542,
+   "undoSteps": 19
+  },
+  {
+   "wallMs": 1434,
+   "respBytes": 16542,
+   "undoSteps": 19
+  }
+ ],
+ "restored": {
+  "ok": true,
+  "undoDepth": 7,
+  "bodyCount": 4
+ },
+ "startUndoDepth": 7,
+ "startBodyCount": 4
+}

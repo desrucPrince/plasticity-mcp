@@ -1,0 +1,211 @@
+[
+ {
+  "toolName": "plasticity_create_box",
+  "arguments": {
+   "originMm": [
+    2000,
+    0,
+    0
+   ],
+   "sizeMm": [
+    80,
+    50,
+    25
+   ],
+   "name": "enclosure-base"
+  }
+ },
+ {
+  "toolName": "plasticity_find_edges",
+  "arguments": {
+   "query": {
+    "bodyIds": [
+     "$0.added[0]"
+    ],
+    "line": true,
+    "direction": {
+     "vector": [
+      0,
+      0,
+      1
+     ]
+    }
+   }
+  }
+ },
+ {
+  "toolName": "plasticity_fillet",
+  "arguments": {
+   "id": "$0.added[0]",
+   "edgeIds": "$1.result.matches[*].id",
+   "radiusMm": 3
+  }
+ },
+ {
+  "toolName": "plasticity_find_faces",
+  "arguments": {
+   "query": {
+    "bodyIds": [
+     "$0.added[0]"
+    ],
+    "planar": true,
+    "normal": {
+     "vector": [
+      0,
+      0,
+      1
+     ]
+    }
+   }
+  }
+ },
+ {
+  "toolName": "plasticity_find_edges",
+  "arguments": {
+   "query": {
+    "bodyIds": [
+     "$0.added[0]"
+    ],
+    "adjacentFaceIds": [
+     "$3.result.matches[0].id"
+    ]
+   }
+  }
+ },
+ {
+  "toolName": "plasticity_chamfer",
+  "arguments": {
+   "id": "$0.added[0]",
+   "edgeIds": "$4.result.matches[*].id",
+   "distanceMm": 1
+  }
+ },
+ {
+  "toolName": "plasticity_create_box",
+  "arguments": {
+   "originMm": [
+    2002,
+    2,
+    2
+   ],
+   "sizeMm": [
+    76,
+    46,
+    25
+   ]
+  }
+ },
+ {
+  "toolName": "plasticity_find_edges",
+  "arguments": {
+   "query": {
+    "bodyIds": [
+     "$6.added[0]"
+    ],
+    "line": true,
+    "direction": {
+     "vector": [
+      0,
+      0,
+      1
+     ]
+    }
+   }
+  }
+ },
+ {
+  "toolName": "plasticity_fillet",
+  "arguments": {
+   "id": "$6.added[0]",
+   "edgeIds": "$7.result.matches[*].id",
+   "radiusMm": 1
+  }
+ },
+ {
+  "toolName": "plasticity_boolean",
+  "arguments": {
+   "targetIds": [
+    "$0.added[0]"
+   ],
+   "toolIds": [
+    "$6.added[0]"
+   ],
+   "operation": "difference"
+  }
+ },
+ {
+  "toolName": "plasticity_create_screw_boss_pattern",
+  "arguments": {
+   "targetId": "$0.added[0]",
+   "baseCentersMm": [
+    [
+     2004.5,
+     4.5,
+     2
+    ],
+    [
+     2075.5,
+     4.5,
+     2
+    ],
+    [
+     2004.5,
+     45.5,
+     2
+    ],
+    [
+     2075.5,
+     45.5,
+     2
+    ]
+   ],
+   "axis": [
+    0,
+    0,
+    1
+   ],
+   "outerDiameterMm": 6,
+   "heightMm": 21,
+   "holeDiameterMm": 2.5,
+   "holeDepthMm": 8
+  }
+ },
+ {
+  "toolName": "plasticity_create_connector_opening",
+  "arguments": {
+   "targetId": "$0.added[0]",
+   "entryCenterMm": [
+    2040,
+    0,
+    12.5
+   ],
+   "axis": [
+    0,
+    1,
+    0
+   ],
+   "widthDirection": [
+    1,
+    0,
+    0
+   ],
+   "widthMm": 12,
+   "heightMm": 6,
+   "cornerRadiusMm": 2,
+   "throughDepthMm": 2
+  }
+ },
+ {
+  "toolName": "plasticity_find_faces",
+  "arguments": {
+   "query": {
+    "bodyIds": [
+     "$0.added[0]"
+    ],
+    "radiusMm": {
+     "value": 1.25
+    }
+   }
+  }
+ }
+]

@@ -1,0 +1,281 @@
+{
+ "scenario": "d",
+ "measuredAt": "2026-11-16T16:29:28.975Z",
+ "scenarioMs": 1922,
+ "totals": {
+  "turns": 2,
+  "calls": 5,
+  "reqBytes": 3304,
+  "respBytes": 9378,
+  "outTokens": 826,
+  "inTokens": 2345,
+  "serverMs": 605,
+  "forcedExtra": [
+   {
+    "turn": 1,
+    "label": "read cavity floor face (inner extents)",
+    "cause": "lid dimensions must come from (a) geometry; batch has no arithmetic on read results"
+   },
+   {
+    "turn": 1,
+    "label": "read boss pilot axes",
+    "cause": "hole transfer needs boss axes from (a)"
+   },
+   {
+    "turn": 1,
+    "label": "schema check_interference",
+    "cause": "fit check tool not in compact list"
+   },
+   {
+    "turn": 1,
+    "label": "schema parallel face clearance",
+    "cause": "clearance tool not in compact list"
+   }
+  ]
+ },
+ "error": "build lid + fit checks: plasticity_batch failed: {\"failedStep\":5,\"toolName\":\"plasticity_fillet\",\"error\":\"Plasticity command failed: Error: Operation Blend failed at PK_BODY_fix_blends with error `16071`.\",\"completedSteps\":[{\"step\":0,\"toolName\":\"plasticity_create_box\",\"added\":[290],\"removed\":[],\"regionsAdded\":[],\"addedBodies\":[{\"id\":290,\"versionId\":605,\"type\":\"Solid\",\"name\":\"lid\",\"boundsMm\":{\"min\":[2000,0,25],\"max\":[2080,50,27.000000000000004]},\"boundsMethod\":\"native-box\",\"faceCount\":6,\"edgeCount\":12,\"vertexCount\":8}]},{\"step\":1,\"toolName\":\"plasticity_find_edges\",\"result\":{\"documentToken\":\"01a1e50b-82f6-7c36-a2c6-9e2e7e4ff8b3\",\"revision\":\"r27.a52a6a346e23a98e\",\"measurementSource\":\"native-brep\",\"count\":4,\"matches\":[{\"bodyId\":290,\"id\":\"605e39278\",\"curveType\":\"Line\",\"line\":true,\"circle\":false,\"lengthMm\":2.0000000000000018,\"centerMm\":[2000,0,26.000000000000004],\"tangent\":[0,0,1],\"boundsMm\":{\"min\":[2000,0,25.00000037252903],\"max\":[2000,0,27.000000700354576]},\"faceIds\":[\"605f39290\",\"605f39295\"],\"vertexIds\":[39253,39277]},{\"bodyId\":290,\"id\":\"605e39274\",\"curveType\":\"Line\",\"line\":true,\"circle\":false,\"lengthMm\":2.0000000000000018,\"centerMm\":[2000,50,26.000000000000004],\"tangent\":[0,0,1],\"boundsMm\":{\"min\":[2000,50.00000074505806,25.00000037252903],\"max\":[2000,50.00000074505806,27.000000700354576]},\"faceIds\":[\"605f39285\",\"605f39290\"],\"vertexIds\":[39257,39273]},{\"bodyId\":290,\"id\":\"605e39270\",\"curveType\":\"Line\",\"line\":true,\"circle\":false,\"lengthMm\":2.0000000000000018,\"centerMm\":[2080,50,26.000000000000004],\"tangent\":[0,0,1],\"boundsMm\":{\"min\":[2079.9999237060547,50.00000074505806,25.00000037252903],\"max\":[2079.9999237060547,50.00000074505806,27.000000700354576]},\"faceIds\":[\"605f39245\",\"605f39285\"],\"vertexIds\":[39261,39269]},{\"bodyId\":290,\"id\":\"605e39266\",\"curveType\":\"Line\",\"line\":true,\"circle\":false,\"lengthMm\":2.0000000000000018,\"centerMm\":[2080,0,26.000000000000004],\"tangent\":[0,0,1],\"boundsMm\":{\"min\":[2079.9999237060547,0,25.00000037252903],\"max\":[2079.9999237060547,0,27.000000700354576]},\"faceIds\":[\"605f39295\",\"605f39245\"],\"vertexIds\":[39252,39265]}]}},{\"step\":2,\"toolName\":\"plasticity_fillet\",\"added\":[],\"removed\":[],\"regionsAdded\":[],\"addedBodies\":[]},{\"step\":3,\"toolName\":\"plasticity_create_box\",\"added\":[291],\"removed\":[],\"regionsAdded\":[],\"addedBodies\":[{\"id\":291,\"versionId\":607,\"type\":\"Solid\",\"name\":null,\"boundsMm\":{\"min\":[2077.384,2.217,23.5],\"max\":[2077.783,2.616,25.500000000000004]},\"boundsMethod\":\"native-box\",\"faceCount\":6,\"edgeCount\":12,\"vertexCount\":8}]},{\"step\":4,\"toolName\":\"plasticity_find_edges\",\"result\":{\"truncated\":true,\"bytes\":1598,\"count\":4,\"ids\":[\"607e39699\",\"607e39695\",\"607e39691\",\"607e39687\"]}}],\"undoneSteps\":3}",
+ "calls": [
+  {
+   "turn": 1,
+   "label": "read cavity floor face (inner extents)",
+   "tool": "plasticity_find_faces",
+   "reqBytes": 221,
+   "respBytes": 2168,
+   "wallMs": 7.8,
+   "isError": false,
+   "forced": "lid dimensions must come from (a) geometry; batch has no arithmetic on read results",
+   "ops": {
+    "stateReads": 1,
+    "stateMs": 7.1,
+    "stateBytesMax": 130771,
+    "mutates": 0,
+    "mutateMs": 0,
+    "reads": 0,
+    "readMs": 0,
+    "journalWrites": 0,
+    "journalMs": 0
+   }
+  },
+  {
+   "turn": 1,
+   "label": "read boss pilot axes",
+   "tool": "plasticity_find_faces",
+   "reqBytes": 132,
+   "respBytes": 1740,
+   "wallMs": 7.7,
+   "isError": false,
+   "forced": "hole transfer needs boss axes from (a)",
+   "ops": {
+    "stateReads": 1,
+    "stateMs": 7.1,
+    "stateBytesMax": 130771,
+    "mutates": 0,
+    "mutateMs": 0,
+    "reads": 0,
+    "readMs": 0,
+    "journalWrites": 0,
+    "journalMs": 0
+   }
+  },
+  {
+   "turn": 1,
+   "label": "schema check_interference",
+   "tool": "plasticity_call",
+   "routedTo": "catalog",
+   "reqBytes": 101,
+   "respBytes": 1201,
+   "wallMs": 0.5,
+   "isError": false,
+   "forced": "fit check tool not in compact list",
+   "ops": {
+    "stateReads": 0,
+    "stateMs": 0,
+    "stateBytesMax": 0,
+    "mutates": 0,
+    "mutateMs": 0,
+    "reads": 0,
+    "readMs": 0,
+    "journalWrites": 0,
+    "journalMs": 0
+   }
+  },
+  {
+   "turn": 1,
+   "label": "schema parallel face clearance",
+   "tool": "plasticity_call",
+   "routedTo": "catalog",
+   "reqBytes": 121,
+   "respBytes": 1654,
+   "wallMs": 0.2,
+   "isError": false,
+   "forced": "clearance tool not in compact list",
+   "ops": {
+    "stateReads": 0,
+    "stateMs": 0,
+    "stateBytesMax": 0,
+    "mutates": 0,
+    "mutateMs": 0,
+    "reads": 0,
+    "readMs": 0,
+    "journalWrites": 0,
+    "journalMs": 0
+   }
+  },
+  {
+   "turn": 2,
+   "label": "build lid + fit checks",
+   "tool": "plasticity_batch",
+   "reqBytes": 2729,
+   "respBytes": 2615,
+   "wallMs": 597,
+   "isError": true,
+   "ops": {
+    "stateReads": 37,
+    "stateMs": 388.6,
+    "stateBytesMax": 156904,
+    "mutates": 6,
+    "mutateMs": 108.8,
+    "reads": 0,
+    "readMs": 0,
+    "journalWrites": 7,
+    "journalMs": 46.1
+   },
+   "stepOps": [
+    {
+     "step": 0,
+     "stateReads": 5,
+     "stateMs": 46.2,
+     "stateBytesMax": 138343,
+     "mutates": 1,
+     "mutateMs": 6.2,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.4,
+     "wallMs": 63.1,
+     "residualMs": 4.3
+    },
+    {
+     "step": 1,
+     "stateReads": 1,
+     "stateMs": 8.4,
+     "stateBytesMax": 138343,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 10,
+     "residualMs": 1.6
+    },
+    {
+     "step": 2,
+     "stateReads": 5,
+     "stateMs": 47.8,
+     "stateBytesMax": 148479,
+     "mutates": 1,
+     "mutateMs": 7.6,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.7,
+     "wallMs": 66.8,
+     "residualMs": 4.7
+    },
+    {
+     "step": 3,
+     "stateReads": 5,
+     "stateMs": 56.6,
+     "stateBytesMax": 156904,
+     "mutates": 1,
+     "mutateMs": 6.7,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7.1,
+     "wallMs": 76.3,
+     "residualMs": 5.9
+    },
+    {
+     "step": 4,
+     "stateReads": 1,
+     "stateMs": 9.1,
+     "stateBytesMax": 156904,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 10.8,
+     "residualMs": 1.7
+    },
+    {
+     "step": 5,
+     "stateReads": 5,
+     "stateMs": 51.7,
+     "stateBytesMax": 156904,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7.2,
+     "wallMs": 81.6,
+     "residualMs": 22.7
+    },
+    {
+     "step": 6,
+     "stateReads": 5,
+     "stateMs": 67,
+     "stateBytesMax": 156904,
+     "mutates": 1,
+     "mutateMs": 30.4,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.8,
+     "wallMs": 108.1,
+     "residualMs": 3.9
+    },
+    {
+     "step": 7,
+     "stateReads": 5,
+     "stateMs": 52,
+     "stateBytesMax": 148479,
+     "mutates": 1,
+     "mutateMs": 28.8,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.1,
+     "wallMs": 90.7,
+     "residualMs": 3.8
+    },
+    {
+     "step": 8,
+     "stateReads": 4,
+     "stateMs": 42.6,
+     "stateBytesMax": 138343,
+     "mutates": 1,
+     "mutateMs": 29,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 5.9,
+     "wallMs": 81.4,
+     "residualMs": 3.9
+    }
+   ]
+  }
+ ],
+ "restored": {
+  "ok": true,
+  "undoDepth": 7,
+  "bodyCount": 4,
+  "redoDepth": 22
+ },
+ "startUndoDepth": 7,
+ "startBodyCount": 4
+}

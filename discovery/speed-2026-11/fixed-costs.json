@@ -1,0 +1,339 @@
+{
+ "measuredAt": "2026-11-16T16:25:21.064Z",
+ "endpoint": "http://127.0.0.1:57147",
+ "serverStartMs": [
+  347,
+  334,
+  350
+ ],
+ "serverStartMsMedian": 347,
+ "firstCallAutoConnectStatusMs": [
+  470,
+  448,
+  453
+ ],
+ "toolsListBytes": 32094,
+ "toolCount": 34,
+ "toolsListMs": 8,
+ "instructionsBytes": 4233,
+ "perTool": [
+  {
+   "name": "plasticity_find_faces",
+   "bytes": 2315
+  },
+  {
+   "name": "plasticity_find_edges",
+   "bytes": 2174
+  },
+  {
+   "name": "plasticity_batch",
+   "bytes": 1726
+  },
+  {
+   "name": "plasticity_cut_with_curves",
+   "bytes": 1321
+  },
+  {
+   "name": "plasticity_changes_since",
+   "bytes": 1273
+  },
+  {
+   "name": "plasticity_call",
+   "bytes": 1257
+  },
+  {
+   "name": "plasticity_extrude_curves",
+   "bytes": 1201
+  },
+  {
+   "name": "plasticity_screenshot",
+   "bytes": 1183
+  },
+  {
+   "name": "plasticity_knife_curve",
+   "bytes": 1068
+  },
+  {
+   "name": "plasticity_mirror",
+   "bytes": 1068
+  },
+  {
+   "name": "plasticity_boolean",
+   "bytes": 1039
+  },
+  {
+   "name": "plasticity_extrude_profile",
+   "bytes": 987
+  },
+  {
+   "name": "plasticity_create_cylinder",
+   "bytes": 968
+  },
+  {
+   "name": "plasticity_status",
+   "bytes": 940
+  },
+  {
+   "name": "plasticity_list_bodies",
+   "bytes": 931
+  },
+  {
+   "name": "plasticity_rotate",
+   "bytes": 920
+  },
+  {
+   "name": "plasticity_create_control_point_curve",
+   "bytes": 912
+  },
+  {
+   "name": "plasticity_scale",
+   "bytes": 885
+  },
+  {
+   "name": "plasticity_move",
+   "bytes": 857
+  },
+  {
+   "name": "plasticity_create_box",
+   "bytes": 827
+  },
+  {
+   "name": "plasticity_fillet",
+   "bytes": 825
+  },
+  {
+   "name": "plasticity_fillet_curves",
+   "bytes": 820
+  },
+  {
+   "name": "plasticity_create_sphere",
+   "bytes": 709
+  },
+  {
+   "name": "plasticity_chamfer",
+   "bytes": 671
+  },
+  {
+   "name": "plasticity_extrude_faces",
+   "bytes": 649
+  },
+  {
+   "name": "plasticity_connect",
+   "bytes": 615
+  },
+  {
+   "name": "plasticity_delete",
+   "bytes": 567
+  },
+  {
+   "name": "plasticity_capture_snapshot",
+   "bytes": 537
+  },
+  {
+   "name": "plasticity_redo",
+   "bytes": 529
+  },
+  {
+   "name": "plasticity_undo",
+   "bytes": 528
+  },
+  {
+   "name": "plasticity_list_windows",
+   "bytes": 500
+  },
+  {
+   "name": "plasticity_current_selection",
+   "bytes": 456
+  },
+  {
+   "name": "plasticity_body_info",
+   "bytes": 408
+  },
+  {
+   "name": "plasticity_reconcile",
+   "bytes": 383
+  }
+ ],
+ "statusBytes": 2034,
+ "statusBodies": 4,
+ "statusWarmMs": 3,
+ "statusWarmBytes": 2034,
+ "catalog": {
+  "fuzzy:boss": {
+   "bytes": 559,
+   "ms": 31,
+   "names": [
+    "plasticity_create_screw_boss",
+    "plasticity_create_screw_boss_pattern"
+   ],
+   "total": 2
+  },
+  "fuzzy:screw boss": {
+   "bytes": 1962,
+   "ms": 20,
+   "names": [
+    "plasticity_create_screw_boss",
+    "plasticity_create_screw_boss_pattern",
+    "plasticity_create_printed_hex_screw",
+    "plasticity_create_split_screw_insert_joint",
+    "plasticity_check_fastener_stack",
+    "plasticity_create_blind_hole",
+    "plasticity_create_printed_hex_pair",
+    "plasticity_create_printed_thread_calibration_set"
+   ],
+   "total": 9
+  },
+  "fuzzy:countersink": {
+   "bytes": 484,
+   "ms": 19,
+   "names": [
+    "plasticity_create_countersink",
+    "plasticity_create_countersink_pattern"
+   ],
+   "total": 2
+  },
+  "fuzzy:hole pattern": {
+   "bytes": 3603,
+   "ms": 18,
+   "names": [
+    "plasticity_create_blind_hole_pattern",
+    "plasticity_create_slotted_hole_pattern",
+    "plasticity_create_through_hole_pattern",
+    "plasticity_create_counterbore_pattern",
+    "plasticity_create_countersink_pattern",
+    "plasticity_cap_sheet_holes",
+    "plasticity_create_blind_hole",
+    "plasticity_create_heat_set_insert_pocket_pattern"
+   ],
+   "total": 52
+  },
+  "fuzzy:shell hollow": {
+   "bytes": 4101,
+   "ms": 19,
+   "names": [
+    "plasticity_hollow_faces",
+    "plasticity_bridge_shell_edges",
+    "plasticity_hollow_solids",
+    "plasticity_unjoin_shells",
+    "plasticity_analyze_static_fem",
+    "plasticity_analyze_strength_task",
+    "plasticity_calculate_tongue_root_strength_from_coupon_data",
+    "plasticity_create_hinge_barrel"
+   ],
+   "total": 23
+  },
+  "fuzzy:gusset rib": {
+   "bytes": 557,
+   "ms": 19,
+   "names": [
+    "plasticity_create_rib",
+    "plasticity_distribute_fastener_group_load"
+   ],
+   "total": 2
+  },
+  "fuzzy:pattern": {
+   "bytes": 4011,
+   "ms": 17,
+   "names": [
+    "plasticity_create_blind_hole_pattern",
+    "plasticity_create_counterbore_pattern",
+    "plasticity_create_countersink_pattern",
+    "plasticity_create_heat_set_insert_pocket_pattern",
+    "plasticity_create_hex_nut_pocket_pattern",
+    "plasticity_create_locating_pin_pair_pattern",
+    "plasticity_create_screw_boss_pattern",
+    "plasticity_create_slotted_hole_pattern"
+   ],
+   "total": 29
+  },
+  "fuzzy+schema:screw boss": {
+   "bytes": 11046,
+   "ms": 20,
+   "names": [
+    "plasticity_create_screw_boss",
+    "plasticity_create_screw_boss_pattern",
+    "plasticity_create_printed_hex_screw",
+    "plasticity_create_split_screw_insert_joint",
+    "plasticity_check_fastener_stack"
+   ]
+  },
+  "fuzzy+schema:countersink": {
+   "bytes": 3817,
+   "ms": 18,
+   "names": [
+    "plasticity_create_countersink",
+    "plasticity_create_countersink_pattern"
+   ]
+  },
+  "exact:plasticity_create_screw_boss_pattern": {
+   "bytes": 1811,
+   "ms": 1,
+   "names": [
+    "plasticity_create_screw_boss_pattern"
+   ]
+  },
+  "exact:plasticity_create_connector_opening": {
+   "bytes": 1816,
+   "ms": 0,
+   "names": [
+    "plasticity_create_connector_opening"
+   ]
+  },
+  "exact:plasticity_create_countersink_pattern": {
+   "bytes": 2038,
+   "ms": 0,
+   "names": [
+    "plasticity_create_countersink_pattern"
+   ]
+  },
+  "exact:plasticity_create_through_hole_pattern": {
+   "bytes": 1589,
+   "ms": 0,
+   "names": [
+    "plasticity_create_through_hole_pattern"
+   ]
+  },
+  "exact:plasticity_create_rib": {
+   "bytes": 1202,
+   "ms": 0,
+   "names": [
+    "plasticity_create_rib"
+   ]
+  },
+  "exact:plasticity_hollow_faces": {
+   "bytes": 1009,
+   "ms": 0,
+   "names": [
+    "plasticity_hollow_faces"
+   ]
+  },
+  "exact:plasticity_radial_pattern": {
+   "bytes": 1242,
+   "ms": 0,
+   "names": [
+    "plasticity_radial_pattern"
+   ]
+  },
+  "exact:plasticity_check_interference": {
+   "bytes": 1201,
+   "ms": 0,
+   "names": [
+    "plasticity_check_interference"
+   ]
+  },
+  "exact:plasticity_measure_parallel_planar_face_clearance": {
+   "bytes": 1654,
+   "ms": 0,
+   "names": [
+    "plasticity_measure_parallel_planar_face_clearance"
+   ]
+  },
+  "exact:plasticity_validate_bodies": {
+   "bytes": 801,
+   "ms": 0,
+   "names": [
+    "plasticity_validate_bodies"
+   ]
+  }
+ }
+}

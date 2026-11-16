@@ -1,0 +1,328 @@
+[
+ {
+  "toolName": "plasticity_create_box",
+  "arguments": {
+   "originMm": [
+    2000,
+    0,
+    0
+   ],
+   "sizeMm": [
+    100,
+    60,
+    30
+   ],
+   "name": "enclosure-base"
+  }
+ },
+ {
+  "toolName": "plasticity_find_edges",
+  "arguments": {
+   "query": {
+    "bodyIds": [
+     "$0.added[0]"
+    ],
+    "line": true,
+    "direction": {
+     "vector": [
+      0,
+      0,
+      1
+     ]
+    }
+   }
+  }
+ },
+ {
+  "toolName": "plasticity_fillet",
+  "arguments": {
+   "id": "$0.added[0]",
+   "edgeIds": "$1.result.matches[*].id",
+   "radiusMm": 3
+  }
+ },
+ {
+  "toolName": "plasticity_find_faces",
+  "arguments": {
+   "query": {
+    "bodyIds": [
+     "$0.added[0]"
+    ],
+    "planar": true,
+    "normal": {
+     "vector": [
+      0,
+      0,
+      1
+     ]
+    }
+   }
+  }
+ },
+ {
+  "toolName": "plasticity_find_edges",
+  "arguments": {
+   "query": {
+    "bodyIds": [
+     "$0.added[0]"
+    ],
+    "adjacentFaceIds": [
+     "$3.result.matches[0].id"
+    ]
+   }
+  }
+ },
+ {
+  "toolName": "plasticity_chamfer",
+  "arguments": {
+   "id": "$0.added[0]",
+   "edgeIds": "$4.result.matches[*].id",
+   "distanceMm": 1
+  }
+ },
+ {
+  "toolName": "plasticity_create_box",
+  "arguments": {
+   "originMm": [
+    2002.5,
+    2.5,
+    2.5
+   ],
+   "sizeMm": [
+    95,
+    55,
+    30
+   ]
+  }
+ },
+ {
+  "toolName": "plasticity_find_edges",
+  "arguments": {
+   "query": {
+    "bodyIds": [
+     "$6.added[0]"
+    ],
+    "line": true,
+    "direction": {
+     "vector": [
+      0,
+      0,
+      1
+     ]
+    }
+   }
+  }
+ },
+ {
+  "toolName": "plasticity_fillet",
+  "arguments": {
+   "id": "$6.added[0]",
+   "edgeIds": "$7.result.matches[*].id",
+   "radiusMm": 0.5
+  }
+ },
+ {
+  "toolName": "plasticity_boolean",
+  "arguments": {
+   "targetIds": [
+    "$0.added[0]"
+   ],
+   "toolIds": [
+    "$6.added[0]"
+   ],
+   "operation": "difference"
+  }
+ },
+ {
+  "toolName": "plasticity_create_cylinder",
+  "arguments": {
+   "centerMm": [
+    2005,
+    5,
+    2
+   ],
+   "radiusMm": 3,
+   "heightMm": 26
+  }
+ },
+ {
+  "toolName": "plasticity_create_cylinder",
+  "arguments": {
+   "centerMm": [
+    2095,
+    5,
+    2
+   ],
+   "radiusMm": 3,
+   "heightMm": 26
+  }
+ },
+ {
+  "toolName": "plasticity_create_cylinder",
+  "arguments": {
+   "centerMm": [
+    2005,
+    55,
+    2
+   ],
+   "radiusMm": 3,
+   "heightMm": 26
+  }
+ },
+ {
+  "toolName": "plasticity_create_cylinder",
+  "arguments": {
+   "centerMm": [
+    2095,
+    55,
+    2
+   ],
+   "radiusMm": 3,
+   "heightMm": 26
+  }
+ },
+ {
+  "toolName": "plasticity_boolean",
+  "arguments": {
+   "targetIds": [
+    "$0.added[0]"
+   ],
+   "toolIds": [
+    "$10.added[0]",
+    "$11.added[0]",
+    "$12.added[0]",
+    "$13.added[0]"
+   ],
+   "operation": "union"
+  }
+ },
+ {
+  "toolName": "plasticity_create_cylinder",
+  "arguments": {
+   "centerMm": [
+    2005,
+    5,
+    20
+   ],
+   "radiusMm": 1.25,
+   "heightMm": 8.5
+  }
+ },
+ {
+  "toolName": "plasticity_create_cylinder",
+  "arguments": {
+   "centerMm": [
+    2095,
+    5,
+    20
+   ],
+   "radiusMm": 1.25,
+   "heightMm": 8.5
+  }
+ },
+ {
+  "toolName": "plasticity_create_cylinder",
+  "arguments": {
+   "centerMm": [
+    2005,
+    55,
+    20
+   ],
+   "radiusMm": 1.25,
+   "heightMm": 8.5
+  }
+ },
+ {
+  "toolName": "plasticity_create_cylinder",
+  "arguments": {
+   "centerMm": [
+    2095,
+    55,
+    20
+   ],
+   "radiusMm": 1.25,
+   "heightMm": 8.5
+  }
+ },
+ {
+  "toolName": "plasticity_boolean",
+  "arguments": {
+   "targetIds": [
+    "$0.added[0]"
+   ],
+   "toolIds": [
+    "$15.added[0]",
+    "$16.added[0]",
+    "$17.added[0]",
+    "$18.added[0]"
+   ],
+   "operation": "difference"
+  }
+ },
+ {
+  "toolName": "plasticity_create_box",
+  "arguments": {
+   "originMm": [
+    2044,
+    -0.5,
+    12.25
+   ],
+   "sizeMm": [
+    12,
+    3.5,
+    6
+   ]
+  }
+ },
+ {
+  "toolName": "plasticity_find_edges",
+  "arguments": {
+   "query": {
+    "bodyIds": [
+     "$20.added[0]"
+    ],
+    "line": true,
+    "direction": {
+     "vector": [
+      0,
+      1,
+      0
+     ]
+    }
+   }
+  }
+ },
+ {
+  "toolName": "plasticity_fillet",
+  "arguments": {
+   "id": "$20.added[0]",
+   "edgeIds": "$21.result.matches[*].id",
+   "radiusMm": 2
+  }
+ },
+ {
+  "toolName": "plasticity_boolean",
+  "arguments": {
+   "targetIds": [
+    "$0.added[0]"
+   ],
+   "toolIds": [
+    "$20.added[0]"
+   ],
+   "operation": "difference"
+  }
+ },
+ {
+  "toolName": "plasticity_find_faces",
+  "arguments": {
+   "query": {
+    "bodyIds": [
+     "$0.added[0]"
+    ],
+    "radiusMm": {
+     "value": 1.25
+    }
+   }
+  }
+ }
+]
