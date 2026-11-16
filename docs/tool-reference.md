@@ -2592,6 +2592,183 @@ plane edit makes geometry-backed datum identities stale; call
 `plasticity_refresh_datum` for a resolvable topology-backed datum or define a
 new immutable coordinate datum at the new revision.
 
+### Board case: base and lid in one call
+
+`plasticity_create_board_case` builds a two-part enclosure around a
+rectangular board in one call: the base shell, one standoff under each board
+hole, four corner bosses for the lid screws (printable: see below), the lid plate with a locating lip,
+countersunk or plain lid screw holes, wall/lid/floor openings, one slot vent and
+an optional board stand-in. It is in the compact tool list. Bodies are named
+`<name>-base`, `<name>-lid` and `<name>-board` (default name `case`). The
+derived dimensions come back in `derived`, computed from the parameters (never
+read back), so a later step uses them instead of searching faces.
+
+All lengths are millimetres. Inputs and defaults: `originMm` (outer bottom
+corner of the base); `board` `{ lengthMm (x), widthMm (y), thicknessMm 1.6,
+holes [{ xMm, yMm, diameterMm }] from the board's min corner, componentHeightMm,
+undersideClearanceMm 2 }`; `fit` `{ boardClearanceMm 0.5, lidClearanceMm 0.2 }`
+(per side); `walls` `{ wallMm 2 (at least 0.8), floorMm 2, lidMm 2,
+outerCornerRadiusMm 3 }`; `standoffs` `{ heightMm = undersideClearanceMm,
+outerDiameterMm = hole + 3, fastener: { screw M2|M2.5|M3, mode
+pilot|heat-set-insert|through, pilotDiameterMm, pilotDepthMm (default the
+standoff height), insertLengthMm, clearanceFit close|medium|free (default
+medium) } }`; `lid` `{ lipDepthMm 1.5, lipWallMm 1.2, fasteners: { screw,
+count 4, bossDiameterMm 6, bossStyle tapered|hanging|floor (default tapered),
+countersunk true, headDiameterMm, base
+pilot|heat-set-insert, pilotDiameterMm, pilotDepthMm, insertLengthMm,
+clearanceFit } }`; `openings` `[{ wall x-|x+|y-|y+|lid|floor, shape
+rect|rounded-rect|circle, widthMm, heightMm, cornerRadiusMm (rounded-rect),
+alongMm, aboveBoardMm (walls) or acrossMm (lid, floor), label }]`; `vents`
+`{ on lid|x-|x+|y-|y+, slots, slotWidthMm, slotLengthMm, pitchMm,
+centerAlongMm, centerAcrossMm }`; `boardStandIn` false; `exploded` 0.
+
+Openings: on a wall, `widthMm` runs along the wall and `heightMm` is vertical;
+`alongMm` is the centre along the wall from the board's min corner on that axis
+(y for x walls, x for y walls) and `aboveBoardMm` is the opening bottom above the
+board top surface. On the lid and the floor, `widthMm` is along x, `heightMm`
+along y, `alongMm` is the x centre and `acrossMm` the y centre from the board's
+min corner. A circle takes `widthMm` as its diameter. Vents: on the lid the
+slots are spaced along x by `pitchMm` and run along y; on a wall they are spaced
+along the wall and run vertically. `centerAlongMm` defaults to the board centre;
+`centerAcrossMm` is the y centre on the lid (default board centre) and the
+height of the vent centre above the board top on a wall (default: the middle of
+the open wall band).
+
+Derived geometry (O = `originMm`, bc/lc = board/lid clearance, w = wall,
+f = floor, t = lid, d = lip depth):
+
+- cavity = board + 2 x bc in x and y; outer = cavity + 2 x w; the cavity starts
+  at O + (w, w, f). `floorTopZMm` = O.z + f.
+- support = standoff height (or `undersideClearanceMm` without standoffs; a
+  standoff below the underside clearance is refused). Board bottom =
+  floor top + support; `boardTopZMm` = board bottom + thickness;
+  `componentTopZMm` = board top + componentHeight.
+- boss length = base hole depth + 1 mm (only with lid screws; 0 otherwise).
+  `wallTopZMm` (styles `hanging` and `floor`) = componentTop + 1 mm headroom +
+  max(d, boss length) (`floor`: or the boss hole depth + 1 above the floor
+  top, if that is higher). So the base inner height (floor top to wall top) is
+  support + board thickness + componentHeight + 1 + max(d, boss length): the
+  lip (and the bosses) occupy space above the component envelope plus
+  headroom, never inside it. The lip bottom is at wallTop - d. Style
+  `tapered` raises the wall top further, see below.
+- `lidTopZMm` = wallTop + t + exploded. The lid plate (outer size, outer corner
+  radius) sits on the wall top.
+- Inner corner radius (`innerCornerRadiusMm`) = min(outer radius - w, bc), so the
+  board's square corners keep at least bc to the rounded cavity corners.
+- Lip ring: outer = cavity - 2 x lc per axis (`lipOuterMm`, corner radius
+  inner radius - lc), wall `lipWallMm` (`lipInnerMm`), depth d below the plate.
+- Standoffs: `standoffAxesMm` = board min corner + hole position;
+  `standoffTopZMm` = board bottom, so a board stand-in sits on them.
+- Lid screw bosses (`lidBossAxesMm`): one per cavity corner, centred
+  bossDiameter/2 - 0.5 mm from both adjoining inner walls (each boss overlaps
+  its walls by 0.5 mm), flush with the wall top so the lid plate clamps on
+  them. The lid lip is notched around each boss with radius bossDiameter/2 +
+  lc. The lid holes are coaxial. `lid.fasteners.bossStyle` (default
+  `tapered`) chooses how the boss is carried; `derived.bossStyle` echoes it.
+  With the cavity at board + 2 x bc a floor-standing corner boss would always
+  overlap the board's corners, so two styles hang the boss from the walls and
+  one widens the cavity:
+  - `hanging`: from `lidBossBottomZMm` (= wallTop - boss length, at least
+    componentTop + 1 mm) up to the wall top. The underside is flat, so
+    printed upright (base floor-down) it bridges or needs support.
+  - `tapered` (default): the same hanging boss on a 45 degree gusset. The
+    gusset is a cone with its apex on each cavity corner and its axis on the
+    corner line, rising at 45 degrees from vertical to the boss bottom (and
+    0.5 mm past it into the boss), cut off 0.5 mm inside the two walls so it
+    blends into both and nothing shows outside. Its height at the boss bottom
+    is reach = (bossDiameter/2 - 0.5) x sqrt 2 + bossDiameter/2, the farthest
+    boss point from the corner, so its top disc covers the whole boss
+    underside. The rounded cavity corner (`innerCornerRadiusMm` = Ri) keeps
+    the apex inside the wall; the lowest point of the gusset inside the cavity
+    is `bossTaper.bottomZMm` = apex + Ri x (sqrt 2 - 1). That point must stay
+    at least componentTop + 1 mm (the gusset lies over the board keep-out,
+    board outline + boardClearance, from the floor to componentTop + 1 mm),
+    so `wallTopZMm` rises to componentTop + 1 + boss length + reach - Ri x
+    (sqrt 2 - 1); `bossTaper.addedHeightMm` is that rise over the `hanging`
+    wall top (always above 0 for this style). `derived.bossTaper` is `{ angleDeg
+    45, bottomZMm, addedHeightMm }`. The lip depth must not exceed the boss
+    length minus 0.5 mm (the lip would meet the gusset); the wall must be
+    thick enough that the 0.5 mm clip stays inside the rounded outer corner.
+  - `floor`: the bosses stand on the floor and rise to the wall top
+    (`lidBossBottomZMm` = floor top; `fasteners.lid.bossLengthMm` is the real
+    floor-to-wall-top length), and the cavity grows so every boss lies outside
+    the board keep-out (board outline + boardClearance). The keep-out edge
+    must be one boss radius from the boss axis, so the cavity grows by 2 x
+    (bossDiameter/2 - 0.5 + bossDiameter/2) in ONE axis (11 mm for a 6 mm
+    boss). Rule: grow the axis that needs less growth; the four corner bosses
+    need the same growth in x and in y, so the tie goes to the axis whose
+    growth adds less floor area (x unless the cavity is shorter in x than in
+    y). The other axis keeps boardClearance exactly and the board is centred.
+    `derived.cavityGrowthMm` is `[x, y]`. Standoffs stay under the board
+    holes, and openings stay referenced to the board, so their positions on
+    the walls, lid and floor follow the board.
+  - `derived.boardWallClearanceMm` `{ xNeg, xPos, yNeg, yPos }` (all styles) is
+    the free space between each board edge and the cavity wall: boardClearance
+    on every side, plus half the growth on both sides of the grown axis.
+  - `derived.printability` `{ baseOrientation: "floor-down", maxBossOverhangDeg }`
+    (with lid screws) is computed by `maxBossOverhangDeg` from the derived
+    geometry, not assumed: the largest overhang of the boss underside from
+    vertical when the base prints floor-down. It is 90 for `hanging` (flat
+    underside), 45 for `tapered` and 0 for `floor`; the plan refuses to build a
+    `tapered` or `floor` case above 45 degrees (+ 1e-6). It says nothing about
+    the rest of the part.
+- `openings[*].centerMm` is the centre of the opening on the outer face it is
+  cut from (outer wall face, lid top, floor bottom); `sizeMm` is
+  [width, height].
+
+Fixed construction constants (returned as `constants`, not engineering values):
+1 mm headroom, 0.5 mm boss-to-wall overlap, 1 mm closed floor under a boss hole,
+0.5 mm cutter overshoot and lip-to-plate joint.
+
+Fasteners use `plasticity_fastener_presets` (read-only, also callable directly):
+ISO 273 clearance holes close/medium/free (M2 2.2/2.4/2.6, M2.5 2.7/2.9/3.1,
+M3 3.2/3.4/3.6; source: amesweb.info and fmcarbide.com charts; confidence
+medium), CNC Kitchen heat-set insert pockets (M2x3 Ø3.2 wall 1.3; M2.5x4 Ø4.0
+wall 1.6; M3x5.7 and M3x3 Ø4.0 wall 1.6; blind hole = insert length + 1 mm;
+CNC Kitchen design-guidelines PDF; medium) and the ISO 10642 M3 countersunk head
+(Ø6.72 max, 90°; engineersedge.com; medium). Not sourced and therefore never
+defaulted: self-tapping pilot diameters (`pilotDiameterMm` is required for
+`pilot`, and `pilotDepthMm` for lid bosses, since it sets the boss length) and
+the M2/M2.5 countersunk head (`countersunk: true` with M2/M2.5 is refused unless
+`headDiameterMm` is given). M3 has two sourced inserts, so `insertLengthMm` (5.7
+or 3) is required for M3. Every value a build uses is echoed in
+`derived.fasteners` with its source (`caller-supplied` for caller values).
+
+Validation runs before any native call and names the conflict: every dimension
+positive (corner radius and `exploded` may be 0), wall at least 0.8 mm, lid
+thicker than the 0.5 mm lip joint, board holes inside the board and not
+overlapping, standoffs at least the underside clearance and deep enough for an
+insert, insert walls at least the sourced minimum, countersink shallower than
+the lid, openings and vent slots inside their face (a wall's flat span and the
+band from the floor top to the lip bottom; the lid area inside the lip; the flat
+floor), not colliding with a standoff, a lid boss or (style `tapered`) the gusset under
+a boss (the pair is named), not overlapping each other on one face, four bosses
+that fit the cavity, a `floor` boss not standing on a standoff, and a lip depth
+below the base inner height.
+
+The build composes the existing recipes (screw boss pattern for standoffs and
+bosses, through-hole, countersink pattern, connector opening, slotted hole
+pattern) with direct boxes, fillets, revolves and Booleans for the shells, the
+lip and the gussets,
+then deletes the construction Wires the sub-recipes keep in one step, so only
+the two (or three) Solids are added. It runs in one exclusive section.
+`undoSteps` is the measured Undo depth change. If a native step fails part-way,
+the recipe undoes its own steps (by Undo depth) and the error names the failed
+stage, the confirmed step count, the undone count and whether the document
+matches the start; after an uncertain native result it undoes nothing and says
+to reconcile. In a lean batch the step replies `{ status }`; `return:
+["bodies", "derived.lidBossAxesMm"]` fetches exactly those fields.
+
+Live acceptance: `PLASTICITY_CDP_URL=http://127.0.0.1:<port> npm run
+accept:native-board-case -- --target ID --allow-disposable-mutations --output
+NEW_DIRECTORY` builds three cases (the multi-part benchmark board, the audit
+enclosure equivalent with heat-set inserts, a small sensor pod; the benchmark
+also runs with `bossStyle` `hanging` and `floor`, checking the 45 degree
+cone faces, their lowest point and the four-wall clearances), checks every
+`derived` field with independent face, edge, validity, interference and
+clearance reads, undoes each with one batched undo, and forces one native
+failure to prove the rollback.
+
 ## Development and verification
 
 ```sh

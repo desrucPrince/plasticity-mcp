@@ -41,6 +41,7 @@ const compactTools = new Set([
   "plasticity_create_rib",
   "plasticity_create_screw_boss_pattern",
   "plasticity_create_connector_opening",
+  "plasticity_create_board_case",
   "plasticity_create_through_hole_pattern",
   "plasticity_create_countersink_pattern",
   "plasticity_check_interference",
