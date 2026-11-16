@@ -480,15 +480,18 @@ export const SCREENSHOT_VIEW_SOURCE = nativeFunction`async function (name2shader
   };
   const controlsSnapshot = () => {
     const out = {};
-    for (const name of ['target', 'targetEnd', 'focalOffset', 'focalOffsetEnd', 'pivot', 'quaternion', 'quaternionEnd']) if (controls[name]?.toArray) out[name] = controls[name].toArray();
+    for (const name of ['target', 'targetEnd', 'focalOffset', 'focalOffsetEnd', 'pivot', 'quaternion', 'quaternionEnd', 'snaplessQuaternion', 'snappedQuaternion']) if (controls[name]?.toArray) out[name] = controls[name].toArray();
     for (const name of ['radius', 'radiusEnd', 'zoom', 'zoomEnd']) if (typeof controls[name] === 'number') out[name] = controls[name];
+    if (typeof controls.wantsSnap === 'boolean') out.wantsSnap = controls.wantsSnap;
     return out;
   };
   const settle = async () => {
     viewport.setNeedsRender();
     const frame = () => new Promise(resolve => { let done = false; const finish = () => { if (!done) { done = true; resolve(); } };
       try { requestAnimationFrame(finish); } catch { finish(); } setTimeout(finish, 250); });
-    await frame(); await frame();
+    // Six frames: a framed capture after three frames differed from a later one in about 3,000 scattered model pixels
+    // (mean abs diff 0.07) in one live run; the extra frames are cheap (about 100 ms).
+    for (let index = 0; index < (args.settleFrames ?? 6); index += 1) await frame();
   };
   const restore = async () => {
     const saved = globalThis[key];
@@ -499,7 +502,8 @@ export const SCREENSHOT_VIEW_SOURCE = nativeFunction`async function (name2shader
         // Put every orbit-control field back as it was (raw copy), with no velocity left to move it afterwards.
         const c = saved.camera.controls;
         for (const name of ['target', 'targetEnd', 'focalOffset', 'focalOffsetEnd', 'pivot']) if (c[name] && controls[name]?.fromArray) controls[name].fromArray(c[name]);
-        for (const name of ['quaternion', 'quaternionEnd']) if (c[name] && controls[name]?.fromArray) controls[name].fromArray(c[name]);
+        for (const name of ['quaternion', 'quaternionEnd', 'snaplessQuaternion', 'snappedQuaternion']) if (c[name] && controls[name]?.fromArray) controls[name].fromArray(c[name]);
+        if (typeof c.wantsSnap === 'boolean') controls.wantsSnap = c.wantsSnap;
         for (const name of ['radius', 'radiusEnd', 'zoom', 'zoomEnd']) if (typeof c[name] === 'number') controls[name] = c[name];
         stopMotion();
         camera.zoom = saved.camera.zoom;
@@ -518,6 +522,11 @@ export const SCREENSHOT_VIEW_SOURCE = nativeFunction`async function (name2shader
           camera.zoom = saved.camera.zoom;
           controls.setNeedsUpdate(); controls.update(1 / 60); camera.updateProjectionMatrix();
         }
+        // The controls recompute the camera from the orbit state; the result can differ from the saved pose in the last
+        // bits (seen live: 3e-16 m per capture). Write the saved pose back so the camera is the one the caller had.
+        camera.position.fromArray(was.position); camera.quaternion.fromArray(was.quaternion); camera.target.fromArray(was.target);
+        camera.zoom = was.zoom;
+        camera.updateMatrixWorld?.(true); camera.updateProjectionMatrix();
       }
     } finally {
       delete globalThis[key];
@@ -674,15 +683,20 @@ export const SURFACE_ALIGN_DRIVE = `
   const started = Date.now();
   let readiness;
   if (observable) {
-    while (!ready() && Date.now() - started < driveArgs.readyMs) await sleep(5);
+    while (!ready() && open() && Date.now() - started < driveArgs.readyMs) await sleep(5);
+    if (!open()) throw new Error('The helper stopped waiting before the Align command was ready');
     if (!ready()) throw new Error('The Align command did not become ready (' + tagOf(command._state) + ', ' + tagOf(factory._state.value) + ') within ' + driveArgs.readyMs + ' ms');
     readiness = 'awaiting';
   } else {
     await sleep(driveArgs.fallbackWaitMs);
     readiness = 'fixed-wait';
+    if (!open()) throw new Error('The helper stopped waiting during the fixed settle wait');
   }
   const continuity = ContinuityType?.[driveArgs.continuityName];
   if (continuity === undefined) throw new Error('Plasticity build has no ContinuityType.' + driveArgs.continuityName);
+  // Once the helper has stopped waiting (its budget ran out, it is cancelling), the factory may be disposed: touch nothing.
+  // A finish() after an update() that outlived the budget is refused by the helper (late finish, undetermined).
+  if (!open()) throw new Error('The helper stopped waiting before the Align update');
   factory.setContinuityForEdge(pairOf(driveArgs.referenceEdgeId), continuity);
   await factory.update();
   dialog.finish();

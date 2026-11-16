@@ -454,8 +454,11 @@ Benchmark: `node discovery/speed-2026-11/parts.ts --tier1 a1 a2 b c d e`
   `topo`) sets Plasticity's analysis shader for one capture and restores the
   previous one in the same call, also when the capture fails; `frame: { bodyIds }`
   aims the camera at those bodies (same view direction) and puts the camera back
-  exactly. Both work with `path` (window or viewport mode) and with the inline
-  JPEG, add no Undo step (checked) and report `view`. Live on 26.1.3: all six
+  exactly (the orbit controls, including their snap state, are restored and then
+  the saved camera pose is written back, because the controls' own recompute
+  differed in the last bits, 3e-16 m per capture). Both work with `path` (window
+  or viewport mode) and with the inline JPEG, add no Undo step (checked) and
+  report `view`. Live on 26.1.3: all six
   shaders change the window and viewport captures (mean absolute pixel
   difference 1.8-4.7), the default capture afterwards differs by 1.2e-5, and the
   camera comes back with deviation 0 (`accept:native-surfacing`)
@@ -1246,6 +1249,47 @@ global minimum. Live, the pad's support top agreed with an exact
 kernel box equals the exact extent within 0.001 mm, or when `boundsMethod` is
 `native-extrema`), and `boundsNote` with the reason when it is false; it leaves
 both out when the support read fails.
+
+`plasticity_surface_align` moves the boundary edge of one Sheet (`moving`) onto
+the boundary edge of another Sheet (`reference`) with `g0`, `g1` or `g2`
+continuity, as Plasticity's Align (Edge Align) does: the moving Sheet is
+rebuilt, the reference stays, one Undo step. It runs the real
+`AlignEdgeCommand` with the two edges selected (the first one moves), finds
+its dialog in the document (no prototype patch), waits until the command is
+`Awaiting` and its factory has updated (about 25 ms; a fixed 500 ms on a build
+without those states), keys the continuity by the reference edge, updates and
+finishes, all inside the pick-command lifecycle (one call, our command only,
+cancel in the same call, the shared outcome classifier). The read-back samples
+both edges in the kernel: `coincidence.maxGapMm` must be within 0.001 mm, and
+`maxTangentPlaneAngleDeg` is the largest angle between the two faces' tangent
+planes. The sheets stay separate, so `achieved` is `"not measured"`: join them
+and call `plasticity_analyze_surface_continuity`. Live on 26.1.3 (the probe's
+two-sheet fixture, joined): g0 gives gap 8.9e-13 mm and 24.49 degrees (G0), g1
+1.2e-6 degrees (G1, relative G2 0.78), g2 relative G2 7.5e-8 (G2); swapped
+order moves the other sheet. A 20 mm edge aligned to a 30 mm curve commits but
+misses by 1.11 mm: a certain error with one Undo step that `plasticity_undo`
+restores. Two edges of one Sheet and Solid edges are refused before the
+command starts (never verified). Stalls injected at the operations layer end
+as a certain "cancelled, unchanged" before `finish()` (or, when the drive step
+outlives its budget, a refused late `finish()` that stays undetermined) and as
+undetermined (reconcile) after it. A drive step that outlives its budget stops
+before it touches the factory. Caution: such injected stalls (budgets of
+1-120 ms; the real one is 15 s) killed the isolated renderer once in about 150
+trials, when the cancel landed while Plasticity was still computing.
+
+`plasticity_square_surface` makes one four-sided Sheet (XNurbs, one B-surface
+face, four edges) from exactly four boundary items, in order around the patch:
+`{ bodyId, edgeId }` (a Sheet or Solid edge) or `{ wireId }`, mixed freely.
+`edgeContinuity` (`g0` or `g1` per boundary edge) matches the neighbouring
+face; `g2` is not offered because it never measured as G2. It sets
+`SquareFactory.boundaries` directly inside `SquareEdgeCommand` (the command's
+own dialog route starts with an empty factory). Failures keep the raw XNurbs
+code with its meaning (30 when g1 meets perpendicular walls, as on an open
+box). Live on 26.1.3: four Bezier curves give a Sheet whose edges read back
+at the curves' own heights by probe rays (3.75, -3, 4.5, 2.25 mm within
+6e-5 mm); a flat neighbour Sheet plus three curves joins at g0 with 4.0e-4
+degrees and at g1 with 8.5e-7 degrees along the shared edge; one
+`plasticity_undo` removes the patch.
 `plasticity_analyze_edge_curvature` runs Plasticity's native curvature
 evaluator at 100 positions on each selected B-Rep edge. Wire segments use the
 numeric `segmentEntityId` returned by `plasticity_list_curve_directions`;

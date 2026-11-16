@@ -222,3 +222,13 @@ test("the classifier invariant still holds: after finish() only the no-effect re
   assert.ok(PICK_OUTCOME_TABLE.length > 0);
   assert.match(SURFACE_ALIGN_DRIVE, /factory\.setContinuityForEdge\(pairOf\(driveArgs\.referenceEdgeId\), continuity\);\s*await factory\.update\(\);\s*dialog\.finish\(\);/);
 });
+
+test("a drive that outlives its budget stops before touching the factory (no continuity set, no update, no finish)", async () => {
+  const f = fixture("never-ready");
+  await assert.rejects(align(f, { dialogMs: 1000, finishMs: 40, cancelMs: 1000 }));
+  // Let the abandoned drive step run on; it must see that the helper stopped waiting.
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  assert.equal(f.seen.perEdge, undefined);
+  assert.equal(f.seen.dialog!.finished, 0);
+  assert.match(SURFACE_ALIGN_DRIVE, /open\(\)/);
+});

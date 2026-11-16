@@ -183,3 +183,35 @@ test("the continuity description explains relative G2, interior and worstAt", as
     assert.match(xsided.description ?? "", /keeps the raw XNurbs code and says what it means: 30 = /);
   });
 });
+
+test("plasticity_surface_align and plasticity_square_surface are registered in the surfacing block, strict, and forward only given options", async () => {
+  const received: Record<string, unknown[]> = {};
+  await withSurfacingClient({
+    async state() { return emptyState(); },
+    async surfaceAlign(...args: unknown[]) { received.align = args; return { state: emptyState(), undoSteps: 1, achieved: "not measured" }; },
+    async squareSurface(...args: unknown[]) { received.square = args; return { state: emptyState(), sheetId: 9, undoSteps: 1 }; },
+  }, async (client) => {
+    const tools = (await client.listTools()).tools;
+    const names = tools.map((entry) => entry.name);
+    const at = names.indexOf("plasticity_exact_bounds");
+    assert.equal(names[at + 1], "plasticity_surface_align");
+    assert.equal(names[at + 2], "plasticity_square_surface");
+    for (const name of ["plasticity_surface_align", "plasticity_square_surface"]) assert.equal((tools.find((entry) => entry.name === name)!.inputSchema as { additionalProperties?: unknown }).additionalProperties, false);
+    const bad = await client.callTool({ name: "plasticity_surface_align", arguments: { moving: { bodyId: 8, edgeId: "a" }, reference: { bodyId: 8, edgeId: "b" }, continuity: "g1", revision: "r1" } });
+    assert.equal(bad.isError, true);
+    assert.equal(received.align, undefined);
+    const ok = parseToolJson(await client.callTool({ name: "plasticity_surface_align", arguments: { moving: { bodyId: 8, edgeId: "a" }, reference: { bodyId: 7, edgeId: "b" }, continuity: "g2", revision: "r1" } }));
+    assert.equal(ok.achieved, "not measured");
+    assert.deepEqual(received.align, [{ moving: { bodyId: 8, edgeId: "a" }, reference: { bodyId: 7, edgeId: "b" }, continuity: "g2" }, "r1"]);
+    for (const args of [{ boundary: [{ wireId: 1 }, { wireId: 2 }, { wireId: 3 }] }, { boundary: [{ wireId: 1 }, { wireId: 2 }, { wireId: 3 }, { wireId: 4 }], edgeContinuity: [{ edgeId: "e", continuity: "g2" }] }]) {
+      assert.equal((await client.callTool({ name: "plasticity_square_surface", arguments: { ...args, revision: "r1" } })).isError, true);
+    }
+    assert.equal(received.square, undefined);
+    const square = parseToolJson(await client.callTool({ name: "plasticity_square_surface", arguments: { boundary: [{ wireId: 1 }, { bodyId: 5, edgeId: "e" }, { wireId: 3 }, { wireId: 4 }], revision: "r1" } }));
+    assert.equal(square.sheetId, 9);
+    assert.deepEqual(received.square, [{ boundary: [{ wireId: 1 }, { bodyId: 5, edgeId: "e" }, { wireId: 3 }, { wireId: 4 }] }, "r1"]);
+    const routed = await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_square_surface", arguments: { boundary: [{ wireId: 1 }, { wireId: 2 }, { wireId: 3 }, { wireId: 4 }], edgeContinuity: [{ edgeId: "x", continuity: "g1" }], revision: "r1" } } });
+    assert.equal(routed.isError, undefined);
+    assert.deepEqual(received.square, [{ boundary: [{ wireId: 1 }, { wireId: 2 }, { wireId: 3 }, { wireId: 4 }], edgeContinuity: [{ edgeId: "x", continuity: "g1" }] }, "r1"]);
+  });
+});

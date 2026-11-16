@@ -19,7 +19,7 @@ class V3 {
   normalize() { const l = this.length() || 1; return this.set(this.x / l, this.y / l, this.z / l); }
   addScaledVector(v: V3, s: number) { return this.set(this.x + v.x * s, this.y + v.y * s, this.z + v.z * s); }
 }
-class Q { a = [0, 0, 0, 1]; toArray() { return [...this.a]; } }
+class Q { a = [0, 0, 0, 1]; toArray() { return [...this.a]; } fromArray(values: number[]) { this.a = [...values]; return this; } }
 
 function stubEditor(options: { shaders?: Record<string, { name: string }>; undoGrows?: boolean } = {}) {
   const name2shader = options.shaders ?? Object.fromEntries(SCREENSHOT_SHADERS.map((name) => [name, { name }]));

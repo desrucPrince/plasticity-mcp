@@ -902,7 +902,8 @@ function pickCommandSource(drive: string, extraBindings: string[] = []): string 
       const pointM = hit.onFace ? pointOnFace(hit.item, item) : hit.pointM;
       return { item, pointM, point: new Vector3(pointM[0], pointM[1], pointM[2]), normal: hit.normalM ? new Vector3(hit.normalM[0], hit.normalM[1], hit.normalM[2]) : undefined };
     });
-    const drive = async (dialog, driveArgs) => { ${drive} };
+    // open() is true while the helper still waits for the drive step; a drive that outlives it must stop touching the command.
+    const drive = async (dialog, driveArgs, open) => { ${drive} };
     const focusedInput = () => typeof document === 'undefined' ? null : document.querySelector('input.z-space-input-focused');
     const selectedCount = () => {
       let count = 0, known = false;
@@ -1003,7 +1004,7 @@ function pickCommandSource(drive: string, extraBindings: string[] = []): string 
         let driveError = null, driveDone = false;
         driveOpen = true;
         let driving;
-        try { driving = Promise.resolve(drive(dialog, args.driveArgs)); } catch (error) { driving = Promise.reject(error); }
+        try { driving = Promise.resolve(drive(dialog, args.driveArgs, () => driveOpen)); } catch (error) { driving = Promise.reject(error); }
         driving.then(value => { result.drive = value ?? null; driveDone = true; }, error => { driveError = message(error); driveDone = true; });
         while (!driveDone && Date.now() < finishDeadline) await sleep(10);
         driveOpen = false;
@@ -8981,6 +8982,89 @@ export class PlasticityOperations {
       ...(note ? { message: note } : {}),
       ...(run.native.foreignActive ? { warning: `Another Plasticity command (${run.native.foreignActive}) is active; it is not part of this edit and was left alone` } : {}),
     };
+  }
+
+  // Square (surfacing P7; FINDINGS probes-2026-11-surfacing section 5): one four-sided XNurbs Sheet from four boundary
+  // items, each a Sheet/Solid boundary edge or a Wire, factory-direct (SquareFactory.boundaries is one flat list; the
+  // command route opens an empty factory). Per-edge continuity g0 or g1 only: g2 never measured as G2 live. One Undo step.
+  async squareSurface(
+    input: { boundary: Array<{ bodyId: number; edgeId: string } | { wireId: number }>; edgeContinuity?: Array<{ edgeId: string; continuity: "g0" | "g1" }> | undefined },
+    revision: string,
+  ): Promise<{ state: RuntimeState; sheetId: number; undoSteps: number }> {
+    const state = await this.assertRevision(revision);
+    const { boundary, edgeContinuity } = input;
+    if (boundary.length !== 4) throw new Error("Square needs exactly four boundary items");
+    const keys = boundary.map((item) => ("wireId" in item ? `wire:${item.wireId}` : `edge:${item.bodyId}:${item.edgeId}`));
+    if (new Set(keys).size !== 4) throw new Error("Square boundary items must be unique");
+    for (const item of boundary) {
+      if ("wireId" in item) {
+        const wire = state.bodies.find((body) => body.id === item.wireId);
+        if (!wire || wire.type !== "Wire") throw new Error(`Square boundary wireId must be a current Wire: ${item.wireId}`);
+      } else {
+        const body = state.bodies.find((candidate) => candidate.id === item.bodyId);
+        if (!body || (body.type !== "Sheet" && body.type !== "Solid")) throw new Error(`Square boundary edges need a current Sheet or Solid body: ${item.bodyId}`);
+        const edge = body.edges.find((candidate) => candidate.id === item.edgeId);
+        if (!edge) throw new Error(`Stale or unknown Square boundary edge: ${item.bodyId}:${item.edgeId}`);
+      }
+    }
+    const boundaryEdgeIds = boundary.flatMap((item) => ("edgeId" in item ? [item.edgeId] : []));
+    if (edgeContinuity !== undefined) {
+      if (edgeContinuity.length === 0) throw new Error("Square edgeContinuity must not be empty");
+      const ids = edgeContinuity.map((entry) => entry.edgeId);
+      if (new Set(ids).size !== ids.length) throw new Error("Square edgeContinuity edge IDs must be unique");
+      const outside = ids.filter((id) => !boundaryEdgeIds.includes(id));
+      if (outside.length > 0) throw new Error(`Square edgeContinuity applies to boundary edges given in boundary: ${outside.join(", ")}`);
+      const bad = edgeContinuity.filter((entry) => entry.continuity !== "g0" && entry.continuity !== "g1");
+      if (bad.length > 0) throw new Error("Square edge continuity must be g0 or g1 (g2 never measured as G2 on 26.1.3)");
+    }
+    const beforeIds = new Set(state.bodies.map((body) => body.id));
+    try {
+      await this.runtime.mutate(nativeFunction`async function (Factory, Command, ContinuityType, args) {
+        ${findView}
+        ${enumMember}
+        if (this.executor.isBusy || this.executor.active) throw new Error('Plasticity is busy; finish or cancel the active command first');
+        const editor = this;
+        let failure;
+        const command = new Command(editor);
+        command.remember = false;
+        command.execute = async function () {
+          try {
+            const factory = new Factory(editor).resource(this);
+            const views = args.boundary.map(item => {
+              const view = find(item.wireId ?? item.bodyId);
+              if (item.wireId !== undefined) {
+                if (view.constructor.name !== 'Wire') throw new Error('Square boundary must be a Wire: ' + item.wireId);
+                return view;
+              }
+              const index = view.high?.edges?.versionIds?.indexOf(item.edgeId) ?? -1;
+              if (index < 0) throw new Error('Stale or unknown edge: ' + item.bodyId + ':' + item.edgeId);
+              return view.high.edges.get(index);
+            });
+            factory.boundaries = views;
+            for (const entry of args.edgeContinuity ?? []) {
+              const at = args.boundary.findIndex(item => item.edgeId === entry.edgeId);
+              factory.setContinuityForEdge(views[at], enumMember(ContinuityType, 'ContinuityType', entry.continuityName));
+            }
+            return await factory.commit();
+          } catch (error) { failure = error; throw error; }
+        };
+        await this.exec(command);
+        if (failure) throw failure;
+      }`, ["SquareFactory", "SquareEdgeCommand", "ContinuityType"], [{
+        boundary: boundary.map((item) => ("wireId" in item ? { wireId: item.wireId } : { bodyId: item.bodyId, edgeId: item.edgeId })),
+        ...(edgeContinuity !== undefined ? { edgeContinuity: edgeContinuity.map((entry) => ({ edgeId: entry.edgeId, continuityName: entry.continuity === "g1" ? "G1" : "G0" })) } : {}),
+      }]);
+    } catch (error) {
+      throw explainXNurbsError(error);
+    }
+    const after = await this.state();
+    const added = after.bodies.filter((body) => !beforeIds.has(body.id));
+    const sheet = added.find((body) => body.type === "Sheet");
+    const undoSteps = after.undoDepth - state.undoDepth;
+    if (!sheet || added.length !== 1 || undoSteps !== 1) {
+      throw new CommittedChangeError(`Square committed, but the read-back does not match: ${added.length} new bodies (${added.map((body) => `${body.id} ${body.type}`).join(", ") || "none"}), ${undoSteps} Undo steps. The document is at revision ${after.revision}; plasticity_undo restores it`, after.revision, undoSteps);
+    }
+    return { state: after, sheetId: sheet.id, undoSteps };
   }
 
   // Surface Align (surfacing P6; FINDINGS probes-2026-11-surfacing section 4): moves the moving Sheet's boundary edge onto

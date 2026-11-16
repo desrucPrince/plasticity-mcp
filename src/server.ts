@@ -3520,6 +3520,33 @@ function createServerWithCatalog(
     await session.get().probeSurface({ id, ...(rays ? { rays: rays as Array<{ originMm: [number, number, number]; direction: [number, number, number] }> } : {}), ...(gridMm ? { gridMm: gridMm as { axis: "x" | "y" | "z"; at: Array<[number, number]> } } : {}) }, current), true);
   tool("plasticity_exact_bounds", "Exact axis-aligned extent of 1-32 Solid or Sheet bodies. On Plasticity 26.1.3 a body's boundsMm (boundsMethod native-box) is the kernel's box, which for a B-spline (lofted, patched, crowned) body is its control-point hull and can be millimetres too large. Each side here is the coordinate of a real body point found by the kernel's global body range from a point 100 km out along that axis; maxErrorMm bounds how far the true extent can lie beyond it, and exact is true when that bound is within 0.001 mm. overshootMm is how much the conservative box overstates the body. Read-only.", z.object({ ids: z.array(z.number().int().positive()).min(1).max(32), revision: revision.optional() }).strict(), async ({ ids: bodyIds, revision: current }) =>
     await session.get().exactBounds(bodyIds, current), true);
+  const alignEdgeRef = z.object({ bodyId: z.number().int().positive(), edgeId: z.string().min(1) }).strict();
+  tool("plasticity_surface_align", "Experimental: during development the test Plasticity renderer died twice while this command ran (once on an edge pair that could not be reproduced, once under an injected stall), so save the document before using it. Surface Align: move the boundary edge of one Sheet (moving) onto the boundary edge of another Sheet (reference) with g0, g1 or g2 continuity, as Plasticity's Align (Edge Align) does; the moving Sheet is rebuilt, the reference Sheet stays. It runs the real AlignEdgeCommand in one Undo step. The edit is read back in the kernel: the moving Sheet's edge must lie on the reference edge within 0.001 mm (coincidence.maxGapMm, 21 samples); maxTangentPlaneAngleDeg is the largest angle between the two faces' tangent planes along it. The sheets stay separate, so achieved continuity is 'not measured': join them with plasticity_join_sheets, then call plasticity_analyze_surface_continuity on the shared edge (live on 26.1.3 g0, g1 and g2 read back as G0, G1 and G2 there). A commit whose edge misses the reference (for example a 20 mm edge aligned to a 30 mm curve) is a certain error with one Undo step that plasticity_undo restores; a stalled command is cancelled in the same call, and when that cannot prove the document unchanged the session must be reconciled. Two edges of one body and Solid edges are refused (never verified).", z.object({ moving: alignEdgeRef, reference: alignEdgeRef, continuity: z.enum(["g0", "g1", "g2"]), intent, revision }).strict().superRefine((input, context) => {
+    if (input.moving.bodyId === input.reference.bodyId) context.addIssue({ code: "custom", path: ["reference"], message: "moving and reference must be on two different Sheets" });
+  }), async ({ moving, reference, continuity, intent: purpose, revision: current }) => {
+    let measured: Record<string, unknown> | undefined;
+    const result = await journaled("surface-align", purpose, { moving, reference, continuity }, async () => {
+      const { state, ...done } = await session.get().surfaceAlign({ moving, reference, continuity }, current);
+      measured = done;
+      return state;
+    });
+    return { ...(result as unknown as Record<string, unknown>), ...measured };
+  });
+  const squareBoundaryItem = z.union([z.object({ bodyId: z.number().int().positive(), edgeId: z.string().min(1) }).strict(), z.object({ wireId: z.number().int().positive() }).strict()]);
+  tool("plasticity_square_surface", "Square: one four-sided native Sheet (XNurbs, a single B-surface face) from exactly four boundary items, each a boundary edge of a Sheet or Solid ({ bodyId, edgeId }) or a Wire ({ wireId }), mixed freely, in order around the patch. edgeContinuity [{ edgeId, continuity: g0 | g1 }] matches a neighbouring face along a boundary edge (default g0); g2 is not offered (it never measured as G2 on 26.1.3). The sources stay; one Undo step. A failure keeps the raw XNurbs code and says what it means: 30 = the continuity is incompatible at a corner or with the neighbouring faces (g1 against walls perpendicular to the patch, or a side curve that leaves the neighbour sloped): use g0 or make the side curves leave the neighbour tangentially; 3 = no usable boundary. Check the result with plasticity_probe_surface and plasticity_analyze_surface_continuity after plasticity_join_sheets.", z.object({
+    boundary: z.array(squareBoundaryItem).length(4),
+    edgeContinuity: z.array(z.object({ edgeId: z.string().min(1), continuity: z.enum(["g0", "g1"]) }).strict()).min(1).max(4).optional(),
+    intent,
+    revision,
+  }).strict(), async ({ boundary, edgeContinuity, intent: purpose, revision: current }) => {
+    let measured: Record<string, unknown> | undefined;
+    const result = await journaled("square-surface", purpose, { boundary, ...(edgeContinuity !== undefined ? { edgeContinuity } : {}) }, async () => {
+      const { state, ...done } = await session.get().squareSurface({ boundary, ...(edgeContinuity !== undefined ? { edgeContinuity } : {}) }, current);
+      measured = done;
+      return state;
+    });
+    return { ...(result as unknown as Record<string, unknown>), ...measured };
+  }, false, { destructiveHint: false });
   tool("plasticity_list_measurements", "List native measurements stored in the Plasticity document with stable measurement IDs, current topology targets, and exact values when both targets still resolve.", z.object({}).strict(), async () =>
     await session.get().listMeasurements(), true);
   tool("plasticity_create_vertex_distance_measurement", "Create a persistent native Plasticity point-to-point distance measurement between two current B-Rep vertices. The measurement participates in document Undo/Redo and remains attached to its topology.", z.object({ first: measurementVertexRef, second: measurementVertexRef, name: z.string().trim().min(1).max(120).optional(), intent, revision }).strict(), async ({ first, second, name, intent: purpose, revision: current }) =>
