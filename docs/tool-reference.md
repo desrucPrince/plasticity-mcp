@@ -2125,8 +2125,10 @@ explicit world-space origin and normal. The normal points toward the clipped
 half-space; the optional `xDirection` fixes the in-plane frame, while omission
 uses a deterministic perpendicular axis. `plasticity_list_section_analyses`
 returns session-stable analysis IDs and exact plane read-back, and
-`plasticity_delete_section_analysis` clears the active section. Plasticity
-supports one active viewport section plane at a time. These operations use
+`plasticity_delete_section_analysis` clears the active section: pass exactly one
+of `id` and `all: true` (every section analysis, no list call first; with none
+active nothing runs). Plasticity supports one active viewport section plane at
+a time. These operations use
 Plasticity's native shading state, change the MCP revision and scene snapshots,
 and leave B-Rep geometry and Undo history unchanged. They are for
 inspection and demonstration, not for creating section geometry; use the exact
@@ -3580,3 +3582,32 @@ npm run accept:native-solid-split -- --target TARGET_ID --allow-disposable-mutat
 --resources-root "/Applications/Creality Print (Apple Silicon).app/Contents/Resources"`.
 Это малый синтетический шовный fixture, не рекомендация для реального изделия;
 оба задания остаются `ready`, а отправка без подтверждения блокируется.
+
+## Tool gaps closed in this round
+
+- `plasticity_boolean` with several `toolIds`: union merges the targets and every
+  tool; difference removes every tool from the target; intersection keeps only
+  what lies inside the target and every tool. The kernel's own intersection
+  takes the target with the union of its tools, so the tool runs one native
+  intersection per tool inside one native command (one Undo step). `keepTools`
+  keeps every tool body. A failing later tool leaves the document unchanged.
+- `plasticity_screenshot` with `frame`: the saved camera is the one that holds
+  still. A camera still easing toward its end pose after `plasticity_set_view`
+  or `plasticity_set_camera` is waited for (up to 2 s) before it is saved, so the
+  restore is exact. The reply's `view.frame` carries `cameraRestored`,
+  `cameraDeviation`, `cameraSettled` and `cameraSettleWaitMs`. A restore that is
+  still not exact (`cameraRestored: false`, with the deviation) returns the
+  written image; it is no longer an error.
+- STEP, IGES and Parasolid exports: the file header names the output file, not
+  the staging path, and carries no OS user name (STEP author and organisation are
+  empty strings; IGES Global parameter 4 and the Parasolid `KEY=`/`FILE=` lines
+  hold the file name). The model data after the header is unchanged. SAT files
+  never carried a path or a user name. A header the tool cannot rewrite is left
+  as written, and an export that still names its staging folder is refused.
+- `plasticity_chamfer` larger than an arc radius: for a selected arc edge with a
+  radius below the distance Plasticity can answer OK while dropping that arc's
+  chamfer face (7.41 mm on a loop of 4 lines and 4 R7 arcs: 4 new faces for 8
+  edges, 71.6 mm3 more than the ideal chamfer). The tool reads the result back for
+  that case and, when faces are missing, returns a certain error that names the
+  new revision and the one Undo step (`plasticity_undo` restores it).
+- Live acceptance: `npm run accept:native-gaps`.
