@@ -36,6 +36,15 @@ const compactTools = new Set([
   "plasticity_fillet_curves",
   "plasticity_cut_with_curves",
   "plasticity_knife_curve",
+  // Recipes, fit checks and exact resize that real builds reach for, so they need no catalog lookup.
+  "plasticity_create_rib",
+  "plasticity_create_screw_boss_pattern",
+  "plasticity_create_connector_opening",
+  "plasticity_create_through_hole_pattern",
+  "plasticity_create_countersink_pattern",
+  "plasticity_check_interference",
+  "plasticity_measure_parallel_planar_face_clearance",
+  "plasticity_set_driving_distance",
 ]);
 
 export function exposeDirectTool(mode: ToolCatalogMode, name: string): boolean {

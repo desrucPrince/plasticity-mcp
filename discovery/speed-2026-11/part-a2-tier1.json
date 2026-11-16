@@ -1,0 +1,731 @@
+{
+ "scenario": "a2",
+ "tier": 1,
+ "measuredAt": "2026-11-16T16:51:32.746Z",
+ "scenarioMs": 924,
+ "totals": {
+  "turns": 1,
+  "calls": 1,
+  "reqBytes": 2078,
+  "respBytes": 1863,
+  "outTokens": 520,
+  "inTokens": 466,
+  "serverMs": 924,
+  "forcedExtra": []
+ },
+ "detail": {
+  "baseId": 667,
+  "revision": "r27.26047375a435473b",
+  "out": {
+   "steps": [
+    {
+     "step": 0,
+     "toolName": "plasticity_create_box",
+     "added": [
+      667
+     ],
+     "addedBodies": [
+      {
+       "id": 667,
+       "versionId": 1198,
+       "type": "Solid",
+       "name": "enclosure-base",
+       "boundsMm": {
+        "min": [
+         2000,
+         0,
+         0
+        ],
+        "max": [
+         2080,
+         50,
+         25
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 6,
+       "edgeCount": 12,
+       "vertexCount": 8
+      }
+     ]
+    },
+    {
+     "step": 1,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 4
+     }
+    },
+    {
+     "step": 2,
+     "toolName": "plasticity_fillet"
+    },
+    {
+     "step": 3,
+     "toolName": "plasticity_find_faces",
+     "result": {
+      "count": 1
+     }
+    },
+    {
+     "step": 4,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 8
+     }
+    },
+    {
+     "step": 5,
+     "toolName": "plasticity_chamfer"
+    },
+    {
+     "step": 6,
+     "toolName": "plasticity_create_box",
+     "added": [
+      668
+     ]
+    },
+    {
+     "step": 7,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 4
+     }
+    },
+    {
+     "step": 8,
+     "toolName": "plasticity_fillet"
+    },
+    {
+     "step": 9,
+     "toolName": "plasticity_boolean",
+     "removed": [
+      668
+     ],
+     "createdEdgeCount": 16
+    },
+    {
+     "step": 10,
+     "toolName": "plasticity_create_screw_boss_pattern",
+     "result": {
+      "status": "completed"
+     }
+    },
+    {
+     "step": 11,
+     "toolName": "plasticity_create_connector_opening",
+     "added": [
+      677
+     ],
+     "regionsAdded": [
+      "1216r136049"
+     ],
+     "addedBodies": [
+      {
+       "id": 677,
+       "versionId": 1214,
+       "type": "Wire",
+       "name": "Polyline.001",
+       "boundsMm": {
+        "min": [
+         2033.9999999999998,
+         -0.5,
+         9.5
+        ],
+        "max": [
+         2045.9999999999998,
+         -0.5,
+         15.5
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 0,
+       "edgeCount": 0,
+       "vertexCount": 0
+      }
+     ],
+     "result": {
+      "status": "completed"
+     }
+    },
+    {
+     "step": 12,
+     "toolName": "plasticity_find_faces",
+     "result": {
+      "matches[*].axisOriginMm": [
+       [
+        2004.5000000000002,
+        4.5,
+        23.5
+       ],
+       [
+        2004.5000000000002,
+        45.5,
+        23.5
+       ],
+       [
+        2075.5,
+        45.5,
+        23.5
+       ],
+       [
+        2075.5,
+        4.5,
+        23.5
+       ]
+      ]
+     }
+    }
+   ],
+   "summary": {
+    "revision": "r27.26047375a435473b",
+    "undoSteps": 20,
+    "bodyCount": 6,
+    "added": [
+     {
+      "id": 677,
+      "type": "Wire",
+      "name": "Polyline.001",
+      "boundsMm": {
+       "min": [
+        2033.9999999999998,
+        -0.5,
+        9.5
+       ],
+       "max": [
+        2045.9999999999998,
+        -0.5,
+        15.5
+       ]
+      },
+      "faceCount": 0,
+      "edgeCount": 0
+     },
+     {
+      "id": 667,
+      "type": "Solid",
+      "name": "enclosure-base",
+      "boundsMm": {
+       "min": [
+        2000,
+        -8.673617379884035e-16,
+        0
+       ],
+       "max": [
+        2080,
+        50,
+        25
+       ]
+      },
+      "faceCount": 59,
+      "edgeCount": 144
+     }
+    ]
+   }
+  },
+  "checks": [
+   {
+    "check": "base bounds",
+    "expected": {
+     "min": [
+      2000,
+      0,
+      0
+     ],
+     "max": [
+      2080,
+      50,
+      25
+     ]
+    },
+    "actual": {
+     "min": [
+      2000,
+      -8.673617379884035e-16,
+      0
+     ],
+     "max": [
+      2080,
+      50,
+      25
+     ]
+    },
+    "ok": true
+   },
+   {
+    "check": "pilot hole axes",
+    "expected": [
+     [
+      2004.5,
+      4.5
+     ],
+     [
+      2075.5,
+      4.5
+     ],
+     [
+      2004.5,
+      45.5
+     ],
+     [
+      2075.5,
+      45.5
+     ]
+    ],
+    "actual": [
+     [
+      2004.5,
+      4.5
+     ],
+     [
+      2004.5,
+      45.5
+     ],
+     [
+      2075.5,
+      45.5
+     ],
+     [
+      2075.5,
+      4.5
+     ]
+    ],
+    "count": 4,
+    "ok": true
+   },
+   {
+    "check": "face/edge counts",
+    "actual": {
+     "faces": 59,
+     "edges": 144
+    },
+    "ok": true
+   }
+  ],
+  "steps": 13,
+  "batchReplyBytes": 1863
+ },
+ "calls": [
+  {
+   "turn": 1,
+   "label": "build enclosure (recipes, tier 1): lean batch with verify read",
+   "tool": "plasticity_batch",
+   "reqBytes": 2078,
+   "respBytes": 1863,
+   "wallMs": 923.6,
+   "isError": false,
+   "ops": {
+    "stateReads": 75,
+    "stateMs": 598.3,
+    "stateBytesMax": 135339,
+    "mutates": 20,
+    "mutateMs": 223.5,
+    "reads": 0,
+    "readMs": 0,
+    "journalWrites": 8,
+    "journalMs": 65.5
+   },
+   "stepOps": [
+    {
+     "step": 0,
+     "stateReads": 5,
+     "stateMs": 23.9,
+     "stateBytesMax": 27967,
+     "mutates": 1,
+     "mutateMs": 8.4,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 10.6,
+     "wallMs": 45.8,
+     "residualMs": 2.9
+    },
+    {
+     "step": 1,
+     "stateReads": 1,
+     "stateMs": 3.4,
+     "stateBytesMax": 27967,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 4.6,
+     "residualMs": 1.2
+    },
+    {
+     "step": 2,
+     "stateReads": 5,
+     "stateMs": 32.8,
+     "stateBytesMax": 37445,
+     "mutates": 1,
+     "mutateMs": 7.7,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.7,
+     "wallMs": 49.2,
+     "residualMs": 2
+    },
+    {
+     "step": 3,
+     "stateReads": 1,
+     "stateMs": 4,
+     "stateBytesMax": 37445,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 4.6,
+     "residualMs": 0.6
+    },
+    {
+     "step": 4,
+     "stateReads": 1,
+     "stateMs": 4.2,
+     "stateBytesMax": 37445,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 4.7,
+     "residualMs": 0.5
+    },
+    {
+     "step": 5,
+     "stateReads": 5,
+     "stateMs": 28.5,
+     "stateBytesMax": 50338,
+     "mutates": 1,
+     "mutateMs": 29.8,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7.2,
+     "wallMs": 66.8,
+     "residualMs": 1.3
+    },
+    {
+     "step": 6,
+     "stateReads": 5,
+     "stateMs": 29.5,
+     "stateBytesMax": 59110,
+     "mutates": 1,
+     "mutateMs": 6.5,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6,
+     "wallMs": 43.9,
+     "residualMs": 1.9
+    },
+    {
+     "step": 7,
+     "stateReads": 1,
+     "stateMs": 4.7,
+     "stateBytesMax": 59110,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 5.3,
+     "residualMs": 0.6
+    },
+    {
+     "step": 8,
+     "stateReads": 5,
+     "stateMs": 30.4,
+     "stateBytesMax": 69841,
+     "mutates": 1,
+     "mutateMs": 7.8,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 6.8,
+     "wallMs": 47,
+     "residualMs": 2
+    },
+    {
+     "step": 9,
+     "stateReads": 7,
+     "stateMs": 48.6,
+     "stateBytesMax": 69841,
+     "mutates": 1,
+     "mutateMs": 10.2,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 7.6,
+     "wallMs": 69.1,
+     "residualMs": 2.7
+    },
+    {
+     "step": 10,
+     "stateReads": 24,
+     "stateMs": 241.7,
+     "stateBytesMax": 118823,
+     "mutates": 10,
+     "mutateMs": 113,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 10.4,
+     "wallMs": 375.6,
+     "residualMs": 10.5
+    },
+    {
+     "step": 11,
+     "stateReads": 12,
+     "stateMs": 128.9,
+     "stateBytesMax": 135339,
+     "mutates": 4,
+     "mutateMs": 40.2,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 1,
+     "journalMs": 10.2,
+     "wallMs": 186.5,
+     "residualMs": 7.2
+    },
+    {
+     "step": 12,
+     "stateReads": 2,
+     "stateMs": 14.9,
+     "stateBytesMax": 134547,
+     "mutates": 0,
+     "mutateMs": 0,
+     "reads": 0,
+     "readMs": 0,
+     "journalWrites": 0,
+     "journalMs": 0,
+     "wallMs": 16.4,
+     "residualMs": 1.5
+    }
+   ]
+  }
+ ],
+ "responses": [
+  {
+   "steps": [
+    {
+     "step": 0,
+     "toolName": "plasticity_create_box",
+     "added": [
+      667
+     ],
+     "addedBodies": [
+      {
+       "id": 667,
+       "versionId": 1198,
+       "type": "Solid",
+       "name": "enclosure-base",
+       "boundsMm": {
+        "min": [
+         2000,
+         0,
+         0
+        ],
+        "max": [
+         2080,
+         50,
+         25
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 6,
+       "edgeCount": 12,
+       "vertexCount": 8
+      }
+     ]
+    },
+    {
+     "step": 1,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 4
+     }
+    },
+    {
+     "step": 2,
+     "toolName": "plasticity_fillet"
+    },
+    {
+     "step": 3,
+     "toolName": "plasticity_find_faces",
+     "result": {
+      "count": 1
+     }
+    },
+    {
+     "step": 4,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 8
+     }
+    },
+    {
+     "step": 5,
+     "toolName": "plasticity_chamfer"
+    },
+    {
+     "step": 6,
+     "toolName": "plasticity_create_box",
+     "added": [
+      668
+     ]
+    },
+    {
+     "step": 7,
+     "toolName": "plasticity_find_edges",
+     "result": {
+      "count": 4
+     }
+    },
+    {
+     "step": 8,
+     "toolName": "plasticity_fillet"
+    },
+    {
+     "step": 9,
+     "toolName": "plasticity_boolean",
+     "removed": [
+      668
+     ],
+     "createdEdgeCount": 16
+    },
+    {
+     "step": 10,
+     "toolName": "plasticity_create_screw_boss_pattern",
+     "result": {
+      "status": "completed"
+     }
+    },
+    {
+     "step": 11,
+     "toolName": "plasticity_create_connector_opening",
+     "added": [
+      677
+     ],
+     "regionsAdded": [
+      "1216r136049"
+     ],
+     "addedBodies": [
+      {
+       "id": 677,
+       "versionId": 1214,
+       "type": "Wire",
+       "name": "Polyline.001",
+       "boundsMm": {
+        "min": [
+         2033.9999999999998,
+         -0.5,
+         9.5
+        ],
+        "max": [
+         2045.9999999999998,
+         -0.5,
+         15.5
+        ]
+       },
+       "boundsMethod": "native-box",
+       "faceCount": 0,
+       "edgeCount": 0,
+       "vertexCount": 0
+      }
+     ],
+     "result": {
+      "status": "completed"
+     }
+    },
+    {
+     "step": 12,
+     "toolName": "plasticity_find_faces",
+     "result": {
+      "matches[*].axisOriginMm": [
+       [
+        2004.5000000000002,
+        4.5,
+        23.5
+       ],
+       [
+        2004.5000000000002,
+        45.5,
+        23.5
+       ],
+       [
+        2075.5,
+        45.5,
+        23.5
+       ],
+       [
+        2075.5,
+        4.5,
+        23.5
+       ]
+      ]
+     }
+    }
+   ],
+   "summary": {
+    "revision": "r27.26047375a435473b",
+    "undoSteps": 20,
+    "bodyCount": 6,
+    "added": [
+     {
+      "id": 677,
+      "type": "Wire",
+      "name": "Polyline.001",
+      "boundsMm": {
+       "min": [
+        2033.9999999999998,
+        -0.5,
+        9.5
+       ],
+       "max": [
+        2045.9999999999998,
+        -0.5,
+        15.5
+       ]
+      },
+      "faceCount": 0,
+      "edgeCount": 0
+     },
+     {
+      "id": 667,
+      "type": "Solid",
+      "name": "enclosure-base",
+      "boundsMm": {
+       "min": [
+        2000,
+        -8.673617379884035e-16,
+        0
+       ],
+       "max": [
+        2080,
+        50,
+        25
+       ]
+      },
+      "faceCount": 59,
+      "edgeCount": 144
+     }
+    ]
+   }
+  }
+ ],
+ "restored": {
+  "ok": true,
+  "undoDepth": 7,
+  "bodyCount": 4,
+  "redoDepth": 20
+ },
+ "startUndoDepth": 7,
+ "startBodyCount": 4
+}

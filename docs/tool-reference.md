@@ -84,6 +84,54 @@ counts. Follow `bodyPagination.nextOffset` for more summaries; use
 `plasticity_body_info` or `plasticity_list_bodies` when exact face, edge, or
 vertex geometry is needed. Non-state operation results keep their own schema.
 
+### Batch reply shaping and selection (speed tier 1)
+
+`plasticity_batch` runs many steps under one lock. Three inputs control what
+comes back; none of them changes what later steps can read, because every
+step's full result stays stored for `$<step>.result...`, `$<step>.added[...]`
+and `$<step>.removed` references.
+
+- Step `return: string[]`: result paths in the `$n.result` syntax (`.key`,
+  `[i]`, `[*]`; the leading dot is optional), for example
+  `["matches[*].id", "matches[*].axisOriginMm", "count"]`. The step's reply
+  `result` is an object with exactly those paths as keys. A path that does not
+  resolve fails the batch and names the step and the path.
+- Without `return`, a read step's reply is its full result when it is 1,500
+  bytes or less. A larger result comes back as `{ truncated: true, bytes,
+  count, ids, hint: "add return: [...] to this step" }`. Nothing is cut
+  silently. Mutating steps also report the tool's own result fields (an export's
+  `path` and `bytes`, `controlPoints`, `previousDistanceMm`, recipe journals)
+  under `result`, with the same 1,500-byte rule; `createdEdges` keeps its own
+  key.
+- `detail: "standard" | "lean"` (default `standard`, the reply this server has
+  always sent). `lean` leaves out the `createdEdges` echo (`createdEdgeCount`
+  stays), `addedBodies` entries for bodies a later step consumed, and every
+  empty list. Its reply is `{ steps, summary }`. `summary` holds `revision`,
+  `undoSteps`, `bodyCount` and the bodies that survive (`added`, `modified`:
+  id, type, name, `boundsMm`, face and edge counts), plus `removed` ids.
+- `roundMm: 0-6`: rounds every number in the reply to that many decimals. Stored
+  results are not rounded. Off by default.
+
+`plasticity_find_faces` and `plasticity_find_edges` take optional `sortBy`
+(`x`, `y`, `z` of the centre; edges also `length`), `order` (`asc` or `desc`;
+`length` defaults to `desc`, the rest to `asc`) and `limit` (1-1000). `count`
+is the number of matches before `limit`. Ties keep the engine's order. With
+none of these inputs the result is unchanged. `boundsMm` in a query matches by
+overlap, not containment. Sorting faces by area is not offered: the read model
+has no face area (use `plasticity_measure_face_properties`).
+
+The compact tool list also names `plasticity_create_rib`,
+`plasticity_create_screw_boss_pattern`, `plasticity_create_connector_opening`,
+`plasticity_create_through_hole_pattern`, `plasticity_create_countersink_pattern`,
+`plasticity_check_interference`,
+`plasticity_measure_parallel_planar_face_clearance` and
+`plasticity_set_driving_distance`, so a typical part needs no catalog lookup.
+`plasticity_create_cylinder` takes `centerMm` as the centre of the BASE face;
+the cylinder extends `heightMm` along `axis`.
+
+Benchmark: `node discovery/speed-2026-11/parts.ts --tier1 a1 a2 b c d e`
+(writes `part-<name>-tier1.json`).
+
 ## Tools
 
 - Connection: diagnose, list windows, connect, status, capabilities, reconcile

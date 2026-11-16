@@ -2033,18 +2033,131 @@ function resolveBatchReferences(value: unknown, steps: ReadonlyArray<BatchStepRe
   return value;
 }
 
-// Later steps read full results through $<step>.result; the response only echoes small ones.
+// Later steps read full results through $<step>.result; the reply only echoes small ones.
+// A bigger result comes back as ids plus an explicit note, never silently cut.
+const BATCH_REPLY_LIMIT = 1_500;
+const BATCH_TRUNCATION_HINT = "add return: [...] to this step";
 function summarizeBatchResult(value: unknown): unknown {
   const text = JSON.stringify(value) ?? "null";
-  if (text.length <= 1_500) return value;
+  if (text.length <= BATCH_REPLY_LIMIT) return value;
   const record = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
   return {
     truncated: true,
     bytes: text.length,
     ...(typeof record.count === "number" ? { count: record.count } : {}),
     ...(Array.isArray(record.matches) ? { ids: record.matches.map((match) => (match as { id?: unknown }).id).slice(0, 100) } : {}),
+    hint: BATCH_TRUNCATION_HINT,
   };
 }
+
+// A step's return list names result paths (the syntax of "$n.result..." without the prefix); the reply holds exactly those.
+const BATCH_RETURN_PATH = /^(?:[A-Za-z_$][\w$]*|\.[A-Za-z_$][\w$]*|\[\d+\]|\[\*\])(?:\.[A-Za-z_$][\w$]*|\[\d+\]|\[\*\])*$/;
+function projectBatchResult(result: unknown, paths: ReadonlyArray<string>): Record<string, unknown> {
+  const projection: Record<string, unknown> = {};
+  for (const path of paths) {
+    const normalized = /^[A-Za-z_$]/.test(path) ? `.${path}` : path;
+    projection[path] = readResultPath(result, normalized, `return path "${path}"`);
+  }
+  return projection;
+}
+
+// Result keys that carry scene state or the change payload; everything else is the tool's own answer
+// (an export's path and bytes, control points, previousDistanceMm).
+const BATCH_STATE_KEYS = new Set(["change", "bodies", "bodyPagination", "construction", "timing", "createdEdges"]);
+function toolSpecificFields(result: unknown, state: RuntimeState): Record<string, unknown> | undefined {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return undefined;
+  const fields = Object.entries(result as Record<string, unknown>).filter(([key]) => !(key in state) && !BATCH_STATE_KEYS.has(key));
+  return fields.length > 0 ? Object.fromEntries(fields) : undefined;
+}
+
+type BatchReplyStep = {
+  step: number;
+  toolName: string;
+  readOnly: boolean;
+  added: ReadonlyArray<number | string>;
+  removed: ReadonlyArray<number | string>;
+  regionsAdded: ReadonlyArray<number | string>;
+  addedBodies: Array<ReturnType<typeof compactChangedBody>>;
+  createdEdges?: unknown;
+  result?: unknown;
+};
+
+// "standard" is the full per-step reply. "lean" drops what the caller never reads: the createdEdges echo
+// (a count stays), bodies a later step consumed, and empty lists. Stored step results are never touched.
+function renderBatchSteps(steps: ReadonlyArray<BatchReplyStep>, detail: "lean" | "standard"): Array<Record<string, unknown>> {
+  const consumedLater: Array<Set<number | string>> = [];
+  const consumed = new Set<number | string>();
+  for (let index = steps.length - 1; index >= 0; index -= 1) {
+    consumedLater[index] = new Set(consumed);
+    for (const id of steps[index]!.removed) consumed.add(id);
+  }
+  return steps.map((entry, index) => {
+    if (detail === "standard") {
+      return entry.readOnly
+        ? { step: entry.step, toolName: entry.toolName, result: entry.result }
+        : {
+          step: entry.step,
+          toolName: entry.toolName,
+          added: entry.added,
+          removed: entry.removed,
+          regionsAdded: entry.regionsAdded,
+          addedBodies: entry.addedBodies,
+          ...(entry.createdEdges !== undefined ? { createdEdges: entry.createdEdges } : {}),
+          ...(entry.result !== undefined ? { result: entry.result } : {}),
+        };
+    }
+    if (entry.readOnly) return { step: entry.step, toolName: entry.toolName, result: entry.result };
+    const kept = entry.addedBodies.filter((body) => !consumedLater[index]!.has(body.id));
+    return {
+      step: entry.step,
+      toolName: entry.toolName,
+      ...(entry.added.length > 0 ? { added: entry.added } : {}),
+      ...(entry.removed.length > 0 ? { removed: entry.removed } : {}),
+      ...(entry.regionsAdded.length > 0 ? { regionsAdded: entry.regionsAdded } : {}),
+      ...(kept.length > 0 ? { addedBodies: kept } : {}),
+      ...(Array.isArray(entry.createdEdges) ? { createdEdgeCount: entry.createdEdges.length } : {}),
+      ...(entry.result !== undefined ? { result: entry.result } : {}),
+    };
+  });
+}
+
+function leanBody(body: RuntimeState["bodies"][number]) {
+  const compact = compactChangedBody(body);
+  return {
+    id: compact.id,
+    type: compact.type,
+    ...(compact.name ? { name: compact.name } : {}),
+    boundsMm: compact.boundsMm,
+    faceCount: compact.faceCount,
+    edgeCount: compact.edgeCount,
+  };
+}
+
+// Rounds every number in a reply to the given decimals. It copies, so stored results keep full precision.
+function roundReplyNumbers(value: unknown, decimals: number): unknown {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return value;
+    const factor = 10 ** decimals;
+    return Math.round(value * factor) / factor + 0;
+  }
+  if (Array.isArray(value)) return value.map((item) => roundReplyNumbers(item, decimals));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, roundReplyNumbers(item, decimals)]));
+  return value;
+}
+
+// Sorting and limiting for plasticity_find_faces / plasticity_find_edges. Ties keep the original order.
+function orderMatches<T>(matches: T[], sortBy: string | undefined, order: "asc" | "desc" | undefined, limit: number | undefined, value: (item: T, sortBy: string) => number): T[] {
+  let ordered = matches;
+  if (sortBy !== undefined) {
+    const direction = (order ?? (sortBy === "length" ? "desc" : "asc")) === "desc" ? -1 : 1;
+    ordered = matches
+      .map((item, index) => ({ item, index, key: value(item, sortBy) }))
+      .sort((left, right) => (left.key - right.key) * direction || left.index - right.index)
+      .map((entry) => entry.item);
+  }
+  return limit === undefined ? ordered : ordered.slice(0, limit);
+}
+const COORDINATE_AXIS: Record<string, number> = { x: 0, y: 1, z: 2 };
 
 function parseToolText(response: { content?: Array<{ type: string; text?: string }> }): unknown {
   const text = response.content?.find((part) => part.type === "text")?.text;
@@ -2535,16 +2648,20 @@ function createServerWithCatalog(
   const batchStepSchema = z.object({
     toolName: z.string().trim().min(1).max(128),
     arguments: z.record(z.string(), z.unknown()).default({}),
+    // Result paths to send back for this step, e.g. ["matches[*].id", "matches[*].axisOriginMm"].
+    return: z.array(z.string().regex(BATCH_RETURN_PATH, "A return path uses .key, [i] and [*], like $n.result paths")).min(1).max(50).optional(),
   }).strict();
   const batchSchema = z.object({
     steps: z.array(batchStepSchema).min(1).max(50),
     revision: z.string().min(1).optional(),
     undoOnError: z.boolean().default(false),
     verbose: z.boolean().default(false),
+    detail: z.enum(["lean", "standard"]).default("standard"),
+    roundMm: z.number().int().min(0).max(6).optional(),
   }).strict();
   rawRegisterTool("plasticity_batch", {
     title: "Run several Plasticity operations in one call",
-    description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all); addedSolids, addedSheets and addedWires filter by type (create_cone adds a Solid and its profile Wire); likewise removed and regionsAdded. Read any step's output with \"$<step>.result.path\" using .key, [i] and [*], e.g. \"$3.result.matches[*].id\" after plasticity_find_edges or \"$2.result.createdEdges[*].edgeId\" after plasticity_boolean. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many. The reply lists what changed (new bodies with bounds); verbose=true adds the full scene summary.",
+    description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all); addedSolids, addedSheets and addedWires filter by type (create_cone adds a Solid and its profile Wire); likewise removed and regionsAdded. Read any step's output with \"$<step>.result.path\" using .key, [i] and [*], e.g. \"$3.result.matches[*].id\" after plasticity_find_edges or \"$2.result.createdEdges[*].edgeId\" after plasticity_boolean. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many. The reply lists what changed (new bodies with bounds); verbose=true adds the full scene summary. A step may carry return: [paths] (e.g. [\"matches[*].id\", \"matches[*].axisOriginMm\"]) to get exactly those values back; without it a read result over 1,500 bytes is cut to ids with truncated: true. detail: \"lean\" leaves out the createdEdges echo (createdEdgeCount stays), bodies a later step consumed and empty lists, and ends with one summary of what survives. roundMm rounds numbers in the reply only.",
     inputSchema: batchSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, async (rawInput, extra) => result(await exclusive(async () => {
@@ -2564,7 +2681,9 @@ function createServerWithCatalog(
     const start = await session.get().state();
     if (input.revision !== undefined && input.revision !== start.revision) throw new Error(`Stale reference: expected revision ${input.revision}, current revision is ${start.revision}`);
     const stepChanges: Array<BatchStepRecord> = [];
-    const completed: Array<Record<string, unknown>> = [];
+    const completed: Array<BatchReplyStep> = [];
+    const render = (value: unknown) => (input.roundMm === undefined ? value : roundReplyNumbers(value, input.roundMm));
+    const renderSteps = () => render(renderBatchSteps(completed, input.detail));
     let current = start;
     for (const [index, step] of input.steps.entries()) {
       hud.step(index, input.steps.length, step.toolName.replace(/^plasticity_/, ""));
@@ -2578,7 +2697,7 @@ function createServerWithCatalog(
         const readOnly = selected.annotations.readOnlyHint;
         const after = readOnly ? current : await session.get().state();
         const change = diffScenes(current, after);
-        // Every step's result is kept for $<step>.result references (e.g. a boolean's createdEdges).
+        // Every step's result is kept whole for $<step>.result references (e.g. a boolean's createdEdges).
         const stepResult = parseToolText(response);
         // Typed lists: some tools add a Solid plus its editable profile Wire (e.g. create_cone).
         const addedOfType = (type: string) => change.added.filter((body) => body.type === type).map((body) => body.id);
@@ -2591,17 +2710,29 @@ function createServerWithCatalog(
           regionsAdded: change.regionsAdded.map((region) => region.id),
           result: stepResult,
         });
-        completed.push(readOnly
-          ? { step: index, toolName: step.toolName, result: summarizeBatchResult(stepResult) }
-          : {
-            step: index,
-            toolName: step.toolName,
-            added: stepChanges[index]!.added,
-            removed: stepChanges[index]!.removed,
-            regionsAdded: stepChanges[index]!.regionsAdded,
-            addedBodies: change.added.map(compactChangedBody),
-            ...(stepResult && typeof stepResult === "object" && "createdEdges" in stepResult ? { createdEdges: (stepResult as { createdEdges: unknown }).createdEdges } : {}),
-          });
+        // What the caller sees: the asked-for projection, else the read result (or the tool's own fields), never cut silently.
+        let shown: unknown;
+        try {
+          if (step.return) shown = projectBatchResult(stepResult, step.return);
+          else if (readOnly) shown = summarizeBatchResult(stepResult);
+          else {
+            const own = toolSpecificFields(stepResult, after);
+            shown = own === undefined ? undefined : summarizeBatchResult(own);
+          }
+        } catch (error) {
+          throw new Error(`step ${index} (${step.toolName}): ${error instanceof Error ? error.message : String(error)}`);
+        }
+        completed.push({
+          step: index,
+          toolName: step.toolName,
+          readOnly,
+          added: stepChanges[index]!.added,
+          removed: stepChanges[index]!.removed,
+          regionsAdded: stepChanges[index]!.regionsAdded,
+          addedBodies: change.added.map(compactChangedBody),
+          ...(stepResult && typeof stepResult === "object" && "createdEdges" in stepResult ? { createdEdges: (stepResult as { createdEdges: unknown }).createdEdges } : {}),
+          ...(shown !== undefined || readOnly ? { result: shown } : {}),
+        });
         current = after;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -2613,15 +2744,28 @@ function createServerWithCatalog(
             undone += 1;
           }
         }
-        throw new Error(JSON.stringify({ failedStep: index, toolName: step.toolName, error: message.slice(0, 4_000), completedSteps: completed, undoneSteps: undone }));
+        throw new Error(JSON.stringify({ failedStep: index, toolName: step.toolName, error: message.slice(0, 4_000), completedSteps: renderSteps(), undoneSteps: undone }));
       }
     }
     const end = await session.get().state();
     const undoSteps = end.undoDepth - start.undoDepth;
-    if (input.verbose) return { ...compactMutationResult<Record<string, unknown>>(end, diffScenes(start, end)), steps: completed, undoSteps };
+    if (input.verbose) return { ...compactMutationResult<Record<string, unknown>>(end, diffScenes(start, end)), steps: renderSteps(), undoSteps };
     // Default reply: what changed, not the whole scene. Use plasticity_status for the rest.
     const change = diffScenes(start, end);
-    return {
+    if (input.detail === "lean") {
+      return render({
+        steps: renderBatchSteps(completed, "lean"),
+        summary: {
+          revision: end.revision,
+          undoSteps,
+          bodyCount: end.bodies.length,
+          ...(change.added.length > 0 ? { added: change.added.map(leanBody) } : {}),
+          ...(change.modified.length > 0 ? { modified: change.modified.map((item) => leanBody(item.after)) } : {}),
+          ...(change.removed.length > 0 ? { removed: change.removed.map((body) => body.id) } : {}),
+        },
+      });
+    }
+    return render({
       revision: end.revision,
       undoSteps,
       bodyCount: end.bodies.length,
@@ -2631,8 +2775,8 @@ function createServerWithCatalog(
         modified: change.modified.map((item) => ({ id: item.id, after: compactChangedBody(item.after) })),
         regionsAdded: change.regionsAdded.map((region) => region.id),
       },
-      steps: completed,
-    };
+      steps: renderBatchSteps(completed, "standard"),
+    });
   };
   tool("plasticity_list_windows", "List Plasticity document windows exposed on loopback CDP. If no Plasticity process is running, opens Plasticity with loopback CDP first (disable with PLASTICITY_AUTO_LAUNCH=0); a running instance without CDP is never restarted.", z.object({}), async () =>
     (await session.windows({ launch: true })).map(({ id, title, url }) => ({ targetId: id, title, url })), true);
@@ -2778,17 +2922,31 @@ function createServerWithCatalog(
     await session.get().inspectFastenerGroup(request), true);
   tool("plasticity_check_fastener_group_layout", "Measure and optionally check a fastener group on one exact rectangular planar face. Returns center-to-edge and hole-edge distances, every pair's center spacing and remaining ligament, plus clearance for supplied circular head, washer, nut, or driver envelopes. Optionally provide opposedFaceId to verify the matching perforated opposite face and exact native B-rep plate thickness. A pass is returned only when explicit layout requirements with a recorded basis are supplied. Geometry verification remains a layout check, not a strength or tool-motion analysis.", fastenerGroupLayoutInputSchema, async (request) =>
     await session.get().inspectFastenerGroupLayout(request), true);
-  tool("plasticity_find_faces", "Find current B-Rep faces semantically by body, surface type, normal, radius, center, bounds, edge count, or adjacency.", z.object({ revision, query: faceQuerySchema }), async ({ revision: expected, query }) => {
+  tool("plasticity_find_faces", "Find current B-Rep faces semantically by body, surface type, normal, radius, center, bounds, edge count, or adjacency. boundsMm matches by overlap. sortBy (x, y or z of the face center), order and limit pick among the matches; count is the total before limit.", z.object({
+    revision,
+    query: faceQuerySchema,
+    sortBy: z.enum(["x", "y", "z"]).optional(),
+    order: z.enum(["asc", "desc"]).optional(),
+    limit: z.number().int().min(1).max(1000).optional(),
+  }), async ({ revision: expected, query, sortBy, order, limit }) => {
     const state = await session.get().state();
     if (state.revision !== expected) throw new Error(`Stale reference: expected revision ${expected}, current revision is ${state.revision}`);
-    const matches = findFaces(state, query);
-    return { documentToken: state.documentToken, revision: state.revision, measurementSource: "native-brep", count: matches.length, matches };
+    const found = findFaces(state, query);
+    const matches = orderMatches(found, sortBy, order, limit, (face, key) => face.centerMm[COORDINATE_AXIS[key]!]!);
+    return { documentToken: state.documentToken, revision: state.revision, measurementSource: "native-brep", count: found.length, matches };
   }, true);
-  tool("plasticity_find_edges", "Find current B-Rep edges semantically by body, curve type, direction, exact length, center, bounds, or adjacent faces.", z.object({ revision, query: edgeQuerySchema }), async ({ revision: expected, query }) => {
+  tool("plasticity_find_edges", "Find current B-Rep edges semantically by body, curve type, direction, exact length, center, bounds, or adjacent faces. boundsMm matches by overlap. sortBy (length, or x, y or z of the edge center), order (length defaults to desc) and limit pick among the matches; count is the total before limit.", z.object({
+    revision,
+    query: edgeQuerySchema,
+    sortBy: z.enum(["length", "x", "y", "z"]).optional(),
+    order: z.enum(["asc", "desc"]).optional(),
+    limit: z.number().int().min(1).max(1000).optional(),
+  }), async ({ revision: expected, query, sortBy, order, limit }) => {
     const state = await session.get().state();
     if (state.revision !== expected) throw new Error(`Stale reference: expected revision ${expected}, current revision is ${state.revision}`);
-    const matches = findEdges(state, query);
-    return { documentToken: state.documentToken, revision: state.revision, measurementSource: "native-brep", count: matches.length, matches };
+    const found = findEdges(state, query);
+    const matches = orderMatches(found, sortBy, order, limit, (edge, key) => (key === "length" ? edge.lengthMm : edge.centerMm[COORDINATE_AXIS[key]!]!));
+    return { documentToken: state.documentToken, revision: state.revision, measurementSource: "native-brep", count: found.length, matches };
   }, true);
   tool("plasticity_save_named_selection", "Save a semantic face or edge query and re-evaluate it after topology changes.", z.discriminatedUnion("kind", [
     z.object({ name: z.string().trim().min(1).max(120), kind: z.literal("faces"), query: faceQuerySchema, expectedCount: z.number().int().positive().max(4096).optional(), revision }).strict(),
@@ -3043,7 +3201,7 @@ function createServerWithCatalog(
 
   tool("plasticity_create_box", "Create an axis-aligned exact CAD box. Coordinates and size are millimeters.", z.object({ originMm: vector, sizeMm: positiveVector, name: z.string().trim().min(1).max(120).optional(), intent, revision }), async ({ originMm, sizeMm, name, intent: purpose, revision: current }) =>
     await journaled("create-box", purpose, { originMm, sizeMm, name }, () => session.get().createBox(originMm, sizeMm, name, current)));
-  tool("plasticity_create_cylinder", "Create an exact CAD cylinder along a world-space axis. Dimensions are millimeters.", z.object({ centerMm: vector, radiusMm: z.number().finite().positive(), heightMm: z.number().finite().positive(), axis: direction.default([0, 0, 1]), name: z.string().trim().min(1).max(120).optional(), intent, revision }), async ({ centerMm, radiusMm, heightMm, axis, name, intent: purpose, revision: current }) =>
+  tool("plasticity_create_cylinder", "Create an exact CAD cylinder along a world-space axis. centerMm is the centre of the BASE face and the cylinder extends heightMm along axis. Dimensions are millimeters.", z.object({ centerMm: vector, radiusMm: z.number().finite().positive(), heightMm: z.number().finite().positive(), axis: direction.default([0, 0, 1]), name: z.string().trim().min(1).max(120).optional(), intent, revision }), async ({ centerMm, radiusMm, heightMm, axis, name, intent: purpose, revision: current }) =>
     await journaled("create-cylinder", purpose, { centerMm, radiusMm, heightMm, axis, name }, () => session.get().createCylinder(centerMm, radiusMm, heightMm, name, current, axis)));
   tool("plasticity_create_cone", "Create an exact cone or conical frustum Solid and preserve its editable meridional polyline profile in one Plasticity history step. The bottom center, unequal bottom and top radii, height, axis, and nonparallel radial direction are explicit. Use topRadiusMm=0 for a pointed cone and plasticity_create_cylinder when the radii are equal.", z.object({
     bottomCenterMm: vector,
