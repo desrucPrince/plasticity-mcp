@@ -85,6 +85,7 @@
     "accept:native-curve-refinement": "node scripts/verify-native-curve-refinement-live.ts",
     "accept:native-curve-segment-split": "node scripts/verify-native-curve-segment-split-live.ts",
     "accept:native-surface-continuity": "node scripts/verify-native-surface-continuity-live.ts",
+    "accept:native-surfacing": "node scripts/verify-native-surfacing-live.ts",
     "accept:native-edge-curvature": "node scripts/verify-native-edge-curvature-live.ts",
     "accept:native-face-draft": "node scripts/verify-native-face-draft-live.ts",
     "accept:native-face-properties": "node scripts/verify-native-face-properties-live.ts",

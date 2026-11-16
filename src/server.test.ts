@@ -1382,6 +1382,7 @@ test("compact catalog exposes core tools while routing hidden operations through
     "plasticity_create_through_hole_pattern", "plasticity_create_countersink_pattern", "plasticity_check_interference",
     "plasticity_measure_parallel_planar_face_clearance", "plasticity_set_driving_distance",
     "plasticity_describe_body",
+    "plasticity_probe_surface",
   ]));
   assert.equal(listed.tools[0]?.name, "plasticity_call");
 
@@ -6355,7 +6356,7 @@ test("MCP registers each Upgrades B tool once with strict schemas and only the e
       assert.equal(schema.additionalProperties, false, `${name} rejects unknown keys`);
     }
     const properties = (name: string) => Object.keys((tools.find((entry) => entry.name === name)?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {}).sort();
-    assert.deepEqual(properties("plasticity_xsided_patch"), ["continuity", "curveIds", "edges", "guideIds", "intent", "revision"]);
+    assert.deepEqual(properties("plasticity_xsided_patch"), ["continuity", "curveIds", "edgeContinuity", "edges", "guideIds", "intent", "quality", "revision", "tension"]);
     assert.deepEqual(properties("plasticity_convert_reference_mesh_to_polysplines"), ["intent", "interpolateBoundary", "mergePatches", "referenceMeshId", "revision"]);
     assert.deepEqual(properties("plasticity_show_face_control_points"), ["bodyId", "faceIds", "intent", "revision"]);
     assert.deepEqual(properties("plasticity_move_face_control_points"), ["bodyId", "cvIds", "deltaMm", "intent", "revision"]);

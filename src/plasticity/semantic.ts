@@ -365,6 +365,9 @@ export interface BodyDescription {
   revision: string;
   boundsMm: { min: number[]; max: number[] } | null;
   sizeMm: number[] | null;
+  // Present when proven: true for exact bounds; false (with boundsNote) for a conservative kernel box, e.g. a B-spline control hull.
+  boundsExact?: boolean;
+  boundsNote?: string;
   faceCount: number;
   edgeCount: number;
   vertexCount: number;
@@ -447,7 +450,7 @@ function holeVerdict(body: DescribedBody, face: DescribedBody["faces"][number], 
   return undefined;
 }
 
-export function describeBody(body: DescribedBody, revision: string, maxBytes: number = DESCRIBE_MAX_BYTES): BodyDescription {
+export function describeBody(body: DescribedBody, revision: string, maxBytes: number = DESCRIBE_MAX_BYTES, exactness?: { boundsExact: boolean; boundsNote?: string }): BodyDescription {
   const planes = new Map<string, { slanted?: number[]; offsets: Map<number, PlaneOffset> }>();
   const cylinderGroups: CylinderGroup[] = [];
   // Groups of one axis, kind and sweep, found by their first radius: radii within 0.0001 mm of it join, whatever bucket they fall in.
@@ -556,6 +559,7 @@ export function describeBody(body: DescribedBody, revision: string, maxBytes: nu
     revision,
     boundsMm: body.boundsMm ? { min: round4Vector(body.boundsMm.min), max: round4Vector(body.boundsMm.max) } : null,
     sizeMm: body.boundsMm ? [0, 1, 2].map((index) => round4(body.boundsMm!.max[index]! - body.boundsMm!.min[index]!)) : null,
+    ...(exactness ? { boundsExact: exactness.boundsExact, ...(exactness.boundsNote ? { boundsNote: exactness.boundsNote } : {}) } : {}),
     faceCount: body.faceIds.length,
     edgeCount: body.edgeIds.length,
     vertexCount: body.vertices?.length ?? new Set(body.edges.flatMap((edge) => edge.vertexIds)).size,
@@ -716,7 +720,7 @@ export function describeBody(body: DescribedBody, revision: string, maxBytes: nu
 
 // ids, or no id with at most 8 bodies: one reply of at most DESCRIBE_MULTI_BYTES. Each body gets an equal share of the budget (and never
 // more than the 4 KB of a single body) and is trimmed to it with the usual `more` counts; no body is dropped.
-export function describeBodies(bodies: DescribedBody[], revision: string): { revision: string; bodies: Array<Omit<BodyDescription, "revision">> } {
+export function describeBodies(bodies: DescribedBody[], revision: string, exactness?: ReadonlyMap<number, { boundsExact: boolean; boundsNote?: string }>): { revision: string; bodies: Array<Omit<BodyDescription, "revision">> } {
   const count = bodies.length;
   if (count === 0) return { revision, bodies: [] };
   const overhead = sizeOf({ revision, bodies: [] }) + (count - 1); // the wrapper and the commas between bodies
@@ -725,7 +729,7 @@ export function describeBodies(bodies: DescribedBody[], revision: string): { rev
   return {
     revision,
     bodies: bodies.map((body) => {
-      const { revision: _revision, ...description } = describeBody(body, revision, share + revisionField);
+      const { revision: _revision, ...description } = describeBody(body, revision, share + revisionField, exactness?.get(body.id));
       return description;
     }),
   };

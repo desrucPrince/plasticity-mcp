@@ -3162,7 +3162,7 @@ function createServerWithCatalog(
     if (!isRuntimeState(state)) throw new Error("Plasticity returned an invalid connected document state");
     return compactStatusSummary(state, 0, 50);
   });
-  tool("plasticity_status", "Read a compact document summary with identity, revision, exact body bounds, topology counts, and Undo/Redo state. Body summaries are paginated with bodyOffset/bodyLimit (default 0/50, maximum 200); follow bodyPagination.nextOffset and pass the prior page's revision as expectedRevision so scene edits cannot mix pages. Use plasticity_body_info for exact face/edge/vertex geometry of one body, or plasticity_list_bodies for paginated topology details.", z.object({
+  tool("plasticity_status", "Read a compact document summary with identity, revision, exact body bounds, topology counts, and Undo/Redo state. A body's boundsMm with boundsMethod native-box can be a conservative box (a B-spline body's control hull, larger than the surface); plasticity_exact_bounds gives its exact extent. Body summaries are paginated with bodyOffset/bodyLimit (default 0/50, maximum 200); follow bodyPagination.nextOffset and pass the prior page's revision as expectedRevision so scene edits cannot mix pages. Use plasticity_body_info for exact face/edge/vertex geometry of one body, or plasticity_list_bodies for paginated topology details.", z.object({
     bodyOffset: z.number().int().min(0).max(1_000_000).default(0),
     bodyLimit: z.number().int().min(1).max(200).default(50),
     expectedRevision: z.string().min(1).optional(),
@@ -3295,14 +3295,21 @@ function createServerWithCatalog(
     }
     return reply;
   }, true);
-  tool("plasticity_describe_body", "Describe bodies compactly to size against them and verify them: bounds and size; planar faces by outward normal (xPos, xNeg, yPos, yNeg, zPos, zNeg, slanted) with each plane's mm (the coordinate on that axis; for slanted, the signed offset along the normal), its face (the largest bounding box at that offset, not exact area) and count when more than one face lies on it; face count; cylinders by radius and axis with kind hole or boss (full turn) or arc (part turn, sweepDeg when known), count (distinct axes; faces only when different), axis points (coaxial holes through opposite walls merge into one point) and axial extentMm when known; for a hole, through true only when the bore reaches the body bounds at both ends, through false only when a flat disc face closes it at one end, otherwise no through field (a stepped, filleted, chamfered or vented floor, or a hole that opens into a cavity); other surfaces; blend radii. Read inner walls and floors from planes: a cavity floor is a zPos entry below the top, an inner wall an xPos/xNeg/yPos/yNeg entry inside the bounds. Includes hole and boss axis positions: no face search needed for those. id: one body; ids (1-8): several; neither: every body when there are at most 8, else a list of the first 40 bodies (id, type, name, bounds) with more. Always returns revision. Size limits: one body at most 4,096 B; ids or no id (up to 8 bodies) at most 12,000 B in all, each body getting an equal share; the list of more than 8 bodies at most 6,000 B. Lists are cut with more counts, never silently; a batch step without return gets the reply whole. Millimetres. Use plasticity_body_info for exact topology.", z.object({ id: z.number().int().positive().optional(), ids: z.array(z.number().int().positive()).min(1).max(8).optional() }).strict().superRefine((input, context) => {
+  // boundsExact for describe_body: a short native support read per call (read-only). Sessions without it (test fakes) add nothing.
+  const describeExactness = async (bodies: RuntimeState["bodies"]) => {
+    const operations = session.get() as Partial<Pick<PlasticityOperations, "describeBoundsExactness">>;
+    if (typeof operations.describeBoundsExactness !== "function") return undefined;
+    try { return await operations.describeBoundsExactness(bodies); } catch { return undefined; }
+  };
+  tool("plasticity_describe_body", "Describe bodies compactly to size against them and verify them: bounds and size; planar faces by outward normal (xPos, xNeg, yPos, yNeg, zPos, zNeg, slanted) with each plane's mm (the coordinate on that axis; for slanted, the signed offset along the normal), its face (the largest bounding box at that offset, not exact area) and count when more than one face lies on it; face count; cylinders by radius and axis with kind hole or boss (full turn) or arc (part turn, sweepDeg when known), count (distinct axes; faces only when different), axis points (coaxial holes through opposite walls merge into one point) and axial extentMm when known; for a hole, through true only when the bore reaches the body bounds at both ends, through false only when a flat disc face closes it at one end, otherwise no through field (a stepped, filleted, chamfered or vented floor, or a hole that opens into a cavity); other surfaces; blend radii. Read inner walls and floors from planes: a cavity floor is a zPos entry below the top, an inner wall an xPos/xNeg/yPos/yNeg entry inside the bounds. Includes hole and boss axis positions: no face search needed for those. id: one body; ids (1-8): several; neither: every body when there are at most 8, else a list of the first 40 bodies (id, type, name, bounds) with more. Always returns revision. boundsExact says whether boundsMm is the exact extent; when false, boundsNote says why (a B-spline body's kernel box is its control hull) and plasticity_exact_bounds gives the exact extent. Size limits: one body at most 4,096 B; ids or no id (up to 8 bodies) at most 12,000 B in all, each body getting an equal share; the list of more than 8 bodies at most 6,000 B. Lists are cut with more counts, never silently; a batch step without return gets the reply whole. Millimetres. Use plasticity_body_info for exact topology.", z.object({ id: z.number().int().positive().optional(), ids: z.array(z.number().int().positive()).min(1).max(8).optional() }).strict().superRefine((input, context) => {
     if (input.id !== undefined && input.ids !== undefined) context.addIssue({ code: "custom", path: ["ids"], message: "Pass id or ids, not both" });
   }), async ({ id, ids: bodyIds }) => {
     const state = await session.get().state();
     if (id !== undefined) {
       const body = state.bodies.find((candidate) => candidate.id === id);
       if (!body) throw new Error(`Unknown body ID: ${id}`);
-      return describeBody(body, state.revision);
+      const exactness = await describeExactness([body]);
+      return describeBody(body, state.revision, undefined, exactness?.get(body.id));
     }
     if (bodyIds === undefined && state.bodies.length > DESCRIBE_ALL_BODIES) return listBodies(state.bodies, state.revision, DESCRIBE_ALL_BODIES);
     const wanted = bodyIds ?? state.bodies.map((body) => body.id);
@@ -3311,7 +3318,7 @@ function createServerWithCatalog(
       if (!body) throw new Error(`Unknown body ID: ${wantedId}`);
       return body;
     });
-    return describeBodies(bodies, state.revision);
+    return describeBodies(bodies, state.revision, await describeExactness(bodies));
   }, true);
   tool("plasticity_inspect_fastener_group", "Read exact in-plane centers and diameters from two or more explicitly selected cylindrical faces on one current Solid. The returned revision-bound native B-Rep evidence and assignments can be passed into fastener-group load distribution; coaxial duplicate faces, stale references, and axes not normal to the supplied frame are rejected.", fastenerGroupInspectionInputSchema, async (request) =>
     await session.get().inspectFastenerGroup(request), true);
@@ -3497,8 +3504,22 @@ function createServerWithCatalog(
     await session.get().analyzeEdgeCurvature(edges, current), true);
   tool("plasticity_analyze_face_draft", "Sample exact native B-Rep face normals on a finite interior grid and classify each selected Solid or Sheet face as positive, negative, neutral, or mixed draft relative to an explicit pull direction and minimum draft angle. Signed draft is asin(normal dot pull): walls parallel to pull are 0 degrees, outward normals toward pull are positive, and opposite normals are negative. The compact extrema do not prove continuous extrema, mold parting, release paths, or print support requirements.", faceDraftInputSchema, async ({ faces, pullDirection, minimumDraftDeg, samplesPerDirection, revision: current }) =>
     await session.get().analyzeFaceDraft(faces, pullDirection, minimumDraftDeg, samplesPerDirection, current), true);
-  tool("plasticity_analyze_surface_continuity", "Sample Plasticity's native B-Rep continuity evaluator at 100 positions along each selected current Solid or Sheet edge shared by exactly two faces. Returns maximum G0 position deviation in millimeters, G1 normal-angle deviation in degrees, Plasticity's dimensionless relative G2 curvature deviation, their locations, and hierarchical G0/G1/G2 tolerance results. This is native surface sampling rather than an exact continuous maximum; it does not use the display mesh and does not change the document.", surfaceContinuityInputSchema, async ({ edges, positionToleranceMm, normalAngleToleranceDeg, relativeCurvatureTolerance, revision: current }) =>
+  tool("plasticity_analyze_surface_continuity", "Sample Plasticity's native B-Rep continuity evaluator at 100 positions along each selected current Solid or Sheet edge shared by exactly two faces. Returns maximum G0 position deviation in millimeters, G1 normal-angle deviation in degrees, Plasticity's dimensionless relative G2 curvature deviation, their locations, and hierarchical G0/G1/G2 tolerance results. Relative G2 is |k1 - k2| / max(|k1|, |k2|) of the curvatures across the edge, so it reads 1.0 whenever one side is flat (a plane meeting a fillet), however small the other curvature; absoluteCurvature { side1PerMm, side2PerMm } gives the curvature across the edge on each face at the worst G2 sample, when a face parameter direction runs across the edge. interior { g0Mm, g1Deg, g2Rel } is the maximum over samples 5..94, leaving out the 5 samples at each end (the corners), and worstAt says whether the first level that fails (G2 when all pass) is worst at a corner or in the run of the edge, so one corner spike does not hide an otherwise G2 edge. This is native surface sampling rather than an exact continuous maximum; it does not use the display mesh and does not change the document.", surfaceContinuityInputSchema, async ({ edges, positionToleranceMm, normalAngleToleranceDeg, relativeCurvatureTolerance, revision: current }) =>
     await session.get().analyzeSurfaceContinuity(edges, current, positionToleranceMm, normalAngleToleranceDeg, relativeCurvatureTolerance), true);
+  // ---- Surfacing tools (verify, read and refine curved bodies): one contiguous block. Logic in src/plasticity/surfacing.ts. ----
+  const probeVector = z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]);
+  const probeSurfaceSchema = z.object({
+    id: z.number().int().positive(),
+    rays: z.array(z.object({ originMm: probeVector, direction: probeVector.refine((value) => Math.hypot(...value) > 1e-12, "direction must be a non-zero vector") }).strict()).min(1).max(64).optional(),
+    gridMm: z.object({ axis: z.enum(["x", "y", "z"]).default("z"), at: z.array(z.tuple([z.number().finite(), z.number().finite()])).min(1).max(64) }).strict().optional(),
+    revision,
+  }).strict().superRefine((input, context) => {
+    if ((input.rays === undefined) === (input.gridMm === undefined)) context.addIssue({ code: "custom", path: ["rays"], message: "Give exactly one of rays or gridMm" });
+  });
+  tool("plasticity_probe_surface", "Exact point reads on a curved Solid or Sheet: cast 1-64 rays and get every crossing with the body's faces, ordered along each ray: pointMm, faceId, normal (outward on a Solid), distanceMm from the origin, the kernel's u/v normal curvatures (1/mm, signed by the surface parametrisation) and residualMm (kernel distance from the point to the face, at most 0.000001 mm). hits: 0 means the ray misses. Use it for the true height of a crowned or lofted (NURBS) top, where boundsMm is only a control-hull box. rays: [{ originMm, direction }]; or gridMm: { axis: x|y|z (default z), at: [[a,b],...] }: rays travel along -axis from 1 mm outside the body's bounds, and a,b are the other two coordinates in x,y,z order (axis z: [x,y]), so 'surface height at (x,y)' is one call. Each point is solved on the exact kernel face; the display mesh only seeds the search, so a ray that grazes a face tangentially can be missed (unresolvedCrossings flags mesh crossings no exact hit explains). Read-only: no undo step.", probeSurfaceSchema, async ({ id, rays, gridMm, revision: current }) =>
+    await session.get().probeSurface({ id, ...(rays ? { rays: rays as Array<{ originMm: [number, number, number]; direction: [number, number, number] }> } : {}), ...(gridMm ? { gridMm: gridMm as { axis: "x" | "y" | "z"; at: Array<[number, number]> } } : {}) }, current), true);
+  tool("plasticity_exact_bounds", "Exact axis-aligned extent of 1-32 Solid or Sheet bodies. On Plasticity 26.1.3 a body's boundsMm (boundsMethod native-box) is the kernel's box, which for a B-spline (lofted, patched, crowned) body is its control-point hull and can be millimetres too large. Each side here is the coordinate of a real body point found by the kernel's global body range from a point 100 km out along that axis; maxErrorMm bounds how far the true extent can lie beyond it, and exact is true when that bound is within 0.001 mm. overshootMm is how much the conservative box overstates the body. Read-only.", z.object({ ids: z.array(z.number().int().positive()).min(1).max(32), revision: revision.optional() }).strict(), async ({ ids: bodyIds, revision: current }) =>
+    await session.get().exactBounds(bodyIds, current), true);
   tool("plasticity_list_measurements", "List native measurements stored in the Plasticity document with stable measurement IDs, current topology targets, and exact values when both targets still resolve.", z.object({}).strict(), async () =>
     await session.get().listMeasurements(), true);
   tool("plasticity_create_vertex_distance_measurement", "Create a persistent native Plasticity point-to-point distance measurement between two current B-Rep vertices. The measurement participates in document Undo/Redo and remains attached to its topology.", z.object({ first: measurementVertexRef, second: measurementVertexRef, name: z.string().trim().min(1).max(120).optional(), intent, revision }).strict(), async ({ first, second, name, intent: purpose, revision: current }) =>
@@ -4374,7 +4395,7 @@ function createServerWithCatalog(
     await journaled("patch-regions", purpose, { regionIds: selectedRegions }, () => session.get().patchRegions(selectedRegions, current)));
   tool("plasticity_patch_closed_wires", "Create independent native Sheet patches from current closed Wire bodies while preserving every source Wire. Unlike planar Region patching, this accepts nonplanar closed boundaries and can create B-Surfaces. Re-read exact boundaries, surface structure, area, and native validity; the native fill is not a constrained engineering surface unless those properties are separately verified.", z.object({ ids: uniqueBodyIds, intent, revision }).strict(), async ({ ids: wireIds, intent: purpose, revision: current }) =>
     await journaled("patch-closed-wires", purpose, { wireIds }, () => session.get().patchClosedWires(wireIds, current)), false, { destructiveHint: false });
-  tool("plasticity_xsided_patch", "Fill an N-sided boundary with one new native Sheet, from 3 or more boundary Wires (curveIds) or from edges of one Sheet or Solid (edges): the open rim of a Sheet, or a closed edge loop of a Solid such as a hole rim or the edge loop of a face (verified live on Plasticity 26.1.3). Optional interior Wire guideIds pull the patch toward them, with curveIds or with edges. Unlike plasticity_patch_closed_wires, which fills each closed Wire alone, this joins several open Wires into one patch and can match the neighbouring surface: continuity g0 (default, flat), g1 or g2 applies to edge boundaries only. Unlike plasticity_create_constrained_surface, the boundary is exact geometry, not points and normals. Source Wires, Sheet and Solid stay. Guides run Plasticity's XNurbs command, which was tested only with a Studio licence. Check the result by type and face and edge counts, because reported bounds can overshoot the boundary.", z.object({
+  tool("plasticity_xsided_patch", "Fill an N-sided boundary with one new native Sheet, from 3 or more boundary Wires (curveIds) or from edges of one Sheet or Solid (edges): the open rim of a Sheet, or a closed edge loop of a Solid such as a hole rim or the edge loop of a face (verified live on Plasticity 26.1.3). Optional interior Wire guideIds pull the patch toward them, with curveIds or with edges. Unlike plasticity_patch_closed_wires, which fills each closed Wire alone, this joins several open Wires into one patch and can match the neighbouring surface: continuity g0 (default, flat), g1 or g2 applies to edge boundaries only. Unlike plasticity_create_constrained_surface, the boundary is exact geometry, not points and normals. Source Wires, Sheet and Solid stay. Guides run Plasticity's XNurbs command, which was tested only with a Studio licence. Check the result by type and face and edge counts, because reported bounds can overshoot the boundary (plasticity_exact_bounds gives the true extent). A failure keeps the raw XNurbs code and says what it means: 30 = the continuity is incompatible at a corner or with the neighbouring faces (g1/g2 against walls perpendicular to the patch): lower it or blend the rim first; 27 (reproduced: g1/g2 on an open rim with perpendicular walls); 25 (reproduced: edges that branch off the loop); 29 (inconsistent constraints); 3 (no usable boundary).", z.object({
     curveIds: z.array(z.number().int().positive()).min(3).max(64).refine((values) => new Set(values).size === values.length, "Boundary curve IDs must be unique").optional(),
     edges: z.object({
       bodyId: z.number().int().positive(),
@@ -4382,6 +4403,9 @@ function createServerWithCatalog(
     }).strict().optional(),
     guideIds: z.array(z.number().int().positive()).min(1).max(64).refine((values) => new Set(values).size === values.length, "Guide curve IDs must be unique").optional(),
     continuity: z.enum(["g0", "g1", "g2"]).optional(),
+    edgeContinuity: z.array(z.object({ edgeId: z.string().min(1), continuity: z.enum(["g0", "g1", "g2"]) }).strict()).min(1).max(256).optional().describe("Per-edge override of continuity; edge boundaries only"),
+    tension: z.number().finite().min(0.1).max(1).optional().describe("0.1 to 1.0; higher lifts the patch centre"),
+    quality: z.enum(["auto", "high", "max"]).optional().describe("Tolerance enforcement"),
     intent,
     revision,
   }).strict().superRefine((input, context) => {
@@ -4391,8 +4415,14 @@ function createServerWithCatalog(
     if (input.continuity !== undefined && input.edges === undefined) {
       context.addIssue({ code: "custom", path: ["continuity"], message: "continuity applies to edges only" });
     }
-  }), async ({ curveIds, edges, guideIds, continuity, intent: purpose, revision: current }) =>
-    await journaled("xsided-patch", purpose, { curveIds, edges, guideIds, continuity }, () => session.get().xsidedPatch({ curveIds, edges, guideIds, continuity }, current)), false, { destructiveHint: false });
+    if (input.edgeContinuity !== undefined && input.edges === undefined) {
+      context.addIssue({ code: "custom", path: ["edgeContinuity"], message: "edgeContinuity applies to edges only" });
+    }
+  }), async ({ curveIds, edges, guideIds, continuity, edgeContinuity, tension, quality, intent: purpose, revision: current }) =>
+  {
+    const options = { ...(edgeContinuity !== undefined ? { edgeContinuity } : {}), ...(tension !== undefined ? { tension } : {}), ...(quality !== undefined ? { quality } : {}) };
+    return await journaled("xsided-patch", purpose, { curveIds, edges, guideIds, continuity, ...options }, () => session.get().xsidedPatch({ curveIds, edges, guideIds, continuity, ...options }, current));
+  }, false, { destructiveHint: false });
   tool("plasticity_bridge_surface", "Create a native G2 transition surface between boundary sides of two Sheet faces. Pick points and width are millimeters; each pick point must lie on the intended boundary edge.", z.object({
     first: faceRef.extend({ pickPointMm: vector }).strict(),
     second: faceRef.extend({ pickPointMm: vector }).strict(),
@@ -4660,16 +4690,26 @@ function createServerWithCatalog(
     await session.get().setCamera(eyeMm, targetMm, frameRadiusMm), true);
   tool("plasticity_set_view", "Set a named viewport orientation and optionally fit all geometry.", z.object({ view: z.enum(["front", "back", "left", "right", "top", "bottom", "isometric"]), fit: z.boolean().default(false) }), async ({ view, fit }) =>
     await session.get().setView(view, fit));
-  tool("plasticity_screenshot", "Screenshot Plasticity. Without path it returns a scaled JPEG of the visible renderer in the response (maxWidth, default 1024) and refuses hidden windows to avoid stale frames. With path it saves a PNG to a new file without overwriting. captureMode=window (default) captures the visible full renderer with HTML panels/labels and rejects hidden windows. captureMode=viewport (requires path) explicitly renders and captures the native WebGL canvas, including when occluded; requires verified frame advancement and a live context. Viewport mode excludes HTML panels and labels and reports rendererHidden/freshFrame provenance.", z.object({
+  tool("plasticity_screenshot", "Screenshot Plasticity. Without path it returns a scaled JPEG of the visible renderer in the response (maxWidth, default 1024) and refuses hidden windows to avoid stale frames. With path it saves a PNG to a new file without overwriting. captureMode=window (default) captures the visible full renderer with HTML panels/labels and rejects hidden windows. captureMode=viewport (requires path) explicitly renders and captures the native WebGL canvas, including when occluded; requires verified frame advancement and a live context. Viewport mode excludes HTML panels and labels and reports rendererHidden/freshFrame provenance. shader (isophotes, draft, faceDirection, zebraVertical, zebraHorizontal, topo) shows surface quality: it sets Plasticity's analysis shader, captures, and restores the previous shader in the same call, also when the capture fails. frame: { bodyIds } aims the camera at those bodies (keeping the view direction) and puts the camera back exactly afterwards. Both are view only (no Undo step; checked) and the reply adds view.", z.object({
     path: z.string().min(1).optional(),
     captureMode: z.enum(["window", "viewport"]).default("window"),
     maxWidth: z.number().int().min(128).max(4096).default(1024),
     quality: z.number().int().min(30).max(95).default(70),
-  }).strict(), async ({ path, captureMode, maxWidth, quality }) => {
-    if (path !== undefined) return await session.get().screenshot(path, captureMode);
+    shader: z.enum(["isophotes", "draft", "faceDirection", "zebraVertical", "zebraHorizontal", "topo"]).optional(),
+    frame: z.object({ bodyIds: z.array(z.number().int().positive()).min(1).max(64).refine((values) => new Set(values).size === values.length, "frame.bodyIds must be unique") }).strict().optional(),
+  }).strict(), async ({ path, captureMode, maxWidth, quality, shader, frame }) => {
+    const view = shader !== undefined || frame !== undefined ? { ...(shader !== undefined ? { shader } : {}), ...(frame !== undefined ? { frame } : {}) } : undefined;
+    if (path !== undefined) {
+      if (view === undefined) return await session.get().screenshot(path, captureMode);
+      return await session.get().screenshotView(view, async () => await session.get().screenshot(path, captureMode));
+    }
     if (captureMode !== "window") throw new Error("captureMode=viewport saves a PNG file; pass path, or omit captureMode for an inline JPEG");
-    const image = await session.get().screenshotImage(maxWidth, quality);
-    return { [INLINE_IMAGE]: { data: image.data, mimeType: image.mimeType }, width: image.width, height: image.height, bytes: image.bytes };
+    if (view === undefined) {
+      const image = await session.get().screenshotImage(maxWidth, quality);
+      return { [INLINE_IMAGE]: { data: image.data, mimeType: image.mimeType }, width: image.width, height: image.height, bytes: image.bytes };
+    }
+    const image = await session.get().screenshotView(view, async () => await session.get().screenshotImage(maxWidth, quality));
+    return { [INLINE_IMAGE]: { data: image.data, mimeType: image.mimeType }, width: image.width, height: image.height, bytes: image.bytes, view: image.view };
   }, false, { destructiveHint: false });
   tool("plasticity_save_copy", "Save the current document to a new .plasticity file without overwriting.", z.object({ path: z.string().min(1) }), async ({ path }) =>
     await session.get().saveCopy(path), false, { destructiveHint: false });
