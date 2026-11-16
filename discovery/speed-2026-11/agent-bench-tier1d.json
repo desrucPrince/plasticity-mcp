@@ -1,0 +1,3390 @@
+{
+ "label": "tier1d",
+ "model": "default",
+ "serverTree": "/Users/neocortez/Projects/plasticity-mcp-merge",
+ "endpoint": "http://127.0.0.1:57291",
+ "target": "E634FD207384F0F8D6EB10D2D01D46F2",
+ "measuredAt": "2026-11-16T18:38:33.040Z",
+ "startUndoDepth": 0,
+ "startBodyCount": 4,
+ "runs": [
+  {
+   "part": "a",
+   "run": 1,
+   "prompt": "Build me an open-top electronics enclosure base in Plasticity (millimetres). Put its lower-left-front corner at x=2000, y=0, z=0 so it clears the other bodies in the file. Outer size 80 x 50 x 25 mm (x, y, z) with 2 mm walls. 3 mm fillets on the four outer vertical corners. Four M3 screw bosses with pilot holes, one in each inside corner. A 12 x 6 mm rounded-corner connector opening in the middle of the front wall (the wall at y=0). A 1 mm chamfer on the outer top rim. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/agent-bench-run-FQpB1E/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 40 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 33705,
+   "startupMs": 685,
+   "timeToFirstToolMs": 24461,
+   "turns": 3,
+   "toolCalls": 2,
+   "errors": 0,
+   "retries": 0,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_batch",
+     "routedTo": "batch(9 steps)",
+     "reqBytes": 1385,
+     "respBytes": 1948,
+     "isError": false,
+     "startedMs": 24461,
+     "execMs": 1145
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_describe_body",
+     "reqBytes": 10,
+     "respBytes": 1580,
+     "isError": false,
+     "startedMs": 27928,
+     "execMs": 38
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 23777,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 2322,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 2345,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 0,
+     "thinkingChars": 0,
+     "textChars": 18
+    }
+   ],
+   "tokens": {
+    "input": 6,
+    "output": 2430,
+    "cacheRead": 54241,
+    "cacheWrite": 29849,
+    "thinking": 1513,
+    "perTurnKnown": false
+   },
+   "modelMsTotal": 28444,
+   "apiMs": 28434,
+   "costUsd": 0.38639049999999997,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 609",
+   "verification": {
+    "verified": true,
+    "passed": 8,
+    "of": 8,
+    "bodyId": 609,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        609
+       ],
+       "said": 609,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "enclosure bounds",
+      "ok": true,
+      "expected": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2080,
+        50,
+        25
+       ]
+      },
+      "actual": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2080,
+        50,
+        25
+       ]
+      }
+     },
+     {
+      "check": "inner wall faces at 2 mm (x lo/hi, y lo/hi)",
+      "ok": true,
+      "actual": [
+       true,
+       true,
+       true,
+       true
+      ]
+     },
+     {
+      "check": "cavity floor present (open top proxy)",
+      "ok": true
+     },
+     {
+      "check": "3 mm outer vertical corner fillets (4 corners)",
+      "ok": true,
+      "actual": [
+       [
+        2003,
+        3
+       ],
+       [
+        2003,
+        47
+       ],
+       [
+        2077,
+        47
+       ],
+       [
+        2077,
+        3
+       ],
+       [
+        2075.5,
+        45.5
+       ],
+       [
+        2075.5,
+        4.5
+       ],
+       [
+        2004.5,
+        4.5
+       ],
+       [
+        2004.5,
+        45.5
+       ]
+      ]
+     },
+     {
+      "check": "4 pilot holes, one per inside corner (M3, r 1.1-1.75)",
+      "ok": true,
+      "actual": [
+       [
+        2004.5,
+        45.5,
+        1.25
+       ],
+       [
+        2004.5,
+        4.5,
+        1.25
+       ],
+       [
+        2075.5,
+        4.5,
+        1.25
+       ],
+       [
+        2075.5,
+        45.5,
+        1.25
+       ]
+      ]
+     },
+     {
+      "check": "pilot axes equal the reference build positions (informational)",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "12 x 6 rounded connector opening in the front wall",
+      "ok": true,
+      "actual": {
+       "w": 12,
+       "h": 6,
+       "cx": 2040,
+       "corners": 4
+      }
+     },
+     {
+      "check": "1 mm chamfer on the top outer rim",
+      "ok": true,
+      "actual": 4
+     }
+    ]
+   },
+   "transcript": "agent-bench-tier1d-transcripts/a-r1.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 19
+   }
+  },
+  {
+   "part": "a",
+   "run": 2,
+   "prompt": "Build me an open-top electronics enclosure base in Plasticity (millimetres). Put its lower-left-front corner at x=2000, y=0, z=0 so it clears the other bodies in the file. Outer size 80 x 50 x 25 mm (x, y, z) with 2 mm walls. 3 mm fillets on the four outer vertical corners. Four M3 screw bosses with pilot holes, one in each inside corner. A 12 x 6 mm rounded-corner connector opening in the middle of the front wall (the wall at y=0). A 1 mm chamfer on the outer top rim. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/agent-bench-run-FnTq4b/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 40 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 39023,
+   "startupMs": 690,
+   "timeToFirstToolMs": 24173,
+   "turns": 4,
+   "toolCalls": 3,
+   "errors": 0,
+   "retries": 0,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_batch",
+     "routedTo": "batch(7 steps)",
+     "reqBytes": 926,
+     "respBytes": 982,
+     "isError": false,
+     "startedMs": 24173,
+     "execMs": 780
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps)",
+     "reqBytes": 585,
+     "respBytes": 1186,
+     "isError": false,
+     "startedMs": 30369,
+     "execMs": 520
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_describe_body",
+     "reqBytes": 10,
+     "respBytes": 1586,
+     "isError": false,
+     "startedMs": 33317,
+     "execMs": 36
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 23482,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 5415,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 2429,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 4,
+     "modelMs": 2566,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 0,
+     "thinkingChars": 0,
+     "textChars": 18
+    }
+   ],
+   "tokens": {
+    "input": 8,
+    "output": 2814,
+    "cacheRead": 104015,
+    "cacheWrite": 9129,
+    "thinking": 1700,
+    "perTurnKnown": false
+   },
+   "modelMsTotal": 33892,
+   "apiMs": 33886,
+   "costUsd": 0.2136875,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 621",
+   "verification": {
+    "verified": true,
+    "passed": 8,
+    "of": 8,
+    "bodyId": 621,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        621
+       ],
+       "said": 621,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "enclosure bounds",
+      "ok": true,
+      "expected": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2080,
+        50,
+        25
+       ]
+      },
+      "actual": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2080,
+        50,
+        25
+       ]
+      }
+     },
+     {
+      "check": "inner wall faces at 2 mm (x lo/hi, y lo/hi)",
+      "ok": true,
+      "actual": [
+       true,
+       true,
+       true,
+       true
+      ]
+     },
+     {
+      "check": "cavity floor present (open top proxy)",
+      "ok": true
+     },
+     {
+      "check": "3 mm outer vertical corner fillets (4 corners)",
+      "ok": true,
+      "actual": [
+       [
+        2003,
+        3
+       ],
+       [
+        2003,
+        47
+       ],
+       [
+        2077,
+        47
+       ],
+       [
+        2077,
+        3
+       ],
+       [
+        2075.5,
+        4.5
+       ],
+       [
+        2075.5,
+        45.5
+       ],
+       [
+        2004.5,
+        45.5
+       ],
+       [
+        2004.5,
+        4.5
+       ]
+      ]
+     },
+     {
+      "check": "4 pilot holes, one per inside corner (M3, r 1.1-1.75)",
+      "ok": true,
+      "actual": [
+       [
+        2004.5,
+        4.5,
+        1.25
+       ],
+       [
+        2004.5,
+        45.5,
+        1.25
+       ],
+       [
+        2075.5,
+        45.5,
+        1.25
+       ],
+       [
+        2075.5,
+        4.5,
+        1.25
+       ]
+      ]
+     },
+     {
+      "check": "pilot axes equal the reference build positions (informational)",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "12 x 6 rounded connector opening in the front wall",
+      "ok": true,
+      "actual": {
+       "w": 12,
+       "h": 6,
+       "cx": 2040,
+       "corners": 4
+      }
+     },
+     {
+      "check": "1 mm chamfer on the top outer rim",
+      "ok": true,
+      "actual": 4
+     }
+    ]
+   },
+   "transcript": "agent-bench-tier1d-transcripts/a-r2.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 20
+   }
+  },
+  {
+   "part": "a",
+   "run": 3,
+   "prompt": "Build me an open-top electronics enclosure base in Plasticity (millimetres). Put its lower-left-front corner at x=2000, y=0, z=0 so it clears the other bodies in the file. Outer size 80 x 50 x 25 mm (x, y, z) with 2 mm walls. 3 mm fillets on the four outer vertical corners. Four M3 screw bosses with pilot holes, one in each inside corner. A 12 x 6 mm rounded-corner connector opening in the middle of the front wall (the wall at y=0). A 1 mm chamfer on the outer top rim. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/agent-bench-run-w9CbN6/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 40 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 32712,
+   "startupMs": 696,
+   "timeToFirstToolMs": 21831,
+   "turns": 3,
+   "toolCalls": 3,
+   "errors": 0,
+   "retries": 0,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_batch",
+     "routedTo": "batch(6 steps)",
+     "reqBytes": 795,
+     "respBytes": 914,
+     "isError": false,
+     "startedMs": 21831,
+     "execMs": 740
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps)",
+     "reqBytes": 538,
+     "respBytes": 1263,
+     "isError": false,
+     "startedMs": 28023,
+     "execMs": 289
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_describe_body",
+     "reqBytes": 10,
+     "respBytes": 1550,
+     "isError": false,
+     "startedMs": 28023,
+     "execMs": 301
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 21135,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 5452,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 2,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 1812,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 0,
+     "thinkingChars": 0,
+     "textChars": 18
+    }
+   ],
+   "tokens": {
+    "input": 6,
+    "output": 2432,
+    "cacheRead": 74460,
+    "cacheWrite": 8829,
+    "thinking": 1466,
+    "perTurnKnown": false
+   },
+   "modelMsTotal": 28399,
+   "apiMs": 28386,
+   "costUsd": 0.18635,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 633",
+   "verification": {
+    "verified": true,
+    "passed": 8,
+    "of": 8,
+    "bodyId": 633,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        633
+       ],
+       "said": 633,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "enclosure bounds",
+      "ok": true,
+      "expected": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2080,
+        50,
+        25
+       ]
+      },
+      "actual": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2080,
+        50,
+        25
+       ]
+      }
+     },
+     {
+      "check": "inner wall faces at 2 mm (x lo/hi, y lo/hi)",
+      "ok": true,
+      "actual": [
+       true,
+       true,
+       true,
+       true
+      ]
+     },
+     {
+      "check": "cavity floor present (open top proxy)",
+      "ok": true
+     },
+     {
+      "check": "3 mm outer vertical corner fillets (4 corners)",
+      "ok": true,
+      "actual": [
+       [
+        2003,
+        3
+       ],
+       [
+        2003,
+        47
+       ],
+       [
+        2077,
+        47
+       ],
+       [
+        2077,
+        3
+       ]
+      ]
+     },
+     {
+      "check": "4 pilot holes, one per inside corner (M3, r 1.1-1.75)",
+      "ok": true,
+      "actual": [
+       [
+        2005,
+        45,
+        1.25
+       ],
+       [
+        2005,
+        5,
+        1.25
+       ],
+       [
+        2075,
+        5,
+        1.25
+       ],
+       [
+        2075,
+        45,
+        1.25
+       ]
+      ]
+     },
+     {
+      "check": "pilot axes equal the reference build positions (informational)",
+      "soft": true,
+      "ok": false
+     },
+     {
+      "check": "12 x 6 rounded connector opening in the front wall",
+      "ok": true,
+      "actual": {
+       "w": 12,
+       "h": 6,
+       "cx": 2040,
+       "corners": 4
+      }
+     },
+     {
+      "check": "1 mm chamfer on the top outer rim",
+      "ok": true,
+      "actual": 4
+     }
+    ]
+   },
+   "transcript": "agent-bench-tier1d-transcripts/a-r3.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 19
+   }
+  },
+  {
+   "part": "b",
+   "run": 1,
+   "prompt": "Make an L-bracket in Plasticity (millimetres), 4 mm thick, with two legs that are each 40 mm long and 30 mm wide. The base leg lies flat on the ground: x from 2200 to 2240, y from 0 to 30, z from 0 to 4. The vertical leg rises from the same end: x from 2200 to 2204, z up to 40, y from 0 to 30. Two 4.5 mm diameter through holes in each leg. A 5 mm fillet on the inside of the bend. 3 mm rounds on the outer corners of the legs. A triangular gusset across the bend, centred on the 30 mm width. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/agent-bench-run-Y3C1iz/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 40 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 29390,
+   "startupMs": 677,
+   "timeToFirstToolMs": 15677,
+   "turns": 3,
+   "toolCalls": 2,
+   "errors": 0,
+   "retries": 0,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_batch",
+     "routedTo": "batch(4 steps)",
+     "reqBytes": 407,
+     "respBytes": 746,
+     "isError": false,
+     "startedMs": 15677,
+     "execMs": 623
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_batch",
+     "routedTo": "batch(7 steps)",
+     "reqBytes": 1200,
+     "respBytes": 1998,
+     "isError": false,
+     "startedMs": 24299,
+     "execMs": 492
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 15000,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 7999,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 2338,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 0,
+     "thinkingChars": 0,
+     "textChars": 18
+    }
+   ],
+   "tokens": {
+    "input": 6,
+    "output": 2216,
+    "cacheRead": 73768,
+    "cacheWrite": 7951,
+    "thinking": 1103,
+    "perTurnKnown": false
+   },
+   "modelMsTotal": 25337,
+   "apiMs": 25337,
+   "costUsd": 0.17182400000000003,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 645",
+   "verification": {
+    "verified": true,
+    "passed": 8,
+    "of": 8,
+    "bodyId": 645,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        645
+       ],
+       "said": 645,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "bracket bounds",
+      "ok": true,
+      "expected": {
+       "min": [
+        2200,
+        0,
+        0
+       ],
+       "max": [
+        2240,
+        30,
+        40
+       ]
+      },
+      "actual": {
+       "min": [
+        2200,
+        0,
+        0
+       ],
+       "max": [
+        2240,
+        30,
+        40
+       ]
+      }
+     },
+     {
+      "check": "4 mm thickness (base top z=4, vertical leg inner face x=2204)",
+      "ok": true
+     },
+     {
+      "check": "two O4.5 through holes in the base leg (axis z)",
+      "ok": true,
+      "actual": 2
+     },
+     {
+      "check": "two O4.5 through holes in the vertical leg (axis x)",
+      "ok": true,
+      "actual": 2
+     },
+     {
+      "check": "5 mm inner bend fillet (cylinder r5, axis y)",
+      "ok": true
+     },
+     {
+      "check": "3 mm outer corner rounds (>= 2 faces r3)",
+      "ok": true,
+      "actual": 4
+     },
+     {
+      "check": "triangular gusset (planar y-normal faces inside the width)",
+      "ok": true,
+      "actual": 2
+     }
+    ]
+   },
+   "transcript": "agent-bench-tier1d-transcripts/b-r1.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 16
+   }
+  },
+  {
+   "part": "b",
+   "run": 2,
+   "prompt": "Make an L-bracket in Plasticity (millimetres), 4 mm thick, with two legs that are each 40 mm long and 30 mm wide. The base leg lies flat on the ground: x from 2200 to 2240, y from 0 to 30, z from 0 to 4. The vertical leg rises from the same end: x from 2200 to 2204, z up to 40, y from 0 to 30. Two 4.5 mm diameter through holes in each leg. A 5 mm fillet on the inside of the bend. 3 mm rounds on the outer corners of the legs. A triangular gusset across the bend, centred on the 30 mm width. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/agent-bench-run-l2vh8I/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 40 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 26400,
+   "startupMs": 672,
+   "timeToFirstToolMs": 14215,
+   "turns": 3,
+   "toolCalls": 2,
+   "errors": 0,
+   "retries": 0,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps)",
+     "reqBytes": 352,
+     "respBytes": 616,
+     "isError": false,
+     "startedMs": 14215,
+     "execMs": 604
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_batch",
+     "routedTo": "batch(6 steps)",
+     "reqBytes": 935,
+     "respBytes": 1931,
+     "isError": false,
+     "startedMs": 21295,
+     "execMs": 482
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 13544,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 6476,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 2207,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 0,
+     "thinkingChars": 0,
+     "textChars": 18
+    }
+   ],
+   "tokens": {
+    "input": 6,
+    "output": 1791,
+    "cacheRead": 73519,
+    "cacheWrite": 7455,
+    "thinking": 883,
+    "perTurnKnown": false
+   },
+   "modelMsTotal": 22227,
+   "apiMs": 22226,
+   "costUsd": 0.1561145,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 653",
+   "verification": {
+    "verified": true,
+    "passed": 8,
+    "of": 8,
+    "bodyId": 653,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        653
+       ],
+       "said": 653,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "bracket bounds",
+      "ok": true,
+      "expected": {
+       "min": [
+        2200,
+        0,
+        0
+       ],
+       "max": [
+        2240,
+        30,
+        40
+       ]
+      },
+      "actual": {
+       "min": [
+        2200,
+        0,
+        0
+       ],
+       "max": [
+        2240,
+        30,
+        40
+       ]
+      }
+     },
+     {
+      "check": "4 mm thickness (base top z=4, vertical leg inner face x=2204)",
+      "ok": true
+     },
+     {
+      "check": "two O4.5 through holes in the base leg (axis z)",
+      "ok": true,
+      "actual": 2
+     },
+     {
+      "check": "two O4.5 through holes in the vertical leg (axis x)",
+      "ok": true,
+      "actual": 2
+     },
+     {
+      "check": "5 mm inner bend fillet (cylinder r5, axis y)",
+      "ok": true
+     },
+     {
+      "check": "3 mm outer corner rounds (>= 2 faces r3)",
+      "ok": true,
+      "actual": 4
+     },
+     {
+      "check": "triangular gusset (planar y-normal faces inside the width)",
+      "ok": true,
+      "actual": 2
+     }
+    ]
+   },
+   "transcript": "agent-bench-tier1d-transcripts/b-r2.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 15
+   }
+  },
+  {
+   "part": "b",
+   "run": 3,
+   "prompt": "Make an L-bracket in Plasticity (millimetres), 4 mm thick, with two legs that are each 40 mm long and 30 mm wide. The base leg lies flat on the ground: x from 2200 to 2240, y from 0 to 30, z from 0 to 4. The vertical leg rises from the same end: x from 2200 to 2204, z up to 40, y from 0 to 30. Two 4.5 mm diameter through holes in each leg. A 5 mm fillet on the inside of the bend. 3 mm rounds on the outer corners of the legs. A triangular gusset across the bend, centred on the 30 mm width. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/agent-bench-run-GAhJfo/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 40 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 30840,
+   "startupMs": 666,
+   "timeToFirstToolMs": 17204,
+   "turns": 3,
+   "toolCalls": 2,
+   "errors": 0,
+   "retries": 0,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps)",
+     "reqBytes": 371,
+     "respBytes": 616,
+     "isError": false,
+     "startedMs": 17204,
+     "execMs": 609
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_batch",
+     "routedTo": "batch(7 steps)",
+     "reqBytes": 1237,
+     "respBytes": 1998,
+     "isError": false,
+     "startedMs": 25867,
+     "execMs": 514
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 16538,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 8054,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 2134,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 0,
+     "thinkingChars": 0,
+     "textChars": 18
+    }
+   ],
+   "tokens": {
+    "input": 6,
+    "output": 2182,
+    "cacheRead": 73718,
+    "cacheWrite": 7879,
+    "thinking": 1054,
+    "perTurnKnown": false
+   },
+   "modelMsTotal": 26726,
+   "apiMs": 26717,
+   "costUsd": 0.17022900000000002,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 661",
+   "verification": {
+    "verified": true,
+    "passed": 8,
+    "of": 8,
+    "bodyId": 661,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        661
+       ],
+       "said": 661,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "bracket bounds",
+      "ok": true,
+      "expected": {
+       "min": [
+        2200,
+        0,
+        0
+       ],
+       "max": [
+        2240,
+        30,
+        40
+       ]
+      },
+      "actual": {
+       "min": [
+        2200,
+        0,
+        0
+       ],
+       "max": [
+        2240,
+        30,
+        40
+       ]
+      }
+     },
+     {
+      "check": "4 mm thickness (base top z=4, vertical leg inner face x=2204)",
+      "ok": true
+     },
+     {
+      "check": "two O4.5 through holes in the base leg (axis z)",
+      "ok": true,
+      "actual": 2
+     },
+     {
+      "check": "two O4.5 through holes in the vertical leg (axis x)",
+      "ok": true,
+      "actual": 2
+     },
+     {
+      "check": "5 mm inner bend fillet (cylinder r5, axis y)",
+      "ok": true
+     },
+     {
+      "check": "3 mm outer corner rounds (>= 2 faces r3)",
+      "ok": true,
+      "actual": 4
+     },
+     {
+      "check": "triangular gusset (planar y-normal faces inside the width)",
+      "ok": true,
+      "actual": 2
+     }
+    ]
+   },
+   "transcript": "agent-bench-tier1d-transcripts/b-r3.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 16
+   }
+  },
+  {
+   "part": "c",
+   "run": 1,
+   "prompt": "Make a round flange in Plasticity (millimetres): a 60 mm diameter disc, 6 mm thick, standing on the ground (z 0 to 6), centred at x=2450, y=30. 20 mm diameter bore through the centre. Six 5 mm diameter holes evenly spaced on a 45 mm bolt circle. 1 mm chamfers on the edges. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/agent-bench-run-Lod7El/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 40 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 20113,
+   "startupMs": 684,
+   "timeToFirstToolMs": 12348,
+   "turns": 3,
+   "toolCalls": 2,
+   "errors": 0,
+   "retries": 0,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_batch",
+     "routedTo": "batch(6 steps)",
+     "reqBytes": 849,
+     "respBytes": 1062,
+     "isError": false,
+     "startedMs": 12348,
+     "execMs": 857
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_describe_body",
+     "reqBytes": 10,
+     "respBytes": 782,
+     "isError": false,
+     "startedMs": 15322,
+     "execMs": 27
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 11664,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 2117,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 2179,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 0,
+     "thinkingChars": 0,
+     "textChars": 125
+    }
+   ],
+   "tokens": {
+    "input": 6,
+    "output": 1147,
+    "cacheRead": 73464,
+    "cacheWrite": 6326,
+    "thinking": 490,
+    "perTurnKnown": false
+   },
+   "modelMsTotal": 15960,
+   "apiMs": 15952,
+   "costUsd": 0.12869699999999998,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 669 (1 mm chamfers are on the outer rim and the bore, top and bottom; the six 5 mm bolt holes are left sharp).",
+   "verification": {
+    "verified": true,
+    "passed": 5,
+    "of": 5,
+    "bodyId": 669,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        669
+       ],
+       "said": 669,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "flange bounds",
+      "ok": true,
+      "expected": {
+       "min": [
+        2420,
+        0,
+        0
+       ],
+       "max": [
+        2480,
+        60,
+        6
+       ]
+      },
+      "actual": {
+       "min": [
+        2420,
+        0,
+        0
+       ],
+       "max": [
+        2480,
+        60,
+        6
+       ]
+      }
+     },
+     {
+      "check": "O20 bore at the centre",
+      "ok": true
+     },
+     {
+      "check": "six O5 holes on the O45 bolt circle, 60 deg apart",
+      "ok": true,
+      "actual": {
+       "n": 6,
+       "radii": [
+        22.5,
+        22.5,
+        22.5,
+        22.5,
+        22.5,
+        22.5
+       ],
+       "gaps": [
+        60,
+        60,
+        60,
+        60,
+        60,
+        60
+       ]
+      }
+     },
+     {
+      "check": "1 mm edge chamfers (>= 4 conical faces)",
+      "ok": true,
+      "actual": 4
+     }
+    ]
+   },
+   "transcript": "agent-bench-tier1d-transcripts/c-r1.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 11
+   }
+  },
+  {
+   "part": "c",
+   "run": 2,
+   "prompt": "Make a round flange in Plasticity (millimetres): a 60 mm diameter disc, 6 mm thick, standing on the ground (z 0 to 6), centred at x=2450, y=30. 20 mm diameter bore through the centre. Six 5 mm diameter holes evenly spaced on a 45 mm bolt circle. 1 mm chamfers on the edges. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/agent-bench-run-7iIejB/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 40 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 19219,
+   "startupMs": 666,
+   "timeToFirstToolMs": 11543,
+   "turns": 3,
+   "toolCalls": 2,
+   "errors": 0,
+   "retries": 0,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_batch",
+     "routedTo": "batch(6 steps)",
+     "reqBytes": 879,
+     "respBytes": 1063,
+     "isError": false,
+     "startedMs": 11543,
+     "execMs": 875
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_describe_body",
+     "reqBytes": 10,
+     "respBytes": 783,
+     "isError": false,
+     "startedMs": 14655,
+     "execMs": 24
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 10878,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 2236,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 1817,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 0,
+     "thinkingChars": 0,
+     "textChars": 18
+    }
+   ],
+   "tokens": {
+    "input": 6,
+    "output": 1080,
+    "cacheRead": 73435,
+    "cacheWrite": 6298,
+    "thinking": 439,
+    "perTurnKnown": false
+   },
+   "modelMsTotal": 14931,
+   "apiMs": 14946,
+   "costUsd": 0.1267275,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 677",
+   "verification": {
+    "verified": true,
+    "passed": 5,
+    "of": 5,
+    "bodyId": 677,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        677
+       ],
+       "said": 677,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "flange bounds",
+      "ok": true,
+      "expected": {
+       "min": [
+        2420,
+        0,
+        0
+       ],
+       "max": [
+        2480,
+        60,
+        6
+       ]
+      },
+      "actual": {
+       "min": [
+        2420,
+        0,
+        0
+       ],
+       "max": [
+        2480,
+        60,
+        6
+       ]
+      }
+     },
+     {
+      "check": "O20 bore at the centre",
+      "ok": true
+     },
+     {
+      "check": "six O5 holes on the O45 bolt circle, 60 deg apart",
+      "ok": true,
+      "actual": {
+       "n": 6,
+       "radii": [
+        22.5,
+        22.5,
+        22.5,
+        22.5,
+        22.5,
+        22.5
+       ],
+       "gaps": [
+        60,
+        60,
+        60,
+        60,
+        60,
+        60
+       ]
+      }
+     },
+     {
+      "check": "1 mm edge chamfers (>= 4 conical faces)",
+      "ok": true,
+      "actual": 16
+     }
+    ]
+   },
+   "transcript": "agent-bench-tier1d-transcripts/c-r2.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 11
+   }
+  },
+  {
+   "part": "c",
+   "run": 3,
+   "prompt": "Make a round flange in Plasticity (millimetres): a 60 mm diameter disc, 6 mm thick, standing on the ground (z 0 to 6), centred at x=2450, y=30. 20 mm diameter bore through the centre. Six 5 mm diameter holes evenly spaced on a 45 mm bolt circle. 1 mm chamfers on the edges. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/agent-bench-run-n6NTUg/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 40 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 21718,
+   "startupMs": 680,
+   "timeToFirstToolMs": 12777,
+   "turns": 3,
+   "toolCalls": 2,
+   "errors": 0,
+   "retries": 0,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_batch",
+     "routedTo": "batch(6 steps)",
+     "reqBytes": 849,
+     "respBytes": 1063,
+     "isError": false,
+     "startedMs": 12777,
+     "execMs": 885
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_describe_body",
+     "reqBytes": 10,
+     "respBytes": 783,
+     "isError": false,
+     "startedMs": 16248,
+     "execMs": 14
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 12097,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 2586,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 3038,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 0,
+     "thinkingChars": 0,
+     "textChars": 196
+    }
+   ],
+   "tokens": {
+    "input": 6,
+    "output": 1283,
+    "cacheRead": 73546,
+    "cacheWrite": 6405,
+    "thinking": 572,
+    "perTurnKnown": false
+   },
+   "modelMsTotal": 17721,
+   "apiMs": 17712,
+   "costUsd": 0.132928,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 685 (verified: Ø60 × 6 mm at x=2450, y=30, z 0–6; Ø20 through bore; six Ø5 through holes on a Ø45 bolt circle; 1 mm chamfers on all 16 circular edges, including the bolt-hole rims).",
+   "verification": {
+    "verified": true,
+    "passed": 5,
+    "of": 5,
+    "bodyId": 685,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        685
+       ],
+       "said": 685,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "flange bounds",
+      "ok": true,
+      "expected": {
+       "min": [
+        2420,
+        0,
+        0
+       ],
+       "max": [
+        2480,
+        60,
+        6
+       ]
+      },
+      "actual": {
+       "min": [
+        2420,
+        0,
+        0
+       ],
+       "max": [
+        2480,
+        60,
+        6
+       ]
+      }
+     },
+     {
+      "check": "O20 bore at the centre",
+      "ok": true
+     },
+     {
+      "check": "six O5 holes on the O45 bolt circle, 60 deg apart",
+      "ok": true,
+      "actual": {
+       "n": 6,
+       "radii": [
+        22.5,
+        22.5,
+        22.5,
+        22.5,
+        22.5,
+        22.5
+       ],
+       "gaps": [
+        60,
+        60,
+        60,
+        60,
+        60,
+        60
+       ]
+      }
+     },
+     {
+      "check": "1 mm edge chamfers (>= 4 conical faces)",
+      "ok": true,
+      "actual": 16
+     }
+    ]
+   },
+   "transcript": "agent-bench-tier1d-transcripts/c-r3.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 11
+   }
+  },
+  {
+   "part": "d",
+   "run": 1,
+   "prompt": "There is an enclosure base in the open Plasticity document (millimetres): an 80 x 50 x 25 mm open-top box at x=2000, y=0, z=0, with 2 mm walls and four screw bosses with pilot holes in the corners. Make a matching lid for it: a 2 mm thick plate with the same outline, sitting on top of the base, with a 1.5 mm lip underneath that fits inside the walls with 0.2 mm clearance per side. Add four countersunk screw holes aligned to the bosses. Measure everything from the existing enclosure. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/agent-bench-run-1FY88n/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 40 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 34231,
+   "startupMs": 661,
+   "timeToFirstToolMs": 3372,
+   "turns": 5,
+   "toolCalls": 5,
+   "errors": 0,
+   "retries": 0,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_describe_body",
+     "reqBytes": 2,
+     "respBytes": 2786,
+     "isError": false,
+     "startedMs": 3372,
+     "execMs": 491
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_find_faces",
+     "reqBytes": 76,
+     "respBytes": 8000,
+     "isError": false,
+     "startedMs": 11977,
+     "execMs": -589
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_find_edges",
+     "reqBytes": 95,
+     "respBytes": 7507,
+     "isError": false,
+     "startedMs": 11977,
+     "execMs": 34
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_batch",
+     "routedTo": "batch(6 steps)",
+     "reqBytes": 728,
+     "respBytes": 1610,
+     "isError": false,
+     "startedMs": 21658,
+     "execMs": 307
+    },
+    {
+     "turn": 4,
+     "name": "plasticity_batch",
+     "routedTo": "batch(4 steps)",
+     "reqBytes": 575,
+     "respBytes": 2687,
+     "isError": false,
+     "startedMs": 26838,
+     "execMs": 624
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 2711,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 8114,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 2,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 9647,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 4,
+     "modelMs": 4873,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 5,
+     "modelMs": 3835,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 0,
+     "thinkingChars": 0,
+     "textChars": 326
+    }
+   ],
+   "tokens": {
+    "input": 10,
+    "output": 2142,
+    "cacheRead": 147065,
+    "cacheWrite": 18292,
+    "thinking": 828,
+    "perTurnKnown": false
+   },
+   "modelMsTotal": 29180,
+   "apiMs": 29180,
+   "costUsd": 0.31005249999999995,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 704 (`enclosure-lid`: 80 × 50 × 2 mm plate on z = 25–27 with R3 corners matching the base, 1.5 mm lip at 0.2 mm clearance per side, four Ø3.4 mm through holes with Ø6.3 mm 90° countersinks on the boss axes; no interference with base 693; hole and countersink sizes are my M3 assumption from the Ø2.5 mm pilots).",
+   "verification": {
+    "verified": true,
+    "passed": 7,
+    "of": 7,
+    "bodyId": 704,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        704
+       ],
+       "said": 704,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "lid bounds",
+      "ok": true,
+      "expected": {
+       "min": [
+        2000,
+        0,
+        23.5
+       ],
+       "max": [
+        2080,
+        50,
+        27
+       ]
+      },
+      "actual": {
+       "min": [
+        2000,
+        0,
+        23.5
+       ],
+       "max": [
+        2080,
+        50,
+        27
+       ]
+      }
+     },
+     {
+      "check": "lip outer faces at 0.2 mm clearance from the inside walls (x lo/hi, y lo/hi)",
+      "ok": true,
+      "actual": [
+       true,
+       true,
+       true,
+       true
+      ]
+     },
+     {
+      "check": "4 screw holes coaxial with the boss pilots (+-0.25 mm)",
+      "ok": true,
+      "actual": [
+       [
+        2004.5,
+        4.5,
+        1.7
+       ],
+       [
+        2075.5,
+        45.5,
+        1.7
+       ],
+       [
+        2004.5,
+        45.5,
+        1.7
+       ],
+       [
+        2075.5,
+        4.5,
+        1.7
+       ]
+      ]
+     },
+     {
+      "check": "countersinks (>= 4 conical faces)",
+      "ok": true,
+      "actual": 4
+     },
+     {
+      "check": "lid-base interference: none",
+      "ok": true,
+      "actual": "[{\"firstBodyId\":704,\"secondBodyId\":693,\"status\":\"no-volumetric-interference\",\"reasons\":[\"native-intersection-has-no-volume\"]}]"
+     },
+     {
+      "check": "base unchanged (face count and bounds)",
+      "ok": true,
+      "actual": {
+       "before": 59,
+       "now": 59
+      }
+     }
+    ]
+   },
+   "transcript": "agent-bench-tier1d-transcripts/d-r1.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 38
+   }
+  },
+  {
+   "part": "d",
+   "run": 2,
+   "prompt": "There is an enclosure base in the open Plasticity document (millimetres): an 80 x 50 x 25 mm open-top box at x=2000, y=0, z=0, with 2 mm walls and four screw bosses with pilot holes in the corners. Make a matching lid for it: a 2 mm thick plate with the same outline, sitting on top of the base, with a 1.5 mm lip underneath that fits inside the walls with 0.2 mm clearance per side. Add four countersunk screw holes aligned to the bosses. Measure everything from the existing enclosure. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/agent-bench-run-Vq0YMG/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 40 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 41787,
+   "startupMs": 670,
+   "timeToFirstToolMs": 3393,
+   "turns": 5,
+   "toolCalls": 6,
+   "errors": 0,
+   "retries": 0,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_describe_body",
+     "reqBytes": 2,
+     "respBytes": 2786,
+     "isError": false,
+     "startedMs": 3393,
+     "execMs": 499
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_find_faces",
+     "reqBytes": 87,
+     "respBytes": 13895,
+     "isError": false,
+     "startedMs": 13991,
+     "execMs": -325
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_call",
+     "reqBytes": 52,
+     "respBytes": 4094,
+     "isError": false,
+     "startedMs": 13991,
+     "execMs": 41
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_batch",
+     "routedTo": "batch(7 steps)",
+     "reqBytes": 1074,
+     "respBytes": 1219,
+     "isError": false,
+     "startedMs": 32867,
+     "execMs": 686
+    },
+    {
+     "turn": 4,
+     "name": "plasticity_describe_body",
+     "reqBytes": 10,
+     "respBytes": 914,
+     "isError": false,
+     "startedMs": 36588,
+     "execMs": -424
+    },
+    {
+     "turn": 4,
+     "name": "plasticity_check_interference",
+     "reqBytes": 84,
+     "respBytes": 322,
+     "isError": false,
+     "startedMs": 36588,
+     "execMs": 70
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 2723,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 10099,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 2,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 18835,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 4,
+     "modelMs": 3035,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 2,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 5,
+     "modelMs": 2797,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 0,
+     "thinkingChars": 0,
+     "textChars": 266
+    }
+   ],
+   "tokens": {
+    "input": 10,
+    "output": 2860,
+    "cacheRead": 149510,
+    "cacheWrite": 18884,
+    "thinking": 1629,
+    "perTurnKnown": false
+   },
+   "modelMsTotal": 37489,
+   "apiMs": 37492,
+   "costUsd": 0.3351449999999999,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 729 (`enclosure-lid`: 80 x 50 x 2 mm plate at z 25–27 with R3 corners, 1.5 mm solid lip at 0.2 mm clearance per side, four Ø3.4 through holes with 90° x Ø6.3 countersinks on the boss axes; read-back matches and there is no interference with the base).",
+   "verification": {
+    "verified": true,
+    "passed": 7,
+    "of": 7,
+    "bodyId": 729,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        729
+       ],
+       "said": 729,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "lid bounds",
+      "ok": true,
+      "expected": {
+       "min": [
+        2000,
+        0,
+        23.5
+       ],
+       "max": [
+        2080,
+        50,
+        27
+       ]
+      },
+      "actual": {
+       "min": [
+        2000,
+        0,
+        23.5
+       ],
+       "max": [
+        2080,
+        50,
+        27
+       ]
+      }
+     },
+     {
+      "check": "lip outer faces at 0.2 mm clearance from the inside walls (x lo/hi, y lo/hi)",
+      "ok": true,
+      "actual": [
+       true,
+       true,
+       true,
+       true
+      ]
+     },
+     {
+      "check": "4 screw holes coaxial with the boss pilots (+-0.25 mm)",
+      "ok": true,
+      "actual": [
+       [
+        2004.5,
+        4.5,
+        1.7
+       ],
+       [
+        2075.5,
+        45.5,
+        1.7
+       ],
+       [
+        2004.5,
+        45.5,
+        1.7
+       ],
+       [
+        2075.5,
+        4.5,
+        1.7
+       ]
+      ]
+     },
+     {
+      "check": "countersinks (>= 4 conical faces)",
+      "ok": true,
+      "actual": 4
+     },
+     {
+      "check": "lid-base interference: none",
+      "ok": true,
+      "actual": "[{\"firstBodyId\":729,\"secondBodyId\":718,\"status\":\"no-volumetric-interference\",\"reasons\":[\"native-intersection-has-no-volume\"]}]"
+     },
+     {
+      "check": "base unchanged (face count and bounds)",
+      "ok": true,
+      "actual": {
+       "before": 59,
+       "now": 59
+      }
+     }
+    ]
+   },
+   "transcript": "agent-bench-tier1d-transcripts/d-r2.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 38
+   }
+  },
+  {
+   "part": "d",
+   "run": 3,
+   "prompt": "There is an enclosure base in the open Plasticity document (millimetres): an 80 x 50 x 25 mm open-top box at x=2000, y=0, z=0, with 2 mm walls and four screw bosses with pilot holes in the corners. Make a matching lid for it: a 2 mm thick plate with the same outline, sitting on top of the base, with a 1.5 mm lip underneath that fits inside the walls with 0.2 mm clearance per side. Add four countersunk screw holes aligned to the bosses. Measure everything from the existing enclosure. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/agent-bench-run-h5Z1k5/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 40 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 38927,
+   "startupMs": 675,
+   "timeToFirstToolMs": 4163,
+   "turns": 5,
+   "toolCalls": 5,
+   "errors": 0,
+   "retries": 0,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_describe_body",
+     "reqBytes": 2,
+     "respBytes": 2786,
+     "isError": false,
+     "startedMs": 4163,
+     "execMs": 484
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_batch",
+     "routedTo": "batch(2 steps)",
+     "reqBytes": 287,
+     "respBytes": 6559,
+     "isError": false,
+     "startedMs": 18491,
+     "execMs": 53
+    },
+    {
+     "turn": 3,
+     "name": "plasticity_batch",
+     "routedTo": "batch(6 steps)",
+     "reqBytes": 1017,
+     "respBytes": 1090,
+     "isError": false,
+     "startedMs": 29930,
+     "execMs": 758
+    },
+    {
+     "turn": 4,
+     "name": "plasticity_describe_body",
+     "reqBytes": 10,
+     "respBytes": 914,
+     "isError": false,
+     "startedMs": 33774,
+     "execMs": -486
+    },
+    {
+     "turn": 4,
+     "name": "plasticity_check_interference",
+     "reqBytes": 84,
+     "respBytes": 322,
+     "isError": false,
+     "startedMs": 33774,
+     "execMs": 69
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 3489,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 13844,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 11385,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 4,
+     "modelMs": 3086,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 2,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 5,
+     "modelMs": 2157,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 0,
+     "thinkingChars": 0,
+     "textChars": 18
+    }
+   ],
+   "tokens": {
+    "input": 10,
+    "output": 2506,
+    "cacheRead": 139302,
+    "cacheWrite": 13453,
+    "thinking": 1356,
+    "perTurnKnown": false
+   },
+   "modelMsTotal": 33961,
+   "apiMs": 33437,
+   "costUsd": 0.266881,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 754",
+   "verification": {
+    "verified": true,
+    "passed": 7,
+    "of": 7,
+    "bodyId": 754,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        754
+       ],
+       "said": 754,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "lid bounds",
+      "ok": true,
+      "expected": {
+       "min": [
+        2000,
+        0,
+        23.5
+       ],
+       "max": [
+        2080,
+        50,
+        27
+       ]
+      },
+      "actual": {
+       "min": [
+        2000,
+        0,
+        23.5
+       ],
+       "max": [
+        2080,
+        50,
+        27
+       ]
+      }
+     },
+     {
+      "check": "lip outer faces at 0.2 mm clearance from the inside walls (x lo/hi, y lo/hi)",
+      "ok": true,
+      "actual": [
+       true,
+       true,
+       true,
+       true
+      ]
+     },
+     {
+      "check": "4 screw holes coaxial with the boss pilots (+-0.25 mm)",
+      "ok": true,
+      "actual": [
+       [
+        2004.5,
+        4.5,
+        1.7
+       ],
+       [
+        2075.5,
+        45.5,
+        1.7
+       ],
+       [
+        2004.5,
+        45.5,
+        1.7
+       ],
+       [
+        2075.5,
+        4.5,
+        1.7
+       ]
+      ]
+     },
+     {
+      "check": "countersinks (>= 4 conical faces)",
+      "ok": true,
+      "actual": 4
+     },
+     {
+      "check": "lid-base interference: none",
+      "ok": true,
+      "actual": "[{\"firstBodyId\":754,\"secondBodyId\":743,\"status\":\"no-volumetric-interference\",\"reasons\":[\"native-intersection-has-no-volume\"]}]"
+     },
+     {
+      "check": "base unchanged (face count and bounds)",
+      "ok": true,
+      "actual": {
+       "before": 59,
+       "now": 59
+      }
+     }
+    ]
+   },
+   "transcript": "agent-bench-tier1d-transcripts/d-r3.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 38
+   }
+  },
+  {
+   "part": "e",
+   "run": 1,
+   "prompt": "Make the same enclosure I asked for in my last session, but bigger. It was an open-top electronics enclosure base in Plasticity (millimetres) with 3 mm fillets on the four outer vertical corners, four M3 screw bosses with pilot holes in the inside corners, a 12 x 6 mm rounded-corner connector opening in the middle of the front wall (the wall at y=0), and a 1 mm chamfer on the outer top rim. Now make it 100 x 60 x 30 mm with 2.5 mm walls. Put its lower-left-front corner at x=2000, y=0, z=0 so it clears the other bodies in the file. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/agent-bench-run-ah8FT2/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 40 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 33157,
+   "startupMs": 668,
+   "timeToFirstToolMs": 23780,
+   "turns": 3,
+   "toolCalls": 2,
+   "errors": 0,
+   "retries": 0,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_batch",
+     "routedTo": "batch(8 steps)",
+     "reqBytes": 1341,
+     "respBytes": 1804,
+     "isError": false,
+     "startedMs": 23780,
+     "execMs": 1153
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_describe_body",
+     "reqBytes": 10,
+     "respBytes": 1631,
+     "isError": false,
+     "startedMs": 27835,
+     "execMs": 36
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 23113,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 2902,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 1989,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 0,
+     "thinkingChars": 0,
+     "textChars": 18
+    }
+   ],
+   "tokens": {
+    "input": 6,
+    "output": 2237,
+    "cacheRead": 75141,
+    "cacheWrite": 8482,
+    "thinking": 1326,
+    "perTurnKnown": false
+   },
+   "modelMsTotal": 28004,
+   "apiMs": 27995,
+   "costUsd": 0.1783455,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 768",
+   "verification": {
+    "verified": true,
+    "passed": 8,
+    "of": 8,
+    "bodyId": 768,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        768
+       ],
+       "said": 768,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "enclosure bounds",
+      "ok": true,
+      "expected": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2100,
+        60,
+        30
+       ]
+      },
+      "actual": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2100,
+        60,
+        30
+       ]
+      }
+     },
+     {
+      "check": "inner wall faces at 2.5 mm (x lo/hi, y lo/hi)",
+      "ok": true,
+      "actual": [
+       true,
+       true,
+       true,
+       true
+      ]
+     },
+     {
+      "check": "cavity floor present (open top proxy)",
+      "ok": true
+     },
+     {
+      "check": "3 mm outer vertical corner fillets (4 corners)",
+      "ok": true,
+      "actual": [
+       [
+        2003,
+        3
+       ],
+       [
+        2003,
+        57
+       ],
+       [
+        2097,
+        57
+       ],
+       [
+        2097,
+        3
+       ]
+      ]
+     },
+     {
+      "check": "4 pilot holes, one per inside corner (M3, r 1.1-1.75)",
+      "ok": true,
+      "actual": [
+       [
+        2005.5,
+        54.5,
+        1.25
+       ],
+       [
+        2005.5,
+        5.5,
+        1.25
+       ],
+       [
+        2094.5,
+        54.5,
+        1.25
+       ],
+       [
+        2094.5,
+        5.5,
+        1.25
+       ]
+      ]
+     },
+     {
+      "check": "pilot axes equal the reference build positions (informational)",
+      "soft": true,
+      "ok": false
+     },
+     {
+      "check": "12 x 6 rounded connector opening in the front wall",
+      "ok": true,
+      "actual": {
+       "w": 12,
+       "h": 6,
+       "cx": 2050,
+       "corners": 4
+      }
+     },
+     {
+      "check": "1 mm chamfer on the top outer rim",
+      "ok": true,
+      "actual": 4
+     }
+    ]
+   },
+   "transcript": "agent-bench-tier1d-transcripts/e-r1.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 19
+   }
+  },
+  {
+   "part": "e",
+   "run": 2,
+   "prompt": "Make the same enclosure I asked for in my last session, but bigger. It was an open-top electronics enclosure base in Plasticity (millimetres) with 3 mm fillets on the four outer vertical corners, four M3 screw bosses with pilot holes in the inside corners, a 12 x 6 mm rounded-corner connector opening in the middle of the front wall (the wall at y=0), and a 1 mm chamfer on the outer top rim. Now make it 100 x 60 x 30 mm with 2.5 mm walls. Put its lower-left-front corner at x=2000, y=0, z=0 so it clears the other bodies in the file. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/agent-bench-run-jJKqvp/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 40 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 27407,
+   "startupMs": 666,
+   "timeToFirstToolMs": 18544,
+   "turns": 3,
+   "toolCalls": 2,
+   "errors": 0,
+   "retries": 0,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_batch",
+     "routedTo": "batch(8 steps)",
+     "reqBytes": 1328,
+     "respBytes": 1727,
+     "isError": false,
+     "startedMs": 18544,
+     "execMs": 1132
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_describe_body",
+     "reqBytes": 10,
+     "respBytes": 1637,
+     "isError": false,
+     "startedMs": 22129,
+     "execMs": 34
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 17878,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 2453,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 2453,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 0,
+     "thinkingChars": 0,
+     "textChars": 18
+    }
+   ],
+   "tokens": {
+    "input": 6,
+    "output": 1820,
+    "cacheRead": 74710,
+    "cacheWrite": 8030,
+    "thinking": 899,
+    "perTurnKnown": false
+   },
+   "modelMsTotal": 22784,
+   "apiMs": 22775,
+   "costUsd": 0.16318500000000002,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 780",
+   "verification": {
+    "verified": true,
+    "passed": 8,
+    "of": 8,
+    "bodyId": 780,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        780
+       ],
+       "said": 780,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "enclosure bounds",
+      "ok": true,
+      "expected": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2100,
+        60,
+        30
+       ]
+      },
+      "actual": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2100,
+        60,
+        30
+       ]
+      }
+     },
+     {
+      "check": "inner wall faces at 2.5 mm (x lo/hi, y lo/hi)",
+      "ok": true,
+      "actual": [
+       true,
+       true,
+       true,
+       true
+      ]
+     },
+     {
+      "check": "cavity floor present (open top proxy)",
+      "ok": true
+     },
+     {
+      "check": "3 mm outer vertical corner fillets (4 corners)",
+      "ok": true,
+      "actual": [
+       [
+        2003,
+        3
+       ],
+       [
+        2003,
+        57
+       ],
+       [
+        2097,
+        57
+       ],
+       [
+        2097,
+        3
+       ]
+      ]
+     },
+     {
+      "check": "4 pilot holes, one per inside corner (M3, r 1.1-1.75)",
+      "ok": true,
+      "actual": [
+       [
+        2005.5,
+        54.5,
+        1.25
+       ],
+       [
+        2005.5,
+        5.5,
+        1.25
+       ],
+       [
+        2094.5,
+        54.5,
+        1.25
+       ],
+       [
+        2094.5,
+        5.5,
+        1.25
+       ]
+      ]
+     },
+     {
+      "check": "pilot axes equal the reference build positions (informational)",
+      "soft": true,
+      "ok": false
+     },
+     {
+      "check": "12 x 6 rounded connector opening in the front wall",
+      "ok": true,
+      "actual": {
+       "w": 12,
+       "h": 6,
+       "cx": 2050,
+       "corners": 4
+      }
+     },
+     {
+      "check": "1 mm chamfer on the top outer rim",
+      "ok": true,
+      "actual": 4
+     }
+    ]
+   },
+   "transcript": "agent-bench-tier1d-transcripts/e-r2.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 19
+   }
+  },
+  {
+   "part": "e",
+   "run": 3,
+   "prompt": "Make the same enclosure I asked for in my last session, but bigger. It was an open-top electronics enclosure base in Plasticity (millimetres) with 3 mm fillets on the four outer vertical corners, four M3 screw bosses with pilot holes in the inside corners, a 12 x 6 mm rounded-corner connector opening in the middle of the front wall (the wall at y=0), and a 1 mm chamfer on the outer top rim. Now make it 100 x 60 x 30 mm with 2.5 mm walls. Put its lower-left-front corner at x=2000, y=0, z=0 so it clears the other bodies in the file. Verify the result, then reply with one line: DONE and the body id.",
+   "commandLine": "claude -p \"<prompt>\" --mcp-config /var/folders/jn/fj6vvlj13154ng407rp_k95h0000gn/T/agent-bench-run-CCLrpI/mcp.json --strict-mcp-config --output-format stream-json --verbose --tools \"\" --allowedTools mcp__plasticity --setting-sources \"\" --permission-mode dontAsk --max-turns 40 --disable-slash-commands --no-session-persistence",
+   "exit": 0,
+   "timedOut": false,
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"claude-fable-5-2\",\"query_source\":\"sdk\"}\n",
+   "wallMs": 29402,
+   "startupMs": 667,
+   "timeToFirstToolMs": 18326,
+   "turns": 3,
+   "toolCalls": 3,
+   "errors": 0,
+   "retries": 0,
+   "calls": [
+    {
+     "turn": 1,
+     "name": "plasticity_batch",
+     "routedTo": "batch(6 steps)",
+     "reqBytes": 788,
+     "respBytes": 990,
+     "isError": false,
+     "startedMs": 18326,
+     "execMs": 696
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_batch",
+     "routedTo": "batch(3 steps)",
+     "reqBytes": 560,
+     "respBytes": 1239,
+     "isError": false,
+     "startedMs": 24573,
+     "execMs": 295
+    },
+    {
+     "turn": 2,
+     "name": "plasticity_describe_body",
+     "reqBytes": 10,
+     "respBytes": 1637,
+     "isError": false,
+     "startedMs": 24573,
+     "execMs": 307
+    }
+   ],
+   "perTurn": [
+    {
+     "turn": 1,
+     "modelMs": 17658,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 1,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 2,
+     "modelMs": 5551,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 2,
+     "thinkingChars": 0,
+     "textChars": 0
+    },
+    {
+     "turn": 3,
+     "modelMs": 1904,
+     "outputTokens": null,
+     "inputTokens": null,
+     "cacheRead": null,
+     "cacheWrite": null,
+     "toolCalls": 0,
+     "thinkingChars": 0,
+     "textChars": 18
+    }
+   ],
+   "tokens": {
+    "input": 6,
+    "output": 2058,
+    "cacheRead": 74125,
+    "cacheWrite": 8571,
+    "thinking": 1071,
+    "perTurnKnown": false
+   },
+   "modelMsTotal": 25113,
+   "apiMs": 25109,
+   "costUsd": 0.1742525,
+   "resultSubtype": "success",
+   "isErrorResult": false,
+   "terminalReason": "completed",
+   "permissionDenials": 0,
+   "model": "claude-fable-5-2",
+   "finalText": "DONE — body id 792",
+   "verification": {
+    "verified": true,
+    "passed": 8,
+    "of": 8,
+    "bodyId": 792,
+    "checks": [
+     {
+      "check": "a new solid body exists",
+      "ok": true,
+      "actual": {
+       "newSolids": [
+        792
+       ],
+       "said": 792,
+       "how": "id from DONE line"
+      }
+     },
+     {
+      "check": "DONE id names the result body",
+      "soft": true,
+      "ok": true
+     },
+     {
+      "check": "no stray new solids (only the result)",
+      "soft": true,
+      "ok": true,
+      "actual": 1
+     },
+     {
+      "check": "enclosure bounds",
+      "ok": true,
+      "expected": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2100,
+        60,
+        30
+       ]
+      },
+      "actual": {
+       "min": [
+        2000,
+        0,
+        0
+       ],
+       "max": [
+        2100,
+        60,
+        30
+       ]
+      }
+     },
+     {
+      "check": "inner wall faces at 2.5 mm (x lo/hi, y lo/hi)",
+      "ok": true,
+      "actual": [
+       true,
+       true,
+       true,
+       true
+      ]
+     },
+     {
+      "check": "cavity floor present (open top proxy)",
+      "ok": true
+     },
+     {
+      "check": "3 mm outer vertical corner fillets (4 corners)",
+      "ok": true,
+      "actual": [
+       [
+        2003,
+        3
+       ],
+       [
+        2003,
+        57
+       ],
+       [
+        2097,
+        57
+       ],
+       [
+        2097,
+        3
+       ]
+      ]
+     },
+     {
+      "check": "4 pilot holes, one per inside corner (M3, r 1.1-1.75)",
+      "ok": true,
+      "actual": [
+       [
+        2005.5,
+        54.5,
+        1.25
+       ],
+       [
+        2005.5,
+        5.5,
+        1.25
+       ],
+       [
+        2094.5,
+        5.5,
+        1.25
+       ],
+       [
+        2094.5,
+        54.5,
+        1.25
+       ]
+      ]
+     },
+     {
+      "check": "pilot axes equal the reference build positions (informational)",
+      "soft": true,
+      "ok": false
+     },
+     {
+      "check": "12 x 6 rounded connector opening in the front wall",
+      "ok": true,
+      "actual": {
+       "w": 12,
+       "h": 6,
+       "cx": 2050,
+       "corners": 4
+      }
+     },
+     {
+      "check": "1 mm chamfer on the top outer rim",
+      "ok": true,
+      "actual": 4
+     }
+    ]
+   },
+   "transcript": "agent-bench-tier1d-transcripts/e-r3.jsonl",
+   "restored": {
+    "ok": true,
+    "undoDepth": 0,
+    "bodyCount": 4,
+    "redoDepth": 19
+   }
+  }
+ ]
+}
