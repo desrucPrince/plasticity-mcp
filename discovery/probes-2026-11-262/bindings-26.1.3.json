@@ -1,0 +1,360 @@
+{
+ "label": "26.1.3",
+ "totalBindingsOnBuild": 4603,
+ "status": {
+  "targetId": "1ADFA40FD1D08EC2065AD40FB33FDD64",
+  "title": "Untitled - Plasticity",
+  "documentToken": "01a1e50b-82f6-7c36-a2c6-9e2e7e4ff8b3",
+  "revision": "r0.8faa1825e323c999",
+  "dbVersion": 6,
+  "undoDepth": 0,
+  "redoDepth": 0,
+  "materials": [],
+  "measurements": [],
+  "sectionAnalyses": [],
+  "instances": [],
+  "referenceMeshes": [],
+  "activeGroupId": 0,
+  "groups": [
+   {
+    "id": 0,
+    "name": "Scene",
+    "parentId": null,
+    "childGroupIds": [],
+    "bodyIds": [
+     1,
+     3,
+     4,
+     5
+    ],
+    "instanceIds": [],
+    "referenceMeshIds": [],
+    "otherNodeKeys": [],
+    "visible": true,
+    "hidden": false,
+    "locked": false
+   }
+  ],
+  "construction": {
+   "planes": [],
+   "activePlaneId": "standard:top",
+   "planeStateToken": "planes:50b2ca886dad7e7f",
+   "viewStateToken": "workplane:standard:top:0.00000000000,0.00000000000,0.00000000000,0.00000000000,0.00000000000,1.00000000000,1.00000000000,0.00000000000,0.00000000000,0.00000000000,1.00000000000,0.00000000000",
+   "standardPlaneIds": [
+    "standard:back",
+    "standard:bottom",
+    "standard:front",
+    "standard:left",
+    "standard:right",
+    "standard:top"
+   ]
+  },
+  "regions": [],
+  "bodies": [
+   {
+    "id": 1,
+    "versionId": 1,
+    "type": "Solid",
+    "name": "test-block",
+    "materialId": 0,
+    "visible": true,
+    "hidden": false,
+    "locked": false,
+    "boundsMm": {
+     "min": [
+      0,
+      0,
+      0
+     ],
+     "max": [
+      40.00000000000001,
+      30,
+      10
+     ]
+    },
+    "boundsMethod": "native-box",
+    "faceCount": 11,
+    "edgeCount": 26,
+    "vertexCount": 16
+   },
+   {
+    "id": 5,
+    "versionId": 2,
+    "type": "Sheet",
+    "name": "Swept.001",
+    "materialId": 0,
+    "visible": true,
+    "hidden": false,
+    "locked": false,
+    "boundsMm": {
+     "min": [
+      60,
+      0,
+      0
+     ],
+     "max": [
+      80.00000000000001,
+      5,
+      30
+     ]
+    },
+    "boundsMethod": "native-box",
+    "faceCount": 1,
+    "edgeCount": 4,
+    "vertexCount": 4
+   },
+   {
+    "id": 3,
+    "versionId": 3,
+    "type": "Wire",
+    "name": "Curve.001",
+    "materialId": 0,
+    "visible": true,
+    "hidden": false,
+    "locked": false,
+    "boundsMm": {
+     "min": [
+      60.00000000000001,
+      0,
+      0
+     ],
+     "max": [
+      80.00000000000001,
+      5,
+      0
+     ]
+    },
+    "boundsMethod": "native-box",
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   },
+   {
+    "id": 4,
+    "versionId": 4,
+    "type": "Wire",
+    "name": "Curve.002",
+    "materialId": 0,
+    "visible": true,
+    "hidden": false,
+    "locked": false,
+    "boundsMm": {
+     "min": [
+      60,
+      0,
+      0
+     ],
+     "max": [
+      60,
+      0,
+      30
+     ]
+    },
+    "boundsMethod": "native-box",
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "bodyPagination": {
+   "offset": 0,
+   "limit": 50,
+   "total": 4,
+   "nextOffset": null
+  }
+ },
+ "tools": {
+  "sweepCurves": [
+   "LineSegmentHelper",
+   "SweepFactory",
+   "SweepGuideMethod",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "sweepRegions (guides)": [
+   "LineSegmentHelper",
+   "SweepAlignmentType",
+   "SweepCornerType",
+   "SweepFactory",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "extendSheetEdges": [
+   "BodyExtensionType",
+   "ExtendSheetFactory",
+   "ExtensionLimit",
+   "ExtensionShape",
+   "LineSegmentHelper",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "xsidedPatch": [
+   "LineSegmentHelper",
+   "Vector2",
+   "Vector3",
+   "XSidedFactory",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "convertReferenceMeshToPolySplines": [
+   "ConvertMeshToPolySplinesFactory",
+   "LineSegmentHelper",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "showFaceControlPoints": [
+   "LineSegmentHelper",
+   "ShowFacePointsFactory",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "hideFaceControlPoints": [
+   "LineSegmentHelper",
+   "ShowFacePointsFactory",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "moveFaceControlPoints": [
+   "LineSegmentHelper",
+   "MultiMoveControlPointFactory",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "moveMeasurementLabel": [
+   "LineSegmentHelper",
+   "MoveMeasurementCommand",
+   "MoveMeasurementFactory",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "setDrivingDistance": [
+   "DimensionDistanceCommand",
+   "DimensionDistanceSpaceDialog",
+   "LineSegmentHelper",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "exportIges": [
+   "ExportCadFactory",
+   "LineSegmentHelper",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "exportSat": [
+   "ExportCadFactory",
+   "LineSegmentHelper",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "clearSelection": [
+   "LineSegmentHelper",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "createControlPointCurve": [
+   "CurveFactory",
+   "CurveType",
+   "LineSegmentHelper",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "knifeCurve": [
+   "CurveType",
+   "KnifeCurveFactory",
+   "LineSegmentHelper",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "cutWithCurves": [
+   "LineSegmentHelper",
+   "MultiCutFactory",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "extrudeCurves": [
+   "ExtrudeFactory",
+   "LineSegmentHelper",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "filletCurves": [
+   "FilletCurveFactory",
+   "LineSegmentHelper",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "createMirroredInstance": [
+   "CreateInstanceFactory",
+   "LineSegmentHelper",
+   "ProjectingScaleItemAndEmptyFactory",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "createRib (recipe steps)": [
+   "BooleanFactory",
+   "CurveFactory",
+   "CurveType",
+   "ExtrudeFactory",
+   "LineSegmentHelper",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ],
+  "keepProfile:false delete (recipes)": [
+   "LineSegmentHelper",
+   "Vector2",
+   "Vector3",
+   "makeAxisAlignedMeasurementPath"
+  ]
+ },
+ "bindings": {
+  "BodyExtensionType": true,
+  "BooleanFactory": true,
+  "ContinuityType": true,
+  "ConvertMeshToPolySplinesFactory": true,
+  "CreateInstanceFactory": true,
+  "CurveFactory": true,
+  "CurveType": true,
+  "DimensionDistanceCommand": true,
+  "DimensionDistanceSpaceDialog": true,
+  "ExportCadFactory": true,
+  "ExtendSheetFactory": true,
+  "ExtensionLimit": true,
+  "ExtensionShape": true,
+  "ExtrudeFactory": true,
+  "FilletCurveFactory": true,
+  "KnifeCurveFactory": true,
+  "LineSegmentHelper": true,
+  "MoveMeasurementCommand": true,
+  "MoveMeasurementFactory": true,
+  "MultiCutFactory": true,
+  "MultiMoveControlPointFactory": true,
+  "ProjectingScaleItemAndEmptyFactory": true,
+  "ShowFacePointsFactory": true,
+  "SweepAlignmentType": true,
+  "SweepCornerType": true,
+  "SweepFactory": true,
+  "SweepGuideMethod": true,
+  "Vector2": true,
+  "Vector3": true,
+  "XSidedFactory": true,
+  "makeAxisAlignedMeasurementPath": true
+ }
+}

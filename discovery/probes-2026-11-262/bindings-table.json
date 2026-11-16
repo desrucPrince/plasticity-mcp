@@ -1,0 +1,340 @@
+{
+ "note": "26.2.0-beta.4 could not be driven live; its column is string presence in the compiled renderer bundle, not proof that the binding resolves. 26.2.7 stable: not launchable with MCP (inspector fuse EnableNodeCliInspectArguments disabled; launcher refuses) and its code sits in an encrypted PLSEC001 pack (Resources/plasticity.jsc.pack), so no live or static column exists.",
+ "rows": [
+  {
+   "binding": "BodyExtensionType",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "extendSheetEdges"
+   ]
+  },
+  {
+   "binding": "BooleanFactory",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "createRib (recipe steps)"
+   ]
+  },
+  {
+   "binding": "ContinuityType",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": []
+  },
+  {
+   "binding": "ConvertMeshToPolySplinesFactory",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "convertReferenceMeshToPolySplines"
+   ]
+  },
+  {
+   "binding": "CreateInstanceFactory",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "createMirroredInstance"
+   ]
+  },
+  {
+   "binding": "CurveFactory",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "createControlPointCurve",
+    "createRib (recipe steps)"
+   ]
+  },
+  {
+   "binding": "CurveType",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "createControlPointCurve",
+    "knifeCurve",
+    "createRib (recipe steps)"
+   ]
+  },
+  {
+   "binding": "DimensionDistanceCommand",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "setDrivingDistance"
+   ]
+  },
+  {
+   "binding": "DimensionDistanceSpaceDialog",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "setDrivingDistance"
+   ]
+  },
+  {
+   "binding": "ExportCadFactory",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "exportIges",
+    "exportSat"
+   ]
+  },
+  {
+   "binding": "ExtendSheetFactory",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "extendSheetEdges"
+   ]
+  },
+  {
+   "binding": "ExtensionLimit",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "extendSheetEdges"
+   ]
+  },
+  {
+   "binding": "ExtensionShape",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "extendSheetEdges"
+   ]
+  },
+  {
+   "binding": "ExtrudeFactory",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "extrudeCurves",
+    "createRib (recipe steps)"
+   ]
+  },
+  {
+   "binding": "FilletCurveFactory",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "filletCurves"
+   ]
+  },
+  {
+   "binding": "KnifeCurveFactory",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "knifeCurve"
+   ]
+  },
+  {
+   "binding": "LineSegmentHelper",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "sweepCurves",
+    "sweepRegions (guides)",
+    "extendSheetEdges",
+    "xsidedPatch",
+    "convertReferenceMeshToPolySplines",
+    "showFaceControlPoints",
+    "hideFaceControlPoints",
+    "moveFaceControlPoints",
+    "moveMeasurementLabel",
+    "setDrivingDistance",
+    "exportIges",
+    "exportSat",
+    "clearSelection",
+    "createControlPointCurve",
+    "knifeCurve",
+    "cutWithCurves",
+    "extrudeCurves",
+    "filletCurves",
+    "createMirroredInstance",
+    "createRib (recipe steps)",
+    "keepProfile:false delete (recipes)"
+   ]
+  },
+  {
+   "binding": "MoveMeasurementCommand",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "moveMeasurementLabel"
+   ]
+  },
+  {
+   "binding": "MoveMeasurementFactory",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "moveMeasurementLabel"
+   ]
+  },
+  {
+   "binding": "MultiCutFactory",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": false,
+   "26.2.0-beta.4 route": "absent by name; native-discovery.ts aliases MultiCutFactory -> CutFactory (CutFactory in bundle: true)",
+   "usedBy": [
+    "cutWithCurves"
+   ]
+  },
+  {
+   "binding": "MultiMoveControlPointFactory",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": false,
+   "26.2.0-beta.4 route": "absent by name; native-discovery.ts aliases MultiMoveControlPointFactory -> MoveControlPointFactory (MoveControlPointFactory in bundle: true)",
+   "usedBy": [
+    "moveFaceControlPoints"
+   ]
+  },
+  {
+   "binding": "ProjectingScaleItemAndEmptyFactory",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "createMirroredInstance"
+   ]
+  },
+  {
+   "binding": "ShowFacePointsFactory",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "showFaceControlPoints",
+    "hideFaceControlPoints"
+   ]
+  },
+  {
+   "binding": "SweepAlignmentType",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "sweepRegions (guides)"
+   ]
+  },
+  {
+   "binding": "SweepCornerType",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "sweepRegions (guides)"
+   ]
+  },
+  {
+   "binding": "SweepFactory",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "sweepCurves",
+    "sweepRegions (guides)"
+   ]
+  },
+  {
+   "binding": "SweepGuideMethod",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "sweepCurves"
+   ]
+  },
+  {
+   "binding": "Vector2",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "sweepCurves",
+    "sweepRegions (guides)",
+    "extendSheetEdges",
+    "xsidedPatch",
+    "convertReferenceMeshToPolySplines",
+    "showFaceControlPoints",
+    "hideFaceControlPoints",
+    "moveFaceControlPoints",
+    "moveMeasurementLabel",
+    "setDrivingDistance",
+    "exportIges",
+    "exportSat",
+    "clearSelection",
+    "createControlPointCurve",
+    "knifeCurve",
+    "cutWithCurves",
+    "extrudeCurves",
+    "filletCurves",
+    "createMirroredInstance",
+    "createRib (recipe steps)",
+    "keepProfile:false delete (recipes)"
+   ]
+  },
+  {
+   "binding": "Vector3",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "sweepCurves",
+    "sweepRegions (guides)",
+    "extendSheetEdges",
+    "xsidedPatch",
+    "convertReferenceMeshToPolySplines",
+    "showFaceControlPoints",
+    "hideFaceControlPoints",
+    "moveFaceControlPoints",
+    "moveMeasurementLabel",
+    "setDrivingDistance",
+    "exportIges",
+    "exportSat",
+    "clearSelection",
+    "createControlPointCurve",
+    "knifeCurve",
+    "cutWithCurves",
+    "extrudeCurves",
+    "filletCurves",
+    "createMirroredInstance",
+    "createRib (recipe steps)",
+    "keepProfile:false delete (recipes)"
+   ]
+  },
+  {
+   "binding": "XSidedFactory",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "xsidedPatch"
+   ]
+  },
+  {
+   "binding": "makeAxisAlignedMeasurementPath",
+   "live on 26.1.3": true,
+   "name in 26.2.0-beta.4 bundle (static only)": true,
+   "usedBy": [
+    "sweepCurves",
+    "sweepRegions (guides)",
+    "extendSheetEdges",
+    "xsidedPatch",
+    "convertReferenceMeshToPolySplines",
+    "showFaceControlPoints",
+    "hideFaceControlPoints",
+    "moveFaceControlPoints",
+    "moveMeasurementLabel",
+    "setDrivingDistance",
+    "exportIges",
+    "exportSat",
+    "clearSelection",
+    "createControlPointCurve",
+    "knifeCurve",
+    "cutWithCurves",
+    "extrudeCurves",
+    "filletCurves",
+    "createMirroredInstance",
+    "createRib (recipe steps)",
+    "keepProfile:false delete (recipes)"
+   ]
+  }
+ ]
+}
