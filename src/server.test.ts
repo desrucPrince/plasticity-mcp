@@ -1382,6 +1382,7 @@ test("compact catalog exposes core tools while routing hidden operations through
     "plasticity_create_through_hole_pattern", "plasticity_create_countersink_pattern", "plasticity_check_interference",
     "plasticity_measure_parallel_planar_face_clearance", "plasticity_set_driving_distance",
     "plasticity_describe_body",
+    "plasticity_create_bracket", "plasticity_place_body", "plasticity_transfer_holes",
   ]));
   assert.equal(listed.tools[0]?.name, "plasticity_call");
 
