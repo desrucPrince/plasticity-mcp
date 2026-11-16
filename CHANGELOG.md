@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Add `plasticity_sweep_curves` (Wire profiles to Sheets), `guideIds`/`guideMethod` rails on `plasticity_sweep_regions`, `shape`/`targetId`/`merge` on `plasticity_extend_sheet_edges`, and `plasticity_move_measurement_label`. Live script: `accept:native-extend-sweep-label`.
+- Polish IGES/SAT export: always stage `geometry.igs`, report a missing file clearly, fix the validator wording. `plasticity_clear_selection` is strict, non-destructive and findable as deselect, unselect or select none.
+
 ## 0.2.2 — 2026-10-11
 
 - Cache serialized body topology to avoid repeated native-wrapper allocation when reading an unchanged scene; retain live names, visibility and materials and invalidate on geometry/history changes (#2, #3).

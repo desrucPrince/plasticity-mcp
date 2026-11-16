@@ -168,7 +168,9 @@ vertex geometry is needed. Non-state operation results keep their own schema.
   rejected to avoid stale frames; screenshots support visual review, while exact
   dimensions and geometry validity come from native B-Rep reads
 - Documents: save a copy, open with mandatory backup, exact STEP and Parasolid
-  (`.x_t`/`.x_b`) import/export, native editable SVG Wire/Region import,
+  (`.x_t`/`.x_b`) import/export, IGES (`.igs`/`.iges`) and ACIS SAT (`.sat`) export,
+  `plasticity_clear_selection` (deselect, unselect, select none; no Undo entry),
+  native editable SVG Wire/Region import,
   orthographic hidden-line SVG drawings of Solid B-rep geometry, and
   approximate STL/OBJ reference-mesh import with explicit source units,
   millimeter-scaled binary STL export, validated OBJ export, and validated 3MF
@@ -1132,6 +1134,12 @@ Six native history steps are returned.
 `plasticity_sweep_regions` creates exact capped solids from explicit closed
 Regions and a Wire spine. It exposes Plasticity's normal, parallel and transport
 alignment, miter/round corners, twist, terminal scale and simplification.
+Optional `guideIds` (current Wire rails) and `guideMethod` (`point`, `chord`,
+`curve`) steer the profile along rails; a rail moves the result bounds.
+`plasticity_sweep_curves` sweeps one or more current Wire profiles, open or
+closed, along a Wire spine and returns independent Sheets. It takes the same
+optional `guideIds` and `guideMethod`, plus `twistDegrees` and a positive
+`scale`. It has no thickness, alignment or corner option.
 `plasticity_loft_regions` consumes an ordered list of Regions from separate
 sketch planes and creates capped loft geometry; open and closed profile chains
 and native simplification are supported. Optional `guideIds` reference current
@@ -1258,6 +1266,9 @@ numeric `segmentEntityId` from `plasticity_list_curve_directions`; Solid and
 Sheet edges use the current string `edgeId`. List results include the native
 topology target, exact radius, and derived diameter in millimeters. It is a
 radius measurement even when a downstream table presents its derived diameter.
+`plasticity_move_measurement_label` moves the dimension line and label of one
+distance measurement. `offsetMm` is `[along, perpendicular]` in the same frame
+that `plasticity_list_measurements` reports. The measurement keeps its name.
 `plasticity_delete_measurement` selects that native measurement and delegates
 removal to Plasticity's own removal command, also as one Undo step. Body topology
 and measurement IDs are valid only for the current document revision; use the
@@ -1489,9 +1500,13 @@ Solid in the same native history step.
 `plasticity_cap_sheet_holes` fills every planar open boundary on one or more
 current Sheet bodies in one native history step. Use it when all compatible
 openings should be closed; Plasticity promotes a fully closed shell to a Solid.
-`plasticity_extend_sheet_edges` linearly extends selected boundary edges on one
+`plasticity_extend_sheet_edges` extends selected boundary edges on one
 current Sheet by an exact positive millimeter distance. It modifies the Sheet
 in one native history step for later trimming, joining, or solidification.
+Optional `shape` is `linear` (default), `soft`, `reflective` or `natural`.
+Optional `targetId` extends up to another Solid or Sheet instead of a distance;
+give exactly one of `distanceMm` and `targetId`. `merge: false` keeps the
+extension as a separate face.
 `plasticity_validate_bodies` runs the native C3D `Check()` method and reports
 its diagnostic codes together with exact topology-derived Sheet boundary
 edges. A native Solid is marked `printableSolid` when `Check()` reports no
@@ -2039,6 +2054,8 @@ npm run accept:groups -- --target <target-id> --allow-disposable-mutations --out
 npm run accept:interference -- --target <target-id> --allow-disposable-mutations --output <new-directory>
 npm run accept:solid-properties -- --target <target-id> --allow-disposable-mutations --output <new-directory>
 npm run accept:native-parasolid -- --target <target-id> --allow-disposable-mutations --output <new-directory>
+npm run accept:native-iges-sat-clear-selection -- --target <target-id> --allow-disposable-mutations --output <new-directory>
+npm run accept:native-extend-sweep-label -- --target <target-id> --allow-disposable-mutations --output <new-directory>
 ```
 
 The live acceptance run created an 80 × 40 × 8 mm plate with two Ø6 mm

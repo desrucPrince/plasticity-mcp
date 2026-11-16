@@ -7208,3 +7208,55 @@ test("clearSelection executes its native source, checks the revision, and create
   assert.equal(reads.length, readCount);
   assert.equal(selected.removed, 1);
 });
+
+test("IGES export always stages geometry.igs, even for a .iges request", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-iges-stage-test-"));
+  const f = cadExportFixture();
+  try {
+    f.stage(Buffer.from(igesLine("S") + igesLine("G")));
+    await f.operations.exportIges([7], join(root, "box.iges"), f.state.revision);
+    assert.match(f.exported[0]?.filePath ?? "", /\.plasticity-iges-[^/]+\/geometry\.igs$/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("IGES export reports a missing staged file instead of a raw ENOENT", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-iges-nofile-test-"));
+  const f = cadExportFixture();
+  try {
+    f.stage(undefined);
+    const output = join(root, "none.igs");
+    await assert.rejects(f.operations.exportIges([7], output, f.state.revision), /^Error: Plasticity wrote no IGES file$/u);
+    await assert.rejects(readFile(output), { code: "ENOENT" });
+    assert.deepEqual(await readdir(root), []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("SAT export reports a missing staged file instead of a raw ENOENT", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-sat-nofile-test-"));
+  const f = cadExportFixture();
+  try {
+    f.stage(undefined);
+    const output = join(root, "none.sat");
+    await assert.rejects(f.operations.exportSat([7], output, f.state.revision), /^Error: Plasticity wrote no SAT file$/u);
+    await assert.rejects(readFile(output), { code: "ENOENT" });
+    assert.deepEqual(await readdir(root), []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("IGES and SAT validators describe an export, not a received file", async () => {
+  const root = await mkdtemp(join(tmpdir(), "plasticity-cad-wording-test-"));
+  const f = cadExportFixture();
+  try {
+    f.stage(Buffer.from("not iges\n"));
+    await assert.rejects(f.operations.exportIges([7], join(root, "bad.igs"), f.state.revision), /^Error: Plasticity produced an invalid IGES file$/u);
+    await assert.rejects(f.operations.exportSat([7], join(root, "bad.sat"), f.state.revision), /^Error: Plasticity produced an invalid SAT file$/u);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

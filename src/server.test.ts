@@ -6184,3 +6184,159 @@ test("MCP instructions name the calling client instead of Codex in the opening l
     assert.match(instructions, /^Use Plasticity MCP as the native CAD tool; keep the conversation in the calling client\./u);
   });
 });
+
+test("MCP registers each Upgrades A tool once and declares the new optional inputs", async () => {
+  await withOperationsClient({}, async (client) => {
+    const tools = (await client.listTools()).tools;
+    for (const name of ["plasticity_sweep_curves", "plasticity_move_measurement_label", "plasticity_sweep_regions", "plasticity_extend_sheet_edges", "plasticity_clear_selection"]) {
+      assert.equal(tools.filter((entry) => entry.name === name).length, 1, name);
+    }
+    const properties = (name: string) => Object.keys((tools.find((entry) => entry.name === name)?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {});
+    assert.deepEqual(properties("plasticity_extend_sheet_edges").filter((key) => ["distanceMm", "targetId", "shape", "merge"].includes(key)).sort(), ["distanceMm", "merge", "shape", "targetId"]);
+    assert.deepEqual(properties("plasticity_sweep_regions").filter((key) => ["guideIds", "guideMethod"].includes(key)).sort(), ["guideIds", "guideMethod"]);
+    assert.deepEqual(properties("plasticity_sweep_curves").sort(), ["guideIds", "guideMethod", "intent", "profileIds", "revision", "scale", "spineId", "twistDegrees"]);
+    assert.deepEqual(properties("plasticity_move_measurement_label").sort(), ["id", "intent", "offsetMm", "revision"]);
+    for (const name of ["plasticity_sweep_curves", "plasticity_move_measurement_label"]) {
+      const schema = tools.find((entry) => entry.name === name)?.inputSchema as { additionalProperties?: unknown };
+      assert.equal(schema.additionalProperties, false, `${name} rejects unknown keys`);
+    }
+  });
+});
+
+test("plasticity_clear_selection rejects unknown keys and is not marked destructive", async () => {
+  let received: unknown[] | undefined;
+  await withOperationsClient({
+    async clearSelection(...args: unknown[]) { received = args; return { bodyIds: [] }; },
+  }, async (client) => {
+    const tool = (await client.listTools()).tools.find((entry) => entry.name === "plasticity_clear_selection");
+    assert.equal(tool?.annotations?.destructiveHint, false);
+    assert.equal(tool?.annotations?.readOnlyHint, false);
+    const extra = await client.callTool({ name: "plasticity_clear_selection", arguments: { revision: "r1", ids: [7] } });
+    assert.equal(extra.isError, true);
+    assert.equal(received, undefined, "a rejected call must not reach the operation");
+    const valid = await client.callTool({ name: "plasticity_clear_selection", arguments: { revision: "r1" } });
+    assert.equal(valid.isError, undefined);
+    assert.deepEqual(received, ["r1"]);
+  });
+});
+
+test("catalog queries deselect, unselect and select none list plasticity_clear_selection in the top 5", async () => {
+  await withOperationsClient({}, async (client) => {
+    for (const query of ["deselect", "unselect", "select none"]) {
+      const response = await client.callTool({ name: "plasticity_call", arguments: { toolName: "catalog", query, limit: 5 } });
+      assert.equal(response.isError, undefined, query);
+      const names = (parseToolJson(response).tools as Array<{ name: string }>).map((entry) => entry.name);
+      assert.ok(names.slice(0, 5).includes("plasticity_clear_selection"), `${query}: ${names.join(", ")}`);
+    }
+  });
+});
+
+test("MCP forwards the extend-sheet options and requires exactly one of distanceMm and targetId", async () => {
+  let received: unknown[] | undefined;
+  await withOperationsClient({
+    async extendSheetEdges(...args: unknown[]) { received = args; return {}; },
+    async state() { return emptyState(); },
+  }, async (client) => {
+    const plain = await client.callTool({ name: "plasticity_extend_sheet_edges", arguments: { id: 5, edgeIds: ["e1"], distanceMm: 10, revision: "r1" } });
+    assert.equal(plain.isError, undefined, JSON.stringify(plain.content));
+    assert.deepEqual(received, [5, ["e1"], 10, "r1", { shape: undefined, targetId: undefined, merge: undefined }]);
+    const full = await client.callTool({ name: "plasticity_extend_sheet_edges", arguments: { id: 5, edgeIds: ["e1"], targetId: 9, shape: "natural", merge: false, revision: "r1" } });
+    assert.equal(full.isError, undefined, JSON.stringify(full.content));
+    assert.deepEqual(received, [5, ["e1"], undefined, "r1", { shape: "natural", targetId: 9, merge: false }]);
+    for (const bad of [
+      { distanceMm: 10, targetId: 9 },
+      {},
+      { distanceMm: 10, shape: "arc" },
+      { distanceMm: 10, shape: "soft", bias: 0.5 },
+      { distanceMm: 0 },
+      { targetId: 0 },
+      { distanceMm: 10, merge: "no" },
+    ]) {
+      const response = await client.callTool({ name: "plasticity_extend_sheet_edges", arguments: { id: 5, edgeIds: ["e1"], revision: "r1", ...bad } });
+      assert.equal(response.isError, true, JSON.stringify(bad));
+    }
+  });
+});
+
+test("MCP forwards sweep guides to sweep_regions and sweep_curves and validates them", async () => {
+  let regions: unknown[] | undefined;
+  let curves: unknown[] | undefined;
+  await withOperationsClient({
+    async sweepRegions(...args: unknown[]) { regions = args; return {}; },
+    async sweepCurves(...args: unknown[]) { curves = args; return {}; },
+    async state() { return emptyState(); },
+  }, async (client) => {
+    const plain = await client.callTool({ name: "plasticity_sweep_regions", arguments: { regionIds: ["12r34"], spineId: 8, revision: "r1" } });
+    assert.equal(plain.isError, undefined, JSON.stringify(plain.content));
+    assert.deepEqual(regions?.[2], { alignment: "normal", corner: "miter", twistDegrees: 0, scale: 1, simplify: false, guideIds: undefined, guideMethod: undefined });
+    const guided = await client.callTool({ name: "plasticity_sweep_regions", arguments: { regionIds: ["12r34"], spineId: 8, guideIds: [9], guideMethod: "chord", revision: "r1" } });
+    assert.equal(guided.isError, undefined, JSON.stringify(guided.content));
+    assert.deepEqual((regions?.[2] as Record<string, unknown>).guideIds, [9]);
+    assert.equal((regions?.[2] as Record<string, unknown>).guideMethod, "chord");
+    const methodOnly = await client.callTool({ name: "plasticity_sweep_regions", arguments: { regionIds: ["12r34"], spineId: 8, guideMethod: "curve", revision: "r1" } });
+    assert.equal(methodOnly.isError, true);
+
+    const sheet = await client.callTool({ name: "plasticity_sweep_curves", arguments: { profileIds: [7, 11], spineId: 8, guideIds: [9], guideMethod: "curve", twistDegrees: 30, scale: 2, revision: "r1" } });
+    assert.equal(sheet.isError, undefined, JSON.stringify(sheet.content));
+    assert.deepEqual(curves, [[7, 11], 8, { guideIds: [9], guideMethod: "curve", twistDegrees: 30, scale: 2 }, "r1"]);
+    for (const bad of [
+      { profileIds: [], spineId: 8 },
+      { profileIds: [7, 7], spineId: 8 },
+      { profileIds: [7], spineId: 8, guideMethod: "point" },
+      { profileIds: [7], spineId: 8, guideIds: [9], guideMethod: "arc" },
+      { profileIds: [7], spineId: 8, scale: 0 },
+      { profileIds: [7], spineId: 8, thickness: 1 },
+      { profileIds: [7], spineId: 8, alignment: "normal" },
+    ]) {
+      const response = await client.callTool({ name: "plasticity_sweep_curves", arguments: { revision: "r1", ...bad } });
+      assert.equal(response.isError, true, JSON.stringify(bad));
+    }
+  });
+});
+
+test("MCP forwards move_measurement_label with a two-number offset", async () => {
+  let received: unknown[] | undefined;
+  await withOperationsClient({
+    async moveMeasurementLabel(...args: unknown[]) { received = args; return {}; },
+    async state() { return emptyState(); },
+  }, async (client) => {
+    const tool = (await client.listTools()).tools.find((entry) => entry.name === "plasticity_move_measurement_label");
+    assert.equal(tool?.annotations?.destructiveHint, false);
+    const ok = await client.callTool({ name: "plasticity_move_measurement_label", arguments: { id: 1, offsetMm: [10, -10], revision: "r1" } });
+    assert.equal(ok.isError, undefined, JSON.stringify(ok.content));
+    assert.deepEqual(received, [1, [10, -10], "r1"]);
+    for (const bad of [{ offsetMm: [1] }, { offsetMm: [1, 2, 3] }, { offsetMm: ["a", 1] }, { offsetMm: [1, 2], labelPointMm: [0, 0, 0] }, { id: 0, offsetMm: [1, 2] }]) {
+      const response = await client.callTool({ name: "plasticity_move_measurement_label", arguments: { id: 1, revision: "r1", ...bad } });
+      assert.equal(response.isError, true, JSON.stringify(bad));
+    }
+  });
+});
+
+test("the new sweep and label tools are reachable through plasticity_call and work as batch steps with revision auto-fill", async () => {
+  let state: RuntimeState = emptyState();
+  const calls: Array<{ op: string; args: unknown[] }> = [];
+  const advance = (revision: string) => { state = { ...state, revision, undoDepth: state.undoDepth + 1 }; return state; };
+  const operations = {
+    async state() { return state; },
+    async sweepCurves(...args: unknown[]) { calls.push({ op: "sweepCurves", args }); return advance(`r${calls.length + 1}`); },
+    async moveMeasurementLabel(...args: unknown[]) { calls.push({ op: "moveMeasurementLabel", args }); return advance(`r${calls.length + 1}`); },
+  } as unknown as PlasticityOperations;
+  const fake = {
+    async windows() { return []; }, async connect() { return state; }, get() { return operations; },
+    capabilities() { return { bindings: [], operations: unavailableConstruction() }; },
+    async captureSnapshot() { return {}; }, async changesSince() { return {}; }, async waitForChange() { return {}; },
+  } satisfies SessionLike;
+  const { client, close } = await batchClient(fake);
+  const direct = await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_sweep_curves", arguments: { profileIds: [7], spineId: 8, revision: "r1" } } });
+  assert.equal(direct.isError, undefined, JSON.stringify(direct.content));
+  assert.deepEqual(calls[0], { op: "sweepCurves", args: [[7], 8, { guideIds: undefined, guideMethod: undefined, twistDegrees: undefined, scale: undefined }, "r1"] });
+
+  const batch = await client.callTool({ name: "plasticity_batch", arguments: { steps: [
+    { toolName: "plasticity_sweep_curves", arguments: { profileIds: [7], spineId: 8, scale: 2 } },
+    { toolName: "plasticity_move_measurement_label", arguments: { id: 1, offsetMm: [3, 4] } },
+  ] } });
+  assert.equal(batch.isError, undefined, JSON.stringify(batch.content));
+  assert.equal(calls[1]?.args[3], "r2", "the first step takes the current revision");
+  assert.deepEqual(calls[2]?.args, [1, [3, 4], "r3"], "the second step takes the revision the first step left");
+  await close();
+});

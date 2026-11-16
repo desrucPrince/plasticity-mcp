@@ -2674,8 +2674,8 @@ function createServerWithCatalog(
     await session.get().selection(), true);
   tool("plasticity_select_bodies", "Replace the current Plasticity selection with stable body IDs.", z.object({ ids, revision }), async ({ ids: bodyIds, revision: current }) =>
     await session.get().selectBodies(bodyIds, current));
-  tool("plasticity_clear_selection", "Empty the current Plasticity selection. This is not a document edit and creates no Undo entry.", z.object({ revision }), async ({ revision: current }) =>
-    await session.get().clearSelection(current));
+  tool("plasticity_clear_selection", "Empty the current Plasticity selection: deselect, unselect, or select none. This is not a document edit and creates no Undo entry.", z.object({ revision }).strict(), async ({ revision: current }) =>
+    await session.get().clearSelection(current), false, { destructiveHint: false });
   tool("plasticity_select_curves", "Replace the current Plasticity selection with whole native Wire curves, using current revision-bound Wire IDs. The returned curveIds identify selected Wires; bodyIds may also contain the same native Wire IDs.", z.object({ ids, revision }).strict(), async ({ ids: curveIds, revision: current }) =>
     await session.get().selectCurves(curveIds, current));
   tool("plasticity_select_nodes", "Replace the current Plasticity selection with a mixed set of current bodies, linked instances, approximate reference meshes, and native groups so the agent can point out assembly content in the application.", z.object({ ...groupSelectionFields, revision }).strict().superRefine(requireNodeSelection), async ({ bodyIds, instanceIds: currentInstanceIds, referenceMeshIds: currentReferenceMeshIds, groupIds: currentGroupIds, revision: current }) =>
@@ -2941,6 +2941,8 @@ function createServerWithCatalog(
     await journaled("create-topology-distance-measurement", purpose, { first, second, name }, () => session.get().createTopologyDistanceMeasurement(first, second, name, current)), false, { destructiveHint: false });
   tool("plasticity_create_radius_measurement", "Create a persistent native Plasticity radius measurement on one exact current circular edge. Reference a Wire segment by bodyId plus segmentEntityId from plasticity_list_curve_directions, or a Solid/Sheet edge by bodyId plus edgeId from state. The measurement remains attached to topology, participates in Undo/Redo, and plasticity_list_measurements reports both radius and derived diameter in millimeters.", z.object({ edge: z.union([edgeRef, curvatureWireSegmentRef]), name: z.string().trim().min(1).max(120).optional(), intent, revision }).strict(), async ({ edge, name, intent: purpose, revision: current }) =>
     await journaled("create-radius-measurement", purpose, { edge, name }, () => session.get().createRadiusMeasurement(edge, name, current)), false, { destructiveHint: false });
+  tool("plasticity_move_measurement_label", "Move the dimension line and label of one existing distance measurement. offsetMm is [along, perpendicular] in millimeters in the measurement's own frame, the same offsetMm that plasticity_list_measurements reports. The measurement keeps its name and stays attached to its topology.", z.object({ id: z.number().int().positive(), offsetMm: z.tuple([z.number().finite(), z.number().finite()]), intent, revision }).strict(), async ({ id, offsetMm, intent: purpose, revision: current }) =>
+    await journaled("move-measurement-label", purpose, { id, offsetMm }, () => session.get().moveMeasurementLabel(id, offsetMm, current)), false, { destructiveHint: false });
   tool("plasticity_delete_measurement", "Delete one current native Plasticity measurement by stable measurement ID through document Undo/Redo history.", z.object({ id: z.number().int().positive(), intent, revision }).strict(), async ({ id, intent: purpose, revision: current }) =>
     await journaled("delete-measurement", purpose, { id }, () => session.get().deleteMeasurement(id, current)));
   tool("plasticity_list_section_analyses", "List the active native Plasticity viewport section plane, including its session-stable analysis ID, origin, clipped-half-space normal, visibility, and number of viewports using it. This reads the section currently applied by Plasticity shading state; sections are viewport state and do not modify B-Rep or Undo history.", z.object({}).strict(), async () =>
@@ -3655,7 +3657,14 @@ function createServerWithCatalog(
       session.get().imprintCurvesOnBody(targetId, curveIds, imprintDirection, { projectionMethod, bidirectional, occlude, completion }, current)));
   tool("plasticity_imprint_bodies", "Split a Solid or Sheet target along exact intersections with preserved Solid or Sheet tool bodies.", z.object({ targetId: z.number().int().positive(), toolIds: ids, intent, revision }).strict(), async ({ targetId, toolIds, intent: purpose, revision: current }) =>
     await journaled("imprint-bodies", purpose, { targetId, toolIds }, () => session.get().imprintBodies(targetId, toolIds, current)));
-  tool("plasticity_sweep_regions", "Sweep one or more explicit closed Regions along a native Wire spine to create exact Solid geometry.", z.object({
+  const sweepGuideFields = {
+    guideIds: z.array(z.number().int().positive()).max(64).refine((values) => new Set(values).size === values.length, "Sweep guide IDs must be unique").optional(),
+    guideMethod: z.enum(["point", "chord", "curve"]).optional(),
+  };
+  const requireGuidesForMethod = (input: { guideIds?: number[] | undefined; guideMethod?: string | undefined }, context: z.RefinementCtx) => {
+    if (input.guideMethod !== undefined && !input.guideIds?.length) context.addIssue({ code: "custom", path: ["guideMethod"], message: "guideMethod requires guideIds" });
+  };
+  tool("plasticity_sweep_regions", "Sweep one or more explicit closed Regions along a native Wire spine to create exact Solid geometry. Optional guideIds (Wire rails) steer the profile; guideMethod is point, chord or curve.", z.object({
     regionIds,
     spineId: z.number().int().positive(),
     alignment: z.enum(["normal", "parallel", "transport"]).default("normal"),
@@ -3663,11 +3672,23 @@ function createServerWithCatalog(
     twistDegrees: z.number().finite().default(0),
     scale: z.number().finite().positive().default(1),
     simplify: z.boolean().default(false),
+    ...sweepGuideFields,
     intent,
     revision,
-  }).strict(), async ({ regionIds: selectedRegions, spineId, alignment, corner, twistDegrees, scale, simplify, intent: purpose, revision: current }) =>
-    await journaled("sweep-regions", purpose, { regionIds: selectedRegions, spineId, alignment, corner, twistDegrees, scale, simplify }, () =>
-      session.get().sweepRegions(selectedRegions, spineId, { alignment, corner, twistDegrees, scale, simplify }, current)));
+  }).strict().superRefine(requireGuidesForMethod), async ({ regionIds: selectedRegions, spineId, alignment, corner, twistDegrees, scale, simplify, guideIds, guideMethod, intent: purpose, revision: current }) =>
+    await journaled("sweep-regions", purpose, { regionIds: selectedRegions, spineId, alignment, corner, twistDegrees, scale, simplify, guideIds, guideMethod }, () =>
+      session.get().sweepRegions(selectedRegions, spineId, { alignment, corner, twistDegrees, scale, simplify, guideIds, guideMethod }, current)));
+  tool("plasticity_sweep_curves", "Sweep one or more Wire profiles, open or closed, along a native Wire spine to create independent Sheets. Use this instead of plasticity_sweep_regions when the profile is a curve rather than a closed Region. Optional guideIds (Wire rails) steer the profile; guideMethod is point, chord or curve. twistDegrees is in degrees and scale is a positive factor.", z.object({
+    profileIds: z.array(z.number().int().positive()).min(1).max(64).refine((values) => new Set(values).size === values.length, "Sweep profile IDs must be unique"),
+    spineId: z.number().int().positive(),
+    ...sweepGuideFields,
+    twistDegrees: z.number().finite().optional(),
+    scale: z.number().finite().positive().optional(),
+    intent,
+    revision,
+  }).strict().superRefine(requireGuidesForMethod), async ({ profileIds, spineId, guideIds, guideMethod, twistDegrees, scale, intent: purpose, revision: current }) =>
+    await journaled("sweep-curves", purpose, { profileIds, spineId, guideIds, guideMethod, twistDegrees, scale }, () =>
+      session.get().sweepCurves(profileIds, spineId, { guideIds, guideMethod, twistDegrees, scale }, current)));
   tool("plasticity_loft_regions", "Loft an ordered list of closed Regions from different sketch planes into exact capped geometry, optionally shaped by native Wire guide curves that intersect every profile.", z.object({
     regionIds: regionIds.min(2),
     guideIds: z.array(z.number().int().positive()).max(4096).default([]),
@@ -3831,8 +3852,21 @@ function createServerWithCatalog(
     await journaled("patch-sheet-hole", purpose, { id, edgeIds }, () => session.get().patchSheetHole(id, edgeIds, current)));
   tool("plasticity_cap_sheet_holes", "Cap every planar open boundary of one or more native Sheet bodies in one history step.", z.object({ ids, intent, revision }).strict(), async ({ ids: sheetIds, intent: purpose, revision: current }) =>
     await journaled("cap-sheet-holes", purpose, { ids: sheetIds }, () => session.get().capSheetHoles(sheetIds, current)));
-  tool("plasticity_extend_sheet_edges", "Linearly extend selected boundary edges of one native Sheet by a positive millimeter distance.", z.object({ id: z.number().int().positive(), edgeIds: z.array(z.string().trim().min(1)).min(1).max(4096), distanceMm: z.number().finite().positive(), intent, revision }).strict(), async ({ id, edgeIds, distanceMm, intent: purpose, revision: current }) =>
-    await journaled("extend-sheet-edges", purpose, { id, edgeIds, distanceMm }, () => session.get().extendSheetEdges(id, edgeIds, distanceMm, current)));
+  tool("plasticity_extend_sheet_edges", "Extend selected boundary edges of one native Sheet by a positive millimeter distance, or up to another body with targetId (give exactly one). shape sets the extension curve (linear by default, soft, reflective, natural). merge=false keeps the extension as a separate face instead of one merged surface.", z.object({
+    id: z.number().int().positive(),
+    edgeIds: z.array(z.string().trim().min(1)).min(1).max(4096),
+    distanceMm: z.number().finite().positive().optional(),
+    targetId: z.number().int().positive().optional(),
+    shape: z.enum(["linear", "soft", "reflective", "natural"]).optional(),
+    merge: z.boolean().optional(),
+    intent,
+    revision,
+  }).strict().superRefine((input, context) => {
+    if ((input.distanceMm === undefined) === (input.targetId === undefined)) {
+      context.addIssue({ code: "custom", path: ["distanceMm"], message: "Give exactly one of distanceMm and targetId" });
+    }
+  }), async ({ id, edgeIds, distanceMm, targetId, shape, merge, intent: purpose, revision: current }) =>
+    await journaled("extend-sheet-edges", purpose, { id, edgeIds, distanceMm, targetId, shape, merge }, () => session.get().extendSheetEdges(id, edgeIds, distanceMm, current, { shape, targetId, merge })));
   tool("plasticity_create_pipes", "Create native solid or hollow circular pipes along one or more Wire spines. Diameter and optional wall thickness are millimeters.", z.object({
     spineIds: ids,
     diameterMm: z.number().finite().positive(),

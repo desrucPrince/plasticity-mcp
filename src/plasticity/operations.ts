@@ -428,6 +428,23 @@ const commandEnd = `
   await this.exec(command);
   if (failure) throw failure;`;
 
+// ExtensionShape members the MCP exposes (probes-2026-11 FINDINGS gap 3). Arc fails on NURBS sheets and
+// bias, Bbox have no measurable effect, so they stay out.
+export const SHEET_EXTENSION_SHAPES = { linear: "Linear", soft: "Soft", reflective: "Reflective", natural: "Natural" } as const;
+export type SheetExtensionShape = keyof typeof SHEET_EXTENSION_SHAPES;
+
+// SweepGuideMethod members (FINDINGS gap 1); resolved by name from the bound enum.
+export const SWEEP_GUIDE_METHODS = { point: "Point", chord: "Chord", curve: "Curve" } as const;
+export type SweepGuideMethodName = keyof typeof SWEEP_GUIDE_METHODS;
+
+// Guide rails for a sweep (FINDINGS gap 1): Wire guides plus an optional SweepGuideMethod resolved by name.
+const sweepGuides = `
+      if (args.guideIds !== undefined) {
+        factory.guides = args.guideIds.map(find);
+        if (factory.guides.some(guide => guide.constructor.name !== 'Wire')) throw new Error('Sweep guides must be Wires');
+        if (args.guideMethodName !== undefined) factory.guideMethod = SweepGuideMethod[args.guideMethodName];
+      }`;
+
 export interface ExtrudeOptions {
   reverseDistanceMm?: number;
   draftAngleDeg?: number;
@@ -1509,6 +1526,57 @@ export class PlasticityOperations {
       if (failure) throw failure;
       for (const viewport of this.viewports ?? []) viewport.setNeedsRender();
     }`, ["RemoveMeasurementCommand"], [{ id }]);
+    return await this.state();
+  }
+
+  // Moves the dimension line and label of one distance measurement (FINDINGS gap 4). The offset is in the
+  // measurement's local frame as listMeasurements reports it: x along `direction`, y along `normal x direction`,
+  // both measured from the first point. MoveMeasurementFactory takes the same offset as a world point.
+  async moveMeasurementLabel(id: number, offsetMm: [number, number], revision: string): Promise<RuntimeState> {
+    const state = await this.assertRevision(revision);
+    const measurement = (state.measurements ?? []).find((candidate) => candidate.id === id);
+    if (!measurement) throw new Error(`Unknown current measurement ID: ${id}`);
+    if (offsetMm.length !== 2 || offsetMm.some((value) => !Number.isFinite(value))) throw new Error("Measurement label offset must be two finite millimeter values");
+    const start = measurement.first?.positionMm;
+    const end = measurement.second?.positionMm;
+    if (measurement.type !== "DistanceMeasurement" || !start || !end || !measurement.direction || !measurement.normal) {
+      throw new Error(`Label move requires a distance measurement with resolved endpoints: ${id}`);
+    }
+    const direction = normalize(measurement.direction, "Measurement direction");
+    const across = normalize(cross(measurement.normal, direction), "Measurement label axis");
+    const startMeters = toMeters(start);
+    const offsetWorld = [0, 1, 2].map((axis) =>
+      startMeters[axis]! + millimetersToMeters(offsetMm[0]) * direction[axis]! + millimetersToMeters(offsetMm[1]) * across[axis]!) as Vector3;
+    await this.runtime.mutate(nativeFunction`async function (Factory, Command, args) {
+      if (this.executor.isBusy) throw new Error('Plasticity is busy');
+      const editor = this;
+      const measurement = this.measurements.lookupByStableId(args.id);
+      if (!measurement) throw new Error('Unknown measurement ID: ' + args.id);
+      this.selection.selected.removeAll();
+      nativeApi.selection.addMeasurement(measurement);
+      let failure;
+      try {
+        const command = new Command(editor);
+        command.remember = false;
+        command.execute = async function () {
+          try {
+            const factory = new Factory(editor).resource(this);
+            factory.measurement = measurement;
+            factory.start.fromArray(args.start);
+            factory.end.fromArray(args.end);
+            factory.direction.fromArray(args.direction);
+            factory.offset.fromArray(args.offset);
+            ${commandEndPreservingMeasurementNames}
+      } finally {
+        this.selection.selected.removeAll();
+      }
+    }`, ["MoveMeasurementFactory", "MoveMeasurementCommand"], [{
+      id,
+      start: startMeters,
+      end: toMeters(end),
+      direction,
+      offset: offsetWorld,
+    }]);
     return await this.state();
   }
 
@@ -6626,6 +6694,8 @@ export class PlasticityOperations {
       twistDegrees?: number;
       scale?: number;
       simplify?: boolean;
+      guideIds?: number[] | undefined;
+      guideMethod?: SweepGuideMethodName | undefined;
     },
     revision: string,
   ): Promise<RuntimeState> {
@@ -6650,7 +6720,12 @@ export class PlasticityOperations {
     if (!Number.isFinite(twistDegrees)) throw new Error("Sweep twist must be finite");
     const alignmentName = ({ normal: "Normal", parallel: "Parallel", transport: "Transport" } as const)[options.alignment ?? "normal"];
     const cornerName = ({ miter: "Mitre", round: "Round" } as const)[options.corner ?? "miter"];
-    await this.runtime.mutate(nativeFunction`async function (Factory, SweepAlignmentType, SweepCornerType, args) {
+    const guideIds = options.guideIds ?? [];
+    const guided = guideIds.length > 0;
+    if (guided) requireSweepGuides(state, guideIds, spineId, selected.flatMap((region) => region!.sketchWireIds), options.guideMethod);
+    else if (options.guideMethod !== undefined) throw new Error("Sweep guide method requires guide IDs");
+    await this.runtime.mutate(nativeFunction`async function (Factory, SweepAlignmentType, SweepCornerType${guided ? ", SweepGuideMethod" : ""}, args) {
+      ${guided ? findView : ""}
       ${commandStart("SweepCommand")}
       const wanted = new Set(args.regionIds);
       const regions = [];
@@ -6674,8 +6749,9 @@ export class PlasticityOperations {
       factory.twistDegrees = args.twistDegrees;
       factory.scale = args.scale;
       factory.simplify = args.simplify;
+      ${guided ? sweepGuides : ""}
       ${commandEnd}
-    }`, ["SweepFactory", "SweepAlignmentType", "SweepCornerType"], [{
+    }`, ["SweepFactory", "SweepAlignmentType", "SweepCornerType", ...(guided ? ["SweepGuideMethod"] : [])], [{
       regionIds: uniqueIds,
       spineId,
       alignmentName,
@@ -6683,6 +6759,55 @@ export class PlasticityOperations {
       twistDegrees,
       scale,
       simplify: options.simplify ?? false,
+      ...(guided ? { guideIds, ...(options.guideMethod ? { guideMethodName: SWEEP_GUIDE_METHODS[options.guideMethod] } : {}) } : {}),
+    }]);
+    return await this.state();
+  }
+
+  async sweepCurves(
+    profileIds: number[],
+    spineId: number,
+    options: {
+      guideIds?: number[] | undefined;
+      guideMethod?: SweepGuideMethodName | undefined;
+      twistDegrees?: number | undefined;
+      scale?: number | undefined;
+    },
+    revision: string,
+  ): Promise<RuntimeState> {
+    const state = await this.assertRevision(revision);
+    if (profileIds.length === 0 || new Set(profileIds).size !== profileIds.length) {
+      throw new Error("Sweep profile Wire IDs must be a nonempty unique list");
+    }
+    const wires = new Map(state.bodies.filter((body) => body.type === "Wire").map((body) => [body.id, body]));
+    const unknownProfiles = profileIds.filter((id) => !wires.has(id));
+    if (unknownProfiles.length > 0) throw new Error(`Sweep profiles must be current Wire IDs: ${unknownProfiles.join(", ")}`);
+    if (!wires.has(spineId)) throw new Error(`Sweep requires a current Wire spine: ${spineId}`);
+    if (profileIds.includes(spineId)) throw new Error("Sweep spine must not be one of the profile curves");
+    const guideIds = options.guideIds ?? [];
+    const guided = guideIds.length > 0;
+    if (guided) requireSweepGuides(state, guideIds, spineId, profileIds, options.guideMethod);
+    else if (options.guideMethod !== undefined) throw new Error("Sweep guide method requires guide IDs");
+    if (options.scale !== undefined && (!Number.isFinite(options.scale) || options.scale <= 0)) throw new Error("Sweep scale must be positive");
+    if (options.twistDegrees !== undefined && !Number.isFinite(options.twistDegrees)) throw new Error("Sweep twist must be finite");
+    await this.runtime.mutate(nativeFunction`async function (Factory, SweepGuideMethod, args) {
+      ${findView}
+      ${commandStart("SweepCommand")}
+      const profiles = args.profileIds.map(find);
+      const spine = find(args.spineId);
+      if (spine.constructor.name !== 'Wire' || profiles.some(profile => profile.constructor.name !== 'Wire')) throw new Error('Sweep profiles and spine must be Wires');
+      factory.curves = profiles;
+      factory.spine = spine;
+      if (args.twistDegrees !== undefined) factory.twistDegrees = args.twistDegrees;
+      if (args.scale !== undefined) factory.scale = args.scale;
+      ${sweepGuides}
+      ${commandEnd}
+    }`, ["SweepFactory", "SweepGuideMethod"], [{
+      profileIds,
+      spineId,
+      ...(options.twistDegrees !== undefined ? { twistDegrees: options.twistDegrees } : {}),
+      ...(options.scale !== undefined ? { scale: options.scale } : {}),
+      ...(guided ? { guideIds, ...(options.guideMethod ? { guideMethodName: SWEEP_GUIDE_METHODS[options.guideMethod] } : {}) } : {}),
     }]);
     return await this.state();
   }
@@ -7840,7 +7965,13 @@ export class PlasticityOperations {
     return await this.state();
   }
 
-  async extendSheetEdges(id: number, edgeIds: string[], distanceMm: number, revision: string): Promise<RuntimeState> {
+  async extendSheetEdges(
+    id: number,
+    edgeIds: string[],
+    distanceMm: number | undefined,
+    revision: string,
+    options: { shape?: SheetExtensionShape | undefined; targetId?: number | undefined; merge?: boolean | undefined } = {},
+  ): Promise<RuntimeState> {
     const state = await this.state();
     if (state.revision !== revision) {
       throw new Error(`Stale reference: expected revision ${revision}, current revision is ${state.revision}`);
@@ -7850,7 +7981,22 @@ export class PlasticityOperations {
     if (edgeIds.length === 0) throw new Error("Sheet extension requires at least one boundary edge");
     const uniqueIds = [...new Set(edgeIds)];
     if (uniqueIds.length !== edgeIds.length) throw new Error("Sheet extension edge IDs must be unique");
-    if (!Number.isFinite(distanceMm) || distanceMm <= 0) throw new Error("Sheet extension distance must be positive");
+    if (distanceMm !== undefined && options.targetId !== undefined) {
+      throw new Error("Sheet extension takes either a distance or a target body, not both");
+    }
+    if (distanceMm === undefined && options.targetId === undefined) {
+      throw new Error("Sheet extension requires a distance or a target body");
+    }
+    if (distanceMm !== undefined && (!Number.isFinite(distanceMm) || distanceMm <= 0)) throw new Error("Sheet extension distance must be positive");
+    if (options.shape !== undefined && !(options.shape in SHEET_EXTENSION_SHAPES)) {
+      throw new Error(`Sheet extension shape must be one of: ${Object.keys(SHEET_EXTENSION_SHAPES).join(", ")}`);
+    }
+    if (options.targetId !== undefined) {
+      const target = state.bodies.find((body) => body.id === options.targetId);
+      if (!target || (target.type !== "Solid" && target.type !== "Sheet") || target.id === id) {
+        throw new Error(`Sheet extension target must be a different current Solid or Sheet body: ${options.targetId}`);
+      }
+    }
     const selected = uniqueIds.map((edgeId) => sheet.edges.find((edge) => edge.id === edgeId));
     const missing = uniqueIds.filter((_edgeId, index) => !selected[index]);
     if (missing.length > 0) throw new Error(`Stale or unknown Sheet edges: ${missing.join(", ")}`);
@@ -7866,16 +8012,25 @@ export class PlasticityOperations {
         if (index < 0) throw new Error('Stale or unknown Sheet edge: ' + id);
         return view.high.edges.get(index);
       });
-      factory.distance = args.distance;
+      if (args.distance !== undefined) factory.distance = args.distance;
       factory.shape = ExtensionShape.Linear;
       factory.type = BodyExtensionType.Distance;
       factory.limit = ExtensionLimit.Minimal;
       factory.modify = true;
+      if (args.shapeName !== undefined) factory.shape = ExtensionShape[args.shapeName];
+      if (args.targetId !== undefined) {
+        factory.type = BodyExtensionType.Target;
+        factory.target = find(args.targetId);
+      }
+      if (args.merge !== undefined) factory.modify = args.merge;
       ${commandEnd}
     }`, ["ExtendSheetFactory", "ExtensionShape", "BodyExtensionType", "ExtensionLimit"], [{
       id,
       edgeIds: uniqueIds,
-      distance: millimetersToMeters(distanceMm),
+      ...(distanceMm !== undefined ? { distance: millimetersToMeters(distanceMm) } : {}),
+      ...(options.shape !== undefined ? { shapeName: SHEET_EXTENSION_SHAPES[options.shape] } : {}),
+      ...(options.targetId !== undefined ? { targetId: options.targetId } : {}),
+      ...(options.merge !== undefined ? { merge: options.merge } : {}),
     }]);
     return await this.state();
   }
@@ -8828,7 +8983,7 @@ export class PlasticityOperations {
     await assertAbsent(output);
     await mkdir(dirname(output), { recursive: true });
     const staging = await mkdtemp(join(dirname(output), ".plasticity-iges-"));
-    const temporary = join(staging, `geometry${extension}`);
+    const temporary = join(staging, "geometry.igs");
     try {
       await this.runtime.mutate(nativeFunction`async function (Factory, args) {
         ${findView}
@@ -10275,6 +10430,24 @@ function escapeSvgAttribute(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll("'", "&apos;");
 }
 
+function requireSweepGuides(
+  state: RuntimeState,
+  guideIds: number[],
+  spineId: number,
+  profileWireIds: number[],
+  guideMethod: SweepGuideMethodName | undefined,
+): void {
+  if (new Set(guideIds).size !== guideIds.length) throw new Error("Sweep guide IDs must be unique");
+  const wires = new Set(state.bodies.filter((body) => body.type === "Wire").map((body) => body.id));
+  const invalid = guideIds.filter((id) => !wires.has(id));
+  if (invalid.length > 0) throw new Error(`Sweep guides must be current Wire IDs: ${invalid.join(", ")}`);
+  if (guideIds.includes(spineId)) throw new Error("Sweep guide must not be the spine");
+  if (guideIds.some((id) => profileWireIds.includes(id))) throw new Error("Sweep guide must not be one of the profile curves");
+  if (guideMethod !== undefined && !(guideMethod in SWEEP_GUIDE_METHODS)) {
+    throw new Error(`Sweep guide method must be one of: ${Object.keys(SWEEP_GUIDE_METHODS).join(", ")}`);
+  }
+}
+
 function requireWireBodyIds(state: RuntimeState, ids: number[]): void {
   if (ids.length === 0 || new Set(ids).size !== ids.length) {
     throw new Error("Wire IDs must be a nonempty unique list");
@@ -10323,8 +10496,11 @@ async function validateParasolidPath(path: string, label: string): Promise<numbe
   }
 }
 
-async function readFirstLine(path: string, label: string): Promise<{ bytes: number; line: string }> {
-  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+async function readFirstLine(path: string, label: string, format: string): Promise<{ bytes: number; line: string }> {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") throw new Error(`Plasticity wrote no ${format} file`);
+    throw error;
+  });
   try {
     const file = await handle.stat();
     if (!file.isFile()) throw new Error(`${label} must be a regular file`);
@@ -10338,15 +10514,15 @@ async function readFirstLine(path: string, label: string): Promise<{ bytes: numb
 
 // IGES fixed-format lines are 80 columns wide; column 73 holds the section letter and the first line is in the Start section.
 async function validateIgesPath(path: string, label: string): Promise<number> {
-  const { bytes, line } = await readFirstLine(path, label);
-  if (bytes === 0 || line.length < 73 || line[72] !== "S") throw new Error("Plasticity produced or received an invalid IGES file");
+  const { bytes, line } = await readFirstLine(path, label, "IGES");
+  if (bytes === 0 || line.length < 73 || line[72] !== "S") throw new Error("Plasticity produced an invalid IGES file");
   return bytes;
 }
 
 // ACIS SAT files start with four integers: version, record count, entity count, and flags.
 async function validateSatPath(path: string, label: string): Promise<number> {
-  const { bytes, line } = await readFirstLine(path, label);
-  if (bytes === 0 || !/^\d+ \d+ \d+ \d+\s*$/u.test(line)) throw new Error("Plasticity produced or received an invalid SAT file");
+  const { bytes, line } = await readFirstLine(path, label, "SAT");
+  if (bytes === 0 || !/^\d+ \d+ \d+ \d+\s*$/u.test(line)) throw new Error("Plasticity produced an invalid SAT file");
   return bytes;
 }
 
