@@ -1,0 +1,85 @@
+{
+ "start": {
+  "undo": 0,
+  "redo": 3,
+  "bodies": 38,
+  "busy": false
+ },
+ "runs": {
+  "bare_commit": {
+   "native": {
+    "exits": [],
+    "error": "Cannot read properties of undefined (reading 'json')",
+    "protoReads": [
+     "commit",
+     "doCommit",
+     "thumbnail",
+     "host",
+     "serialized",
+     "state",
+     "cancel",
+     "doCancel"
+    ],
+    "ownFieldsAfter": [
+     "editor",
+     "changed",
+     "updated",
+     "refine",
+     "temps",
+     "phantoms",
+     "diagnoses",
+     "executor",
+     "_state"
+    ]
+   },
+   "depthAfter": {
+    "undo": 0,
+    "redo": 3,
+    "bodies": 38,
+    "busy": false
+   }
+  },
+  "items_and_filePath": {
+   "native": {
+    "exits": [],
+    "error": "Cannot read properties of undefined (reading 'json')",
+    "protoReads": [
+     "commit",
+     "doCommit",
+     "thumbnail",
+     "host",
+     "serialized",
+     "state",
+     "cancel",
+     "doCancel"
+    ],
+    "ownFieldsAfter": [
+     "editor",
+     "changed",
+     "updated",
+     "refine",
+     "temps",
+     "phantoms",
+     "diagnoses",
+     "executor",
+     "_state",
+     "items",
+     "filePath"
+    ]
+   },
+   "depthAfter": {
+    "undo": 1,
+    "redo": 0,
+    "bodies": 39,
+    "busy": false
+   }
+  }
+ },
+ "end": {
+  "undo": 0,
+  "redo": 1,
+  "bodies": 38,
+  "busy": false
+ },
+ "endOk": true
+}

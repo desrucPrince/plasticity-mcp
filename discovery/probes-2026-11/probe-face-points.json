@@ -1,0 +1,627 @@
+{
+ "start": {
+  "undo": 0,
+  "redo": 3,
+  "bodies": 38,
+  "busy": false
+ },
+ "steps": {
+  "cvsBeforeShow": {
+   "itemKeys": [
+    "view",
+    "model",
+    "cvs"
+   ],
+   "viewCvKeys": [],
+   "highKeys": [
+    "edges",
+    "faces",
+    "cvs"
+   ],
+   "cvsType": "ShellCVGroup",
+   "cvsCount": 0,
+   "firstCv": null,
+   "editorCvKeys": [],
+   "dbCvKeys": [],
+   "geoCvKeys": []
+  },
+  "show": {
+   "committed": true,
+   "result": [
+    "Sheet"
+   ]
+  },
+  "showReads": [
+   "db",
+   "commit",
+   "createInitialMark",
+   "state",
+   "signals",
+   "updateAndCommitBehaviorAreIdentical",
+   "constructor",
+   "doCommit",
+   "calculateForCommit",
+   "calculate",
+   "zip",
+   "originalItems",
+   "shouldRemoveOriginalItemOnCommit",
+   "collections",
+   "finalize",
+   "cleanupTemps",
+   "cleanupPhantoms",
+   "cleanupDiagnoses",
+   "dispose"
+  ],
+  "depthAfterShow": {
+   "undo": 3,
+   "redo": 0,
+   "bodies": 40,
+   "busy": false
+  },
+  "bodiesAfterShow": [
+   {
+    "id": 331,
+    "type": "Wire",
+    "name": "Curve.001",
+    "boundsMm": {
+     "min": [
+      2900,
+      0,
+      0
+     ],
+     "max": [
+      2940,
+      0,
+      13.333333333333334
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   },
+   {
+    "id": 332,
+    "type": "Sheet",
+    "name": "Extruded.001",
+    "boundsMm": {
+     "min": [
+      2900,
+      0,
+      0
+     ],
+     "max": [
+      2940,
+      20,
+      13.333333333333334
+     ]
+    },
+    "faceCount": 1,
+    "edgeCount": 4,
+    "vertexCount": 4
+   }
+  ],
+  "cvsAfterShow": {
+   "itemKeys": [
+    "view",
+    "model",
+    "cvs"
+   ],
+   "viewCvKeys": [],
+   "highKeys": [
+    "edges",
+    "faces",
+    "cvs"
+   ],
+   "cvsType": "ShellCVGroup",
+   "cvsCount": 8,
+   "firstCv": {
+    "ctor": "ShellCV",
+    "keys": [
+     "parentItem",
+     "id",
+     "layers",
+     "position",
+     "versionId"
+    ],
+    "position": [
+     2.9000000953674316,
+     0,
+     0
+    ]
+   },
+   "editorCvKeys": [],
+   "dbCvKeys": [],
+   "geoCvKeys": []
+  },
+  "cvList": [
+   {
+    "id": 0,
+    "versionId": "235c0",
+    "position": [
+     2900.0000953674316,
+     0,
+     0
+    ]
+   },
+   {
+    "id": 1,
+    "versionId": "235c1",
+    "position": [
+     2900.0000953674316,
+     19.999999552965164,
+     0
+    ]
+   },
+   {
+    "id": 2,
+    "versionId": "235c2",
+    "position": [
+     2913.3334159851074,
+     0,
+     13.333333656191826
+    ]
+   },
+   {
+    "id": 3,
+    "versionId": "235c3",
+    "position": [
+     2913.3334159851074,
+     19.999999552965164,
+     13.333333656191826
+    ]
+   },
+   {
+    "id": 4,
+    "versionId": "235c4",
+    "position": [
+     2926.666736602783,
+     0,
+     13.333333656191826
+    ]
+   },
+   {
+    "id": 5,
+    "versionId": "235c5",
+    "position": [
+     2926.666736602783,
+     19.999999552965164,
+     13.333333656191826
+    ]
+   },
+   {
+    "id": 6,
+    "versionId": "235c6",
+    "position": [
+     2940.000057220459,
+     0,
+     0
+    ]
+   },
+   {
+    "id": 7,
+    "versionId": "235c7",
+    "position": [
+     2940.000057220459,
+     19.999999552965164,
+     0
+    ]
+   }
+  ],
+  "move_topCV_up10_cvsField": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Sheet"
+    ]
+   },
+   "reads": [
+    "dirty",
+    "commit",
+    "createInitialMark",
+    "state",
+    "signals",
+    "updateAndCommitBehaviorAreIdentical",
+    "constructor",
+    "db",
+    "doCommit",
+    "calculateForCommit",
+    "calculate",
+    "matrix",
+    "last",
+    "prepare",
+    "zip",
+    "originalItems",
+    "shouldRemoveOriginalItemOnCommit",
+    "collections",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose"
+   ],
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 40,
+    "busy": false
+   },
+   "readBack": [
+    {
+     "id": 331,
+     "type": "Wire",
+     "name": "Curve.001",
+     "boundsMm": {
+      "min": [
+       2900,
+       0,
+       0
+      ],
+      "max": [
+       2940,
+       0,
+       13.333333333333334
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 332,
+     "type": "Sheet",
+     "name": "Extruded.001",
+     "boundsMm": {
+      "min": [
+       2900,
+       0,
+       0
+      ],
+      "max": [
+       2940,
+       20,
+       15
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "surfaceStructureAfter": {
+    "documentToken": "01a1dbab-9912-7787-9e39-0dc387dc107a",
+    "revision": "r4.58b64261a1131206",
+    "surfaces": [
+     {
+      "bodyId": 332,
+      "faceId": "236f200275",
+      "bodyVersionId": 236,
+      "measurementSource": "native-brep",
+      "surfaceType": "BSurf",
+      "trimmed": false,
+      "faceParameterBounds": {
+       "uMin": 0,
+       "uMax": 1,
+       "vMin": -2.421640144183777e-16,
+       "vMax": 1
+      },
+      "naturalParameterBounds": {
+       "uMin": 0,
+       "uMax": 1,
+       "vMin": 0,
+       "vMax": 1
+      },
+      "naturalParameterBoundsSource": "surface",
+      "bSpline": {
+       "uDegree": 3,
+       "vDegree": 1,
+       "uSpanCount": 1,
+       "vSpanCount": 1,
+       "uControlPointCount": 4,
+       "vControlPointCount": 2,
+       "rational": false
+      }
+     }
+    ]
+   }
+  },
+  "move_topCV_up10_controlPoints": {
+   "commit": {
+    "committed": true,
+    "result": []
+   },
+   "reads": [
+    "commit",
+    "createInitialMark",
+    "state",
+    "signals",
+    "updateAndCommitBehaviorAreIdentical",
+    "constructor",
+    "db",
+    "doCommit",
+    "calculateForCommit",
+    "calculate",
+    "matrix",
+    "last",
+    "prepare",
+    "zip",
+    "originalItems",
+    "shouldRemoveOriginalItemOnCommit",
+    "collections",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose"
+   ],
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 40,
+    "busy": false
+   },
+   "readBack": [
+    {
+     "id": 331,
+     "type": "Wire",
+     "name": "Curve.001",
+     "boundsMm": {
+      "min": [
+       2900,
+       0,
+       0
+      ],
+      "max": [
+       2940,
+       0,
+       13.333333333333334
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 332,
+     "type": "Sheet",
+     "name": "Extruded.001",
+     "boundsMm": {
+      "min": [
+       2900,
+       0,
+       0
+      ],
+      "max": [
+       2940,
+       20,
+       13.333333333333334
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "surfaceStructureAfter": {
+    "documentToken": "01a1dbab-9912-7787-9e39-0dc387dc107a",
+    "revision": "r4.f75585a4a1a2103b",
+    "surfaces": [
+     {
+      "bodyId": 332,
+      "faceId": "235f200275",
+      "bodyVersionId": 235,
+      "measurementSource": "native-brep",
+      "surfaceType": "BSurf",
+      "trimmed": false,
+      "faceParameterBounds": {
+       "uMin": 0,
+       "uMax": 1,
+       "vMin": 0,
+       "vMax": 1
+      },
+      "naturalParameterBounds": {
+       "uMin": 0,
+       "uMax": 1,
+       "vMin": 0,
+       "vMax": 1
+      },
+      "naturalParameterBoundsSource": "surface",
+      "bSpline": {
+       "uDegree": 3,
+       "vDegree": 1,
+       "uSpanCount": 1,
+       "vSpanCount": 1,
+       "uControlPointCount": 4,
+       "vControlPointCount": 2,
+       "rational": false
+      }
+     }
+    ]
+   }
+  },
+  "move_topCV_up10_selection": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Sheet"
+    ]
+   },
+   "reads": [
+    "dirty",
+    "commit",
+    "createInitialMark",
+    "state",
+    "signals",
+    "updateAndCommitBehaviorAreIdentical",
+    "constructor",
+    "db",
+    "doCommit",
+    "calculateForCommit",
+    "calculate",
+    "matrix",
+    "last",
+    "prepare",
+    "zip",
+    "originalItems",
+    "shouldRemoveOriginalItemOnCommit",
+    "collections",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose"
+   ],
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 40,
+    "busy": false
+   },
+   "readBack": [
+    {
+     "id": 331,
+     "type": "Wire",
+     "name": "Curve.001",
+     "boundsMm": {
+      "min": [
+       2900,
+       0,
+       0
+      ],
+      "max": [
+       2940,
+       0,
+       13.333333333333334
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 332,
+     "type": "Sheet",
+     "name": "Extruded.001",
+     "boundsMm": {
+      "min": [
+       2900,
+       0,
+       0
+      ],
+      "max": [
+       2940,
+       20,
+       15
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "surfaceStructureAfter": {
+    "documentToken": "01a1dbab-9912-7787-9e39-0dc387dc107a",
+    "revision": "r4.0471224a31a9c10c",
+    "surfaces": [
+     {
+      "bodyId": 332,
+      "faceId": "237f200275",
+      "bodyVersionId": 237,
+      "measurementSource": "native-brep",
+      "surfaceType": "BSurf",
+      "trimmed": false,
+      "faceParameterBounds": {
+       "uMin": 0,
+       "uMax": 1,
+       "vMin": -2.421640144183777e-16,
+       "vMax": 1
+      },
+      "naturalParameterBounds": {
+       "uMin": 0,
+       "uMax": 1,
+       "vMin": 0,
+       "vMax": 1
+      },
+      "naturalParameterBoundsSource": "surface",
+      "bSpline": {
+       "uDegree": 3,
+       "vDegree": 1,
+       "uSpanCount": 1,
+       "vSpanCount": 1,
+       "uControlPointCount": 4,
+       "vControlPointCount": 2,
+       "rational": false
+      }
+     }
+    ]
+   }
+  }
+ },
+ "sheet": {
+  "id": 332,
+  "type": "Sheet",
+  "name": "Extruded.001",
+  "boundsMm": {
+   "min": [
+    2900,
+    0,
+    0
+   ],
+   "max": [
+    2940,
+    20,
+    13.333333333333334
+   ]
+  },
+  "faceCount": 1,
+  "edgeCount": 4,
+  "vertexCount": 4
+ },
+ "face": {
+  "id": "234f200275",
+  "surfaceType": "BSurf"
+ },
+ "surfaceStructureBefore": {
+  "documentToken": "01a1dbab-9912-7787-9e39-0dc387dc107a",
+  "revision": "r2.03cddbc19fee959f",
+  "surfaces": [
+   {
+    "bodyId": 332,
+    "faceId": "234f200275",
+    "bodyVersionId": 234,
+    "measurementSource": "native-brep",
+    "surfaceType": "BSurf",
+    "trimmed": false,
+    "faceParameterBounds": {
+     "uMin": 0,
+     "uMax": 1,
+     "vMin": 0,
+     "vMax": 1
+    },
+    "naturalParameterBounds": {
+     "uMin": 0,
+     "uMax": 1,
+     "vMin": 0,
+     "vMax": 1
+    },
+    "naturalParameterBoundsSource": "surface",
+    "bSpline": {
+     "uDegree": 3,
+     "vDegree": 1,
+     "uSpanCount": 1,
+     "vSpanCount": 1,
+     "uControlPointCount": 4,
+     "vControlPointCount": 2,
+     "rational": false
+    }
+   }
+  ]
+ },
+ "geoDepth": 2,
+ "end": {
+  "undo": 0,
+  "redo": 4,
+  "bodies": 38,
+  "busy": false
+ },
+ "endOk": true
+}

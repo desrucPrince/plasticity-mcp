@@ -1,0 +1,665 @@
+{
+ "start": {
+  "undo": 0,
+  "redo": 8,
+  "bodies": 38,
+  "busy": false
+ },
+ "geometry": {
+  "quad0": [
+   {
+    "id": 286,
+    "type": "Wire",
+    "name": "Line.001",
+    "boundsMm": {
+     "min": [
+      2300,
+      0,
+      0
+     ],
+     "max": [
+      2340,
+      0,
+      10.000000000000002
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "quad1": [
+   {
+    "id": 287,
+    "type": "Wire",
+    "name": "Line.002",
+    "boundsMm": {
+     "min": [
+      2340,
+      0,
+      0
+     ],
+     "max": [
+      2340,
+      40,
+      10
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "quad2": [
+   {
+    "id": 288,
+    "type": "Wire",
+    "name": "Line.003",
+    "boundsMm": {
+     "min": [
+      2300,
+      40,
+      0
+     ],
+     "max": [
+      2340,
+      40,
+      10.000000000000002
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "quad3": [
+   {
+    "id": 289,
+    "type": "Wire",
+    "name": "Line.004",
+    "boundsMm": {
+     "min": [
+      2300,
+      0,
+      0
+     ],
+     "max": [
+      2300,
+      40,
+      10
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "tri0": [
+   {
+    "id": 290,
+    "type": "Wire",
+    "name": "Curve.001",
+    "boundsMm": {
+     "min": [
+      2300,
+      100.00000000000001,
+      0
+     ],
+     "max": [
+      2340,
+      100.00000000000001,
+      10.666666666666666
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "tri1": [
+   {
+    "id": 291,
+    "type": "Wire",
+    "name": "Curve.002",
+    "boundsMm": {
+     "min": [
+      2320,
+      100.00000000000001,
+      0
+     ],
+     "max": [
+      2340,
+      135,
+      10.666666666666666
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "tri2": [
+   {
+    "id": 292,
+    "type": "Wire",
+    "name": "Curve.003",
+    "boundsMm": {
+     "min": [
+      2300,
+      100.00000000000001,
+      0
+     ],
+     "max": [
+      2320,
+      135,
+      10.666666666666666
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "pent0": [
+   {
+    "id": 293,
+    "type": "Wire",
+    "name": "Line.005",
+    "boundsMm": {
+     "min": [
+      2326.180339887499,
+      220,
+      0
+     ],
+     "max": [
+      2340,
+      239.02113032590307,
+      4
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "pent1": [
+   {
+    "id": 294,
+    "type": "Wire",
+    "name": "Line.006",
+    "boundsMm": {
+     "min": [
+      2303.819660112501,
+      231.75570504584945,
+      0
+     ],
+     "max": [
+      2326.180339887499,
+      239.02113032590307,
+      4
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "pent2": [
+   {
+    "id": 295,
+    "type": "Wire",
+    "name": "Line.007",
+    "boundsMm": {
+     "min": [
+      2303.819660112501,
+      208.24429495415055,
+      0
+     ],
+     "max": [
+      2303.819660112501,
+      231.75570504584945,
+      4
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "pent3": [
+   {
+    "id": 296,
+    "type": "Wire",
+    "name": "Line.008",
+    "boundsMm": {
+     "min": [
+      2303.819660112501,
+      200.97886967409693,
+      0
+     ],
+     "max": [
+      2326.180339887499,
+      208.24429495415055,
+      4
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "pent4": [
+   {
+    "id": 297,
+    "type": "Wire",
+    "name": "Line.009",
+    "boundsMm": {
+     "min": [
+      2326.180339887499,
+      200.97886967409693,
+      0
+     ],
+     "max": [
+      2340,
+      220,
+      0
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "cylinder": [
+   {
+    "id": 298,
+    "type": "Solid",
+    "name": "Cylinder.001",
+    "boundsMm": {
+     "min": [
+      2390,
+      -10,
+      0
+     ],
+     "max": [
+      2409.9999999999995,
+      10,
+      20
+     ]
+    },
+    "faceCount": 3,
+    "edgeCount": 2,
+    "vertexCount": 0
+   }
+  ],
+  "openCylinder": {
+   "id": 298,
+   "type": "Sheet",
+   "name": "Cylinder.001",
+   "boundsMm": {
+    "min": [
+     2390,
+     -10,
+     0
+    ],
+    "max": [
+     2409.9999999999995,
+     10,
+     20
+    ]
+   },
+   "faceCount": 2,
+   "edgeCount": 2,
+   "vertexCount": 0
+  }
+ },
+ "variants": {
+  "A_quad_curves": {
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "readBack": [
+    {
+     "id": 299,
+     "type": "Sheet",
+     "name": "XNurbs.001",
+     "boundsMm": {
+      "min": [
+       2299.439213645366,
+       -0.5737256631691176,
+       -0.019666589327304886
+      ],
+      "max": [
+       2340.5637486616483,
+       40.57006478317925,
+       10.028104803312841
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "depthAfter": {
+    "undo": 15,
+    "redo": 0,
+    "bodies": 52,
+    "busy": false
+   },
+   "depthRestored": 14
+  },
+  "B_triangle_curves": {
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "readBack": [
+    {
+     "id": 300,
+     "type": "Sheet",
+     "name": "XNurbs.001",
+     "boundsMm": {
+      "min": [
+       2280.354540065788,
+       74.32287290684434,
+       -1.4558443692487448
+      ],
+      "max": [
+       2340.0320698666196,
+       135.03136221983726,
+       10.665918644699772
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 3,
+     "vertexCount": 3
+    }
+   ],
+   "depthAfter": {
+    "undo": 15,
+    "redo": 0,
+    "bodies": 52,
+    "busy": false
+   },
+   "depthRestored": 14
+  },
+  "C_pentagon_curves": {
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "readBack": [
+    {
+     "id": 301,
+     "type": "Sheet",
+     "name": "XNurbs.001",
+     "boundsMm": {
+      "min": [
+       2296.9990998878634,
+       195.1776167686066,
+       -1.9617000375703482
+      ],
+      "max": [
+       2344.1705786204434,
+       241.09906009943973,
+       5.16368457502273
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 5,
+     "vertexCount": 5
+    }
+   ],
+   "depthAfter": {
+    "undo": 15,
+    "redo": 0,
+    "bodies": 52,
+    "busy": false
+   },
+   "depthRestored": 14
+  },
+  "D_openCylinder_edge_G0": {
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "readBack": [
+    {
+     "id": 302,
+     "type": "Sheet",
+     "name": "XNurbs.001",
+     "boundsMm": {
+      "min": [
+       2389.9680213623824,
+       -10.024036733667787,
+       19.989999995170876
+      ],
+      "max": [
+       2410.0308854870464,
+       10.02403721456605,
+       20.010000006452266
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 1,
+     "vertexCount": 1
+    }
+   ],
+   "depthAfter": {
+    "undo": 15,
+    "redo": 0,
+    "bodies": 52,
+    "busy": false
+   },
+   "depthRestored": 14
+  },
+  "E_openCylinder_edge_G1": {
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "readBack": [
+    {
+     "id": 303,
+     "type": "Sheet",
+     "name": "XNurbs.001",
+     "boundsMm": {
+      "min": [
+       2389.9220445932083,
+       -10.094437247530465,
+       16.228622771648794
+      ],
+      "max": [
+       2410.1170745988657,
+       10.116215143041735,
+       24.15042903986791
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 1,
+     "vertexCount": 1
+    }
+   ],
+   "depthAfter": {
+    "undo": 15,
+    "redo": 0,
+    "bodies": 52,
+    "busy": false
+   },
+   "depthRestored": 14
+  },
+  "F_openCylinder_edge_G2": {
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "readBack": [
+    {
+     "id": 304,
+     "type": "Sheet",
+     "name": "XNurbs.001",
+     "boundsMm": {
+      "min": [
+       2389.8857271495003,
+       -10.12221263225426,
+       17.10515957010144
+      ],
+      "max": [
+       2410.154973514249,
+       10.151379967400338,
+       24.4982153878089
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 1,
+     "vertexCount": 1
+    }
+   ],
+   "depthAfter": {
+    "undo": 15,
+    "redo": 0,
+    "bodies": 52,
+    "busy": false
+   },
+   "depthRestored": 14
+  },
+  "G_openCylinder_edge_continuityAll_G1": {
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "readBack": [
+    {
+     "id": 305,
+     "type": "Sheet",
+     "name": "XNurbs.001",
+     "boundsMm": {
+      "min": [
+       2389.9220445934025,
+       -10.094437247520936,
+       16.228622771849174
+      ],
+      "max": [
+       2410.1170745998947,
+       10.116215143047453,
+       24.15042903950114
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 1,
+     "vertexCount": 1
+    }
+   ],
+   "depthAfter": {
+    "undo": 15,
+    "redo": 0,
+    "bodies": 52,
+    "busy": false
+   },
+   "depthRestored": 14
+  },
+  "H_quad_curves_spans4_degree5": {
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "readBack": [
+    {
+     "id": 306,
+     "type": "Sheet",
+     "name": "XNurbs.001",
+     "boundsMm": {
+      "min": [
+       2299.439213657005,
+       -0.573725663053911,
+       -0.019666589326950687
+      ],
+      "max": [
+       2340.5637486701416,
+       40.57006478351844,
+       10.028104803317017
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "depthAfter": {
+    "undo": 15,
+    "redo": 0,
+    "bodies": 52,
+    "busy": false
+   },
+   "depthRestored": 14
+  }
+ },
+ "cylInfoKeys": [
+  "documentToken",
+  "revision",
+  "measurementSource",
+  "body"
+ ],
+ "cylFaces": [
+  {
+   "id": "153f194497",
+   "surfaceType": "Plane",
+   "center": [
+    2400,
+    0,
+    20
+   ],
+   "normal": [
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "id": "153f194489",
+   "surfaceType": "Plane",
+   "center": [
+    2400,
+    0,
+    0
+   ],
+   "normal": [
+    0,
+    0,
+    -1
+   ]
+  },
+  {
+   "id": "153f194483",
+   "surfaceType": "Cylinder",
+   "center": [
+    2390,
+    1.2246467991473533e-15,
+    10
+   ],
+   "normal": [
+    -1,
+    1.2246467991473793e-16,
+    0
+   ]
+  }
+ ],
+ "boundaryEdges": [
+  {
+   "id": "154e194492",
+   "curveType": "Circle",
+   "faceIds": [
+    "154f194483"
+   ]
+  }
+ ],
+ "geoDepth": 14,
+ "end": {
+  "undo": 0,
+  "redo": 15,
+  "bodies": 38,
+  "busy": false
+ },
+ "endOk": true
+}

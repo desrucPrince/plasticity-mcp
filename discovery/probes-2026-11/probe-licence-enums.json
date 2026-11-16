@@ -1,0 +1,135 @@
+{
+ "depth": {
+  "undo": 0,
+  "redo": 8,
+  "bodies": 38,
+  "busy": false
+ },
+ "out": {
+  "ContinuityType": {
+   "23150": "C1",
+   "23151": "C2",
+   "23152": "C3",
+   "23153": "G1",
+   "23154": "G2",
+   "23155": "G3",
+   "23156": "G0",
+   "23157": "Free",
+   "C1": 23150,
+   "C2": 23151,
+   "C3": 23152,
+   "G1": 23153,
+   "G2": 23154,
+   "G3": 23155,
+   "G0": 23156,
+   "Free": 23157
+  },
+  "ControlType": {
+   "0": "None",
+   "1": "Explicit",
+   "2": "Aligned",
+   "None": 0,
+   "Explicit": 1,
+   "Aligned": 2
+  },
+  "BoundaryCondition": {
+   "0": "Natural",
+   "1": "Normal",
+   "2": "AlignWithAdjacent",
+   "3": "AlignToNext",
+   "Natural": 0,
+   "Normal": 1,
+   "AlignWithAdjacent": 2,
+   "AlignToNext": 3
+  },
+  "ParameterizationType": {
+   "0": "Disable",
+   "1": "FavorParmeterizationPerformance",
+   "2": "BalanceParameterizationPerformanceAndQuality",
+   "3": "FavorParmeterizationQuality",
+   "Disable": 0,
+   "FavorParmeterizationPerformance": 1,
+   "BalanceParameterizationPerformanceAndQuality": 2,
+   "FavorParmeterizationQuality": 3
+  },
+  "ConstraintTopologyType": {
+   "0": "Boundary",
+   "1": "Internal",
+   "Boundary": 0,
+   "Internal": 1
+  },
+  "ConstraintPriority": {
+   "0": "Guaranteed",
+   "1": "GuaranteedWeak",
+   "2": "Guide",
+   "3": "GuideStrong",
+   "Guaranteed": 0,
+   "GuaranteedWeak": 1,
+   "Guide": 2,
+   "GuideStrong": 3
+  },
+  "hasXNurbs": {
+   "kind": "function",
+   "length": 0,
+   "calls": {
+    "noArgs": true,
+    "editor": true,
+    "editor.license": true,
+    "editor.licenseManager": true
+   }
+  },
+  "isStudioLicense": {
+   "kind": "function",
+   "length": 0,
+   "calls": {
+    "noArgs": true,
+    "editor": true,
+    "editor.license": true,
+    "editor.licenseManager": true
+   }
+  },
+  "isIndieLicense": {
+   "kind": "function",
+   "length": 0,
+   "calls": {
+    "noArgs": false,
+    "editor": false,
+    "editor.license": false,
+    "editor.licenseManager": false
+   }
+  },
+  "isLicenseExpired": {
+   "kind": "function",
+   "length": 0,
+   "calls": {
+    "noArgs": false,
+    "editor": false,
+    "editor.license": false,
+    "editor.licenseManager": false
+   }
+  },
+  "LicenseContext": {
+   "kind": "class",
+   "statics": [
+    "length",
+    "name",
+    "prototype",
+    "__c",
+    "__",
+    "Consumer",
+    "__l",
+    "Provider"
+   ]
+  },
+  "editorLicenceKeys": [
+   "planes"
+  ],
+  "editor.planes": {
+   "ctor": "ConstructionPlaneDatabase",
+   "keys": [
+    "signals",
+    "store"
+   ]
+  }
+ }
+}

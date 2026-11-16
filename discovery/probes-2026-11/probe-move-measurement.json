@@ -1,0 +1,524 @@
+{
+ "start": {
+  "undo": 0,
+  "redo": 3,
+  "bodies": 38,
+  "busy": false
+ },
+ "variants": {
+  "offset_only": {
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'clone') | proto reads: commit,state,signals,beforeFirstCommit,beforeCommit,db,doCommit,measurement,offsetLocal2d,finalize,cleanupTemps,cleanupPhantoms,cleanupDiagnoses,dispose,beforeCancel,doCancel\n    at Object.doCommit (evalmachine.<anonymous>:1:6209757)\n    at Object.commit (evalmachine.<anonymous>:1:5716246)\n    at async MoveMeasurementCommand.execute (<anonymous>:277:20)\n    at async CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823177)\n    at async CommandExecutor.dequeue (evalmachine.<anonymous>:1:9821064)\n    at async CommandExecutor.exec (evalmachine.<anonymous>:1:9820102)\n    at async Editor.exec (evalmachine.<anonymous>:1:10774430)\n    at async Editor.<anonymous> (<anonymous>:280:9)",
+   "protoReads": [
+    "commit",
+    "state",
+    "signals",
+    "beforeFirstCommit",
+    "beforeCommit",
+    "db",
+    "doCommit",
+    "measurement",
+    "offsetLocal2d",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose",
+    "beforeCancel",
+    "doCancel"
+   ],
+   "measurementAfter": {
+    "id": 1,
+    "versionId": 1,
+    "type": "DistanceMeasurement",
+    "name": "probe-m",
+    "measurementSource": "native-brep",
+    "first": {
+     "bodyId": 328,
+     "topologyId": 199791,
+     "landmark": 0,
+     "topologyType": "vertex",
+     "topologyRefId": 199791,
+     "positionMm": [
+      2800,
+      0,
+      0
+     ]
+    },
+    "second": {
+     "bodyId": 328,
+     "topologyId": 199790,
+     "landmark": 0,
+     "topologyType": "vertex",
+     "topologyRefId": 199790,
+     "positionMm": [
+      2819.9999999999995,
+      0,
+      0
+     ]
+    },
+    "distanceMm": 19.999999999999545,
+    "direction": [
+     1,
+     0,
+     0
+    ],
+    "normal": [
+     0,
+     0,
+     1
+    ],
+    "offsetMm": [
+     -2800,
+     0
+    ]
+   },
+   "depthAfter": {
+    "undo": 2,
+    "redo": 0,
+    "bodies": 39,
+    "busy": false
+   }
+  },
+  "start_end_offset": {
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'clone') | proto reads: commit,state,signals,beforeFirstCommit,beforeCommit,db,doCommit,measurement,offsetLocal2d,finalize,cleanupTemps,cleanupPhantoms,cleanupDiagnoses,dispose,beforeCancel,doCancel\n    at Object.doCommit (evalmachine.<anonymous>:1:6209757)\n    at Object.commit (evalmachine.<anonymous>:1:5716246)\n    at async MoveMeasurementCommand.execute (<anonymous>:277:20)\n    at async CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823177)\n    at async CommandExecutor.dequeue (evalmachine.<anonymous>:1:9821064)\n    at async CommandExecutor.exec (evalmachine.<anonymous>:1:9820102)\n    at async Editor.exec (evalmachine.<anonymous>:1:10774430)\n    at async Editor.<anonymous> (<anonymous>:280:9)",
+   "protoReads": [
+    "commit",
+    "state",
+    "signals",
+    "beforeFirstCommit",
+    "beforeCommit",
+    "db",
+    "doCommit",
+    "measurement",
+    "offsetLocal2d",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose",
+    "beforeCancel",
+    "doCancel"
+   ],
+   "measurementAfter": {
+    "id": 1,
+    "versionId": 1,
+    "type": "DistanceMeasurement",
+    "name": "probe-m",
+    "measurementSource": "native-brep",
+    "first": {
+     "bodyId": 328,
+     "topologyId": 199791,
+     "landmark": 0,
+     "topologyType": "vertex",
+     "topologyRefId": 199791,
+     "positionMm": [
+      2800,
+      0,
+      0
+     ]
+    },
+    "second": {
+     "bodyId": 328,
+     "topologyId": 199790,
+     "landmark": 0,
+     "topologyType": "vertex",
+     "topologyRefId": 199790,
+     "positionMm": [
+      2819.9999999999995,
+      0,
+      0
+     ]
+    },
+    "distanceMm": 19.999999999999545,
+    "direction": [
+     1,
+     0,
+     0
+    ],
+    "normal": [
+     0,
+     0,
+     1
+    ],
+    "offsetMm": [
+     -2800,
+     0
+    ]
+   },
+   "depthAfter": {
+    "undo": 2,
+    "redo": 0,
+    "bodies": 39,
+    "busy": false
+   }
+  },
+  "measurement_field": {
+   "native": {
+    "measurementKeys": [
+     "versionId",
+     "direction",
+     "normal",
+     "offset",
+     "target1",
+     "target2",
+     "userData"
+    ],
+    "factory": {
+     "start": [
+      0,
+      0,
+      0
+     ],
+     "end": [
+      0,
+      0,
+      0
+     ],
+     "offset": [
+      0,
+      -0.01,
+      0
+     ],
+     "direction": [
+      0,
+      0,
+      0
+     ]
+    }
+   },
+   "protoReads": [
+    "commit",
+    "state",
+    "signals",
+    "beforeFirstCommit",
+    "beforeCommit",
+    "db",
+    "doCommit",
+    "offsetLocal2d",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose"
+   ],
+   "measurementAfter": {
+    "id": 1,
+    "versionId": 2,
+    "type": "DistanceMeasurement",
+    "name": null,
+    "measurementSource": "native-brep",
+    "first": {
+     "bodyId": 328,
+     "topologyId": 199791,
+     "landmark": 0,
+     "topologyType": "vertex",
+     "topologyRefId": 199791,
+     "positionMm": [
+      2800,
+      0,
+      0
+     ]
+    },
+    "second": {
+     "bodyId": 328,
+     "topologyId": 199790,
+     "landmark": 0,
+     "topologyType": "vertex",
+     "topologyRefId": 199790,
+     "positionMm": [
+      2819.9999999999995,
+      0,
+      0
+     ]
+    },
+    "distanceMm": 19.999999999999545,
+    "direction": [
+     1,
+     0,
+     0
+    ],
+    "normal": [
+     0,
+     0,
+     1
+    ],
+    "offsetMm": [
+     0,
+     0
+    ]
+   },
+   "depthAfter": {
+    "undo": 3,
+    "redo": 0,
+    "bodies": 39,
+    "busy": false
+   }
+  },
+  "measurement_field_full_frame": {
+   "native": {
+    "measurementKeys": [
+     "versionId",
+     "direction",
+     "normal",
+     "offset",
+     "target1",
+     "target2",
+     "userData"
+    ],
+    "offsetLocal2d": [
+     0.010000000000000231,
+     -0.01
+    ],
+    "factory": {
+     "start": [
+      2.8,
+      0,
+      0
+     ],
+     "end": [
+      2.82,
+      0,
+      0
+     ],
+     "offset": [
+      2.81,
+      -0.01,
+      0
+     ],
+     "direction": [
+      1,
+      0,
+      0
+     ]
+    }
+   },
+   "protoReads": [
+    "offsetLocal2d",
+    "commit",
+    "state",
+    "signals",
+    "beforeFirstCommit",
+    "beforeCommit",
+    "db",
+    "doCommit",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose"
+   ],
+   "measurementAfter": {
+    "id": 1,
+    "versionId": 2,
+    "type": "DistanceMeasurement",
+    "name": null,
+    "measurementSource": "native-brep",
+    "first": {
+     "bodyId": 328,
+     "topologyId": 199791,
+     "landmark": 0,
+     "topologyType": "vertex",
+     "topologyRefId": 199791,
+     "positionMm": [
+      2800,
+      0,
+      0
+     ]
+    },
+    "second": {
+     "bodyId": 328,
+     "topologyId": 199790,
+     "landmark": 0,
+     "topologyType": "vertex",
+     "topologyRefId": 199790,
+     "positionMm": [
+      2819.9999999999995,
+      0,
+      0
+     ]
+    },
+    "distanceMm": 19.999999999999545,
+    "direction": [
+     1,
+     0,
+     0
+    ],
+    "normal": [
+     0,
+     0,
+     1
+    ],
+    "offsetMm": [
+     10.000000000000231,
+     -10
+    ]
+   },
+   "depthAfter": {
+    "undo": 3,
+    "redo": 0,
+    "bodies": 39,
+    "busy": false
+   }
+  },
+  "measurement_field_full_frame_y5": {
+   "native": {
+    "measurementKeys": [
+     "versionId",
+     "direction",
+     "normal",
+     "offset",
+     "target1",
+     "target2",
+     "userData"
+    ],
+    "offsetLocal2d": [
+     0,
+     0.005
+    ],
+    "factory": {
+     "start": [
+      2.8,
+      0,
+      0
+     ],
+     "end": [
+      2.82,
+      0,
+      0
+     ],
+     "offset": [
+      2.8,
+      0.005,
+      0
+     ],
+     "direction": [
+      1,
+      0,
+      0
+     ]
+    }
+   },
+   "protoReads": [
+    "offsetLocal2d",
+    "commit",
+    "state",
+    "signals",
+    "beforeFirstCommit",
+    "beforeCommit",
+    "db",
+    "doCommit",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose"
+   ],
+   "measurementAfter": {
+    "id": 1,
+    "versionId": 2,
+    "type": "DistanceMeasurement",
+    "name": null,
+    "measurementSource": "native-brep",
+    "first": {
+     "bodyId": 328,
+     "topologyId": 199791,
+     "landmark": 0,
+     "topologyType": "vertex",
+     "topologyRefId": 199791,
+     "positionMm": [
+      2800,
+      0,
+      0
+     ]
+    },
+    "second": {
+     "bodyId": 328,
+     "topologyId": 199790,
+     "landmark": 0,
+     "topologyType": "vertex",
+     "topologyRefId": 199790,
+     "positionMm": [
+      2819.9999999999995,
+      0,
+      0
+     ]
+    },
+    "distanceMm": 19.999999999999545,
+    "direction": [
+     1,
+     0,
+     0
+    ],
+    "normal": [
+     0,
+     0,
+     1
+    ],
+    "offsetMm": [
+     0,
+     5
+    ]
+   },
+   "depthAfter": {
+    "undo": 3,
+    "redo": 0,
+    "bodies": 39,
+    "busy": false
+   }
+  }
+ },
+ "measurementBefore": {
+  "id": 1,
+  "versionId": 1,
+  "type": "DistanceMeasurement",
+  "name": "probe-m",
+  "measurementSource": "native-brep",
+  "first": {
+   "bodyId": 328,
+   "topologyId": 199791,
+   "landmark": 0,
+   "topologyType": "vertex",
+   "topologyRefId": 199791,
+   "positionMm": [
+    2800,
+    0,
+    0
+   ]
+  },
+  "second": {
+   "bodyId": 328,
+   "topologyId": 199790,
+   "landmark": 0,
+   "topologyType": "vertex",
+   "topologyRefId": 199790,
+   "positionMm": [
+    2819.9999999999995,
+    0,
+    0
+   ]
+  },
+  "distanceMm": 19.999999999999545,
+  "direction": [
+   1,
+   0,
+   0
+  ],
+  "normal": [
+   0,
+   0,
+   1
+  ],
+  "offsetMm": [
+   -2800,
+   0
+  ]
+ },
+ "geoDepth": 2,
+ "end": {
+  "undo": 0,
+  "redo": 3,
+  "bodies": 38,
+  "busy": false
+ },
+ "endOk": true
+}

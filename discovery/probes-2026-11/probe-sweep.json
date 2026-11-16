@@ -1,0 +1,595 @@
+{
+ "start": {
+  "undo": 0,
+  "redo": 8,
+  "bodies": 38,
+  "busy": false
+ },
+ "geometry": {
+  "spine": [
+   {
+    "id": 269,
+    "type": "Wire",
+    "name": "Line.001",
+    "boundsMm": {
+     "min": [
+      2000,
+      0,
+      0
+     ],
+     "max": [
+      2000,
+      0,
+      60
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "curvedSpine": [
+   {
+    "id": 270,
+    "type": "Wire",
+    "name": "Curve.001",
+    "boundsMm": {
+     "min": [
+      2100,
+      0,
+      0
+     ],
+     "max": [
+      2113.3333333333335,
+      0,
+      60
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "openArcProfile": [
+   {
+    "id": 271,
+    "type": "Wire",
+    "name": "Arc.001",
+    "boundsMm": {
+     "min": [
+      1990,
+      0,
+      0
+     ],
+     "max": [
+      2009.9999999999998,
+      10.000000000000009,
+      0
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "circleProfile": [
+   {
+    "id": 272,
+    "type": "Wire",
+    "name": "Circle.001",
+    "boundsMm": {
+     "min": [
+      1995,
+      -4.999999999999893,
+      0
+     ],
+     "max": [
+      2005,
+      4.999999999999893,
+      0
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "rail": [
+   {
+    "id": 273,
+    "type": "Wire",
+    "name": "Line.002",
+    "boundsMm": {
+     "min": [
+      2005,
+      0,
+      0
+     ],
+     "max": [
+      2015.0000000000002,
+      0,
+      60.00000000000001
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "toolBox": [
+   {
+    "id": 274,
+    "type": "Solid",
+    "name": null,
+    "boundsMm": {
+     "min": [
+      2195,
+      -5,
+      -5
+     ],
+     "max": [
+      2204.9999999999995,
+      5,
+      5
+     ]
+    },
+    "faceCount": 6,
+    "edgeCount": 12,
+    "vertexCount": 8
+   }
+  ],
+  "toolSpine": [
+   {
+    "id": 275,
+    "type": "Wire",
+    "name": "Line.003",
+    "boundsMm": {
+     "min": [
+      2200,
+      0,
+      0
+     ],
+     "max": [
+      2200,
+      40,
+      0
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "circleRegion": {
+   "id": "100r190478",
+   "entityId": 190478,
+   "islandVersionId": 100,
+   "sketchId": 8,
+   "sketchWireIds": [
+    28,
+    271,
+    272,
+    275
+   ],
+   "measurementSource": "render-mesh",
+   "displayBoundsMm": {
+    "min": [
+     1995.0000047683716,
+     -4.990133456885815,
+     0
+    ],
+    "max": [
+     2005.000114440918,
+     4.990133456885815,
+     0
+    ]
+   }
+  }
+ },
+ "variants": {
+  "A_openWireProfile_curves": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Sheet"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 276,
+     "type": "Sheet",
+     "name": "Swept.001",
+     "boundsMm": {
+      "min": [
+       1990,
+       0,
+       0
+      ],
+      "max": [
+       2009.9999999999998,
+       10.000000000000009,
+       60
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "depthAfter": {
+    "undo": 8,
+    "redo": 0,
+    "bodies": 46,
+    "busy": false
+   },
+   "depthRestored": 7
+  },
+  "A2_openWireProfile_curvedSpine": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Sheet"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 277,
+     "type": "Sheet",
+     "name": "Swept.001",
+     "boundsMm": {
+      "min": [
+       1989.9986248232426,
+       -0.0013751767575740815,
+       -43.04533673874404
+      ],
+      "max": [
+       2065.3859905613735,
+       10.001375176757584,
+       0.0013751767575740815
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "depthAfter": {
+    "undo": 8,
+    "redo": 0,
+    "bodies": 46,
+    "busy": false
+   },
+   "depthRestored": 7
+  },
+  "B_closedWireProfile_curves": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Sheet"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 278,
+     "type": "Sheet",
+     "name": "Swept.001",
+     "boundsMm": {
+      "min": [
+       1995,
+       -4.999999999999893,
+       0
+      ],
+      "max": [
+       2005,
+       4.999999999999893,
+       60
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 2,
+     "vertexCount": 0
+    }
+   ],
+   "depthAfter": {
+    "undo": 8,
+    "redo": 0,
+    "bodies": 46,
+    "busy": false
+   },
+   "depthRestored": 7
+  },
+  "C0_region_noGuide": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Solid"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 279,
+     "type": "Solid",
+     "name": "Swept.001",
+     "boundsMm": {
+      "min": [
+       1995,
+       -4.999999999999893,
+       0
+      ],
+      "max": [
+       2005,
+       4.999999999999893,
+       60
+      ]
+     },
+     "faceCount": 3,
+     "edgeCount": 2,
+     "vertexCount": 0
+    }
+   ],
+   "depthAfter": {
+    "undo": 8,
+    "redo": 0,
+    "bodies": 46,
+    "busy": false
+   },
+   "depthRestored": 7
+  },
+  "C_region_guide_Point": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Solid"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 280,
+     "type": "Solid",
+     "name": "Swept.001",
+     "boundsMm": {
+      "min": [
+       1994.9999999999998,
+       -4.999999999999893,
+       0
+      ],
+      "max": [
+       2015.0000000000002,
+       4.999999999999893,
+       60.00000000000002
+      ]
+     },
+     "faceCount": 3,
+     "edgeCount": 2,
+     "vertexCount": 0
+    }
+   ],
+   "depthAfter": {
+    "undo": 8,
+    "redo": 0,
+    "bodies": 46,
+    "busy": false
+   },
+   "depthRestored": 7
+  },
+  "C_region_guide_Chord": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Solid"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 281,
+     "type": "Solid",
+     "name": "Swept.001",
+     "boundsMm": {
+      "min": [
+       1994.9999999999998,
+       -4.999999999999893,
+       0
+      ],
+      "max": [
+       2015.0000000000002,
+       4.999999999999893,
+       60.00000000000002
+      ]
+     },
+     "faceCount": 3,
+     "edgeCount": 2,
+     "vertexCount": 0
+    }
+   ],
+   "depthAfter": {
+    "undo": 8,
+    "redo": 0,
+    "bodies": 46,
+    "busy": false
+   },
+   "depthRestored": 7
+  },
+  "C_region_guide_Curve": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Solid"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 282,
+     "type": "Solid",
+     "name": "Swept.001",
+     "boundsMm": {
+      "min": [
+       1994.9999999999998,
+       -4.999999999999893,
+       0
+      ],
+      "max": [
+       2015.0000000000002,
+       4.999999999999893,
+       60.00000000000002
+      ]
+     },
+     "faceCount": 3,
+     "edgeCount": 2,
+     "vertexCount": 0
+    }
+   ],
+   "depthAfter": {
+    "undo": 8,
+    "redo": 0,
+    "bodies": 46,
+    "busy": false
+   },
+   "depthRestored": 7
+  },
+  "C4_openWire_guide_Curve": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Sheet"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 283,
+     "type": "Sheet",
+     "name": "Swept.001",
+     "boundsMm": {
+      "min": [
+       1989.9999999999998,
+       0,
+       0
+      ],
+      "max": [
+       2020,
+       10.000000000000009,
+       60.00000000000002
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "depthAfter": {
+    "undo": 8,
+    "redo": 0,
+    "bodies": 46,
+    "busy": false
+   },
+   "depthRestored": 7
+  },
+  "D_thickness_openWire": {
+   "error": "Plasticity command failed: Error: Operation failed at PK_BODY_hollow_2 with error `PK_ERROR_unsuitable_entity` (914) ",
+   "depthAfter": {
+    "undo": 7,
+    "redo": 1,
+    "bodies": 45,
+    "busy": false
+   },
+   "depthRestored": 7
+  },
+  "E_sweepTool_box_traced": {
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'x') | proto reads: db,commit,createInitialMark,state,signals,updateAndCommitBehaviorAreIdentical,constructor,doCommit,calculateForCommit,calculate,origin,originOrientation,finalize,cleanupTemps,cleanupPhantoms,cleanupDiagnoses,dispose,doCancel\n    at Vector3.applyQuaternion (evalmachine.<anonymous>:1:2968241)\n    at Object.calculate (evalmachine.<anonymous>:1:8646863)\n    at Object.calculateForCommit (evalmachine.<anonymous>:1:5662783)\n    at Object.doCommit (evalmachine.<anonymous>:1:5656217)\n    at Object.commit (evalmachine.<anonymous>:1:5667530)\n    at SweepToolCommand.execute (<anonymous>:289:38)\n    at evalmachine.<anonymous>:1:5306148\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at SweepToolCommand.run (evalmachine.<anonymous>:1:5306048)\n    at CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823191)",
+   "depthAfter": {
+    "undo": 7,
+    "redo": 1,
+    "bodies": 45,
+    "busy": false
+   },
+   "depthRestored": 7
+  },
+  "E2_sweepTool_box_tangent": {
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'x') | proto reads: db,commit,createInitialMark,state,signals,updateAndCommitBehaviorAreIdentical,constructor,doCommit,calculateForCommit,calculate,origin,originOrientation,finalize,cleanupTemps,cleanupPhantoms,cleanupDiagnoses,dispose,doCancel\n    at Vector3.applyQuaternion (evalmachine.<anonymous>:1:2968241)\n    at Object.calculate (evalmachine.<anonymous>:1:8646863)\n    at Object.calculateForCommit (evalmachine.<anonymous>:1:5662783)\n    at Object.doCommit (evalmachine.<anonymous>:1:5656217)\n    at Object.commit (evalmachine.<anonymous>:1:5667530)\n    at SweepToolCommand.execute (<anonymous>:289:38)\n    at evalmachine.<anonymous>:1:5306148\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at SweepToolCommand.run (evalmachine.<anonymous>:1:5306048)\n    at CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823191)",
+   "depthAfter": {
+    "undo": 7,
+    "redo": 1,
+    "bodies": 45,
+    "busy": false
+   },
+   "depthRestored": 7
+  },
+  "E3_sweepTool_box_origin": {
+   "commit": {
+    "committed": true,
+    "result": "Solid"
+   },
+   "readBack": [
+    {
+     "id": 284,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2192.9289321881333,
+       -7.071067811865728,
+       -5.000000000001339
+      ],
+      "max": [
+       2207.0710678118658,
+       47.07106781186573,
+       5.000000000001339
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    }
+   ],
+   "depthAfter": {
+    "undo": 8,
+    "redo": 0,
+    "bodies": 46,
+    "busy": false
+   },
+   "depthRestored": 7
+  },
+  "E4_sweepTool_box_origin_angle90": {
+   "commit": {
+    "committed": true,
+    "result": "Solid"
+   },
+   "readBack": [
+    {
+     "id": 285,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2192.9289321881333,
+       -7.071067811865728,
+       -5.000000000001339
+      ],
+      "max": [
+       2207.0710678118658,
+       47.07106781186573,
+       5.000000000001339
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    }
+   ],
+   "depthAfter": {
+    "undo": 8,
+    "redo": 0,
+    "bodies": 46,
+    "busy": false
+   },
+   "depthRestored": 7
+  }
+ },
+ "geoDepth": 7,
+ "end": {
+  "undo": 0,
+  "redo": 8,
+  "bodies": 38,
+  "busy": false
+ },
+ "endOk": true
+}

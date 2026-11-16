@@ -1,0 +1,992 @@
+{
+ "start": {
+  "undo": 0,
+  "redo": 6,
+  "bodies": 38,
+  "busy": false
+ },
+ "steps": {
+  "importMesh": {
+   "targetId": "3FDC93BEB98D54E51A091068A9142583",
+   "title": "isolated-scratch.plasticity - Plasticity",
+   "documentToken": "01a1dbab-9912-7787-9e39-0dc387dc107a",
+   "revision": "r2.dbfb0733db43b4a1",
+   "dbVersion": 495,
+   "undoDepth": 2,
+   "redoDepth": 0,
+   "materials": [],
+   "measurements": [],
+   "sectionAnalyses": [],
+   "instances": [],
+   "referenceMeshes": [
+    {
+     "id": 0,
+     "type": "ReferenceMesh",
+     "name": "probe-cube.obj",
+     "sourcePath": "/private/tmp/claude-501/plasticity-probe-state/probe-cube.obj",
+     "sourceFormat": "obj",
+     "measurementSource": "reference-mesh",
+     "boundsMm": {
+      "min": [
+       3100,
+       0,
+       0
+      ],
+      "max": [
+       3110,
+       10,
+       10
+      ]
+     },
+     "translationMm": [
+      0,
+      0,
+      0
+     ],
+     "rotationQuaternion": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "sceneScaleToMeters": [
+      0.001,
+      0.001,
+      0.001
+     ],
+     "vertexEntries": 36,
+     "triangles": 12,
+     "visible": true,
+     "hidden": false,
+     "locked": false
+    }
+   ],
+   "activeGroupId": 0,
+   "groups": [
+    {
+     "id": 0,
+     "name": "Scene",
+     "parentId": null,
+     "childGroupIds": [
+      1
+     ],
+     "bodyIds": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      13,
+      14,
+      22,
+      28,
+      37,
+      59,
+      63,
+      68,
+      74,
+      78,
+      83,
+      89,
+      96,
+      100,
+      105,
+      111,
+      118,
+      142,
+      150,
+      178,
+      180,
+      182,
+      189,
+      196,
+      211,
+      212,
+      213,
+      214,
+      225,
+      237,
+      349
+     ],
+     "instanceIds": [],
+     "referenceMeshIds": [
+      0
+     ],
+     "otherNodeKeys": [],
+     "visible": true,
+     "hidden": false,
+     "locked": false
+    },
+    {
+     "id": 1,
+     "name": "Inbox",
+     "parentId": 0,
+     "childGroupIds": [
+      2
+     ],
+     "bodyIds": [],
+     "instanceIds": [],
+     "referenceMeshIds": [],
+     "otherNodeKeys": [],
+     "visible": true,
+     "hidden": false,
+     "locked": false
+    },
+    {
+     "id": 2,
+     "name": null,
+     "parentId": 1,
+     "childGroupIds": [],
+     "bodyIds": [],
+     "instanceIds": [],
+     "referenceMeshIds": [],
+     "otherNodeKeys": [],
+     "visible": true,
+     "hidden": false,
+     "locked": false
+    }
+   ],
+   "construction": {
+    "planes": [],
+    "activePlaneId": "standard:top",
+    "planeStateToken": "planes:50b2ca886dad7e7f",
+    "viewStateToken": "workplane:standard:top:0.00000000000,0.00000000000,0.00000000000,0.00000000000,0.00000000000,1.00000000000,1.00000000000,0.00000000000,0.00000000000,0.00000000000,1.00000000000,0.00000000000",
+    "standardPlaneIds": [
+     "standard:back",
+     "standard:bottom",
+     "standard:front",
+     "standard:left",
+     "standard:right",
+     "standard:top"
+    ]
+   },
+   "regions": [
+    {
+     "id": "42r170084",
+     "entityId": 170084,
+     "islandVersionId": 42,
+     "sketchId": 11,
+     "sketchWireIds": [
+      9
+     ],
+     "measurementSource": "render-mesh",
+     "displayBoundsMm": {
+      "min": [
+       -15.661800280213356,
+       -27.000000700354576,
+       155.12439608573914
+      ],
+      "max": [
+       15.751399099826813,
+       -27.000000700354576,
+       182.79029428958893
+      ]
+     }
+    },
+    {
+     "id": "43r179660",
+     "entityId": 179660,
+     "islandVersionId": 43,
+     "sketchId": 12,
+     "sketchWireIds": [
+      14
+     ],
+     "measurementSource": "render-mesh",
+     "displayBoundsMm": {
+      "min": [
+       -15.572699718177319,
+       -23.000000044703484,
+       155.7915061712265
+      ],
+      "max": [
+       15.661699697375298,
+       -23.000000044703484,
+       183.2991987466812
+      ]
+     }
+    },
+    {
+     "id": "44r184167",
+     "entityId": 184167,
+     "islandVersionId": 44,
+     "sketchId": 8,
+     "sketchWireIds": [
+      28
+     ],
+     "measurementSource": "render-mesh",
+     "displayBoundsMm": {
+      "min": [
+       97.00000286102295,
+       10.999999940395355,
+       0
+      ],
+      "max": [
+       103.00000011920929,
+       16.00000075995922,
+       0
+      ]
+     }
+    }
+   ],
+   "bodies": [
+    {
+     "id": 2,
+     "versionId": 1,
+     "type": "Solid",
+     "name": "handle",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       -13.000050000000304,
+       -9.500050000000305,
+       -0.07066409451812894
+      ],
+      "max": [
+       13.000050000000304,
+       16.500050000000307,
+       147.84376775677416
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 15,
+     "edgeCount": 32,
+     "vertexCount": 21
+    },
+    {
+     "id": 4,
+     "versionId": 2,
+     "type": "Solid",
+     "name": "bottom_plug",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       -19.15005000000039,
+       -22.90005,
+       139.99994999999961
+      ],
+      "max": [
+       19.15005000000039,
+       -10.54995,
+       164.22516261489804
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 24,
+     "edgeCount": 66,
+     "vertexCount": 44
+    },
+    {
+     "id": 5,
+     "versionId": 3,
+     "type": "Solid",
+     "name": "button_pin_1",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       -22.30160827315264,
+       -19.986537102709676,
+       136.93031433135167
+      ],
+      "max": [
+       -8.272486289865476,
+       -13.463462897290327,
+       153.25117765311288
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 5,
+     "edgeCount": 7,
+     "vertexCount": 5
+    },
+    {
+     "id": 6,
+     "versionId": 4,
+     "type": "Solid",
+     "name": "button_pin_2",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       8.272486289870475,
+       -19.986537102709676,
+       136.22335306619962
+      ],
+      "max": [
+       21.59464700800559,
+       -13.463462897290327,
+       153.25117765311288
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 5,
+     "edgeCount": 7,
+     "vertexCount": 5
+    },
+    {
+     "id": 7,
+     "versionId": 5,
+     "type": "Solid",
+     "name": "mic_pro_reference",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       -19.416090408318478,
+       -23.166090408318478,
+       147.58390959168153
+      ],
+      "max": [
+       19.416090408318478,
+       -10.283909591681528,
+       186.4160904083185
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 3,
+     "edgeCount": 3,
+     "vertexCount": 2
+    },
+    {
+     "id": 8,
+     "versionId": 6,
+     "type": "Solid",
+     "name": "capsule",
+     "materialId": 0,
+     "visible": true,
+     "hidden": true,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       -22.422773831128932,
+       -22.422773831128932,
+       193.57722616887108
+      ],
+      "max": [
+       22.422773831128932,
+       22.422773831128932,
+       241.99005000000002
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 24,
+     "edgeCount": 53,
+     "vertexCount": 36
+    },
+    {
+     "id": 3,
+     "versionId": 7,
+     "type": "Solid",
+     "name": "cube",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       -25.03559723125404,
+       -25.00005,
+       139.83566414744763
+      ],
+      "max": [
+       25.03559723125404,
+       25.326700233145097,
+       200.1437677567742
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 681,
+     "edgeCount": 2009,
+     "vertexCount": 1332
+    },
+    {
+     "id": 13,
+     "versionId": 8,
+     "type": "Solid",
+     "name": "magnet_test_coupon",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       -25.03559723125404,
+       -25.000049999999995,
+       139.99994999886516
+      ],
+      "max": [
+       25.03559723125404,
+       -3.9999442285507407,
+       194.00005000000004
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 673,
+     "edgeCount": 1997,
+     "vertexCount": 1322
+    },
+    {
+     "id": 22,
+     "versionId": 9,
+     "type": "Solid",
+     "name": "magnet_plate_test",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       80.95,
+       -19.05,
+       0
+      ],
+      "max": [
+       119.05,
+       19.05,
+       4
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 17,
+     "edgeCount": 24,
+     "vertexCount": 10
+    },
+    {
+     "id": 37,
+     "versionId": 10,
+     "type": "Solid",
+     "name": "magnet_plate_test_v2",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       130.95,
+       -19.05,
+       0
+      ],
+      "max": [
+       169.05,
+       19.05,
+       4
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 73,
+     "edgeCount": 199,
+     "vertexCount": 132
+    },
+    {
+     "id": 59,
+     "versionId": 11,
+     "type": "Solid",
+     "name": "slot_gauge_1",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       217.49999999999997,
+       -6.5,
+       0
+      ],
+      "max": [
+       242.5,
+       6.5,
+       2.6
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 20,
+     "edgeCount": 48,
+     "vertexCount": 32
+    },
+    {
+     "id": 63,
+     "versionId": 12,
+     "type": "Solid",
+     "name": "slot_gauge_2",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       217.49999999999997,
+       10.500000000000002,
+       0
+      ],
+      "max": [
+       242.5,
+       23.5,
+       2.6
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 24,
+     "edgeCount": 60,
+     "vertexCount": 40
+    },
+    {
+     "id": 68,
+     "versionId": 13,
+     "type": "Solid",
+     "name": "slot_gauge_3",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       217.49999999999997,
+       27.500000000000004,
+       0
+      ],
+      "max": [
+       242.5,
+       40.5,
+       2.6
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 28,
+     "edgeCount": 72,
+     "vertexCount": 48
+    },
+    {
+     "id": 74,
+     "versionId": 14,
+     "type": "Solid",
+     "name": "slot_gauge_v2_1",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       277.5,
+       -5.5,
+       0
+      ],
+      "max": [
+       302.50000000000006,
+       5.5,
+       3.1
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 20,
+     "edgeCount": 48,
+     "vertexCount": 32
+    },
+    {
+     "id": 78,
+     "versionId": 15,
+     "type": "Solid",
+     "name": "slot_gauge_v2_2",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       277.5,
+       9.500000000000002,
+       0
+      ],
+      "max": [
+       302.50000000000006,
+       20.499999999999996,
+       3.1000000000000005
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 24,
+     "edgeCount": 60,
+     "vertexCount": 40
+    },
+    {
+     "id": 83,
+     "versionId": 16,
+     "type": "Solid",
+     "name": "slot_gauge_v2_3",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       277.5,
+       24.5,
+       0
+      ],
+      "max": [
+       302.50000000000006,
+       35.50000000000001,
+       3.1000000000000005
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 28,
+     "edgeCount": 72,
+     "vertexCount": 48
+    },
+    {
+     "id": 89,
+     "versionId": 17,
+     "type": "Solid",
+     "name": "slot_gauge_v2_4",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       277.5,
+       39.49999999999999,
+       0
+      ],
+      "max": [
+       302.50000000000006,
+       50.5,
+       3.1
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 32,
+     "edgeCount": 84,
+     "vertexCount": 56
+    },
+    {
+     "id": 96,
+     "versionId": 18,
+     "type": "Solid",
+     "name": "slot_gauge_v3_1",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       387,
+       -5.499999999999999,
+       0
+      ],
+      "max": [
+       413.00000000000006,
+       5.499999999999996,
+       3.1999999999999997
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 20,
+     "edgeCount": 48,
+     "vertexCount": 32
+    },
+    {
+     "id": 100,
+     "versionId": 19,
+     "type": "Solid",
+     "name": "slot_gauge_v3_2",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       387,
+       9.5,
+       0
+      ],
+      "max": [
+       413.00000000000006,
+       20.49999999999999,
+       3.1999999999999997
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 24,
+     "edgeCount": 60,
+     "vertexCount": 40
+    },
+    {
+     "id": 105,
+     "versionId": 20,
+     "type": "Solid",
+     "name": "slot_gauge_v3_3",
+     "materialId": 0,
+     "visible": true,
+     "hidden": false,
+     "locked": false,
+     "boundsMm": {
+      "min": [
+       387,
+       24.5,
+       0
+      ],
+      "max": [
+       413.00000000000006,
+       35.50000000000001,
+       3.1999999999999997
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 28,
+     "edgeCount": 72,
+     "vertexCount": 48
+    }
+   ],
+   "bodyPagination": {
+    "offset": 0,
+    "limit": 20,
+    "total": 39,
+    "nextOffset": 20
+   },
+   "change": {
+    "sceneChanged": true,
+    "revisionChanged": true,
+    "changed": true,
+    "documentChanged": false,
+    "added": [],
+    "removed": [],
+    "modified": [],
+    "regionsAdded": [],
+    "regionsRemoved": [],
+    "regionsModified": [],
+    "constructionPlanesAdded": [],
+    "constructionPlanesRemoved": [],
+    "constructionPlanesModified": [],
+    "activeWorkplaneChanged": null,
+    "materialsChanged": false,
+    "measurementsChanged": false,
+    "sectionAnalysesChanged": false,
+    "instancesChanged": false,
+    "referenceMeshesChanged": true,
+    "groupsChanged": true
+   }
+  },
+  "referenceMeshes": {
+   "documentToken": "01a1dbab-9912-7787-9e39-0dc387dc107a",
+   "revision": "r2.dbfb0733db43b4a1",
+   "referenceMeshes": [
+    {
+     "id": 0,
+     "type": "ReferenceMesh",
+     "name": "probe-cube.obj",
+     "sourcePath": "/private/tmp/claude-501/plasticity-probe-state/probe-cube.obj",
+     "sourceFormat": "obj",
+     "measurementSource": "reference-mesh",
+     "boundsMm": {
+      "min": [
+       3100,
+       0,
+       0
+      ],
+      "max": [
+       3110,
+       10,
+       10
+      ]
+     },
+     "translationMm": [
+      0,
+      0,
+      0
+     ],
+     "rotationQuaternion": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "sceneScaleToMeters": [
+      0.001,
+      0.001,
+      0.001
+     ],
+     "vertexEntries": 36,
+     "triangles": 12,
+     "visible": true,
+     "hidden": false,
+     "locked": false
+    }
+   ]
+  },
+  "capture_solid": {
+   "factories": [],
+   "error": "Operation has no effect",
+   "busy": false
+  },
+  "capture_mesh": {
+   "factories": [
+    {
+     "chain": [
+      "ConvertMeshToPolySplinesFactory",
+      "RollbackStatefulFactory",
+      "SimpleStatefulFactory",
+      "AbstractFactory"
+     ],
+     "fields": [
+      "editor",
+      "changed",
+      "updated",
+      "refine",
+      "temps",
+      "phantoms",
+      "diagnoses",
+      "executor",
+      "_state",
+      "stages",
+      "partition",
+      "phantomPartition",
+      "roundedCorners",
+      "mergePatches",
+      "interpolateBoundary",
+      "_empties"
+     ]
+    }
+   ],
+   "error": null,
+   "busy": false
+  },
+  "convert_default": {
+   "native": {
+    "result": [
+     "Solid"
+    ]
+   },
+   "reads": [
+    "commit",
+    "state",
+    "signals",
+    "beforeFirstCommit",
+    "beforeCommit",
+    "db",
+    "doCommit",
+    "calculate",
+    "doCommitFromUpdateCache",
+    "empties",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose"
+   ],
+   "readBack": [
+    {
+     "id": 350,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       3100.8024691358014,
+       0.802469135802469,
+       0.802469135802469
+      ],
+      "max": [
+       3109.1975308641977,
+       9.197530864197532,
+       9.19753086419753
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    }
+   ],
+   "meshesAfter": {
+    "documentToken": "01a1dbab-9912-7787-9e39-0dc387dc107a",
+    "revision": "r3.16ec7ec340f99519",
+    "referenceMeshes": []
+   },
+   "depthAfter": {
+    "undo": 3,
+    "redo": 0,
+    "bodies": 40,
+    "busy": false
+   }
+  },
+  "convert_roundedCorners": {
+   "native": {
+    "result": [
+     "Solid"
+    ]
+   },
+   "reads": [
+    "commit",
+    "state",
+    "signals",
+    "beforeFirstCommit",
+    "beforeCommit",
+    "db",
+    "doCommit",
+    "calculate",
+    "doCommitFromUpdateCache",
+    "empties",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose"
+   ],
+   "readBack": [
+    {
+     "id": 351,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       3100.8024691358014,
+       0.802469135802469,
+       0.802469135802469
+      ],
+      "max": [
+       3109.1975308641977,
+       9.197530864197532,
+       9.19753086419753
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    }
+   ],
+   "meshesAfter": {
+    "documentToken": "01a1dbab-9912-7787-9e39-0dc387dc107a",
+    "revision": "r3.491378e213d37090",
+    "referenceMeshes": []
+   },
+   "depthAfter": {
+    "undo": 3,
+    "redo": 0,
+    "bodies": 40,
+    "busy": false
+   }
+  }
+ },
+ "geoDepth": 2,
+ "end": {
+  "undo": 0,
+  "redo": 3,
+  "bodies": 38,
+  "busy": false
+ },
+ "endOk": true
+}

@@ -1,0 +1,148 @@
+{
+ "start": {
+  "undo": 0,
+  "redo": 6,
+  "bodies": 38,
+  "busy": false
+ },
+ "commands": {
+  "PolySplinesCommand": {
+   "resourceOwner": "AbstractFactory",
+   "factories": [],
+   "error": "Operation has no effect",
+   "timedOut": false,
+   "busy": false
+  },
+  "XNurbsCommand": {
+   "resourceOwner": "AbstractFactory",
+   "factories": [
+    {
+     "chain": [
+      "XSidedFactory",
+      "XNurbsFactory",
+      "GeometryFactory",
+      "AbstractGeometryFactory"
+     ],
+     "fields": {
+      "editor": "Editor",
+      "changed": "Signal",
+      "updated": "Signal",
+      "refine": "RefineScope",
+      "temps": "Array",
+      "phantoms": "Array",
+      "diagnoses": "Array",
+      "executor": "TransactionExecutor",
+      "_state": "AtomicRef",
+      "partition": "Partition",
+      "phantomPartition": "Partition",
+      "continuities": "Array",
+      "isDirty": true,
+      "needsUpdate": "Map",
+      "needsRemove": "Set",
+      "_controlType": 0,
+      "_uDegree": 3,
+      "_vDegree": 3,
+      "_uSpans": 1,
+      "_vSpans": 1,
+      "_weight": 0.5,
+      "_adaptiveTolerance": false,
+      "_preferToProduceSurface": true,
+      "_tolerance": 0.00001,
+      "_angularTolerance": 0.1,
+      "_maxCVs": 4000,
+      "_quadSided": false,
+      "_stretch": 0,
+      "_bending": 0.05,
+      "_changeInBending": 0.95,
+      "_boundaryCondition": 2,
+      "_parameterization": 2,
+      "_enforceTolerance": 5,
+      "analysis": "Object",
+      "_guides": "Object",
+      "_edge2constraint": "Map",
+      "isoparm2refinement": "Map",
+      "_segment2constraint": "Map",
+      "_continuity": 23156,
+      "_blending": 0.5,
+      "vsurf": "XNurbs",
+      "shouldErrorOnImpossibleQuadSided": false,
+      "_edges": "Object",
+      "_curves": "Object"
+     }
+    }
+   ],
+   "error": null,
+   "timedOut": false,
+   "busy": false
+  },
+  "ImportPolySplinesCommand": {
+   "resourceOwner": "AbstractFactory",
+   "factories": [],
+   "error": "Cannot read properties of undefined (reading 'map')",
+   "timedOut": false,
+   "busy": false
+  },
+  "SweepToolCommand": {
+   "resourceOwner": "AbstractFactory",
+   "factories": [
+    {
+     "chain": [
+      "SweepToolFactory",
+      "GeometryFactory",
+      "AbstractGeometryFactory",
+      "AbstractFactory"
+     ],
+     "fields": {
+      "editor": "Editor",
+      "changed": "Signal",
+      "updated": "Signal",
+      "refine": "RefineScope",
+      "temps": "Array",
+      "phantoms": "Array",
+      "diagnoses": "Array",
+      "executor": "TransactionExecutor",
+      "_state": "AtomicRef",
+      "partition": "Partition",
+      "phantomPartition": "Partition",
+      "angle": 0,
+      "scale": 1,
+      "offset": 0,
+      "flip": false,
+      "tangent": "Vector3"
+     }
+    }
+   ],
+   "error": null,
+   "timedOut": false,
+   "busy": false
+  },
+  "TogglePointsCommand": {
+   "resourceOwner": "AbstractFactory",
+   "factories": [],
+   "error": null,
+   "timedOut": false,
+   "busy": false
+  },
+  "PatchCommand": {
+   "resourceOwner": "AbstractFactory",
+   "factories": [],
+   "error": "Invalid selection for patching.",
+   "timedOut": false,
+   "busy": false
+  },
+  "ExtendCommand": {
+   "resourceOwner": "AbstractFactory",
+   "factories": [],
+   "error": null,
+   "timedOut": false,
+   "busy": false
+  }
+ },
+ "end": {
+  "undo": 0,
+  "redo": 6,
+  "bodies": 38,
+  "busy": false
+ },
+ "endOk": true
+}

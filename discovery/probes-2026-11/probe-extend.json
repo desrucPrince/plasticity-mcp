@@ -1,0 +1,1031 @@
+{
+ "start": {
+  "undo": 0,
+  "redo": 5,
+  "bodies": 38,
+  "busy": false
+ },
+ "geometry": {
+  "arch": [
+   {
+    "id": 311,
+    "type": "Wire",
+    "name": "Curve.001",
+    "boundsMm": {
+     "min": [
+      2500,
+      0,
+      0
+     ],
+     "max": [
+      2540,
+      0,
+      13.333333333333334
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "archSheet": [
+   {
+    "id": 312,
+    "type": "Sheet",
+    "name": "Extruded.001",
+    "boundsMm": {
+     "min": [
+      2500,
+      0,
+      0
+     ],
+     "max": [
+      2540,
+      20,
+      13.333333333333334
+     ]
+    },
+    "faceCount": 1,
+    "edgeCount": 4,
+    "vertexCount": 4
+   }
+  ],
+  "targetBox": [
+   {
+    "id": 313,
+    "type": "Solid",
+    "name": null,
+    "boundsMm": {
+     "min": [
+      2555,
+      -5.000000000000001,
+      -30
+     ],
+     "max": [
+      2565,
+      24.999999999999996,
+      10.000000000000002
+     ]
+    },
+    "faceCount": 6,
+    "edgeCount": 12,
+    "vertexCount": 8
+   }
+  ],
+  "solidBox": [
+   {
+    "id": 314,
+    "type": "Solid",
+    "name": null,
+    "boundsMm": {
+     "min": [
+      2600.0000000000005,
+      0,
+      0
+     ],
+     "max": [
+      2620,
+      20,
+      20
+     ]
+    },
+    "faceCount": 6,
+    "edgeCount": 12,
+    "vertexCount": 8
+   }
+  ]
+ },
+ "variants": {
+  "shape_Linear": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Sheet"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 314,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2600.0000000000005,
+       0,
+       0
+      ],
+      "max": [
+       2620,
+       20,
+       20
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 312,
+     "type": "Sheet",
+     "name": "Extruded.001",
+     "boundsMm": {
+      "min": [
+       2500,
+       0,
+       -7.071067811865516
+      ],
+      "max": [
+       2547.0710678118653,
+       20.000000000000004,
+       13.333333333333334
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   },
+   "depthRestored": 4
+  },
+  "shape_Soft": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Sheet"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 314,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2600.0000000000005,
+       0,
+       0
+      ],
+      "max": [
+       2620,
+       20,
+       20
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 312,
+     "type": "Sheet",
+     "name": "Extruded.001",
+     "boundsMm": {
+      "min": [
+       2500,
+       0,
+       -7.357152469008553
+      ],
+      "max": [
+       2546.7712972926383,
+       20.00000000000001,
+       13.333333333333352
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   },
+   "depthRestored": 4
+  },
+  "shape_Reflective": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Sheet"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 314,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2600.0000000000005,
+       0,
+       0
+      ],
+      "max": [
+       2620,
+       20,
+       20
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 312,
+     "type": "Sheet",
+     "name": "Extruded.001",
+     "boundsMm": {
+      "min": [
+       2500,
+       0,
+       -7.768491631027499
+      ],
+      "max": [
+       2546.2601270118976,
+       20,
+       13.333333333333334
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   },
+   "depthRestored": 4
+  },
+  "shape_Natural": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Sheet"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 314,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2600.0000000000005,
+       0,
+       0
+      ],
+      "max": [
+       2620,
+       20,
+       20
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 312,
+     "type": "Sheet",
+     "name": "Extruded.001",
+     "boundsMm": {
+      "min": [
+       2500,
+       0,
+       -7.576006610707486
+      ],
+      "max": [
+       2546.5149064570915,
+       20,
+       14.242301050579172
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   },
+   "depthRestored": 4
+  },
+  "shape_Arc": {
+   "error": "Plasticity command failed: Error: Operation failed at PK_BODY_extend with error `PK_ERROR_field_of_wrong_type` (5014) ",
+   "depthAfter": {
+    "undo": 4,
+    "redo": 1,
+    "bodies": 42,
+    "busy": false
+   },
+   "depthRestored": 4
+  },
+  "soft_bias_0.1": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Sheet"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 314,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2600.0000000000005,
+       0,
+       0
+      ],
+      "max": [
+       2620,
+       20,
+       20
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 312,
+     "type": "Sheet",
+     "name": "Extruded.001",
+     "boundsMm": {
+      "min": [
+       2500,
+       0,
+       -7.357152469008553
+      ],
+      "max": [
+       2546.7712972926383,
+       20.00000000000001,
+       13.333333333333352
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   },
+   "depthRestored": 4
+  },
+  "soft_bias_0.9": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Sheet"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 314,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2600.0000000000005,
+       0,
+       0
+      ],
+      "max": [
+       2620,
+       20,
+       20
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 312,
+     "type": "Sheet",
+     "name": "Extruded.001",
+     "boundsMm": {
+      "min": [
+       2500,
+       0,
+       -7.357152469008553
+      ],
+      "max": [
+       2546.7712972926383,
+       20.00000000000001,
+       13.333333333333352
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   },
+   "depthRestored": 4
+  },
+  "natural_bias_0.1": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Sheet"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 314,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2600.0000000000005,
+       0,
+       0
+      ],
+      "max": [
+       2620,
+       20,
+       20
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 312,
+     "type": "Sheet",
+     "name": "Extruded.001",
+     "boundsMm": {
+      "min": [
+       2500,
+       0,
+       -7.576006610707486
+      ],
+      "max": [
+       2546.5149064570915,
+       20,
+       14.242301050579172
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   },
+   "depthRestored": 4
+  },
+  "modify_false": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Sheet"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 314,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2600.0000000000005,
+       0,
+       0
+      ],
+      "max": [
+       2620,
+       20,
+       20
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 312,
+     "type": "Sheet",
+     "name": "Extruded.001",
+     "boundsMm": {
+      "min": [
+       2500,
+       0,
+       -7.071067811865594
+      ],
+      "max": [
+       2547.0710678118653,
+       20.000000000000004,
+       13.333333333333334
+      ]
+     },
+     "faceCount": 2,
+     "edgeCount": 7,
+     "vertexCount": 6
+    }
+   ],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   },
+   "depthRestored": 4
+  },
+  "type_Target_box": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Sheet"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 314,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2600.0000000000005,
+       0,
+       0
+      ],
+      "max": [
+       2620,
+       20,
+       20
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 312,
+     "type": "Sheet",
+     "name": "Extruded.001",
+     "boundsMm": {
+      "min": [
+       2500,
+       0,
+       -15.000000000000552
+      ],
+      "max": [
+       2555,
+       20.000000000000004,
+       13.333333333333334
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   },
+   "depthRestored": 4
+  },
+  "type_Bbox": {
+   "commit": {
+    "committed": true,
+    "result": [
+     "Sheet"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 314,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2600.0000000000005,
+       0,
+       0
+      ],
+      "max": [
+       2620,
+       20,
+       20
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 312,
+     "type": "Sheet",
+     "name": "Extruded.001",
+     "boundsMm": {
+      "min": [
+       2500,
+       0,
+       -7.071067811865516
+      ],
+      "max": [
+       2547.0710678118653,
+       20.000000000000004,
+       13.333333333333334
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   },
+   "depthRestored": 4
+  },
+  "extendEdge_sheet_traced": {
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "readBack": [
+    {
+     "id": 314,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2600.0000000000005,
+       0,
+       0
+      ],
+      "max": [
+       2620,
+       20,
+       20
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 312,
+     "type": "Sheet",
+     "name": "Extruded.001",
+     "boundsMm": {
+      "min": [
+       2499.999975,
+       -0.004999999999999999,
+       -0.004999999999999999
+      ],
+      "max": [
+       2540.0049999999997,
+       20.005000000000003,
+       13.333358333333335
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "protoReads": [
+    "db",
+    "commit",
+    "createInitialMark",
+    "state",
+    "signals",
+    "updateAndCommitBehaviorAreIdentical",
+    "constructor",
+    "doCommit",
+    "calculateForCommit",
+    "calculate",
+    "zip",
+    "originalItems",
+    "originalItem",
+    "shell",
+    "shouldRemoveOriginalItemOnCommit",
+    "collections",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose"
+   ],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   },
+   "depthRestored": 4
+  },
+  "extendEdge_solid_traced": {
+   "commit": {
+    "committed": true,
+    "result": "Solid"
+   },
+   "readBack": [
+    {
+     "id": 312,
+     "type": "Sheet",
+     "name": "Extruded.001",
+     "boundsMm": {
+      "min": [
+       2500,
+       0,
+       0
+      ],
+      "max": [
+       2540,
+       20,
+       13.333333333333334
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    },
+    {
+     "id": 314,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2600.0000000000005,
+       0,
+       0
+      ],
+      "max": [
+       2620,
+       20,
+       20
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    }
+   ],
+   "protoReads": [
+    "db",
+    "commit",
+    "createInitialMark",
+    "state",
+    "signals",
+    "updateAndCommitBehaviorAreIdentical",
+    "constructor",
+    "doCommit",
+    "calculateForCommit",
+    "calculate",
+    "zip",
+    "originalItems",
+    "originalItem",
+    "shell",
+    "shouldRemoveOriginalItemOnCommit",
+    "collections",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose"
+   ],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   },
+   "depthRestored": 4
+  },
+  "extendEdge_sheet_distance10": {
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "readBack": [
+    {
+     "id": 314,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2600.0000000000005,
+       0,
+       0
+      ],
+      "max": [
+       2620,
+       20,
+       20
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 312,
+     "type": "Sheet",
+     "name": "Extruded.001",
+     "boundsMm": {
+      "min": [
+       2499.999975,
+       -0.004999999999999999,
+       -0.004999999999999999
+      ],
+      "max": [
+       2540.0049999999997,
+       20.005000000000003,
+       13.333358333333335
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "protoReads": [
+    "db",
+    "commit",
+    "createInitialMark",
+    "state",
+    "signals",
+    "updateAndCommitBehaviorAreIdentical",
+    "constructor",
+    "doCommit",
+    "calculateForCommit",
+    "calculate",
+    "zip",
+    "originalItems",
+    "originalItem",
+    "shell",
+    "shouldRemoveOriginalItemOnCommit",
+    "collections",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose"
+   ],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   },
+   "depthRestored": 4
+  }
+ },
+ "sheetEdgeSample": {
+  "id": "182e196170",
+  "curveType": "Line",
+  "line": true,
+  "circle": false,
+  "lengthMm": 20,
+  "centerMm": [
+   2540,
+   10,
+   0
+  ],
+  "tangent": [
+   0,
+   1,
+   0
+  ],
+  "boundsMm": {
+   "min": [
+    2539.9999618530273,
+    0,
+    0
+   ],
+   "max": [
+    2539.9999618530273,
+    19.999999552965164,
+    0
+   ]
+  },
+  "faceIds": [
+   "182f196176"
+  ],
+  "vertexIds": [
+   196146,
+   196160
+  ]
+ },
+ "endEdge": {
+  "id": "182e196170",
+  "curveType": "Line",
+  "line": true,
+  "circle": false,
+  "lengthMm": 20,
+  "centerMm": [
+   2540,
+   10,
+   0
+  ],
+  "tangent": [
+   0,
+   1,
+   0
+  ],
+  "boundsMm": {
+   "min": [
+    2539.9999618530273,
+    0,
+    0
+   ],
+   "max": [
+    2539.9999618530273,
+    19.999999552965164,
+    0
+   ]
+  },
+  "faceIds": [
+   "182f196176"
+  ],
+  "vertexIds": [
+   196146,
+   196160
+  ]
+ },
+ "solidEdge": {
+  "id": "184e196335",
+  "curveType": "Line",
+  "line": true,
+  "circle": false,
+  "lengthMm": 19.999999999999574,
+  "centerMm": [
+   2610.0000000000005,
+   0,
+   20
+  ],
+  "tangent": [
+   -1,
+   0,
+   0
+  ],
+  "boundsMm": {
+   "min": [
+    2599.9999046325684,
+    0,
+    19.999999552965164
+   ],
+   "max": [
+    2619.999885559082,
+    0,
+    19.999999552965164
+   ]
+  },
+  "faceIds": [
+   "184f196334",
+   "184f196339"
+  ],
+  "vertexIds": [
+   196304,
+   196316
+  ]
+ },
+ "geoDepth": 4,
+ "end": {
+  "undo": 0,
+  "redo": 5,
+  "bodies": 38,
+  "busy": false
+ },
+ "endOk": true
+}

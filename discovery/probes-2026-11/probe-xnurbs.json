@@ -1,0 +1,479 @@
+{
+ "start": {
+  "undo": 0,
+  "redo": 5,
+  "bodies": 38,
+  "busy": false
+ },
+ "variants": {
+  "empty": {
+   "error": "Plasticity command failed: Error: XNurbs operation failed with error `3`. | proto reads: commit,createInitialMark,state,signals,updateAndCommitBehaviorAreIdentical,constructor,db,doCommit,calculateForCommit,calculate,controlType,solve,adaptiveTolerance,preferToProduceSurface,tolerance,angularTolerance,maxCVs,quadSided,stretch,bending,changeInBending,boundaryCondition,parameterization,enforceTolerance,uDegree,vDegree,uSpans,vSpans,weight,edge2constraint,segment2constraint,finalize,cleanupTemps,cleanupPhantoms,cleanupDiagnoses,dispose,doCancel",
+   "reads": [
+    "commit",
+    "createInitialMark",
+    "state",
+    "signals",
+    "updateAndCommitBehaviorAreIdentical",
+    "constructor",
+    "db",
+    "doCommit",
+    "calculateForCommit",
+    "calculate",
+    "controlType",
+    "solve",
+    "adaptiveTolerance",
+    "preferToProduceSurface",
+    "tolerance",
+    "angularTolerance",
+    "maxCVs",
+    "quadSided",
+    "stretch",
+    "bending",
+    "changeInBending",
+    "boundaryCondition",
+    "parameterization",
+    "enforceTolerance",
+    "uDegree",
+    "vDegree",
+    "uSpans",
+    "vSpans",
+    "weight",
+    "edge2constraint",
+    "segment2constraint",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose",
+    "doCancel"
+   ],
+   "readBack": [],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 43,
+    "busy": false
+   },
+   "busy": false
+  },
+  "segmentConstraints_quad": {
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'Id')\n    at Object.addSegmentConstraint (evalmachine.<anonymous>:1:7087187)\n    at XNurbsCommand.execute (<anonymous>:272:86)\n    at evalmachine.<anonymous>:1:5306148\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at XNurbsCommand.run (evalmachine.<anonymous>:1:5306048)\n    at CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823191)\n    at evalmachine.<anonymous>:1:9821684\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at CommandExecutor.execute (evalmachine.<anonymous>:1:9821643)\n    at CommandExecutor.dequeue (evalmachine.<anonymous>:1:9821075)",
+   "reads": null,
+   "readBack": [],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 43,
+    "busy": false
+   },
+   "busy": false
+  },
+  "segmentConstraints_quad_plus_guide": {
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'Id')\n    at Object.addSegmentConstraint (evalmachine.<anonymous>:1:7087187)\n    at XNurbsCommand.execute (<anonymous>:272:86)\n    at evalmachine.<anonymous>:1:5306148\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at XNurbsCommand.run (evalmachine.<anonymous>:1:5306048)\n    at CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823191)\n    at evalmachine.<anonymous>:1:9821684\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at CommandExecutor.execute (evalmachine.<anonymous>:1:9821643)\n    at CommandExecutor.dequeue (evalmachine.<anonymous>:1:9821075)",
+   "reads": null,
+   "readBack": [],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 43,
+    "busy": false
+   },
+   "busy": false
+  },
+  "segmentConstraints_wireViews": {
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'Id')\n    at Object.addSegmentConstraint (evalmachine.<anonymous>:1:7087187)\n    at XNurbsCommand.execute (<anonymous>:272:49)\n    at evalmachine.<anonymous>:1:5306148\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at XNurbsCommand.run (evalmachine.<anonymous>:1:5306048)\n    at CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823191)\n    at evalmachine.<anonymous>:1:9821684\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at CommandExecutor.execute (evalmachine.<anonymous>:1:9821643)\n    at CommandExecutor.dequeue (evalmachine.<anonymous>:1:9821075)",
+   "reads": null,
+   "readBack": [],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 43,
+    "busy": false
+   },
+   "busy": false
+  },
+  "segmentConstraints_segmentModels": {
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'Id')\n    at Object.addSegmentConstraint (evalmachine.<anonymous>:1:7087187)\n    at XNurbsCommand.execute (<anonymous>:272:86)\n    at evalmachine.<anonymous>:1:5306148\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at XNurbsCommand.run (evalmachine.<anonymous>:1:5306048)\n    at CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823191)\n    at evalmachine.<anonymous>:1:9821684\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at CommandExecutor.execute (evalmachine.<anonymous>:1:9821643)\n    at CommandExecutor.dequeue (evalmachine.<anonymous>:1:9821075)",
+   "reads": null,
+   "readBack": [],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 43,
+    "busy": false
+   },
+   "busy": false
+  },
+  "borrowedConstraints_quad": {
+   "error": "Plasticity command failed: Error: XNurbs operation failed with error `3`. | proto reads: addSegmentConstraint,commit,createInitialMark,state,signals,updateAndCommitBehaviorAreIdentical,constructor,db,doCommit,calculateForCommit,calculate,controlType,solve,adaptiveTolerance,preferToProduceSurface,tolerance,angularTolerance,maxCVs,quadSided,stretch,bending,changeInBending,boundaryCondition,parameterization,enforceTolerance,uDegree,vDegree,uSpans,vSpans,weight,edge2constraint,segment2constraint,finalize,cleanupTemps,cleanupPhantoms,cleanupDiagnoses,dispose,doCancel",
+   "reads": [
+    "addSegmentConstraint",
+    "commit",
+    "createInitialMark",
+    "state",
+    "signals",
+    "updateAndCommitBehaviorAreIdentical",
+    "constructor",
+    "db",
+    "doCommit",
+    "calculateForCommit",
+    "calculate",
+    "controlType",
+    "solve",
+    "adaptiveTolerance",
+    "preferToProduceSurface",
+    "tolerance",
+    "angularTolerance",
+    "maxCVs",
+    "quadSided",
+    "stretch",
+    "bending",
+    "changeInBending",
+    "boundaryCondition",
+    "parameterization",
+    "enforceTolerance",
+    "uDegree",
+    "vDegree",
+    "uSpans",
+    "vSpans",
+    "weight",
+    "edge2constraint",
+    "segment2constraint",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose",
+    "doCancel"
+   ],
+   "readBack": [],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 43,
+    "busy": false
+   },
+   "busy": false
+  },
+  "borrowedConstraints_quad_plus_guide": {
+   "error": "Plasticity command failed: Error: XNurbs operation failed with error `29`. | proto reads: addSegmentConstraint,db,commit,createInitialMark,state,signals,updateAndCommitBehaviorAreIdentical,constructor,doCommit,calculateForCommit,calculate,controlType,solve,adaptiveTolerance,preferToProduceSurface,tolerance,angularTolerance,maxCVs,quadSided,stretch,bending,changeInBending,boundaryCondition,parameterization,enforceTolerance,uDegree,vDegree,uSpans,vSpans,weight,edge2constraint,segment2constraint,emitWarnings,finalize,cleanupTemps,cleanupPhantoms,cleanupDiagnoses,dispose,doCancel\n    at Object.calculate (evalmachine.<anonymous>:1:7091409)\n    at async Object.doCommit (evalmachine.<anonymous>:1:5656206)\n    at async Object.commit (evalmachine.<anonymous>:1:5667519)\n    at async XNurbsCommand.execute (<anonymous>:273:23)\n    at async CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823177)\n    at async CommandExecutor.dequeue (evalmachine.<anonymous>:1:9821064)\n    at async CommandExecutor.exec (evalmachine.<anonymous>:1:9820102)\n    at async Editor.exec (evalmachine.<anonymous>:1:10774430)\n    at async Editor.<anonymous> (<anonymous>:278:9)",
+   "reads": [
+    "addSegmentConstraint",
+    "db",
+    "commit",
+    "createInitialMark",
+    "state",
+    "signals",
+    "updateAndCommitBehaviorAreIdentical",
+    "constructor",
+    "doCommit",
+    "calculateForCommit",
+    "calculate",
+    "controlType",
+    "solve",
+    "adaptiveTolerance",
+    "preferToProduceSurface",
+    "tolerance",
+    "angularTolerance",
+    "maxCVs",
+    "quadSided",
+    "stretch",
+    "bending",
+    "changeInBending",
+    "boundaryCondition",
+    "parameterization",
+    "enforceTolerance",
+    "uDegree",
+    "vDegree",
+    "uSpans",
+    "vSpans",
+    "weight",
+    "edge2constraint",
+    "segment2constraint",
+    "emitWarnings",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose",
+    "doCancel"
+   ],
+   "readBack": [],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 0,
+    "bodies": 43,
+    "busy": false
+   },
+   "busy": false
+  },
+  "xsidedFactory_quad_plus_guide": {
+   "native": {
+    "result": "Sheet",
+    "xsidedWithGuide": true
+   },
+   "reads": null,
+   "readBack": [
+    {
+     "id": 348,
+     "type": "Sheet",
+     "name": "XNurbs.001",
+     "boundsMm": {
+      "min": [
+       2995.901640207982,
+       -2.928845774514937,
+       -0.43819329211761904
+      ],
+      "max": [
+       3043.6801478853267,
+       42.78554060357754,
+       22.466085824844132
+      ]
+     },
+     "faceCount": 1,
+     "edgeCount": 4,
+     "vertexCount": 4
+    }
+   ],
+   "depthAfter": {
+    "undo": 6,
+    "redo": 0,
+    "bodies": 44,
+    "busy": false
+   },
+   "busy": false
+  },
+  "guides_only_quad": {
+   "error": "Plasticity command failed: Error: XNurbs operation failed with error `29`. | proto reads: db,commit,createInitialMark,state,signals,updateAndCommitBehaviorAreIdentical,constructor,doCommit,calculateForCommit,calculate,controlType,solve,adaptiveTolerance,preferToProduceSurface,tolerance,angularTolerance,maxCVs,quadSided,stretch,bending,changeInBending,boundaryCondition,parameterization,enforceTolerance,uDegree,vDegree,uSpans,vSpans,weight,edge2constraint,segment2constraint,emitWarnings,finalize,cleanupTemps,cleanupPhantoms,cleanupDiagnoses,dispose,doCancel\n    at Object.calculate (evalmachine.<anonymous>:1:7091409)\n    at async Object.doCommit (evalmachine.<anonymous>:1:5656206)\n    at async Object.commit (evalmachine.<anonymous>:1:5667519)\n    at async XNurbsCommand.execute (<anonymous>:273:23)\n    at async CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823177)\n    at async CommandExecutor.dequeue (evalmachine.<anonymous>:1:9821064)\n    at async CommandExecutor.exec (evalmachine.<anonymous>:1:9820102)\n    at async Editor.exec (evalmachine.<anonymous>:1:10774430)\n    at async Editor.<anonymous> (<anonymous>:278:9)",
+   "reads": [
+    "db",
+    "commit",
+    "createInitialMark",
+    "state",
+    "signals",
+    "updateAndCommitBehaviorAreIdentical",
+    "constructor",
+    "doCommit",
+    "calculateForCommit",
+    "calculate",
+    "controlType",
+    "solve",
+    "adaptiveTolerance",
+    "preferToProduceSurface",
+    "tolerance",
+    "angularTolerance",
+    "maxCVs",
+    "quadSided",
+    "stretch",
+    "bending",
+    "changeInBending",
+    "boundaryCondition",
+    "parameterization",
+    "enforceTolerance",
+    "uDegree",
+    "vDegree",
+    "uSpans",
+    "vSpans",
+    "weight",
+    "edge2constraint",
+    "segment2constraint",
+    "emitWarnings",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose",
+    "doCancel"
+   ],
+   "readBack": [],
+   "depthAfter": {
+    "undo": 5,
+    "redo": 1,
+    "bodies": 43,
+    "busy": false
+   },
+   "busy": false
+  }
+ },
+ "classInfo": {
+  "base": "XNurbsFactory",
+  "baseOfBase": "GeometryFactory",
+  "arity": {
+   "addEdgeConstraint": 1,
+   "addSegmentConstraint": 1,
+   "setContinuityForEdge": 2,
+   "setContinuityForSegment": 2,
+   "setContinuityForConstraint": 2,
+   "solve": 0,
+   "calculate": 0,
+   "cycle": 0
+  },
+  "hasXNurbs": true,
+  "ownFieldCount": 42,
+  "guidesSetter": true
+ },
+ "geometry": {
+  "quad": [
+   {
+    "id": 343,
+    "type": "Wire",
+    "name": "Line.001",
+    "boundsMm": {
+     "min": [
+      3000,
+      0,
+      0
+     ],
+     "max": [
+      3040,
+      0,
+      10.000000000000002
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   },
+   {
+    "id": 344,
+    "type": "Wire",
+    "name": "Line.002",
+    "boundsMm": {
+     "min": [
+      3040,
+      0,
+      0
+     ],
+     "max": [
+      3040,
+      40,
+      10
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   },
+   {
+    "id": 345,
+    "type": "Wire",
+    "name": "Line.003",
+    "boundsMm": {
+     "min": [
+      3000,
+      40,
+      0
+     ],
+     "max": [
+      3040,
+      40,
+      10.000000000000002
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   },
+   {
+    "id": 346,
+    "type": "Wire",
+    "name": "Line.004",
+    "boundsMm": {
+     "min": [
+      3000,
+      0,
+      0
+     ],
+     "max": [
+      3000,
+      40,
+      10
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "guide": {
+   "id": 347,
+   "type": "Wire",
+   "name": "Curve.001",
+   "boundsMm": {
+    "min": [
+     3000,
+     19.999999999999996,
+     5
+    ],
+    "max": [
+     3040.0000000000005,
+     20,
+     24.999999999999993
+    ]
+   },
+   "faceCount": 0,
+   "edgeCount": 0,
+   "vertexCount": 0
+  }
+ },
+ "geoDepth": 5,
+ "xsidedFeed": {
+  "calls": [
+   {
+    "m": "addSegmentConstraint",
+    "args": [
+     {
+      "ctor": "XNurbsEdgeConstraint",
+      "keys": []
+     }
+    ]
+   },
+   {
+    "m": "addSegmentConstraint",
+    "args": [
+     {
+      "ctor": "XNurbsEdgeConstraint",
+      "keys": []
+     }
+    ]
+   },
+   {
+    "m": "addSegmentConstraint",
+    "args": [
+     {
+      "ctor": "XNurbsEdgeConstraint",
+      "keys": []
+     }
+    ]
+   },
+   {
+    "m": "addSegmentConstraint",
+    "args": [
+     {
+      "ctor": "XNurbsEdgeConstraint",
+      "keys": []
+     }
+    ]
+   }
+  ],
+  "segment": {
+   "ctor": "CurveSegment",
+   "keys": [
+    "versionId",
+    "entityId",
+    "layers",
+    "group",
+    "index",
+    "parent"
+   ]
+  },
+  "segment2constraintSize": 4
+ },
+ "end": {
+  "undo": 0,
+  "redo": 6,
+  "bodies": 38,
+  "busy": false
+ },
+ "endOk": true
+}

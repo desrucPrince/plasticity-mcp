@@ -1,0 +1,1003 @@
+{
+ "start": {
+  "undo": 0,
+  "redo": 4,
+  "bodies": 38,
+  "busy": false
+ },
+ "geometry": {
+  "box": [
+   {
+    "id": 324,
+    "type": "Solid",
+    "name": null,
+    "boundsMm": {
+     "min": [
+      2700,
+      0,
+      0
+     ],
+     "max": [
+      2719.9999999999995,
+      10,
+      5
+     ]
+    },
+    "faceCount": 6,
+    "edgeCount": 12,
+    "vertexCount": 8
+   }
+  ],
+  "polyline": [
+   {
+    "id": 325,
+    "type": "Wire",
+    "name": "Polyline.001",
+    "boundsMm": {
+     "min": [
+      2700,
+      50,
+      0
+     ],
+     "max": [
+      2720,
+      70,
+      0
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ],
+  "closedTriangle": [
+   {
+    "id": 326,
+    "type": "Wire",
+    "name": "Polyline.002",
+    "boundsMm": {
+     "min": [
+      2700,
+      100,
+      0
+     ],
+     "max": [
+      2730,
+      120,
+      0
+     ]
+    },
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   }
+  ]
+ },
+ "variants": {
+  "capture_oneFace": {
+   "select": [
+    {
+     "kind": "face",
+     "bodyId": 324,
+     "id": "217f198359"
+    }
+   ],
+   "native": {
+    "selectedSummary": {
+     "faces": 1,
+     "edges": 0,
+     "solids": 0,
+     "curves": 0
+    },
+    "routedFactory": "DimensionDistanceFactory",
+    "captured": true,
+    "collectionType": "DimensionCollection",
+    "captureError": null,
+    "timedOut": false,
+    "has": {
+     "GetIds": "Int32Array",
+     "HasDistance": "throws",
+     "HasRadius": "Object",
+     "HasRectangle": "Object",
+     "HasBlock": "Object",
+     "HasPolyline": "Object"
+    }
+   },
+   "readBack": [
+    {
+     "id": 324,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2700,
+       0,
+       0
+      ],
+      "max": [
+       2719.9999999999995,
+       10,
+       5
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 325,
+     "type": "Wire",
+     "name": "Polyline.001",
+     "boundsMm": {
+      "min": [
+       2700,
+       50,
+       0
+      ],
+      "max": [
+       2720,
+       70,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 326,
+     "type": "Wire",
+     "name": "Polyline.002",
+     "boundsMm": {
+      "min": [
+       2700,
+       100,
+       0
+      ],
+      "max": [
+       2730,
+       120,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    }
+   ],
+   "depthAfter": {
+    "undo": 3,
+    "redo": 0,
+    "bodies": 41,
+    "busy": false
+   }
+  },
+  "capture_closedTriangle": {
+   "select": [
+    {
+     "kind": "body",
+     "bodyId": 326
+    }
+   ],
+   "native": {
+    "selectedSummary": {
+     "faces": 0,
+     "edges": 0,
+     "solids": 0,
+     "curves": 1
+    },
+    "routedFactory": null,
+    "captured": false,
+    "captureError": "Operation has no effect",
+    "timedOut": false,
+    "has": {}
+   },
+   "readBack": [
+    {
+     "id": 324,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2700,
+       0,
+       0
+      ],
+      "max": [
+       2719.9999999999995,
+       10,
+       5
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 325,
+     "type": "Wire",
+     "name": "Polyline.001",
+     "boundsMm": {
+      "min": [
+       2700,
+       50,
+       0
+      ],
+      "max": [
+       2720,
+       70,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 326,
+     "type": "Wire",
+     "name": "Polyline.002",
+     "boundsMm": {
+      "min": [
+       2700,
+       100,
+       0
+      ],
+      "max": [
+       2730,
+       120,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    }
+   ],
+   "depthAfter": {
+    "undo": 3,
+    "redo": 0,
+    "bodies": 41,
+    "busy": false
+   }
+  },
+  "dist_commit_oneFace_30mm": {
+   "select": [
+    {
+     "kind": "face",
+     "bodyId": 324,
+     "id": "217f198359"
+    }
+   ],
+   "native": {
+    "selectedSummary": {
+     "faces": 1,
+     "edges": 0,
+     "solids": 0,
+     "curves": 0
+    },
+    "routedFactory": "DimensionDistanceFactory",
+    "captured": true,
+    "collectionType": "DimensionCollection",
+    "captureError": null,
+    "timedOut": false,
+    "has": {
+     "GetIds": "Int32Array",
+     "HasDistance": "throws",
+     "HasRadius": "Object",
+     "HasRectangle": "Object",
+     "HasBlock": "Object",
+     "HasPolyline": "Object"
+    },
+    "afterCollection": {
+     "distance": 0,
+     "refDistance": 0,
+     "containsRefEntity": false,
+     "to": [
+      0,
+      0,
+      0
+     ],
+     "direction": [
+      0,
+      0,
+      0
+     ]
+    },
+    "factoryBefore": {
+     "to": [
+      0,
+      0,
+      0
+     ],
+     "direction": [
+      0,
+      0,
+      0
+     ],
+     "refDistance": 0,
+     "containsRefEntity": false,
+     "_distance": 0.03
+    },
+    "result": [
+     "Solid"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 325,
+     "type": "Wire",
+     "name": "Polyline.001",
+     "boundsMm": {
+      "min": [
+       2700,
+       50,
+       0
+      ],
+      "max": [
+       2720,
+       70,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 326,
+     "type": "Wire",
+     "name": "Polyline.002",
+     "boundsMm": {
+      "min": [
+       2700,
+       100,
+       0
+      ],
+      "max": [
+       2730,
+       120,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 324,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2700,
+       0,
+       0
+      ],
+      "max": [
+       2719.9999999999995,
+       10,
+       5
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    }
+   ],
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 41,
+    "busy": false
+   }
+  },
+  "dist_commit_twoFaces_30mm": {
+   "select": [
+    {
+     "kind": "face",
+     "bodyId": 324,
+     "id": "217f198404"
+    },
+    {
+     "kind": "face",
+     "bodyId": 324,
+     "id": "217f198359"
+    }
+   ],
+   "native": {
+    "selectedSummary": {
+     "faces": 2,
+     "edges": 0,
+     "solids": 0,
+     "curves": 0
+    },
+    "routedFactory": "DimensionDistanceFactory",
+    "captured": true,
+    "collectionType": "DimensionCollection",
+    "captureError": null,
+    "timedOut": false,
+    "has": {
+     "GetIds": "Int32Array",
+     "HasDistance": "throws",
+     "HasRadius": "Object",
+     "HasRectangle": "Object",
+     "HasBlock": "Object",
+     "HasPolyline": "Object"
+    },
+    "afterCollection": {
+     "distance": 0,
+     "refDistance": 0,
+     "containsRefEntity": false,
+     "to": [
+      0,
+      0,
+      0
+     ],
+     "direction": [
+      0,
+      0,
+      0
+     ]
+    },
+    "factoryBefore": {
+     "to": [
+      0,
+      0,
+      0
+     ],
+     "direction": [
+      0,
+      0,
+      0
+     ],
+     "refDistance": 0,
+     "containsRefEntity": false,
+     "_distance": 0.03
+    },
+    "result": [
+     "Solid"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 325,
+     "type": "Wire",
+     "name": "Polyline.001",
+     "boundsMm": {
+      "min": [
+       2700,
+       50,
+       0
+      ],
+      "max": [
+       2720,
+       70,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 326,
+     "type": "Wire",
+     "name": "Polyline.002",
+     "boundsMm": {
+      "min": [
+       2700,
+       100,
+       0
+      ],
+      "max": [
+       2730,
+       120,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 324,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2700,
+       0,
+       0
+      ],
+      "max": [
+       2719.9999999999995,
+       10,
+       5
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    }
+   ],
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 41,
+    "busy": false
+   }
+  },
+  "dist_commit_topFace_12mm": {
+   "select": [
+    {
+     "kind": "face",
+     "bodyId": 324,
+     "id": "217f198414"
+    }
+   ],
+   "native": {
+    "selectedSummary": {
+     "faces": 1,
+     "edges": 0,
+     "solids": 0,
+     "curves": 0
+    },
+    "routedFactory": "DimensionDistanceFactory",
+    "captured": true,
+    "collectionType": "DimensionCollection",
+    "captureError": null,
+    "timedOut": false,
+    "has": {
+     "GetIds": "Int32Array",
+     "HasDistance": "throws",
+     "HasRadius": "Object",
+     "HasRectangle": "Object",
+     "HasBlock": "Object",
+     "HasPolyline": "Object"
+    },
+    "afterCollection": {
+     "distance": 0,
+     "refDistance": 0,
+     "containsRefEntity": false,
+     "to": [
+      0,
+      0,
+      0
+     ],
+     "direction": [
+      0,
+      0,
+      0
+     ]
+    },
+    "factoryBefore": {
+     "to": [
+      0,
+      0,
+      0
+     ],
+     "direction": [
+      0,
+      0,
+      0
+     ],
+     "refDistance": 0,
+     "containsRefEntity": false,
+     "_distance": 0.012
+    },
+    "result": [
+     "Solid"
+    ]
+   },
+   "readBack": [
+    {
+     "id": 325,
+     "type": "Wire",
+     "name": "Polyline.001",
+     "boundsMm": {
+      "min": [
+       2700,
+       50,
+       0
+      ],
+      "max": [
+       2720,
+       70,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 326,
+     "type": "Wire",
+     "name": "Polyline.002",
+     "boundsMm": {
+      "min": [
+       2700,
+       100,
+       0
+      ],
+      "max": [
+       2730,
+       120,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 324,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2700,
+       0,
+       0
+      ],
+      "max": [
+       2719.9999999999995,
+       10,
+       5
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    }
+   ],
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 41,
+    "busy": false
+   }
+  },
+  "dist_commit_oneFace_ref_to_dir": {
+   "select": [
+    {
+     "kind": "face",
+     "bodyId": 324,
+     "id": "217f198359"
+    }
+   ],
+   "error": "Plasticity command failed: Error: Operation LocalOutcome failed with error `21460`.",
+   "readBack": [
+    {
+     "id": 324,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2700,
+       0,
+       0
+      ],
+      "max": [
+       2719.9999999999995,
+       10,
+       5
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 325,
+     "type": "Wire",
+     "name": "Polyline.001",
+     "boundsMm": {
+      "min": [
+       2700,
+       50,
+       0
+      ],
+      "max": [
+       2720,
+       70,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 326,
+     "type": "Wire",
+     "name": "Polyline.002",
+     "boundsMm": {
+      "min": [
+       2700,
+       100,
+       0
+      ],
+      "max": [
+       2730,
+       120,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    }
+   ],
+   "depthAfter": {
+    "undo": 3,
+    "redo": 1,
+    "bodies": 41,
+    "busy": false
+   }
+  },
+  "dist_commit_oneFace_to_dir_only": {
+   "select": [
+    {
+     "kind": "face",
+     "bodyId": 324,
+     "id": "217f198359"
+    }
+   ],
+   "error": "Plasticity command failed: Error: Operation LocalOutcome failed with error `21460`.",
+   "readBack": [
+    {
+     "id": 324,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2700,
+       0,
+       0
+      ],
+      "max": [
+       2719.9999999999995,
+       10,
+       5
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 325,
+     "type": "Wire",
+     "name": "Polyline.001",
+     "boundsMm": {
+      "min": [
+       2700,
+       50,
+       0
+      ],
+      "max": [
+       2720,
+       70,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 326,
+     "type": "Wire",
+     "name": "Polyline.002",
+     "boundsMm": {
+      "min": [
+       2700,
+       100,
+       0
+      ],
+      "max": [
+       2730,
+       120,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    }
+   ],
+   "depthAfter": {
+    "undo": 3,
+    "redo": 1,
+    "bodies": 41,
+    "busy": false
+   }
+  },
+  "dist_commit_oneFace_clickPoint": {
+   "select": [
+    {
+     "kind": "face",
+     "bodyId": 324,
+     "id": "217f198359"
+    }
+   ],
+   "error": "Plasticity command failed: Error: Operation LocalOutcome failed with error `21460`.",
+   "readBack": [
+    {
+     "id": 324,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2700,
+       0,
+       0
+      ],
+      "max": [
+       2719.9999999999995,
+       10,
+       5
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 325,
+     "type": "Wire",
+     "name": "Polyline.001",
+     "boundsMm": {
+      "min": [
+       2700,
+       50,
+       0
+      ],
+      "max": [
+       2720,
+       70,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 326,
+     "type": "Wire",
+     "name": "Polyline.002",
+     "boundsMm": {
+      "min": [
+       2700,
+       100,
+       0
+      ],
+      "max": [
+       2730,
+       120,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    }
+   ],
+   "depthAfter": {
+    "undo": 3,
+    "redo": 1,
+    "bodies": 41,
+    "busy": false
+   }
+  },
+  "poly_commit_triangle_length40": {
+   "select": [
+    {
+     "kind": "body",
+     "bodyId": 326
+    }
+   ],
+   "native": {
+    "selectedSummary": {
+     "faces": 0,
+     "edges": 0,
+     "solids": 0,
+     "curves": 1
+    },
+    "routedFactory": null,
+    "captured": false,
+    "captureError": "Operation has no effect",
+    "timedOut": false,
+    "has": {}
+   },
+   "readBack": [
+    {
+     "id": 324,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       2700,
+       0,
+       0
+      ],
+      "max": [
+       2719.9999999999995,
+       10,
+       5
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 325,
+     "type": "Wire",
+     "name": "Polyline.001",
+     "boundsMm": {
+      "min": [
+       2700,
+       50,
+       0
+      ],
+      "max": [
+       2720,
+       70,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    },
+    {
+     "id": 326,
+     "type": "Wire",
+     "name": "Polyline.002",
+     "boundsMm": {
+      "min": [
+       2700,
+       100,
+       0
+      ],
+      "max": [
+       2730,
+       120,
+       0
+      ]
+     },
+     "faceCount": 0,
+     "edgeCount": 0,
+     "vertexCount": 0
+    }
+   ],
+   "depthAfter": {
+    "undo": 3,
+    "redo": 1,
+    "bodies": 41,
+    "busy": false
+   }
+  }
+ },
+ "picked": {
+  "faceX0": "217f198404",
+  "faceX1": "217f198359",
+  "faceZ1": "217f198414",
+  "edgeX": {
+   "id": "217e198410",
+   "lengthMm": 19.999999999999574
+  }
+ },
+ "geoDepth": 2,
+ "end": {
+  "undo": 0,
+  "redo": 4,
+  "bodies": 38,
+  "busy": false
+ },
+ "endOk": true
+}

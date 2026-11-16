@@ -1,0 +1,493 @@
+{
+ "start": {
+  "undo": 0,
+  "redo": 2,
+  "bodies": 38,
+  "busy": false
+ },
+ "runs": {
+  "generic_body_box": {
+   "select": [
+    {
+     "kind": "body",
+     "bodyId": 317
+    }
+   ],
+   "command": {
+    "name": "DimensionCommand"
+   },
+   "native": {
+    "captured": true,
+    "factoryClass": "DimensionBlockFactory",
+    "collectionType": "DimensionCollection",
+    "err": null,
+    "has": {
+     "GetIds": "Int32Array[1]",
+     "HasDistance": "throws",
+     "HasRadius": "Object",
+     "HasRectangle": "Object",
+     "HasBlock": "Object",
+     "HasPolyline": "Object"
+    },
+    "busy": false
+   },
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   }
+  },
+  "generic_twoFaces": {
+   "select": [
+    {
+     "kind": "face",
+     "bodyId": 317,
+     "id": "201f197383"
+    },
+    {
+     "kind": "face",
+     "bodyId": 317,
+     "id": "201f197338"
+    }
+   ],
+   "command": {
+    "name": "DimensionCommand"
+   },
+   "native": {
+    "captured": true,
+    "factoryClass": "DimensionDistanceFactory",
+    "collectionType": "DimensionCollection",
+    "err": null,
+    "has": {
+     "GetIds": "Int32Array[1]",
+     "HasDistance": "throws",
+     "HasRadius": "Object",
+     "HasRectangle": "Object",
+     "HasBlock": "Object",
+     "HasPolyline": "Object"
+    },
+    "busy": false
+   },
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   }
+  },
+  "generic_face": {
+   "select": [
+    {
+     "kind": "face",
+     "bodyId": 317,
+     "id": "201f197338"
+    }
+   ],
+   "command": {
+    "name": "DimensionCommand"
+   },
+   "native": {
+    "captured": true,
+    "factoryClass": "DimensionDistanceFactory",
+    "collectionType": "DimensionCollection",
+    "err": null,
+    "has": {
+     "GetIds": "Int32Array[1]",
+     "HasDistance": "throws",
+     "HasRadius": "Object",
+     "HasRectangle": "Object",
+     "HasBlock": "Object",
+     "HasPolyline": "Object"
+    },
+    "busy": false
+   },
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   }
+  },
+  "generic_edge": {
+   "select": [
+    {
+     "kind": "edge",
+     "bodyId": 317,
+     "id": "201e197389"
+    }
+   ],
+   "command": {
+    "name": "DimensionCommand"
+   },
+   "native": {
+    "captured": false,
+    "factoryClass": null,
+    "err": "Operation has no effect",
+    "has": {},
+    "busy": false
+   },
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   }
+  },
+  "generic_polyline": {
+   "select": [
+    {
+     "kind": "body",
+     "bodyId": 318
+    }
+   ],
+   "command": {
+    "name": "DimensionCommand"
+   },
+   "native": {
+    "captured": false,
+    "factoryClass": null,
+    "err": "Operation has no effect",
+    "has": {},
+    "busy": false
+   },
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   }
+  },
+  "generic_rectangle": {
+   "select": [
+    {
+     "kind": "body",
+     "bodyId": 319
+    }
+   ],
+   "command": {
+    "name": "DimensionCommand"
+   },
+   "native": {
+    "captured": true,
+    "factoryClass": "DimensionRectangleFactory",
+    "collectionType": "DimensionCollection",
+    "err": null,
+    "has": {
+     "GetIds": "Int32Array[1]",
+     "HasDistance": "throws",
+     "HasRadius": "Object",
+     "HasRectangle": "Object",
+     "HasBlock": "Object",
+     "HasPolyline": "Object"
+    },
+    "busy": false
+   },
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   }
+  },
+  "generic_cylinder": {
+   "select": [
+    {
+     "kind": "body",
+     "bodyId": 320
+    }
+   ],
+   "command": {
+    "name": "DimensionCommand"
+   },
+   "native": {
+    "captured": true,
+    "factoryClass": "DimensionRadiusFactory",
+    "collectionType": "DimensionCollection",
+    "err": null,
+    "has": {
+     "GetIds": "Int32Array[1]",
+     "HasDistance": "throws",
+     "HasRadius": "Object",
+     "HasRectangle": "Object",
+     "HasBlock": "Object",
+     "HasPolyline": "Object"
+    },
+    "busy": false
+   },
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   }
+  },
+  "generic_box_and_cylinder": {
+   "select": [
+    {
+     "kind": "body",
+     "bodyId": 317
+    },
+    {
+     "kind": "body",
+     "bodyId": 320
+    }
+   ],
+   "command": {
+    "name": "DimensionCommand"
+   },
+   "native": {
+    "captured": true,
+    "factoryClass": "DimensionRadiusFactory",
+    "collectionType": "DimensionCollection",
+    "err": null,
+    "has": {
+     "GetIds": "Int32Array[1]",
+     "HasDistance": "throws",
+     "HasRadius": "Object",
+     "HasRectangle": "Object",
+     "HasBlock": "Object",
+     "HasPolyline": "Object"
+    },
+    "busy": false
+   },
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   }
+  },
+  "generic_twoVertices": {
+   "select": [
+    {
+     "kind": "vertex",
+     "bodyId": 317,
+     "id": 197345,
+     "index": 0
+    },
+    {
+     "kind": "vertex",
+     "bodyId": 317,
+     "id": 197366,
+     "index": 6
+    }
+   ],
+   "command": {
+    "name": "DimensionCommand"
+   },
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'versionIds')\n    at Editor.<anonymous> (<anonymous>:268:97)\n    at Editor.<anonymous> (<anonymous>:284:8)",
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   }
+  },
+  "distanceBinding_twoVertices": {
+   "select": [
+    {
+     "kind": "vertex",
+     "bodyId": 317,
+     "id": 197345,
+     "index": 0
+    },
+    {
+     "kind": "vertex",
+     "bodyId": 317,
+     "id": 197366,
+     "index": 6
+    }
+   ],
+   "command": {
+    "binding": "DimensionDistanceCommand"
+   },
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'versionIds')\n    at Editor.<anonymous> (<anonymous>:268:97)\n    at Editor.<anonymous> (<anonymous>:284:8)",
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   }
+  },
+  "polylineBinding_polyline": {
+   "select": [
+    {
+     "kind": "body",
+     "bodyId": 318
+    }
+   ],
+   "command": {
+    "binding": "DimensionPolylineCommand"
+   },
+   "native": {
+    "captured": false,
+    "factoryClass": null,
+    "err": "Operation has no effect",
+    "has": {},
+    "busy": false
+   },
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   }
+  },
+  "distanceBinding_box_and_cylinder": {
+   "select": [
+    {
+     "kind": "body",
+     "bodyId": 317
+    },
+    {
+     "kind": "body",
+     "bodyId": 320
+    }
+   ],
+   "command": {
+    "binding": "DimensionDistanceCommand"
+   },
+   "native": {
+    "captured": false,
+    "factoryClass": null,
+    "err": "Operation has no effect",
+    "has": {},
+    "busy": false
+   },
+   "depthAfter": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 42,
+    "busy": false
+   }
+  }
+ },
+ "geometry": [
+  {
+   "id": 317,
+   "type": "Solid",
+   "name": null,
+   "boundsMm": {
+    "min": [
+     2700,
+     0,
+     0
+    ],
+    "max": [
+     2719.9999999999995,
+     10,
+     5
+    ]
+   },
+   "faceCount": 6,
+   "edgeCount": 12,
+   "vertexCount": 8
+  },
+  {
+   "id": 318,
+   "type": "Wire",
+   "name": "Polyline.001",
+   "boundsMm": {
+    "min": [
+     2700,
+     50,
+     0
+    ],
+    "max": [
+     2720,
+     70,
+     0
+    ]
+   },
+   "faceCount": 0,
+   "edgeCount": 0,
+   "vertexCount": 0
+  },
+  {
+   "id": 319,
+   "type": "Wire",
+   "name": "Rectangle.001",
+   "boundsMm": {
+    "min": [
+     2740,
+     55,
+     0
+    ],
+    "max": [
+     2760,
+     65,
+     0
+    ]
+   },
+   "faceCount": 0,
+   "edgeCount": 0,
+   "vertexCount": 0
+  },
+  {
+   "id": 320,
+   "type": "Solid",
+   "name": "Cylinder.001",
+   "boundsMm": {
+    "min": [
+     2775,
+     -5,
+     0
+    ],
+    "max": [
+     2784.9999999999995,
+     5,
+     10
+    ]
+   },
+   "faceCount": 3,
+   "edgeCount": 2,
+   "vertexCount": 0
+  }
+ ],
+ "boxVertexSample": [
+  {
+   "id": 197345,
+   "positionMm": [
+    2719.9999999999995,
+    0,
+    0
+   ],
+   "edgeIds": [
+    "201e197339",
+    "201e197347",
+    "201e197359"
+   ],
+   "faceIds": [
+    "201f197338",
+    "201f197344",
+    "201f197388"
+   ]
+  },
+  {
+   "id": 197346,
+   "positionMm": [
+    2700,
+    0,
+    0
+   ],
+   "edgeIds": [
+    "201e197347",
+    "201e197351",
+    "201e197371"
+   ],
+   "faceIds": [
+    "201f197344",
+    "201f197383",
+    "201f197388"
+   ]
+  }
+ ],
+ "end": {
+  "undo": 0,
+  "redo": 4,
+  "bodies": 38,
+  "busy": false
+ },
+ "endOk": true
+}

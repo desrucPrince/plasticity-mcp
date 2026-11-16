@@ -1,0 +1,1784 @@
+{
+ "before": {
+  "undo": 0,
+  "redo": 1,
+  "bodies": 38,
+  "busy": false
+ },
+ "after": {
+  "undo": 0,
+  "redo": 1,
+  "bodies": 38,
+  "busy": false
+ },
+ "missingFactories": [],
+ "missingEnums": [],
+ "out": {
+  "factories": {
+   "SweepFactory": {
+    "chain": [
+     {
+      "name": "SweepFactory",
+      "methods": [
+       "updatePath",
+       "sweepFromProfiles",
+       "calculateFromProfiles",
+       "calculateForPhantom"
+      ],
+      "accessors": [
+       "thickness:gs",
+       "twistDegrees:gs",
+       "spine:gs",
+       "supportsTwoDistances:g",
+       "guides:gs"
+      ]
+     },
+     {
+      "name": "AbstractSweepFactory",
+      "methods": [
+       "computeCurveDirection",
+       "makeProfiles",
+       "prepareProfiles",
+       "calculateFromProfiles",
+       "calculateForUpdate",
+       "calculateForCommit",
+       "calculateForPhantom",
+       "doUpdate",
+       "doCommit",
+       "doCommitFromUpdateCache",
+       "calculatePhantoms",
+       "calculateDiagnostics",
+       "doCancel"
+      ],
+      "accessors": [
+       "operationType:gs",
+       "keepTools:gs",
+       "targets:gs",
+       "originalItems:g",
+       "hasProfile:g",
+       "region:s",
+       "regions:gs",
+       "curves:gs",
+       "edges:gs",
+       "faces:gs",
+       "center:g"
+      ]
+     },
+     {
+      "name": "RollbackStatefulFactory",
+      "methods": [
+       "initializeStages",
+       "invalidate",
+       "beforeFirstUpdate",
+       "beforeFirstCommit",
+       "beforeUpdatePreEmbed",
+       "beforeUpdatePostEmbed",
+       "beforeCommit",
+       "beforeCancel",
+       "onInterruptUpdate",
+       "onInterruptCommit",
+       "beforePause",
+       "afterPause",
+       "doPhantoms",
+       "doDiagnostics",
+       "calculatePhantoms",
+       "calculateDiagnostics"
+      ],
+      "accessors": []
+     },
+     {
+      "name": "SimpleStatefulFactory",
+      "methods": [
+       "embed",
+       "beforeFirstUpdate",
+       "beforeUpdatePreEmbed",
+       "beforeUpdatePostEmbed",
+       "onInterruptUpdate",
+       "onUpdateFailed",
+       "beforeFirstCommit",
+       "beforeCommit",
+       "doPhantoms",
+       "doDiagnostics",
+       "onInterruptCommit",
+       "beforeCancel",
+       "beforePause",
+       "afterPause",
+       "doCommitFromUpdateCache",
+       "update",
+       "updateAndIgnoreErrors",
+       "cancel",
+       "commit",
+       "supportsCommitFromUpdateCache",
+       "pause"
+      ],
+      "accessors": [
+       "state:gs",
+       "db:g",
+       "signals:g"
+      ]
+     }
+    ],
+    "fields": {
+     "editor": "Editor",
+     "changed": "Signal",
+     "updated": "Signal",
+     "refine": "RefineScope",
+     "temps": "Array[0]",
+     "phantoms": "Array[0]",
+     "diagnoses": "Array[0]",
+     "executor": "TransactionExecutor",
+     "_state": "AtomicRef",
+     "stages": "StageManager",
+     "partition": "Partition",
+     "phantomPartition": "Partition",
+     "boolean": "BooleanHelper",
+     "direction": "Vector3",
+     "_center": "Vector3",
+     "_regions": "Object",
+     "_curves": "Object",
+     "_edges": "Object",
+     "_faces": "Object",
+     "primaryProfiles": "Object",
+     "phantomProfiles": "Object",
+     "alignment": 21560,
+     "guideMethod": 23250,
+     "tangent": "Vector3",
+     "distance1": 1,
+     "distance2": 1,
+     "extensionShape": 22750,
+     "simplify": false,
+     "cornerType": 25700,
+     "origin": "Vector3",
+     "_thickness": 0,
+     "twist": 0,
+     "scale": 1,
+     "_supportsTwoDistances": false,
+     "_guides": "Object"
+    },
+    "getters": {
+     "thickness": 0,
+     "twistDegrees": 0,
+     "spine": "throws: Cannot read properties of undefined (reading 'view')",
+     "supportsTwoDistances": false,
+     "guides": "Array[0]",
+     "operationType": "undefined",
+     "keepTools": false,
+     "targets": "Array[0]",
+     "originalItems": "Array[0]",
+     "hasProfile": false,
+     "regions": "Array[0]",
+     "curves": "Array[0]",
+     "edges": "Array[0]",
+     "faces": "Array[0]",
+     "center": "Vector3"
+    }
+   },
+   "SweepToolFactory": {
+    "chain": [
+     {
+      "name": "SweepToolFactory",
+      "methods": [
+       "calculate"
+      ],
+      "accessors": [
+       "degrees:gs",
+       "solid:gs",
+       "spine:gs"
+      ]
+     },
+     {
+      "name": "AbstractGeometryFactory",
+      "methods": [
+       "doPhantoms",
+       "doDiagnostics",
+       "doUpdate",
+       "calculateTemps",
+       "doCommit",
+       "doCancel",
+       "zip",
+       "calculateForUpdate",
+       "calculateForCommit",
+       "calculatePhantoms",
+       "calculateDiagnostics",
+       "collections"
+      ],
+      "accessors": [
+       "db:g",
+       "materials:g",
+       "signals:g",
+       "phantomArguments:g",
+       "shouldRemoveOriginalItemOnCommit:g",
+       "shouldHideOriginalItemDuringUpdate:g"
+      ]
+     }
+    ],
+    "fields": {
+     "editor": "Editor",
+     "changed": "Signal",
+     "updated": "Signal",
+     "refine": "RefineScope",
+     "temps": "Array[0]",
+     "phantoms": "Array[0]",
+     "diagnoses": "Array[0]",
+     "executor": "TransactionExecutor",
+     "_state": "AtomicRef",
+     "partition": "Partition",
+     "phantomPartition": "Partition",
+     "angle": 0,
+     "scale": 1,
+     "offset": 0,
+     "flip": false,
+     "tangent": "Vector3"
+    },
+    "getters": {
+     "degrees": 0,
+     "solid": "undefined",
+     "spine": "throws: Cannot read properties of undefined (reading 'view')",
+     "state": "Object",
+     "phantomArguments": "Partition",
+     "done": false,
+     "updateAndCommitBehaviorAreIdentical": true,
+     "isPaused": false
+    }
+   },
+   "XSidedFactory": {
+    "chain": [
+     {
+      "name": "XSidedFactory",
+      "methods": [],
+      "accessors": [
+       "edges:gs",
+       "curves:gs"
+      ]
+     },
+     {
+      "name": "XNurbsFactory",
+      "methods": [
+       "clearEdgeConstraints",
+       "addEdgeConstraint",
+       "removeEdgeConstraint",
+       "getContinuityForEdge",
+       "setContinuityForEdge",
+       "clearSegmentConstraints",
+       "addSegmentConstraint",
+       "getContinuityForSegment",
+       "setContinuityForSegment",
+       "setContinuityForConstraint",
+       "cycle",
+       "solve",
+       "calculate",
+       "emitWarnings",
+       "calculateAnalysis",
+       "calculateRefinements",
+       "toJSON",
+       "fromJSON",
+       "dispose"
+      ],
+      "accessors": [
+       "controlType:gs",
+       "uDegree:gs",
+       "vDegree:gs",
+       "uSpans:gs",
+       "vSpans:gs",
+       "weight:gs",
+       "adaptiveTolerance:gs",
+       "preferToProduceSurface:gs",
+       "satisfyPrecisionRequirements:gs",
+       "tolerance:gs",
+       "angularTolerance:gs",
+       "maxCVs:gs",
+       "quadSided:gs",
+       "flatness:gs",
+       "stretch:gs",
+       "bending:gs",
+       "changeInBending:gs",
+       "boundaryCondition:gs",
+       "parameterization:gs",
+       "enforceTolerance:gs",
+       "guides:gs",
+       "edge2constraint:g",
+       "edge2continuity:g",
+       "segment2constraint:g",
+       "shouldDirtyOnContinuityChange:g",
+       "segment2continuity:g",
+       "continuity:gs",
+       "blending:gs",
+       "refinements:g"
+      ]
+     },
+     {
+      "name": "AbstractGeometryFactory",
+      "methods": [
+       "doPhantoms",
+       "doDiagnostics",
+       "doUpdate",
+       "calculateTemps",
+       "doCommit",
+       "doCancel",
+       "zip",
+       "calculateForUpdate",
+       "calculateForCommit",
+       "calculatePhantoms",
+       "calculateDiagnostics",
+       "collections"
+      ],
+      "accessors": [
+       "db:g",
+       "materials:g",
+       "signals:g",
+       "phantomArguments:g",
+       "shouldRemoveOriginalItemOnCommit:g",
+       "shouldHideOriginalItemDuringUpdate:g"
+      ]
+     }
+    ],
+    "fields": {
+     "editor": "Editor",
+     "changed": "Signal",
+     "updated": "Signal",
+     "refine": "RefineScope",
+     "temps": "Array[0]",
+     "phantoms": "Array[0]",
+     "diagnoses": "Array[0]",
+     "executor": "TransactionExecutor",
+     "_state": "AtomicRef",
+     "partition": "Partition",
+     "phantomPartition": "Partition",
+     "continuities": "Array[3]",
+     "isDirty": true,
+     "needsUpdate": "Map",
+     "needsRemove": "Set",
+     "_controlType": 0,
+     "_uDegree": 3,
+     "_vDegree": 3,
+     "_uSpans": 1,
+     "_vSpans": 1,
+     "_weight": 0.5,
+     "_adaptiveTolerance": false,
+     "_preferToProduceSurface": true,
+     "_tolerance": 0.00001,
+     "_angularTolerance": 0.1,
+     "_maxCVs": 4000,
+     "_quadSided": false,
+     "_stretch": 0,
+     "_bending": 0.05,
+     "_changeInBending": 0.95,
+     "_boundaryCondition": 2,
+     "_parameterization": 2,
+     "_enforceTolerance": 5,
+     "analysis": "Object",
+     "_guides": "Object",
+     "_edge2constraint": "Map",
+     "isoparm2refinement": "Map",
+     "_segment2constraint": "Map",
+     "_continuity": 23156,
+     "_blending": 0.5,
+     "vsurf": "XNurbs",
+     "shouldErrorOnImpossibleQuadSided": false,
+     "_edges": "Object",
+     "_curves": "Object"
+    },
+    "getters": {
+     "edges": "Array[0]",
+     "curves": "Array[0]",
+     "controlType": 0,
+     "uDegree": 3,
+     "vDegree": 3,
+     "uSpans": 1,
+     "vSpans": 1,
+     "weight": 0.5,
+     "adaptiveTolerance": false,
+     "preferToProduceSurface": true,
+     "satisfyPrecisionRequirements": true,
+     "tolerance": 0.00001,
+     "angularTolerance": 0.1,
+     "maxCVs": 4000,
+     "quadSided": false,
+     "flatness": 0.95,
+     "stretch": 0,
+     "bending": 0.05,
+     "changeInBending": 0.95,
+     "boundaryCondition": 2,
+     "parameterization": 2,
+     "enforceTolerance": 5,
+     "guides": "Array[0]",
+     "edge2constraint": "Map",
+     "edge2continuity": "Map",
+     "segment2constraint": "Map",
+     "shouldDirtyOnContinuityChange": false,
+     "segment2continuity": "Map",
+     "continuity": 23156,
+     "blending": 0.5,
+     "refinements": "Object"
+    }
+   },
+   "ExtendEdgeFactory": {
+    "chain": [
+     {
+      "name": "ExtendEdgeFactory",
+      "methods": [
+       "calculate"
+      ],
+      "accessors": [
+       "shell:gs",
+       "edges:gs",
+       "originalItem:g"
+      ]
+     },
+     {
+      "name": "AbstractGeometryFactory",
+      "methods": [
+       "doPhantoms",
+       "doDiagnostics",
+       "doUpdate",
+       "calculateTemps",
+       "doCommit",
+       "doCancel",
+       "zip",
+       "calculateForUpdate",
+       "calculateForCommit",
+       "calculatePhantoms",
+       "calculateDiagnostics",
+       "collections"
+      ],
+      "accessors": [
+       "db:g",
+       "materials:g",
+       "signals:g",
+       "phantomArguments:g",
+       "shouldRemoveOriginalItemOnCommit:g",
+       "shouldHideOriginalItemDuringUpdate:g"
+      ]
+     }
+    ],
+    "fields": {
+     "editor": "Editor",
+     "changed": "Signal",
+     "updated": "Signal",
+     "refine": "RefineScope",
+     "temps": "Array[0]",
+     "phantoms": "Array[0]",
+     "diagnoses": "Array[0]",
+     "executor": "TransactionExecutor",
+     "_state": "AtomicRef",
+     "partition": "Partition",
+     "phantomPartition": "Partition"
+    },
+    "getters": {
+     "shell": "undefined",
+     "edges": "Array[0]",
+     "originalItem": "undefined",
+     "state": "Object",
+     "phantomArguments": "Partition",
+     "done": false,
+     "updateAndCommitBehaviorAreIdentical": true,
+     "isPaused": false
+    }
+   },
+   "ExtendSheetFactory": {
+    "chain": [
+     {
+      "name": "ExtendSheetFactory",
+      "methods": [
+       "toggle",
+       "toJSON",
+       "fromJSON",
+       "calculate"
+      ],
+      "accessors": [
+       "shape:gs",
+       "target:gs",
+       "edges:gs",
+       "supportsNatural:g",
+       "originalItems:g"
+      ]
+     },
+     {
+      "name": "AbstractGeometryFactory",
+      "methods": [
+       "doPhantoms",
+       "doDiagnostics",
+       "doUpdate",
+       "calculateTemps",
+       "doCommit",
+       "doCancel",
+       "zip",
+       "calculateForUpdate",
+       "calculateForCommit",
+       "calculatePhantoms",
+       "calculateDiagnostics",
+       "collections"
+      ],
+      "accessors": [
+       "db:g",
+       "materials:g",
+       "signals:g",
+       "phantomArguments:g",
+       "shouldRemoveOriginalItemOnCommit:g",
+       "shouldHideOriginalItemDuringUpdate:g"
+      ]
+     }
+    ],
+    "fields": {
+     "editor": "Editor",
+     "changed": "Signal",
+     "updated": "Signal",
+     "refine": "RefineScope",
+     "temps": "Array[0]",
+     "phantoms": "Array[0]",
+     "diagnoses": "Array[0]",
+     "executor": "TransactionExecutor",
+     "_state": "AtomicRef",
+     "partition": "Partition",
+     "phantomPartition": "Partition",
+     "distance": 0,
+     "bias": 0.5,
+     "type": 22760,
+     "modify": true,
+     "limit": 23800,
+     "_shape": 22750,
+     "_target": "Object",
+     "_groups": "Array[0]"
+    },
+    "getters": {
+     "shape": 22750,
+     "target": "undefined",
+     "edges": "throws: Cannot read properties of undefined (reading 'views')",
+     "supportsNatural": true,
+     "originalItems": "Array[0]",
+     "state": "Object",
+     "phantomArguments": "Partition",
+     "done": false,
+     "updateAndCommitBehaviorAreIdentical": true,
+     "isPaused": false
+    }
+   },
+   "MultiExtendVertexFactory": {
+    "chain": [
+     {
+      "name": "MultiExtendVertexFactory",
+      "methods": [
+       "toggle",
+       "calculate",
+       "calculateForWire",
+       "toJSON",
+       "fromJSON"
+      ],
+      "accessors": [
+       "vertices:gs",
+       "target:gs",
+       "placement:g",
+       "selection:g",
+       "originalItems:g"
+      ]
+     },
+     {
+      "name": "AbstractGeometryFactory",
+      "methods": [
+       "doPhantoms",
+       "doDiagnostics",
+       "doUpdate",
+       "calculateTemps",
+       "doCommit",
+       "doCancel",
+       "zip",
+       "calculateForUpdate",
+       "calculateForCommit",
+       "calculatePhantoms",
+       "calculateDiagnostics",
+       "collections"
+      ],
+      "accessors": [
+       "db:g",
+       "materials:g",
+       "signals:g",
+       "phantomArguments:g",
+       "shouldRemoveOriginalItemOnCommit:g",
+       "shouldHideOriginalItemDuringUpdate:g"
+      ]
+     }
+    ],
+    "fields": {
+     "editor": "Editor",
+     "changed": "Signal",
+     "updated": "Signal",
+     "refine": "RefineScope",
+     "temps": "Array[0]",
+     "phantoms": "Array[0]",
+     "diagnoses": "Array[0]",
+     "executor": "TransactionExecutor",
+     "_state": "AtomicRef",
+     "partition": "Partition",
+     "phantomPartition": "Partition",
+     "distance": 0,
+     "shape": 22753,
+     "type": 23081,
+     "tracking": "Array[0]"
+    },
+    "getters": {
+     "vertices": "throws: Cannot read properties of undefined (reading 'views')",
+     "target": "undefined",
+     "placement": "throws: Cannot read properties of undefined (reading 'views')",
+     "selection": "throws: invalid state",
+     "originalItems": "throws: Cannot read properties of undefined (reading 'parents')",
+     "state": "Object",
+     "phantomArguments": "Partition",
+     "done": false,
+     "updateAndCommitBehaviorAreIdentical": true,
+     "isPaused": false
+    }
+   },
+   "DimensionDistanceFactory": {
+    "chain": [
+     {
+      "name": "DimensionDistanceFactory",
+      "methods": [
+       "calculate"
+      ],
+      "accessors": [
+       "distance:gs",
+       "selection:g"
+      ]
+     },
+     {
+      "name": "DimensionFactory",
+      "methods": [
+       "dimensionCollection2views"
+      ],
+      "accessors": [
+       "collection:gs",
+       "originalItems:g",
+       "selection:g"
+      ]
+     },
+     {
+      "name": "AbstractGeometryFactory",
+      "methods": [
+       "doPhantoms",
+       "doDiagnostics",
+       "doUpdate",
+       "calculateTemps",
+       "doCommit",
+       "doCancel",
+       "zip",
+       "calculateForUpdate",
+       "calculateForCommit",
+       "calculatePhantoms",
+       "calculateDiagnostics",
+       "collections"
+      ],
+      "accessors": [
+       "db:g",
+       "materials:g",
+       "signals:g",
+       "phantomArguments:g",
+       "shouldRemoveOriginalItemOnCommit:g",
+       "shouldHideOriginalItemDuringUpdate:g"
+      ]
+     }
+    ],
+    "fields": {
+     "editor": "Editor",
+     "changed": "Signal",
+     "updated": "Signal",
+     "refine": "RefineScope",
+     "temps": "Array[0]",
+     "phantoms": "Array[0]",
+     "diagnoses": "Array[0]",
+     "executor": "TransactionExecutor",
+     "_state": "AtomicRef",
+     "partition": "Partition",
+     "phantomPartition": "Partition",
+     "clickPoint": "undefined",
+     "_collection": "Object",
+     "to": "Vector3",
+     "direction": "Vector3",
+     "refDistance": 0,
+     "containsRefEntity": false
+    },
+    "getters": {
+     "distance": 0,
+     "selection": "throws: invalid state",
+     "collection": "DimensionCollection",
+     "originalItems": "Array[0]"
+    }
+   },
+   "DimensionPolylineFactory": {
+    "chain": [
+     {
+      "name": "DimensionPolylineFactory",
+      "methods": [
+       "calculate"
+      ],
+      "accessors": [
+       "positions:gs"
+      ]
+     },
+     {
+      "name": "DimensionFactory",
+      "methods": [
+       "dimensionCollection2views"
+      ],
+      "accessors": [
+       "collection:gs",
+       "originalItems:g",
+       "selection:g"
+      ]
+     },
+     {
+      "name": "AbstractGeometryFactory",
+      "methods": [
+       "doPhantoms",
+       "doDiagnostics",
+       "doUpdate",
+       "calculateTemps",
+       "doCommit",
+       "doCancel",
+       "zip",
+       "calculateForUpdate",
+       "calculateForCommit",
+       "calculatePhantoms",
+       "calculateDiagnostics",
+       "collections"
+      ],
+      "accessors": [
+       "db:g",
+       "materials:g",
+       "signals:g",
+       "phantomArguments:g",
+       "shouldRemoveOriginalItemOnCommit:g",
+       "shouldHideOriginalItemDuringUpdate:g"
+      ]
+     }
+    ],
+    "fields": {
+     "editor": "Editor",
+     "changed": "Signal",
+     "updated": "Signal",
+     "refine": "RefineScope",
+     "temps": "Array[0]",
+     "phantoms": "Array[0]",
+     "diagnoses": "Array[0]",
+     "executor": "TransactionExecutor",
+     "_state": "AtomicRef",
+     "partition": "Partition",
+     "phantomPartition": "Partition",
+     "clickPoint": "undefined",
+     "_collection": "Object",
+     "length": 1
+    },
+    "getters": {
+     "positions": "undefined",
+     "collection": "DimensionCollection",
+     "originalItems": "Array[0]",
+     "selection": "throws: invalid state"
+    }
+   },
+   "MoveMeasurementFactory": {
+    "chain": [
+     {
+      "name": "MoveMeasurementFactory",
+      "methods": [
+       "doUpdate",
+       "doCommit",
+       "doCancel"
+      ],
+      "accessors": [
+       "offsetLocal2d:g"
+      ]
+     },
+     {
+      "name": "SimpleStatefulFactory",
+      "methods": [
+       "embed",
+       "beforeFirstUpdate",
+       "beforeUpdatePreEmbed",
+       "beforeUpdatePostEmbed",
+       "onInterruptUpdate",
+       "onUpdateFailed",
+       "beforeFirstCommit",
+       "beforeCommit",
+       "doPhantoms",
+       "doDiagnostics",
+       "onInterruptCommit",
+       "beforeCancel",
+       "beforePause",
+       "afterPause",
+       "doCommitFromUpdateCache",
+       "update",
+       "updateAndIgnoreErrors",
+       "cancel",
+       "commit",
+       "supportsCommitFromUpdateCache",
+       "pause"
+      ],
+      "accessors": [
+       "state:gs",
+       "db:g",
+       "signals:g"
+      ]
+     }
+    ],
+    "fields": {
+     "editor": "Editor",
+     "changed": "Signal",
+     "updated": "Signal",
+     "refine": "RefineScope",
+     "temps": "Array[0]",
+     "phantoms": "Array[0]",
+     "diagnoses": "Array[0]",
+     "executor": "TransactionExecutor",
+     "_state": "AtomicRef",
+     "start": "Vector3",
+     "end": "Vector3",
+     "offset": "Vector3",
+     "orientation": "Quaternion",
+     "direction": "Vector3"
+    },
+    "getters": {
+     "offsetLocal2d": "Vector2",
+     "state": "Object",
+     "db": "Database",
+     "signals": "EditorSignals"
+    }
+   },
+   "ShowFacePointsFactory": {
+    "chain": [
+     {
+      "name": "ShowFacePointsFactory",
+      "methods": [
+       "calculate"
+      ],
+      "accessors": [
+       "faces:gs",
+       "selection:g",
+       "originalItems:g"
+      ]
+     },
+     {
+      "name": "AbstractGeometryFactory",
+      "methods": [
+       "doPhantoms",
+       "doDiagnostics",
+       "doUpdate",
+       "calculateTemps",
+       "doCommit",
+       "doCancel",
+       "zip",
+       "calculateForUpdate",
+       "calculateForCommit",
+       "calculatePhantoms",
+       "calculateDiagnostics",
+       "collections"
+      ],
+      "accessors": [
+       "db:g",
+       "materials:g",
+       "signals:g",
+       "phantomArguments:g",
+       "shouldRemoveOriginalItemOnCommit:g",
+       "shouldHideOriginalItemDuringUpdate:g"
+      ]
+     }
+    ],
+    "fields": {
+     "editor": "Editor",
+     "changed": "Signal",
+     "updated": "Signal",
+     "refine": "RefineScope",
+     "temps": "Array[0]",
+     "phantoms": "Array[0]",
+     "diagnoses": "Array[0]",
+     "executor": "TransactionExecutor",
+     "_state": "AtomicRef",
+     "partition": "Partition",
+     "phantomPartition": "Partition",
+     "show": true
+    },
+    "getters": {
+     "faces": "throws: Cannot read properties of undefined (reading 'views')",
+     "selection": "throws: invalid state",
+     "originalItems": "throws: Cannot read properties of undefined (reading 'views')",
+     "state": "Object",
+     "phantomArguments": "Partition",
+     "done": false,
+     "updateAndCommitBehaviorAreIdentical": true,
+     "isPaused": false
+    }
+   },
+   "MultiMoveControlPointFactory": {
+    "chain": [
+     {
+      "name": "MultiMoveControlPointFactory",
+      "methods": [
+       "updateFactories"
+      ],
+      "accessors": [
+       "proportional:gs",
+       "falloffExponentU:gs",
+       "falloffExponentV:gs",
+       "lockFalloff:gs",
+       "mirrorMode:gs"
+      ]
+     },
+     {
+      "name": "MoveRotateScaleFactory2",
+      "methods": [
+       "push",
+       "clearTransform",
+       "prepare"
+      ],
+      "accessors": [
+       "degrees:gs",
+       "angle:gs",
+       "hasAngle:g",
+       "axis:g"
+      ]
+     },
+     {
+      "name": "MultiTransformControlPointFactory",
+      "methods": [
+       "computeTransformOrientations",
+       "calculate"
+      ],
+      "accessors": []
+     },
+     {
+      "name": "Pivot",
+      "methods": [
+       "updateTransformOrientationAndPivot",
+       "toJSON",
+       "fromJSON"
+      ],
+      "accessors": [
+       "constructionPlane:gs",
+       "transformOrientation:gs",
+       "transformPivot:gs",
+       "bbox:g",
+       "centroid:g",
+       "median:g",
+       "active:g"
+      ]
+     }
+    ],
+    "fields": {
+     "editor": "Editor",
+     "changed": "Signal",
+     "updated": "Signal",
+     "refine": "RefineScope",
+     "temps": "Array[0]",
+     "phantoms": "Array[0]",
+     "diagnoses": "Array[0]",
+     "executor": "TransactionExecutor",
+     "_state": "AtomicRef",
+     "partition": "Partition",
+     "phantomPartition": "Partition",
+     "factories": "Array[0]",
+     "proportionalPivot": "Vector3",
+     "_cvs": "Object",
+     "_vertices": "Object",
+     "transforms": "Array[1]",
+     "_matrix": "Matrix4",
+     "pivot": "Vector3",
+     "quaternion": "Quaternion",
+     "updatePivotMode": 0,
+     "_transformOrientation": 1,
+     "_transformPivot": 1,
+     "_transformOrientations": "undefined",
+     "_centroid": "Vector3",
+     "_median": "Vector3",
+     "_bbox": "Box3",
+     "mode": "move",
+     "move": "Vector3",
+     "scale": "Vector3",
+     "rotation": "Quaternion",
+     "_angle": "undefined",
+     "_axis": "VectorProxy",
+     "_proportional": 0,
+     "_falloffExponentU": 1,
+     "_falloffExponentV": 1,
+     "_lockFalloff": false,
+     "_mirrorMode": 0,
+     "origin": "VectorProxy",
+     "normal": "VectorProxy",
+     "ref": "VectorProxy"
+    },
+    "getters": {
+     "proportional": 0,
+     "falloffExponentU": 1,
+     "falloffExponentV": 1,
+     "lockFalloff": false,
+     "mirrorMode": 0,
+     "degrees": 0,
+     "angle": 0,
+     "hasAngle": false,
+     "axis": "VectorProxy"
+    }
+   },
+   "ConvertMeshToPolySplinesFactory": {
+    "chain": [
+     {
+      "name": "ConvertMeshToPolySplinesFactory",
+      "methods": [
+       "doCancel",
+       "calculate",
+       "doUpdate",
+       "doCommitFromUpdateCache",
+       "doCommit"
+      ],
+      "accessors": [
+       "empties:gs"
+      ]
+     },
+     {
+      "name": "RollbackStatefulFactory",
+      "methods": [
+       "initializeStages",
+       "invalidate",
+       "beforeFirstUpdate",
+       "beforeFirstCommit",
+       "beforeUpdatePreEmbed",
+       "beforeUpdatePostEmbed",
+       "beforeCommit",
+       "beforeCancel",
+       "onInterruptUpdate",
+       "onInterruptCommit",
+       "beforePause",
+       "afterPause",
+       "doPhantoms",
+       "doDiagnostics",
+       "calculatePhantoms",
+       "calculateDiagnostics"
+      ],
+      "accessors": []
+     },
+     {
+      "name": "SimpleStatefulFactory",
+      "methods": [
+       "embed",
+       "beforeFirstUpdate",
+       "beforeUpdatePreEmbed",
+       "beforeUpdatePostEmbed",
+       "onInterruptUpdate",
+       "onUpdateFailed",
+       "beforeFirstCommit",
+       "beforeCommit",
+       "doPhantoms",
+       "doDiagnostics",
+       "onInterruptCommit",
+       "beforeCancel",
+       "beforePause",
+       "afterPause",
+       "doCommitFromUpdateCache",
+       "update",
+       "updateAndIgnoreErrors",
+       "cancel",
+       "commit",
+       "supportsCommitFromUpdateCache",
+       "pause"
+      ],
+      "accessors": [
+       "state:gs",
+       "db:g",
+       "signals:g"
+      ]
+     }
+    ],
+    "fields": {
+     "editor": "Editor",
+     "changed": "Signal",
+     "updated": "Signal",
+     "refine": "RefineScope",
+     "temps": "Array[0]",
+     "phantoms": "Array[0]",
+     "diagnoses": "Array[0]",
+     "executor": "TransactionExecutor",
+     "_state": "AtomicRef",
+     "stages": "StageManager",
+     "partition": "Partition",
+     "phantomPartition": "Partition",
+     "roundedCorners": false,
+     "mergePatches": true,
+     "interpolateBoundary": false,
+     "_empties": "Object"
+    },
+    "getters": {
+     "empties": "Array[0]"
+    }
+   },
+   "ImportPolySplinesFactory": {
+    "chain": [
+     {
+      "name": "ImportPolySplinesFactory",
+      "methods": [
+       "doCommit",
+       "doUpdate",
+       "doCancel"
+      ],
+      "accessors": []
+     },
+     {
+      "name": "RollbackStatefulFactory",
+      "methods": [
+       "initializeStages",
+       "invalidate",
+       "beforeFirstUpdate",
+       "beforeFirstCommit",
+       "beforeUpdatePreEmbed",
+       "beforeUpdatePostEmbed",
+       "beforeCommit",
+       "beforeCancel",
+       "onInterruptUpdate",
+       "onInterruptCommit",
+       "beforePause",
+       "afterPause",
+       "doPhantoms",
+       "doDiagnostics",
+       "calculatePhantoms",
+       "calculateDiagnostics"
+      ],
+      "accessors": []
+     },
+     {
+      "name": "SimpleStatefulFactory",
+      "methods": [
+       "embed",
+       "beforeFirstUpdate",
+       "beforeUpdatePreEmbed",
+       "beforeUpdatePostEmbed",
+       "onInterruptUpdate",
+       "onUpdateFailed",
+       "beforeFirstCommit",
+       "beforeCommit",
+       "doPhantoms",
+       "doDiagnostics",
+       "onInterruptCommit",
+       "beforeCancel",
+       "beforePause",
+       "afterPause",
+       "doCommitFromUpdateCache",
+       "update",
+       "updateAndIgnoreErrors",
+       "cancel",
+       "commit",
+       "supportsCommitFromUpdateCache",
+       "pause"
+      ],
+      "accessors": [
+       "state:gs",
+       "db:g",
+       "signals:g"
+      ]
+     }
+    ],
+    "fields": {
+     "editor": "Editor",
+     "changed": "Signal",
+     "updated": "Signal",
+     "refine": "RefineScope",
+     "temps": "Array[0]",
+     "phantoms": "Array[0]",
+     "diagnoses": "Array[0]",
+     "executor": "TransactionExecutor",
+     "_state": "AtomicRef",
+     "stages": "StageManager",
+     "partition": "Partition",
+     "phantomPartition": "Partition",
+     "results": "Array[0]"
+    },
+    "getters": {}
+   },
+   "ExportWebFactory": {
+    "chain": [
+     {
+      "name": "ExportWebFactory",
+      "methods": [
+       "doCommit",
+       "doCancel"
+      ],
+      "accessors": []
+     },
+     {
+      "name": "VoidFactory",
+      "methods": [
+       "doUpdate",
+       "doPhantoms",
+       "commit",
+       "cancel"
+      ],
+      "accessors": [
+       "state:gs"
+      ]
+     }
+    ],
+    "fields": {
+     "editor": "Editor",
+     "changed": "Signal",
+     "updated": "Signal",
+     "refine": "RefineScope",
+     "temps": "Array[0]",
+     "phantoms": "Array[0]",
+     "diagnoses": "Array[0]",
+     "executor": "TransactionExecutor",
+     "_state": "Object"
+    },
+    "getters": {
+     "state": "Object"
+    }
+   },
+   "ExtrudeSurfaceFactory": {
+    "chain": [
+     {
+      "name": "ExtrudeSurfaceFactory",
+      "methods": [
+       "calculate"
+      ],
+      "accessors": [
+       "curve:gs"
+      ]
+     },
+     {
+      "name": "AbstractGeometryFactory",
+      "methods": [
+       "doPhantoms",
+       "doDiagnostics",
+       "doUpdate",
+       "calculateTemps",
+       "doCommit",
+       "doCancel",
+       "zip",
+       "calculateForUpdate",
+       "calculateForCommit",
+       "calculatePhantoms",
+       "calculateDiagnostics",
+       "collections"
+      ],
+      "accessors": [
+       "db:g",
+       "materials:g",
+       "signals:g",
+       "phantomArguments:g",
+       "shouldRemoveOriginalItemOnCommit:g",
+       "shouldHideOriginalItemDuringUpdate:g"
+      ]
+     }
+    ],
+    "fields": {
+     "editor": "Editor",
+     "changed": "Signal",
+     "updated": "Signal",
+     "refine": "RefineScope",
+     "temps": "Array[0]",
+     "phantoms": "Array[0]",
+     "diagnoses": "Array[0]",
+     "executor": "TransactionExecutor",
+     "_state": "AtomicRef",
+     "partition": "Partition",
+     "phantomPartition": "Partition",
+     "direction": "Vector3",
+     "distance1": 0,
+     "distance2": 0
+    },
+    "getters": {
+     "curve": "undefined",
+     "state": "Object",
+     "phantomArguments": "Partition",
+     "done": false,
+     "updateAndCommitBehaviorAreIdentical": true,
+     "isPaused": false
+    }
+   },
+   "RemoveNominalSurfaceFactory": {
+    "chain": [
+     {
+      "name": "RemoveNominalSurfaceFactory",
+      "methods": [
+       "calculate"
+      ],
+      "accessors": [
+       "shell:gs",
+       "faces:gs",
+       "originalItem:g"
+      ]
+     },
+     {
+      "name": "AbstractGeometryFactory",
+      "methods": [
+       "doPhantoms",
+       "doDiagnostics",
+       "doUpdate",
+       "calculateTemps",
+       "doCommit",
+       "doCancel",
+       "zip",
+       "calculateForUpdate",
+       "calculateForCommit",
+       "calculatePhantoms",
+       "calculateDiagnostics",
+       "collections"
+      ],
+      "accessors": [
+       "db:g",
+       "materials:g",
+       "signals:g",
+       "phantomArguments:g",
+       "shouldRemoveOriginalItemOnCommit:g",
+       "shouldHideOriginalItemDuringUpdate:g"
+      ]
+     }
+    ],
+    "fields": {
+     "editor": "Editor",
+     "changed": "Signal",
+     "updated": "Signal",
+     "refine": "RefineScope",
+     "temps": "Array[0]",
+     "phantoms": "Array[0]",
+     "diagnoses": "Array[0]",
+     "executor": "TransactionExecutor",
+     "_state": "AtomicRef",
+     "partition": "Partition",
+     "phantomPartition": "Partition"
+    },
+    "getters": {
+     "shell": "undefined",
+     "faces": "Array[0]",
+     "originalItem": "undefined",
+     "state": "Object",
+     "phantomArguments": "Partition",
+     "done": false,
+     "updateAndCommitBehaviorAreIdentical": true,
+     "isPaused": false
+    }
+   },
+   "RefitSurfaceFactory": {
+    "chain": [
+     {
+      "name": "RefitSurfaceFactory",
+      "methods": [],
+      "accessors": [
+       "edges:g",
+       "surface:gs"
+      ]
+     },
+     {
+      "name": "XNurbsFactory",
+      "methods": [
+       "clearEdgeConstraints",
+       "addEdgeConstraint",
+       "removeEdgeConstraint",
+       "getContinuityForEdge",
+       "setContinuityForEdge",
+       "clearSegmentConstraints",
+       "addSegmentConstraint",
+       "getContinuityForSegment",
+       "setContinuityForSegment",
+       "setContinuityForConstraint",
+       "cycle",
+       "solve",
+       "calculate",
+       "emitWarnings",
+       "calculateAnalysis",
+       "calculateRefinements",
+       "toJSON",
+       "fromJSON",
+       "dispose"
+      ],
+      "accessors": [
+       "controlType:gs",
+       "uDegree:gs",
+       "vDegree:gs",
+       "uSpans:gs",
+       "vSpans:gs",
+       "weight:gs",
+       "adaptiveTolerance:gs",
+       "preferToProduceSurface:gs",
+       "satisfyPrecisionRequirements:gs",
+       "tolerance:gs",
+       "angularTolerance:gs",
+       "maxCVs:gs",
+       "quadSided:gs",
+       "flatness:gs",
+       "stretch:gs",
+       "bending:gs",
+       "changeInBending:gs",
+       "boundaryCondition:gs",
+       "parameterization:gs",
+       "enforceTolerance:gs",
+       "guides:gs",
+       "edge2constraint:g",
+       "edge2continuity:g",
+       "segment2constraint:g",
+       "shouldDirtyOnContinuityChange:g",
+       "segment2continuity:g",
+       "continuity:gs",
+       "blending:gs",
+       "refinements:g"
+      ]
+     },
+     {
+      "name": "AbstractGeometryFactory",
+      "methods": [
+       "doPhantoms",
+       "doDiagnostics",
+       "doUpdate",
+       "calculateTemps",
+       "doCommit",
+       "doCancel",
+       "zip",
+       "calculateForUpdate",
+       "calculateForCommit",
+       "calculatePhantoms",
+       "calculateDiagnostics",
+       "collections"
+      ],
+      "accessors": [
+       "db:g",
+       "materials:g",
+       "signals:g",
+       "phantomArguments:g",
+       "shouldRemoveOriginalItemOnCommit:g",
+       "shouldHideOriginalItemDuringUpdate:g"
+      ]
+     }
+    ],
+    "fields": {
+     "editor": "Editor",
+     "changed": "Signal",
+     "updated": "Signal",
+     "refine": "RefineScope",
+     "temps": "Array[0]",
+     "phantoms": "Array[0]",
+     "diagnoses": "Array[0]",
+     "executor": "TransactionExecutor",
+     "_state": "AtomicRef",
+     "partition": "Partition",
+     "phantomPartition": "Partition",
+     "continuities": "Array[3]",
+     "isDirty": true,
+     "needsUpdate": "Map",
+     "needsRemove": "Set",
+     "_controlType": 1,
+     "_uDegree": 3,
+     "_vDegree": 3,
+     "_uSpans": 1,
+     "_vSpans": 1,
+     "_weight": 1,
+     "_adaptiveTolerance": false,
+     "_preferToProduceSurface": true,
+     "_tolerance": 0.00001,
+     "_angularTolerance": 0.1,
+     "_maxCVs": 4000,
+     "_quadSided": true,
+     "_stretch": 0,
+     "_bending": 0,
+     "_changeInBending": 1,
+     "_boundaryCondition": 2,
+     "_parameterization": 2,
+     "_enforceTolerance": 5,
+     "analysis": "Object",
+     "_guides": "Object",
+     "_edge2constraint": "Map",
+     "isoparm2refinement": "Map",
+     "_segment2constraint": "Map",
+     "_continuity": 23156,
+     "_blending": 0.5,
+     "vsurf": "XNurbs",
+     "shouldErrorOnImpossibleQuadSided": false,
+     "uSamples": 10,
+     "vSamples": 10,
+     "constraints": "Array[0]"
+    },
+    "getters": {
+     "edges": "throws: Cannot read properties of undefined (reading 'views')",
+     "surface": "throws: Cannot read properties of undefined (reading 'model')",
+     "controlType": 1,
+     "uDegree": 3,
+     "vDegree": 3,
+     "uSpans": 1,
+     "vSpans": 1,
+     "weight": 1,
+     "adaptiveTolerance": false,
+     "preferToProduceSurface": true,
+     "satisfyPrecisionRequirements": true,
+     "tolerance": 0.00001,
+     "angularTolerance": 0.1,
+     "maxCVs": 4000,
+     "quadSided": true,
+     "flatness": 1,
+     "stretch": 0,
+     "bending": 0,
+     "changeInBending": 1,
+     "boundaryCondition": 2,
+     "parameterization": 2,
+     "enforceTolerance": 5,
+     "guides": "Array[0]",
+     "edge2constraint": "Map",
+     "edge2continuity": "Map",
+     "segment2constraint": "Map",
+     "shouldDirtyOnContinuityChange": false,
+     "segment2continuity": "Map",
+     "continuity": 23156,
+     "blending": 0.5,
+     "refinements": "Object"
+    }
+   }
+  },
+  "enums": {
+   "SweepAlignmentType": {
+    "21560": "Normal",
+    "21561": "Parallel",
+    "21564": "Transport",
+    "Normal": 21560,
+    "Parallel": 21561,
+    "Transport": 21564
+   },
+   "SweepCornerType": {
+    "25700": "Mitre",
+    "25701": "Round",
+    "Mitre": 25700,
+    "Round": 25701
+   },
+   "SweepGuideMethod": {
+    "23250": "Point",
+    "23251": "Chord",
+    "23252": "Curve",
+    "Point": 23250,
+    "Chord": 23251,
+    "Curve": 23252
+   },
+   "ExtensionShape": {
+    "22750": "Linear",
+    "22751": "Soft",
+    "22752": "Reflective",
+    "22753": "Natural",
+    "22754": "Arc",
+    "Linear": 22750,
+    "Soft": 22751,
+    "Reflective": 22752,
+    "Natural": 22753,
+    "Arc": 22754
+   },
+   "BodyExtensionType": {
+    "22760": "Distance",
+    "22761": "Target",
+    "22762": "Bbox",
+    "Distance": 22760,
+    "Target": 22761,
+    "Bbox": 22762
+   },
+   "ExtensionLimit": {
+    "23800": "Minimal",
+    "23801": "Outside",
+    "23802": "Inside",
+    "Minimal": 23800,
+    "Outside": 23801,
+    "Inside": 23802
+   },
+   "MeasurementType": {
+    "24880": "Distance",
+    "24881": "DistanceRatio",
+    "24882": "Chord",
+    "24883": "ChordRatio",
+    "Distance": 24880,
+    "DistanceRatio": 24881,
+    "Chord": 24882,
+    "ChordRatio": 24883
+   },
+   "hasXNurbs": "function: ​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​",
+   "TransformControlPointsMirrorMode": {
+    "0": "None",
+    "1": "X",
+    "2": "Y",
+    "4": "Z",
+    "None": 0,
+    "X": 1,
+    "Y": 2,
+    "Z": 4
+   },
+   "TransformControlPointsProportionalMode": {
+    "0": "None",
+    "1": "All",
+    "2": "Selected",
+    "None": 0,
+    "All": 1,
+    "Selected": 2
+   }
+  },
+  "commands": {
+   "SweepCommand": {
+    "chain": [
+     {
+      "name": "SweepCommand",
+      "methods": [
+       "execute"
+      ]
+     },
+     {
+      "name": "Command",
+      "methods": [
+       "run",
+       "shouldAddToHistory",
+       "shouldUpdateBackup",
+       "shouldPropagateClickPoint",
+       "shouldDisableViewportSelector",
+       "repeat",
+       "embed",
+       "forward"
+      ]
+     },
+     {
+      "name": "CancellableRegistor",
+      "methods": [
+       "cancel",
+       "finish",
+       "interrupt",
+       "register",
+       "ensure",
+       "using",
+       "then"
+      ]
+     }
+    ],
+    "executeSource": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​"
+   },
+   "XNurbsCommand": {
+    "chain": [
+     {
+      "name": "XNurbsCommand",
+      "methods": [
+       "execute"
+      ]
+     },
+     {
+      "name": "Command",
+      "methods": [
+       "run",
+       "shouldAddToHistory",
+       "shouldUpdateBackup",
+       "shouldPropagateClickPoint",
+       "shouldDisableViewportSelector",
+       "repeat",
+       "embed",
+       "forward"
+      ]
+     },
+     {
+      "name": "CancellableRegistor",
+      "methods": [
+       "cancel",
+       "finish",
+       "interrupt",
+       "register",
+       "ensure",
+       "using",
+       "then"
+      ]
+     }
+    ],
+    "executeSource": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​"
+   },
+   "PolySplinesCommand": {
+    "chain": [
+     {
+      "name": "PolySplinesCommand",
+      "methods": [
+       "execute"
+      ]
+     },
+     {
+      "name": "Command",
+      "methods": [
+       "run",
+       "shouldAddToHistory",
+       "shouldUpdateBackup",
+       "shouldPropagateClickPoint",
+       "shouldDisableViewportSelector",
+       "repeat",
+       "embed",
+       "forward"
+      ]
+     },
+     {
+      "name": "CancellableRegistor",
+      "methods": [
+       "cancel",
+       "finish",
+       "interrupt",
+       "register",
+       "ensure",
+       "using",
+       "then"
+      ]
+     }
+    ],
+    "executeSource": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​"
+   },
+   "ImportPolySplinesCommand": "absent from editor.commands",
+   "DimensionDistanceCommand": "absent from editor.commands",
+   "DimensionPolylineCommand": "absent from editor.commands",
+   "MoveMeasurementCommand": "absent from editor.commands",
+   "ExtendSheetCommand": {
+    "chain": [
+     {
+      "name": "ExtendSheetCommand",
+      "methods": [
+       "execute"
+      ]
+     },
+     {
+      "name": "Command",
+      "methods": [
+       "run",
+       "shouldAddToHistory",
+       "shouldUpdateBackup",
+       "shouldPropagateClickPoint",
+       "shouldDisableViewportSelector",
+       "repeat",
+       "embed",
+       "forward"
+      ]
+     },
+     {
+      "name": "CancellableRegistor",
+      "methods": [
+       "cancel",
+       "finish",
+       "interrupt",
+       "register",
+       "ensure",
+       "using",
+       "then"
+      ]
+     }
+    ],
+    "executeSource": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​"
+   },
+   "MoveControlPointCommand": {
+    "chain": [
+     {
+      "name": "MoveControlPointCommand",
+      "methods": [
+       "make",
+       "getFreestyleCommand"
+      ]
+     },
+     {
+      "name": "AbstractMoveCommand",
+      "methods": [
+       "execute"
+      ]
+     },
+     {
+      "name": "AbstractTransformCommand",
+      "methods": [
+       "onKeyPress",
+       "choosePivot"
+      ]
+     }
+    ],
+    "executeSource": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​"
+   }
+  }
+ }
+}

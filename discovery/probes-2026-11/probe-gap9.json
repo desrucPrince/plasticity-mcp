@@ -1,0 +1,249 @@
+{
+ "start": {
+  "undo": 0,
+  "redo": 1,
+  "bodies": 38,
+  "busy": false
+ },
+ "fields": {
+  "ChamferMode": {
+   "0": "Offset",
+   "1": "Apex",
+   "Offset": 0,
+   "Apex": 1
+  },
+  "SpiralFactory": {
+   "fields": {
+    "turns": 4,
+    "spiralPitch": 0,
+    "handedness": true
+   },
+   "setters": [
+    "p2",
+    "length",
+    "angle",
+    "degrees"
+   ]
+  },
+  "FilletShellFactory": {
+   "fields": {
+    "agent": "automatic",
+    "_filletMode": "constant",
+    "_chamferMode": 1,
+    "_edges": "Object",
+    "_prolong": true,
+    "_lockDistances": true,
+    "_distance1": 0,
+    "_distance2": 0,
+    "shape": 22201,
+    "yBlend": false,
+    "rho": 0.5,
+    "chain2info": "Map",
+    "edge2chain": "Map",
+    "limitPoints": "Set"
+   },
+   "setters": [
+    "filletMode",
+    "chamferMode",
+    "shell",
+    "edges",
+    "prolong",
+    "distance",
+    "lockDistances",
+    "distance1",
+    "distance2"
+   ]
+  },
+  "RefitTrimFactory": {
+   "fields": {
+    "continuities": "Array",
+    "isDirty": true,
+    "needsUpdate": "Map",
+    "needsRemove": "Set",
+    "_controlType": 1,
+    "_uDegree": 3,
+    "_vDegree": 3,
+    "_uSpans": 1,
+    "_vSpans": 1,
+    "_weight": 0.5,
+    "_adaptiveTolerance": false,
+    "_preferToProduceSurface": true,
+    "_tolerance": 0.00001,
+    "_angularTolerance": 0.1,
+    "_maxCVs": 4000,
+    "_quadSided": true,
+    "_stretch": 0,
+    "_bending": 0,
+    "_changeInBending": 1,
+    "_boundaryCondition": 2,
+    "_parameterization": 2,
+    "_enforceTolerance": 5,
+    "analysis": "Object",
+    "_guides": "Object",
+    "_edge2constraint": "Map",
+    "isoparm2refinement": "Map",
+    "_segment2constraint": "Map",
+    "_continuity": 23156,
+    "_blending": 0.5,
+    "vsurf": "XNurbs",
+    "shouldErrorOnImpossibleQuadSided": false,
+    "uSamples": 25,
+    "vSamples": 25,
+    "constraints": "Array",
+    "_sheet": "undefined"
+   },
+   "setters": [
+    "faces",
+    "sheet"
+   ]
+  },
+  "RefitFaceFactory": {
+   "fields": {
+    "underlying": "RefitTrimFactory",
+    "uDegree": 5,
+    "vDegree": 5,
+    "uSpans": 1,
+    "vSpans": 1,
+    "flatness": 1,
+    "weight": 1
+   },
+   "setters": [
+    "shell",
+    "faces",
+    "continuity"
+   ]
+  },
+  "JoinFacesFactory": {
+   "fields": {},
+   "setters": [
+    "faces",
+    "shell"
+   ]
+  },
+  "AlignAndRebuildFactory": {
+   "fields": {
+    "continuities": "Array",
+    "isDirty": true,
+    "needsUpdate": "Map",
+    "needsRemove": "Set",
+    "_controlType": 2,
+    "_uDegree": 3,
+    "_vDegree": 3,
+    "_uSpans": 1,
+    "_vSpans": 1,
+    "_weight": 1,
+    "_adaptiveTolerance": false,
+    "_preferToProduceSurface": true,
+    "_tolerance": 0.00001,
+    "_angularTolerance": 0.1,
+    "_maxCVs": 4000,
+    "_quadSided": true,
+    "_stretch": 0,
+    "_bending": 0,
+    "_changeInBending": 1,
+    "_boundaryCondition": 2,
+    "_parameterization": 2,
+    "_enforceTolerance": 5,
+    "analysis": "Object",
+    "_guides": "Object",
+    "_edge2constraint": "Map",
+    "isoparm2refinement": "Map",
+    "_segment2constraint": "Map",
+    "_continuity": 23156,
+    "_blending": 0.5,
+    "vsurf": "XNurbs",
+    "shouldErrorOnImpossibleQuadSided": false,
+    "_extraCVs": 0,
+    "_inputShapeInfluence": 0,
+    "_constraintInfluence": 1,
+    "_minimizeLocalCVMovement": false,
+    "rebuildFactory": "RefitSurfaceFactory",
+    "constraint2partials": "Map"
+   },
+   "setters": [
+    "reference"
+   ]
+  },
+  "RemoveNominalSurfaceFactory": {
+   "fields": {},
+   "setters": [
+    "shell",
+    "faces"
+   ]
+  }
+ },
+ "commits": {
+  "removeNominal_boxTopFace": {
+   "commit": {
+    "committed": true,
+    "result": "Solid"
+   },
+   "readBack": [
+    {
+     "id": 353,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       3300,
+       0,
+       0
+      ],
+      "max": [
+       3309.9999999999995,
+       10,
+       10
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    }
+   ],
+   "depthAfter": {
+    "undo": 2,
+    "redo": 0,
+    "bodies": 39,
+    "busy": false
+   }
+  },
+  "joinFaces_twoAdjacentBoxFaces": {
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'CoverFaces_async')\n    at JoinFacesFactory.calculate (evalmachine.<anonymous>:1:6637422)\n    at JoinFacesFactory.calculateForCommit (evalmachine.<anonymous>:1:5662783)\n    at JoinFacesFactory.doCommit (evalmachine.<anonymous>:1:5656217)\n    at JoinFacesFactory.commit (evalmachine.<anonymous>:1:5667530)\n    at JoinFacesCommand.execute (<anonymous>:288:38)\n    at evalmachine.<anonymous>:1:5306148\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at JoinFacesCommand.run (evalmachine.<anonymous>:1:5306048)\n    at CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823191)\n    at evalmachine.<anonymous>:1:9821684",
+   "readBack": [
+    {
+     "id": 353,
+     "type": "Solid",
+     "name": null,
+     "boundsMm": {
+      "min": [
+       3300,
+       0,
+       0
+      ],
+      "max": [
+       3309.9999999999995,
+       10,
+       10
+      ]
+     },
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    }
+   ],
+   "depthAfter": {
+    "undo": 1,
+    "redo": 1,
+    "bodies": 39,
+    "busy": false
+   }
+  }
+ },
+ "end": {
+  "undo": 0,
+  "redo": 2,
+  "bodies": 38,
+  "busy": false
+ },
+ "endOk": true
+}
