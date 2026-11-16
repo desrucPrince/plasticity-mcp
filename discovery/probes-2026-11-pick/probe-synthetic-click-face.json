@@ -1,0 +1,259 @@
+{
+ "start": {
+  "undo": 4,
+  "redo": 1,
+  "bodies": 8,
+  "busy": false
+ },
+ "steps": {
+  "frame": {
+   "pos": [
+    2.121401330379203,
+    -0.12665611772087665,
+    0.10377393670836664
+   ],
+   "target": [
+    2.01,
+    0.005,
+    0.0025
+   ],
+   "zoom": 90,
+   "ndc": [
+    0.19198352963962617,
+    -0.09812567051925344,
+    0.4684199328946903
+   ],
+   "css": [
+    920.2903236632803,
+    574.8268927307323
+   ],
+   "finite": true
+  },
+  "mode": {
+   "before": {
+    "keys": [
+     "signals"
+    ],
+    "set": [],
+    "arr": [
+     0,
+     2,
+     3,
+     4,
+     5,
+     7,
+     6
+    ],
+    "proto": [
+     "constructor",
+     "toggle",
+     "set",
+     "add",
+     "addPoints",
+     "removePoints",
+     "is",
+     "isSubset"
+    ]
+   },
+   "after": {
+    "keys": [
+     "signals"
+    ],
+    "set": [],
+    "arr": [
+     0,
+     2,
+     3,
+     4,
+     5,
+     7,
+     6
+    ],
+    "proto": [
+     "constructor",
+     "toggle",
+     "set",
+     "add",
+     "addPoints",
+     "removePoints",
+     "is",
+     "isSubset"
+    ]
+   }
+  },
+  "undoBeforeClick": 4,
+  "afterClick": {
+   "faces": [],
+   "solids": 1,
+   "hits": [
+    {
+     "key": "Face",
+     "vid": "9f670",
+     "point": [
+      2.0199999999999996,
+      0.005000024568289518,
+      0.002499980852007866
+     ],
+     "normal": [
+      1,
+      0,
+      0
+     ]
+    },
+    {
+     "key": "Solid",
+     "vid": 9,
+     "point": [
+      2.0199999999999996,
+      0.005000024568289518,
+      0.002499980852007866
+     ],
+     "normal": [
+      1,
+      0,
+      0
+     ]
+    }
+   ],
+   "env": {
+    "hasFocus": true,
+    "visibility": "visible"
+   }
+  },
+  "undoAfterClick": 5,
+  "command": {
+   "at": null,
+   "execError": "Operation has no effect",
+   "state": "Cancelled",
+   "active": null,
+   "undoDelta": 0
+  }
+ },
+ "box": {
+  "id": 7,
+  "boundsMm": {
+   "min": [
+    1999.9999999999998,
+    0,
+    0
+   ],
+   "max": [
+    2019.9999999999995,
+    10,
+    5
+   ]
+  },
+  "undoDepth": 4,
+  "xPos": "9f670"
+ },
+ "readBack": {
+  "undoDepth": 5,
+  "boundsMm": {
+   "min": [
+    1999.9999999999998,
+    0,
+    0
+   ],
+   "max": [
+    2019.9999999999995,
+    10,
+    5
+   ]
+  },
+  "sizeXmm": 19.999999999999773
+ },
+ "pass": false,
+ "afterUndo": {
+  "undoDepth": 4,
+  "sizeXmm": 19.999999999999773
+ },
+ "savedView": {
+  "target": [
+   -0.017774105327793777,
+   -0.020382134598479595,
+   0.02323218855111664
+  ],
+  "q": [
+   0.48634604143716686,
+   0.15997945771748512,
+   0.2684110478429566,
+   0.8159838297923943
+  ],
+  "radius": 0.1869039,
+  "zoom": 54.54545454545455
+ },
+ "restore": {
+  "pos": [
+   0.07982012149224206,
+   -0.15267654715286627,
+   0.1121513829553573
+  ],
+  "target": [
+   -0.017774105327793777,
+   -0.020382134598479595,
+   0.02323218855111664
+  ],
+  "zoom": 54.54545454545455,
+  "ndc": null,
+  "css": null,
+  "finite": true
+ },
+ "modeRestore": {
+  "before": {
+   "keys": [
+    "signals"
+   ],
+   "set": [],
+   "arr": [
+    0,
+    2,
+    3,
+    4,
+    5,
+    7,
+    6
+   ],
+   "proto": [
+    "constructor",
+    "toggle",
+    "set",
+    "add",
+    "addPoints",
+    "removePoints",
+    "is",
+    "isSubset"
+   ]
+  },
+  "after": {
+   "keys": [
+    "signals"
+   ],
+   "set": [],
+   "arr": [
+    0,
+    2,
+    3,
+    4,
+    5,
+    7,
+    6
+   ],
+   "proto": [
+    "constructor",
+    "toggle",
+    "set",
+    "add",
+    "addPoints",
+    "removePoints",
+    "is",
+    "isSubset"
+   ]
+  }
+ },
+ "end": {
+  "undo": 4,
+  "redo": 1,
+  "bodies": 8,
+  "busy": false
+ }
+}

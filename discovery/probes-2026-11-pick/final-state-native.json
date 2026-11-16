@@ -1,0 +1,21 @@
+{
+ "undo": 0,
+ "redo": 7,
+ "bodies": 4,
+ "isBusy": false,
+ "active": null,
+ "spaceInput": false,
+ "selected": 0,
+ "hits": 0,
+ "probeGlobals": [],
+ "selectionMode": [
+  0,
+  2,
+  3,
+  4,
+  5,
+  7,
+  6
+ ],
+ "cameraFinite": true
+}

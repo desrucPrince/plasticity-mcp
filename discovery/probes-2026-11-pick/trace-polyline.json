@@ -1,0 +1,327 @@
+{
+ "start": {
+  "undo": 4,
+  "redo": 0,
+  "bodies": 8,
+  "busy": false
+ },
+ "cases": {
+  "polyline_body_hitSeg0": {
+   "args": {
+    "command": "DimensionPolylineCommand",
+    "binding": "DimensionPolylineCommand",
+    "select": [
+     {
+      "kind": "body",
+      "bodyId": 8
+     }
+    ],
+    "hit": {
+     "kind": "segment",
+     "bodyId": 8,
+     "index": 0,
+     "point": [
+      2.11,
+      0,
+      0
+     ]
+    }
+   },
+   "trace": {
+    "sel": {
+     "faces": 0,
+     "solids": 0,
+     "curves": 1,
+     "segments": 0,
+     "edges": 0,
+     "hits": 2
+    },
+    "state": "resolved",
+    "cmdState": "Cancelled",
+    "active": null,
+    "dialog": null,
+    "dialogGizmos": null,
+    "factory": null,
+    "factoryClass": null,
+    "input": null,
+    "log": [
+     "Exec.exec CommandExecutor DimensionPolylineCommand,interrupt",
+     "Exec.dequeue CommandExecutor",
+     "Exec.execute CommandExecutor DimensionPolylineCommand",
+     "Cmd.run DimensionPolylineCommand",
+     "Cmd.run:rejected DimensionPolylineCommand  Operation has no effect",
+     "Reg.cancel DimensionPolylineCommand",
+     "Exec.execute:rejected CommandExecutor  Operation has no effect",
+     "Exec.dequeue:resolved CommandExecutor  undefined",
+     "Exec.exec:resolved CommandExecutor  undefined"
+    ]
+   },
+   "cancel": {
+    "activeBefore": null,
+    "runState": "resolved",
+    "active": null,
+    "undo": 4,
+    "input": false
+   },
+   "depth": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 8,
+    "busy": false
+   }
+  },
+  "polyline_seg0_hitSeg0": {
+   "args": {
+    "command": "DimensionPolylineCommand",
+    "binding": "DimensionPolylineCommand",
+    "select": [
+     {
+      "kind": "segment",
+      "bodyId": 8,
+      "index": 0
+     }
+    ],
+    "hit": {
+     "kind": "segment",
+     "bodyId": 8,
+     "index": 0,
+     "point": [
+      2.11,
+      0,
+      0
+     ]
+    }
+   },
+   "trace": {
+    "sel": {
+     "faces": 0,
+     "solids": 0,
+     "curves": 0,
+     "segments": 1,
+     "edges": 0,
+     "hits": 2
+    },
+    "state": "resolved",
+    "cmdState": "Cancelled",
+    "active": null,
+    "dialog": null,
+    "dialogGizmos": null,
+    "factory": null,
+    "factoryClass": null,
+    "input": null,
+    "log": [
+     "Exec.exec CommandExecutor DimensionPolylineCommand,interrupt",
+     "Exec.dequeue CommandExecutor",
+     "Exec.execute CommandExecutor DimensionPolylineCommand",
+     "Cmd.run DimensionPolylineCommand",
+     "Cmd.run:rejected DimensionPolylineCommand  Operation has no effect",
+     "Reg.cancel DimensionPolylineCommand",
+     "Exec.execute:rejected CommandExecutor  Operation has no effect",
+     "Exec.dequeue:resolved CommandExecutor  undefined",
+     "Exec.exec:resolved CommandExecutor  undefined"
+    ]
+   },
+   "cancel": {
+    "activeBefore": null,
+    "runState": "resolved",
+    "active": null,
+    "undo": 4,
+    "input": false
+   },
+   "depth": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 8,
+    "busy": false
+   }
+  },
+  "polyline_body_noHit": {
+   "args": {
+    "command": "DimensionPolylineCommand",
+    "binding": "DimensionPolylineCommand",
+    "select": [
+     {
+      "kind": "body",
+      "bodyId": 8
+     }
+    ],
+    "hit": null
+   },
+   "trace": {
+    "sel": {
+     "faces": 0,
+     "solids": 0,
+     "curves": 1,
+     "segments": 0,
+     "edges": 0,
+     "hits": 0
+    },
+    "state": "resolved",
+    "cmdState": "Cancelled",
+    "active": null,
+    "dialog": null,
+    "dialogGizmos": null,
+    "factory": null,
+    "factoryClass": null,
+    "input": null,
+    "log": [
+     "Exec.exec CommandExecutor DimensionPolylineCommand,interrupt",
+     "Exec.dequeue CommandExecutor",
+     "Exec.execute CommandExecutor DimensionPolylineCommand",
+     "Cmd.run DimensionPolylineCommand",
+     "Cmd.run:rejected DimensionPolylineCommand  Operation has no effect",
+     "Reg.cancel DimensionPolylineCommand",
+     "Exec.execute:rejected CommandExecutor  Operation has no effect",
+     "Exec.dequeue:resolved CommandExecutor  undefined",
+     "Exec.exec:resolved CommandExecutor  undefined"
+    ]
+   },
+   "cancel": {
+    "activeBefore": null,
+    "runState": "resolved",
+    "active": null,
+    "undo": 4,
+    "input": false
+   },
+   "depth": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 8,
+    "busy": false
+   }
+  },
+  "triangle_body_hitSeg0": {
+   "args": {
+    "command": "DimensionPolylineCommand",
+    "binding": "DimensionPolylineCommand",
+    "select": [
+     {
+      "kind": "body",
+      "bodyId": 9
+     }
+    ],
+    "hit": {
+     "kind": "segment",
+     "bodyId": 9,
+     "index": 0,
+     "point": [
+      2.165,
+      0,
+      0
+     ]
+    }
+   },
+   "trace": {
+    "sel": {
+     "faces": 0,
+     "solids": 0,
+     "curves": 1,
+     "segments": 0,
+     "edges": 0,
+     "hits": 2
+    },
+    "state": "resolved",
+    "cmdState": "Cancelled",
+    "active": null,
+    "dialog": null,
+    "dialogGizmos": null,
+    "factory": null,
+    "factoryClass": null,
+    "input": null,
+    "log": [
+     "Exec.exec CommandExecutor DimensionPolylineCommand,interrupt",
+     "Exec.dequeue CommandExecutor",
+     "Exec.execute CommandExecutor DimensionPolylineCommand",
+     "Cmd.run DimensionPolylineCommand",
+     "Cmd.run:rejected DimensionPolylineCommand  Operation has no effect",
+     "Reg.cancel DimensionPolylineCommand",
+     "Exec.execute:rejected CommandExecutor  Operation has no effect",
+     "Exec.dequeue:resolved CommandExecutor  undefined",
+     "Exec.exec:resolved CommandExecutor  undefined"
+    ]
+   },
+   "cancel": {
+    "activeBefore": null,
+    "runState": "resolved",
+    "active": null,
+    "undo": 4,
+    "input": false
+   },
+   "depth": {
+    "undo": 4,
+    "redo": 0,
+    "bodies": 8,
+    "busy": false
+   }
+  }
+ },
+ "instrument": {
+  "installed": 28
+ },
+ "instrument2": {
+  "wrapped": 10
+ },
+ "ids": {
+  "box": 7,
+  "cyl": 10,
+  "wire": 8,
+  "tri": 9,
+  "cTop": "25f1462",
+  "cBot": "25f1454",
+  "bXp": "9f670",
+  "cylFaces": [
+   {
+    "id": "25f1462",
+    "surfaceType": "Plane",
+    "normal": [
+     0,
+     0,
+     1
+    ],
+    "centerMm": [
+     2200,
+     0,
+     10
+    ]
+   },
+   {
+    "id": "25f1454",
+    "surfaceType": "Plane",
+    "normal": [
+     0,
+     0,
+     -1
+    ],
+    "centerMm": [
+     2200,
+     0,
+     0
+    ]
+   },
+   {
+    "id": "25f1448",
+    "surfaceType": "Cylinder",
+    "normal": [
+     -1,
+     1.2246467991473793e-16,
+     0
+    ],
+    "centerMm": [
+     2195.0000000000005,
+     6.123233995736766e-16,
+     5
+    ]
+   }
+  ]
+ },
+ "uninstrument": {
+  "restored": 38,
+  "logLen": 36
+ },
+ "end": {
+  "undo": 4,
+  "redo": 0,
+  "bodies": 8,
+  "busy": false
+ }
+}

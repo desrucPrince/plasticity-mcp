@@ -1,0 +1,636 @@
+{
+ "startNative": {
+  "undo": 4,
+  "redo": 0,
+  "bodies": 8,
+  "busy": false
+ },
+ "trials": [
+  {
+   "label": "cylinder_caps_height_16",
+   "opts": {
+    "refNormal": [
+     0,
+     0,
+     -1
+    ],
+    "movingNormal": [
+     0,
+     0,
+     1
+    ],
+    "targetMm": 16,
+    "axis": 2,
+    "baseMm": 10
+   },
+   "before": {
+    "revision": "r4.85d0127280a2c543",
+    "undoDepth": 4,
+    "bodyCount": 8,
+    "boundsMm": {
+     "min": [
+      2195.0000000000005,
+      -5,
+      0
+     ],
+     "max": [
+      2205,
+      5,
+      10
+     ]
+    },
+    "sizeMm": [
+     9.999999999999545,
+     10,
+     10
+    ]
+   },
+   "faces": [
+    "25f1454",
+    "25f1462"
+   ],
+   "native": {
+    "env0": {
+     "hasFocus": false,
+     "visibility": "visible"
+    },
+    "undo0": 4,
+    "timeline": [
+     {
+      "ms": 1,
+      "ev": "exec started"
+     },
+     {
+      "ms": 1,
+      "ev": "dialog found",
+      "commandState": "Awaiting",
+      "settled": false,
+      "execError": null
+     },
+     {
+      "ms": 1,
+      "ev": "factory.distance set",
+      "distance": 0.016
+     },
+     {
+      "ms": 1,
+      "ev": "dialog.finish called"
+     }
+    ],
+    "factoryAtDialog": {
+     "clickPoint": [
+      2.2,
+      0,
+      0.01
+     ],
+     "to": [
+      2.2,
+      0,
+      0
+     ],
+     "direction": [
+      0,
+      0,
+      -1
+     ],
+     "refDistance": 0.01,
+     "distance": 0.01,
+     "containsRefEntity": true,
+     "refEntity": "Face"
+    },
+    "end": {
+     "settled": true,
+     "execError": null,
+     "execRejected": null,
+     "commandState": "Finished",
+     "active": null,
+     "inputLeft": false,
+     "busy": false,
+     "undo": 5,
+     "undoDelta": 1,
+     "ms": 13,
+     "env": {
+      "hasFocus": false,
+      "visibility": "visible"
+     }
+    }
+   },
+   "after": {
+    "revision": "r5.75ca03e5fd2dd10e",
+    "undoDepth": 5,
+    "bodyCount": 8,
+    "boundsMm": {
+     "min": [
+      2195.0000000000005,
+      -5,
+      0
+     ],
+     "max": [
+      2205,
+      5,
+      16
+     ]
+    },
+    "sizeMm": [
+     9.999999999999545,
+     10,
+     16
+    ]
+   },
+   "undoSteps": 1,
+   "pass": true,
+   "afterUndo": {
+    "revision": "r4.5c79b99038195ca5",
+    "undoDepth": 4,
+    "bodyCount": 8,
+    "boundsMm": {
+     "min": [
+      2195.0000000000005,
+      -5,
+      0
+     ],
+     "max": [
+      2205,
+      5,
+      10
+     ]
+    },
+    "sizeMm": [
+     9.999999999999545,
+     10,
+     10
+    ]
+   },
+   "undoRestored": true
+  },
+  {
+   "label": "cylinder_topOnly_height_14",
+   "opts": {
+    "movingNormal": [
+     0,
+     0,
+     1
+    ],
+    "targetMm": 14,
+    "axis": 2,
+    "baseMm": 10
+   },
+   "before": {
+    "revision": "r4.5c79b99038195ca5",
+    "undoDepth": 4,
+    "bodyCount": 8,
+    "boundsMm": {
+     "min": [
+      2195.0000000000005,
+      -5,
+      0
+     ],
+     "max": [
+      2205,
+      5,
+      10
+     ]
+    },
+    "sizeMm": [
+     9.999999999999545,
+     10,
+     10
+    ]
+   },
+   "faces": [
+    "25f1462"
+   ],
+   "native": {
+    "env0": {
+     "hasFocus": false,
+     "visibility": "visible"
+    },
+    "undo0": 4,
+    "timeline": [
+     {
+      "ms": 1,
+      "ev": "exec started"
+     },
+     {
+      "ms": 1,
+      "ev": "dialog found",
+      "commandState": "Awaiting",
+      "settled": false,
+      "execError": null
+     },
+     {
+      "ms": 1,
+      "ev": "factory.distance set",
+      "distance": 0.014
+     },
+     {
+      "ms": 1,
+      "ev": "dialog.finish called"
+     }
+    ],
+    "factoryAtDialog": {
+     "clickPoint": [
+      2.2,
+      0,
+      0.01
+     ],
+     "to": [
+      2.2,
+      0,
+      0
+     ],
+     "direction": [
+      0,
+      0,
+      -1
+     ],
+     "refDistance": 0.01,
+     "distance": 0.01,
+     "containsRefEntity": false,
+     "refEntity": "Face"
+    },
+    "end": {
+     "settled": true,
+     "execError": null,
+     "execRejected": null,
+     "commandState": "Finished",
+     "active": null,
+     "inputLeft": false,
+     "busy": false,
+     "undo": 5,
+     "undoDelta": 1,
+     "ms": 15,
+     "env": {
+      "hasFocus": false,
+      "visibility": "visible"
+     }
+    }
+   },
+   "after": {
+    "revision": "r5.cd525e84409024ae",
+    "undoDepth": 5,
+    "bodyCount": 8,
+    "boundsMm": {
+     "min": [
+      2195.0000000000005,
+      -5,
+      0
+     ],
+     "max": [
+      2205,
+      5,
+      14
+     ]
+    },
+    "sizeMm": [
+     9.999999999999545,
+     10,
+     14
+    ]
+   },
+   "undoSteps": 1,
+   "pass": true,
+   "afterUndo": {
+    "revision": "r4.623562e39776603f",
+    "undoDepth": 4,
+    "bodyCount": 8,
+    "boundsMm": {
+     "min": [
+      2195.0000000000005,
+      -5,
+      0
+     ],
+     "max": [
+      2205,
+      5,
+      10
+     ]
+    },
+    "sizeMm": [
+     9.999999999999545,
+     10,
+     10
+    ]
+   },
+   "undoRestored": true
+  },
+  {
+   "label": "box_oneFace_xPos_33",
+   "opts": {
+    "movingNormal": [
+     1,
+     0,
+     0
+    ],
+    "targetMm": 33,
+    "axis": 0,
+    "baseMm": 20
+   },
+   "before": {
+    "revision": "r4.623562e39776603f",
+    "undoDepth": 4,
+    "bodyCount": 8,
+    "boundsMm": {
+     "min": [
+      1999.9999999999998,
+      0,
+      0
+     ],
+     "max": [
+      2019.9999999999995,
+      10,
+      5
+     ]
+    },
+    "sizeMm": [
+     19.999999999999773,
+     10,
+     5
+    ]
+   },
+   "faces": [
+    "9f670"
+   ],
+   "native": {
+    "env0": {
+     "hasFocus": false,
+     "visibility": "visible"
+    },
+    "undo0": 4,
+    "timeline": [
+     {
+      "ms": 1,
+      "ev": "exec started"
+     },
+     {
+      "ms": 1,
+      "ev": "dialog found",
+      "commandState": "Awaiting",
+      "settled": false,
+      "execError": null
+     },
+     {
+      "ms": 1,
+      "ev": "factory.distance set",
+      "distance": 0.033
+     },
+     {
+      "ms": 1,
+      "ev": "dialog.finish called"
+     }
+    ],
+    "factoryAtDialog": {
+     "clickPoint": [
+      2.0199999999999996,
+      0.005000000000000001,
+      0.0025000000000000005
+     ],
+     "to": [
+      1.9999999999999998,
+      0.005000000000000001,
+      0.0025000000000000005
+     ],
+     "direction": [
+      -1,
+      0,
+      0
+     ],
+     "refDistance": 0.019999999999999796,
+     "distance": 0.019999999999999796,
+     "containsRefEntity": false,
+     "refEntity": "Face"
+    },
+    "end": {
+     "settled": true,
+     "execError": null,
+     "execRejected": null,
+     "commandState": "Finished",
+     "active": null,
+     "inputLeft": false,
+     "busy": false,
+     "undo": 5,
+     "undoDelta": 1,
+     "ms": 13,
+     "env": {
+      "hasFocus": false,
+      "visibility": "visible"
+     }
+    }
+   },
+   "after": {
+    "revision": "r5.13248aa827c10f2a",
+    "undoDepth": 5,
+    "bodyCount": 8,
+    "boundsMm": {
+     "min": [
+      1999.9999999999998,
+      0,
+      0
+     ],
+     "max": [
+      2033,
+      10,
+      5
+     ]
+    },
+    "sizeMm": [
+     33.00000000000023,
+     10,
+     5
+    ]
+   },
+   "undoSteps": 1,
+   "pass": true,
+   "afterUndo": {
+    "revision": "r4.f8434c666d25f18c",
+    "undoDepth": 4,
+    "bodyCount": 8,
+    "boundsMm": {
+     "min": [
+      1999.9999999999998,
+      0,
+      0
+     ],
+     "max": [
+      2019.9999999999995,
+      10,
+      5
+     ]
+    },
+    "sizeMm": [
+     19.999999999999773,
+     10,
+     5
+    ]
+   },
+   "undoRestored": true
+  },
+  {
+   "label": "box_twoFaces_y_height_via_yPos_18",
+   "opts": {
+    "refNormal": [
+     0,
+     -1,
+     0
+    ],
+    "movingNormal": [
+     0,
+     1,
+     0
+    ],
+    "targetMm": 18,
+    "axis": 1,
+    "baseMm": 10
+   },
+   "before": {
+    "revision": "r4.f8434c666d25f18c",
+    "undoDepth": 4,
+    "bodyCount": 8,
+    "boundsMm": {
+     "min": [
+      1999.9999999999998,
+      0,
+      0
+     ],
+     "max": [
+      2019.9999999999995,
+      10,
+      5
+     ]
+    },
+    "sizeMm": [
+     19.999999999999773,
+     10,
+     5
+    ]
+   },
+   "faces": [
+    "9f720",
+    "9f710"
+   ],
+   "native": {
+    "env0": {
+     "hasFocus": false,
+     "visibility": "visible"
+    },
+    "undo0": 4,
+    "timeline": [
+     {
+      "ms": 0,
+      "ev": "exec started"
+     },
+     {
+      "ms": 0,
+      "ev": "dialog found",
+      "commandState": "Awaiting",
+      "settled": false,
+      "execError": null
+     },
+     {
+      "ms": 0,
+      "ev": "factory.distance set",
+      "distance": 0.018
+     },
+     {
+      "ms": 0,
+      "ev": "dialog.finish called"
+     }
+    ],
+    "factoryAtDialog": {
+     "clickPoint": [
+      2.0099999999999993,
+      0.009999999999999998,
+      0.0025
+     ],
+     "to": [
+      2.0099999999999993,
+      0,
+      0.0025
+     ],
+     "direction": [
+      0,
+      -1,
+      0
+     ],
+     "refDistance": 0.01,
+     "distance": 0.01,
+     "containsRefEntity": true,
+     "refEntity": "Face"
+    },
+    "end": {
+     "settled": true,
+     "execError": null,
+     "execRejected": null,
+     "commandState": "Finished",
+     "active": null,
+     "inputLeft": false,
+     "busy": false,
+     "undo": 5,
+     "undoDelta": 1,
+     "ms": 22,
+     "env": {
+      "hasFocus": false,
+      "visibility": "visible"
+     }
+    }
+   },
+   "after": {
+    "revision": "r5.831b0ae32c1cd2a8",
+    "undoDepth": 5,
+    "bodyCount": 8,
+    "boundsMm": {
+     "min": [
+      1999.9999999999998,
+      0,
+      0
+     ],
+     "max": [
+      2019.9999999999995,
+      18,
+      5
+     ]
+    },
+    "sizeMm": [
+     19.999999999999773,
+     18,
+     5
+    ]
+   },
+   "undoSteps": 1,
+   "pass": true,
+   "afterUndo": {
+    "revision": "r4.1dd9ede509b83c2d",
+    "undoDepth": 4,
+    "bodyCount": 8,
+    "boundsMm": {
+     "min": [
+      1999.9999999999998,
+      0,
+      0
+     ],
+     "max": [
+      2019.9999999999995,
+      10,
+      5
+     ]
+    },
+    "sizeMm": [
+     19.999999999999773,
+     10,
+     5
+    ]
+   },
+   "undoRestored": true
+  }
+ ],
+ "ids": {
+  "box": 7,
+  "cyl": 10
+ },
+ "endNative": {
+  "undo": 4,
+  "redo": 1,
+  "bodies": 8,
+  "busy": false
+ }
+}

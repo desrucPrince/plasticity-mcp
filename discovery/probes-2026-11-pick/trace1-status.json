@@ -1,0 +1,53 @@
+{
+ "undo": 1,
+ "redo": 0,
+ "bodies": 5,
+ "busy": false,
+ "instrumented": true,
+ "log": [
+  {
+   "t": 1794844673830,
+   "ev": "Reg.interrupt",
+   "cls": "DimensionCommand",
+   "args": [],
+   "ret": "undefined"
+  },
+  {
+   "t": 1794844673830,
+   "ev": "Reg.finish",
+   "cls": "DimensionCommand",
+   "args": [],
+   "ret": "undefined"
+  },
+  {
+   "t": 1794844673833,
+   "ev": "DDC.execute",
+   "cls": "DimensionDistanceCommand",
+   "args": [],
+   "async": true
+  },
+  {
+   "t": 1794844673834,
+   "ev": "DDC.execute:rejected",
+   "err": "Operation has no effect"
+  },
+  {
+   "t": 1794844673834,
+   "ev": "Reg.cancel",
+   "cls": "DimensionDistanceCommand",
+   "args": [],
+   "ret": "undefined"
+  }
+ ],
+ "objs": {
+  "Reg": 3,
+  "DDC": 1
+ },
+ "executorKeys": [
+  "editor",
+  "commandForSelection",
+  "next",
+  "lastCommand"
+ ],
+ "activeCmd": null
+}

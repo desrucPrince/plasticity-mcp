@@ -1,0 +1,62 @@
+{
+ "polylineOpen": [
+  {
+   "id": 8,
+   "type": "Wire",
+   "name": "Polyline.001",
+   "boundsMm": {
+    "min": [
+     2100,
+     0,
+     0
+    ],
+    "max": [
+     2120,
+     15,
+     0
+    ]
+   }
+  }
+ ],
+ "polylineOpen_undo": 2,
+ "triangle": [
+  {
+   "id": 9,
+   "type": "Wire",
+   "name": "Polyline.002",
+   "boundsMm": {
+    "min": [
+     2150,
+     0,
+     0
+    ],
+    "max": [
+     2180,
+     20,
+     0
+    ]
+   }
+  }
+ ],
+ "triangle_undo": 3,
+ "cylinder": [
+  {
+   "id": 10,
+   "type": "Solid",
+   "name": "Cylinder.001",
+   "boundsMm": {
+    "min": [
+     2195.0000000000005,
+     -5,
+     0
+    ],
+    "max": [
+     2205,
+     5,
+     10
+    ]
+   }
+  }
+ ],
+ "cylinder_undo": 4
+}

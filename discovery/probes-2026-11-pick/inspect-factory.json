@@ -1,0 +1,45 @@
+{
+ "factoryFields": {
+  "editor": "Editor",
+  "changed": "Signal",
+  "updated": "Signal",
+  "refine": "RefineScope",
+  "temps": "[0]",
+  "phantoms": "[0]",
+  "diagnoses": "[0]",
+  "executor": "TransactionExecutor",
+  "_state": "AtomicRef",
+  "partition": "Partition",
+  "phantomPartition": "Partition",
+  "clickPoint": "V3(2.02,0.005736,0.002132)",
+  "_collection": "Object{\"views\":\"Array\",\"models\":\"Array\",\"collection\":\"DimensionCollection\"}",
+  "to": "V3(2,0.005736,0.002132)",
+  "direction": "V3(-1,0,0)",
+  "refDistance": 0.019999999999999796,
+  "containsRefEntity": true,
+  "refEntity": "Face"
+ },
+ "get": {
+  "distance": 0.019999999999999796,
+  "to": "V3(2,0.005736,0.002132)",
+  "direction": "V3(-1,0,0)",
+  "refDistance": 0.019999999999999796,
+  "containsRefEntity": true,
+  "clickPoint": "V3(2.02,0.005736,0.002132)",
+  "selection": "throws Error: invalid state",
+  "originalItems": "[1]",
+  "originalItem": "undefined",
+  "state": "Object{\"clock\":0,\"state\":\"Object\"}"
+ },
+ "dlgState": "Object{\"tag\":\"executing\",\"cb\":\"fn\",\"cancellable\":\"CancellablePromise\",\"tabs\":\"TabGroup\",\"options\":\"Object\"}",
+ "inputState": "Object{\"tag\":\"focused\",\"content\":\"Object\",\"currentText\":\"20.0 mm\",\"position\":\"Vector3\",\"quaternion\":\"Quaternion\",\"dispose\":\"Disposable\",\"hasChanged\":false}",
+ "inputOptions": "Object{\"fast\":true,\"focusFirst\":0}",
+ "inputText": {},
+ "inputQuantity": "fn",
+ "inputEl": {
+  "tag": "INPUT",
+  "html": "<input type=\"text\" class=\"absolute text-xs px-2 text-center rounded pointer-events-none w-24 text-measurement h-6 bg-black-600 z-space-input-focused\" tabindex=\"-1\" draggable=\"false\" style=\"position: absolute; user-select: none; transform-origin: 0px 0px; transform: translate(15090.1px, 5387.34px) translate(-50%, -100%);\">",
+  "connected": true
+ },
+ "cbSrc": "​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​​"
+}

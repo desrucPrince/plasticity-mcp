@@ -1,0 +1,97 @@
+{
+ "entries": [
+  {
+   "key": "Face",
+   "keyFields": {
+    "versionId": "7f514",
+    "entityId": 514,
+    "layers": "Layers",
+    "group": "Object",
+    "index": 0,
+    "matrixWorld": "undefined",
+    "parent": "FaceGroup"
+   },
+   "val": {
+    "point": "V3(2.02,0.005736,0.002132)",
+    "normal": "undefined",
+    "intersected": "Face"
+   },
+   "valInner": {
+    "point": {
+     "x": 2.0199999999999996,
+     "y": 0.0057357300000000005,
+     "z": 0.002132135
+    },
+    "normal": "undefined",
+    "intersected": {
+     "versionId": "7f514",
+     "entityId": 514,
+     "layers": "Layers",
+     "group": "Object",
+     "index": 0,
+     "matrixWorld": "undefined",
+     "parent": "FaceGroup"
+    }
+   }
+  },
+  {
+   "key": "Solid",
+   "keyFields": {
+    "isObject3D": true,
+    "uuid": "2203cde7-c022-46e3-a400-ef56c1759e54",
+    "name": "",
+    "type": "Object3D",
+    "parent": "null",
+    "children": "[0]",
+    "up": "V3(0,0,1)",
+    "position": "V3(0,0,0)",
+    "rotation": "Euler",
+    "quaternion": "Quaternion",
+    "scale": "V3(1,1,1)",
+    "matrix": "Matrix4",
+    "matrixWorld": "Matrix4",
+    "matrixAutoUpdate": true,
+    "matrixWorldAutoUpdate": true,
+    "matrixWorldNeedsUpdate": false,
+    "layers": "Layers",
+    "visible": true,
+    "castShadow": false,
+    "receiveShadow": false,
+    "frustumCulled": true,
+    "renderOrder": 0,
+    "animations": "[0]",
+    "customDepthMaterial": "undefined",
+    "customDistanceMaterial": "undefined",
+    "static": false,
+    "userData": "Object",
+    "pivot": "null",
+    "clippingLayers": "Layers",
+    "_lods": "[2]"
+   },
+   "val": {
+    "point": "V3(2.02,0.005736,0.002132)",
+    "normal": "undefined",
+    "intersected": "Face"
+   },
+   "valInner": {
+    "point": {
+     "x": 2.0199999999999996,
+     "y": 0.0057357300000000005,
+     "z": 0.002132135
+    },
+    "normal": "undefined",
+    "intersected": {
+     "versionId": "7f514",
+     "entityId": 514,
+     "layers": "Layers",
+     "group": "Object",
+     "index": 0,
+     "matrixWorld": "undefined",
+     "parent": "FaceGroup"
+    }
+   }
+  }
+ ],
+ "clickPoint": "V3(2.02,0.005736,0.002132)",
+ "clickNormal": "undefined"
+}

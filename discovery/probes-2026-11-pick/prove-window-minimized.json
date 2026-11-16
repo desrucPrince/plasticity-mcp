@@ -1,0 +1,20 @@
+{
+ "startNative": {
+  "undo": 4,
+  "redo": 1,
+  "bodies": 8,
+  "busy": false
+ },
+ "trials": [],
+ "ids": {
+  "box": 7,
+  "cyl": 10
+ },
+ "fatal": "CDP -32601: 'Browser.getWindowForTarget' wasn't found",
+ "endNative": {
+  "undo": 4,
+  "redo": 1,
+  "bodies": 8,
+  "busy": false
+ }
+}
