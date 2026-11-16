@@ -169,7 +169,6 @@ vertex geometry is needed. Non-state operation results keep their own schema.
   dimensions and geometry validity come from native B-Rep reads
 - Documents: save a copy, open with mandatory backup, exact STEP and Parasolid
   (`.x_t`/`.x_b`) import/export, IGES (`.igs`/`.iges`) and ACIS SAT (`.sat`) export,
-  `plasticity_clear_selection` (deselect, unselect, select none; no Undo entry),
   native editable SVG Wire/Region import,
   orthographic hidden-line SVG drawings of Solid B-rep geometry, and
   approximate STL/OBJ reference-mesh import with explicit source units,
@@ -1145,7 +1144,8 @@ alignment, miter/round corners, twist, terminal scale and simplification.
 Optional `guideIds` (current Wire rails) and `guideMethod` (`point`, `chord`,
 `curve`) steer the profile along rails; a rail moves the result bounds.
 `plasticity_sweep_curves` sweeps one or more current Wire profiles, open or
-closed, along a Wire spine and returns independent Sheets. It takes the same
+closed, along a Wire spine and returns one independent Sheet per profile (two
+profiles on one spine give two Sheets in one Undo step). It takes the same
 optional `guideIds` and `guideMethod`, plus `twistDegrees` and a positive
 `scale`. It has no thickness, alignment or corner option.
 `plasticity_loft_regions` consumes an ordered list of Regions from separate
@@ -1292,6 +1292,7 @@ radius measurement even when a downstream table presents its derived diameter.
 `plasticity_move_measurement_label` moves the dimension line and label of one
 distance measurement. `offsetMm` is `[along, perpendicular]` in the same frame
 that `plasticity_list_measurements` reports. The measurement keeps its name.
+The move clears the current selection; select again afterwards if you need it.
 `plasticity_delete_measurement` selects that native measurement and delegates
 removal to Plasticity's own removal command, also as one Undo step. Body topology
 and measurement IDs are valid only for the current document revision; use the
@@ -1653,7 +1654,8 @@ directions. Each reference is tied to the current body and document revision.
 `plasticity_select_curve_control_points` replaces Plasticity's current selection
 with those exact handles, while `plasticity_current_selection` reads a manual or
 agent-made handle selection back. Selection does not change the document or its
-Undo history.
+Undo history. `plasticity_clear_selection` (deselect, unselect, select none)
+empties the current selection and adds no Undo entry.
 `plasticity_move_curve_control_points` moves any selected mix by one shared
 world-space millimeter delta. `plasticity_slide_curve_control_points` moves the
 selected handles by one positive distance along each handle's chosen local U
@@ -2092,6 +2094,12 @@ npm run accept:native-iges-sat-clear-selection -- --target <target-id> --allow-d
 npm run accept:native-extend-sweep-label -- --target <target-id> --allow-disposable-mutations --output <new-directory>
 npm run accept:native-patch-polysplines-facepoints -- --target <target-id> --allow-disposable-mutations --output <new-directory>
 ```
+
+The last three accept commands (`accept:native-iges-sat-clear-selection`,
+`accept:native-extend-sweep-label`, `accept:native-patch-polysplines-facepoints`)
+require `PLASTICITY_CDP_URL` to name the isolated test instance. They refuse to
+start without it, never launch Plasticity (they force `PLASTICITY_AUTO_LAUNCH=0`
+and `PLASTICITY_HUD=0`), and recover the baseline on every exit path.
 
 The live acceptance run created an 80 × 40 × 8 mm plate with two Ø6 mm
 through-holes and four R2 outer vertical fillets. It verified Undo/Redo,

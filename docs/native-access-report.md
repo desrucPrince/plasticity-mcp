@@ -1979,10 +1979,11 @@ A guarded public stdio acceptance on 2026-09-23 exported one exact Solid
 file produced one exact Solid with the same bounds, six faces, twelve edges, no
 native `Check()` codes, `nativeValid=true`, and `printableSolid=true`. Undo
 removed the text import, Redo restored the same stable body ID, and final
-cleanup restored the initial empty scene. IGES and SAT export is verified
-working on Plasticity 26.1.3 on 2026-11-15 via
-`accept:native-iges-sat-clear-selection`. Sanitized evidence is at
-`[local acceptance artifact omitted]`.
+cleanup restored the initial empty scene. Sanitized evidence for that Parasolid
+acceptance is at `[local acceptance artifact omitted]`.
+
+IGES and SAT export is verified working on Plasticity 26.1.3 on 2026-11-15 via
+`accept:native-iges-sat-clear-selection`.
 
 ## Native cone and conical-frustum construction
 

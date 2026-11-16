@@ -454,12 +454,24 @@ const FACE_CONTROL_POINT_READ = `const view = find(args.bodyId);
     positionMm: [cv.position.x, cv.position.y, cv.position.z].map(value => Math.round(value * 1000 * 1000) / 1000),
   }));`;
 
+// Resolves a native enum member by name. A Plasticity build that lacks the member fails loudly instead of
+// handing the factory undefined.
+const enumMember = `const enumMember = (enumeration, enumerationName, member) => {
+  const value = enumeration?.[member];
+  if (value === undefined) throw new Error('Plasticity build has no ' + enumerationName + '.' + member);
+  return value;
+};`;
+
 // Guide rails for a sweep (FINDINGS gap 1): Wire guides plus an optional SweepGuideMethod resolved by name.
+// The guide views and the method are checked before anything is assigned to the factory.
 const sweepGuides = `
       if (args.guideIds !== undefined) {
-        factory.guides = args.guideIds.map(find);
-        if (factory.guides.some(guide => guide.constructor.name !== 'Wire')) throw new Error('Sweep guides must be Wires');
-        if (args.guideMethodName !== undefined) factory.guideMethod = SweepGuideMethod[args.guideMethodName];
+        ${enumMember}
+        const guides = args.guideIds.map(find);
+        if (guides.some(guide => guide.constructor.name !== 'Wire')) throw new Error('Sweep guides must be Wires');
+        const guideMethod = args.guideMethodName !== undefined ? enumMember(SweepGuideMethod, 'SweepGuideMethod', args.guideMethodName) : undefined;
+        factory.guides = guides;
+        if (guideMethod !== undefined) factory.guideMethod = guideMethod;
       }`;
 
 export interface ExtrudeOptions {
@@ -7195,6 +7207,7 @@ export class PlasticityOperations {
     }
     await this.runtime.mutate(nativeFunction`async function (Factory${continuity !== undefined ? ", ContinuityType" : ""}, args) {
       ${findView}
+      ${enumMember}
       ${commandStart(guided ? "XNurbsCommand" : "PatchCommand")}
       const wire = id => {
         const view = find(id);
@@ -7209,7 +7222,7 @@ export class PlasticityOperations {
           if (index < 0) throw new Error('Stale or unknown edge: ' + args.edges.bodyId + ':' + edgeId);
           return view.high.edges.get(index);
         });
-        if (args.continuityName !== undefined) factory.continuity = ContinuityType[args.continuityName];
+        if (args.continuityName !== undefined) factory.continuity = enumMember(ContinuityType, 'ContinuityType', args.continuityName);
       }
       if (args.guideIds) factory.guides = args.guideIds.map(wire);
       ${commandEnd}
@@ -8184,6 +8197,7 @@ export class PlasticityOperations {
     if (nonBoundary.length > 0) throw new Error(`Sheet extension requires boundary edges: ${nonBoundary.join(", ")}`);
     await this.runtime.mutate(nativeFunction`async function (Factory, ExtensionShape, BodyExtensionType, ExtensionLimit, args) {
       ${findView}
+      ${enumMember}
       ${commandStart("ExtendSheetCommand")}
       const view = find(args.id);
       if (view.constructor.name !== 'Sheet') throw new Error('Sheet extension input must be a Sheet body');
@@ -8193,13 +8207,16 @@ export class PlasticityOperations {
         return view.high.edges.get(index);
       });
       if (args.distance !== undefined) factory.distance = args.distance;
+      enumMember(ExtensionShape, 'ExtensionShape', 'Linear');
+      enumMember(BodyExtensionType, 'BodyExtensionType', 'Distance');
+      enumMember(ExtensionLimit, 'ExtensionLimit', 'Minimal');
       factory.shape = ExtensionShape.Linear;
       factory.type = BodyExtensionType.Distance;
       factory.limit = ExtensionLimit.Minimal;
       factory.modify = true;
-      if (args.shapeName !== undefined) factory.shape = ExtensionShape[args.shapeName];
+      if (args.shapeName !== undefined) factory.shape = enumMember(ExtensionShape, 'ExtensionShape', args.shapeName);
       if (args.targetId !== undefined) {
-        factory.type = BodyExtensionType.Target;
+        factory.type = enumMember(BodyExtensionType, 'BodyExtensionType', 'Target');
         factory.target = find(args.targetId);
       }
       if (args.merge !== undefined) factory.modify = args.merge;

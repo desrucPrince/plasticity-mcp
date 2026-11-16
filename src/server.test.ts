@@ -6491,3 +6491,13 @@ test("the Upgrades B tools are reachable through plasticity_call and work as bat
   assert.deepEqual(stepCalls[0]!.args, [3, { mergePatches: true, interpolateBoundary: undefined }, "r3"]);
   await close();
 });
+
+test("plasticity_move_measurement_label says it clears the selection and takes a two-number offset", async () => {
+  await withOperationsClient({ async state() { return emptyState(); } }, async (client) => {
+    const tool = (await client.listTools()).tools.find((entry) => entry.name === "plasticity_move_measurement_label");
+    assert.match(tool?.description ?? "", /clears the current selection/i);
+    const offset = (tool?.inputSchema.properties as Record<string, { minItems?: number; maxItems?: number }>).offsetMm;
+    assert.equal(offset?.minItems, 2);
+    assert.equal(offset?.maxItems, 2);
+  });
+});

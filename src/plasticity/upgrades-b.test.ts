@@ -362,3 +362,18 @@ test("moveFaceControlPoints rejects bad input and a stale revision before any na
   await assert.rejects(f.operations.moveFaceControlPoints(5, [0], [0, 0, 1], "old"), /Stale reference/);
   assert.equal(f.calls.length, 0);
 });
+
+test("a missing ContinuityType member throws a clear native error", async () => {
+  const original = ENUMS.ContinuityType!.G1!;
+  delete ENUMS.ContinuityType!.G1;
+  try {
+    const f = fixture();
+    await assert.rejects(f.operations.xsidedPatch({ edges: { bodyId: 5, edgeIds: ["e1"] }, continuity: "g1" }, "r1"), /Plasticity build has no ContinuityType\.G1/);
+    assert.equal(f.created.length, 0);
+    const other = fixture();
+    await other.operations.xsidedPatch({ edges: { bodyId: 5, edgeIds: ["e1"] }, continuity: "g2" }, "r1");
+    assert.equal(other.created[0]!.continuity, 23154);
+  } finally {
+    ENUMS.ContinuityType!.G1 = original;
+  }
+});

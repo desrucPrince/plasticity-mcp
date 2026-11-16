@@ -46,6 +46,8 @@ const HELP = `Usage:
   node scripts/verify-native-patch-polysplines-facepoints-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY
 
 With no arguments or --help, this command performs no connection and no mutation.
+PLASTICITY_CDP_URL is mandatory: set it to the isolated Plasticity instance. The command never launches Plasticity
+(it forces PLASTICITY_AUTO_LAUNCH=0 and PLASTICITY_HUD=0) and refuses to start without the variable.
 Live mode takes a baseline, then builds disposable geometry at x >= 2300 mm and checks, by reading
 type, topology counts, bounds and control points back through plasticity_status and the tool results:
   - plasticity_xsided_patch: 4, 3 and 5 boundary curves, an open cylinder edge with g0 and g1, and a guide curve.
@@ -58,12 +60,14 @@ async function main(): Promise<void> {
   const options = parsePatchPolysplinesFacepointsArgs(process.argv.slice(2));
   if (options.help) { console.log(HELP); return; }
   const output = resolve(options.output!);
+  if (!process.env.PLASTICITY_CDP_URL) throw new Error("PLASTICITY_CDP_URL is mandatory and must name the isolated Plasticity instance; nothing was created");
   await mkdir(output, { mode: 0o700 });
   const evidence: Record<string, unknown> = { schemaVersion: 1, startedAt: new Date().toISOString(), targetId: options.target! };
+  const serverStderr: string[] = [];
   let live: LiveMcp | undefined;
   let baseline: any;
   try {
-    live = await startMcp();
+    live = await startMcp(serverStderr);
     const client = live.client;
     const windows = await call(client, "plasticity_list_windows", {});
     requireCondition(windows.some((window: { targetId: string }) => window.targetId === options.target), "Explicit Plasticity target was not found");
@@ -71,6 +75,7 @@ async function main(): Promise<void> {
     baseline = await status(client);
     evidence.baseline = summary(baseline);
     const baselineMeshes = (await call(client, "plasticity_list_reference_meshes", {})).referenceMeshes.length;
+    baseline.referenceMeshCount = baselineMeshes;
     const known = new Set<number>(baseline.bodies.map((body: { id: number }) => body.id));
     const checks: Record<string, unknown> = {};
 
@@ -274,10 +279,14 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({ ok: true, output, baseline: evidence.baseline, restored: evidence.restored, checks }, null, 2));
   } catch (error) {
     evidence.failure = boundedError(error);
-    if (live && baseline) evidence.cleanup = await recover(live.client, baseline).catch((cleanupError) => ({ restored: false, reason: boundedError(cleanupError) }));
-    await writeExclusive(join(output, "failure.json"), evidence).catch(() => {});
     throw error;
   } finally {
+    // Recovery runs on every exit path; after a clean run it finds the baseline and does nothing.
+    if (live && baseline) evidence.cleanup = await recover(live.client, baseline).catch((cleanupError) => ({ restored: false, reason: boundedError(cleanupError) }));
+    if (evidence.failure !== undefined) {
+      evidence.serverStderr = serverStderr.join("").slice(-8192);
+      await writeExclusive(join(output, "failure.json"), evidence).catch(() => {});
+    }
     await live?.client.close().catch(() => {});
   }
 }
@@ -289,17 +298,16 @@ function cubeObjText(x: number): string {
   return `${vertices.map(([vx, vy, vz]) => `v ${x + vx!} ${vy} ${vz}`).join("\n")}\n${faces.map((face) => `f ${face.join(" ")}`).join("\n")}\n`;
 }
 
-async function startMcp(): Promise<LiveMcp> {
+async function startMcp(stderr: string[]): Promise<LiveMcp> {
   const endpoint = process.env.PLASTICITY_CDP_URL;
   if (!endpoint) throw new Error("PLASTICITY_CDP_URL must name the isolated Plasticity instance");
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [join(projectRoot, "scripts", "run-server.ts")],
     cwd: projectRoot,
-    env: selectedEnvironment(process.env),
+    env: { ...selectedEnvironment(process.env), PLASTICITY_CDP_URL: endpoint, PLASTICITY_AUTO_LAUNCH: "0", PLASTICITY_HUD: "0" },
     stderr: "pipe",
   });
-  const stderr: string[] = [];
   transport.stderr?.on("data", (chunk) => { stderr.push(String(chunk).slice(-4096)); while (stderr.join("").length > 16384) stderr.shift(); });
   const client = new Client({ name: "plasticity-patch-polysplines-facepoints-live", version: "1.0.0" });
   await client.connect(transport);
@@ -330,7 +338,10 @@ async function recover(client: Client, initial: any): Promise<Record<string, unk
   for (let count = 0; count < 40; count += 1) {
     const current = await status(client);
     if (current.documentToken !== initial.documentToken) return { restored: false, reason: "document-changed" };
-    if (current.undoDepth <= initial.undoDepth) return { restored: current.bodies.length === initial.bodies.length };
+    if (current.undoDepth <= initial.undoDepth) {
+      const referenceMeshCount = (await call(client, "plasticity_list_reference_meshes", {})).referenceMeshes.length;
+      return { restored: current.bodies.length === initial.bodies.length && (initial.referenceMeshCount === undefined || referenceMeshCount === initial.referenceMeshCount), bodyCount: current.bodies.length, referenceMeshCount };
+    }
     await call(client, "plasticity_undo", { intent: "Recover patch/polysplines/face-points acceptance", revision: current.revision });
   }
   return { restored: false, reason: "undo-limit" };

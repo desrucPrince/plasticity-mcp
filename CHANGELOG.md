@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-- Add `plasticity_sweep_curves` (Wire profiles to Sheets), `guideIds`/`guideMethod` rails on `plasticity_sweep_regions`, `shape`/`targetId`/`merge` on `plasticity_extend_sheet_edges`, and `plasticity_move_measurement_label`. Live script: `accept:native-extend-sweep-label`.
+- Add `plasticity_sweep_curves` (Wire profiles to Sheets), `guideIds`/`guideMethod` rails on `plasticity_sweep_regions`, `shape`/`targetId`/`merge` on `plasticity_extend_sheet_edges`, and `plasticity_move_measurement_label`. Live script: `accept:native-extend-sweep-label` (label move checked on X, Y and Z measurements; multi-profile sweep gives one Sheet per profile).
 - Add `plasticity_xsided_patch` (N-sided Sheet from boundary Wires or edges, optional guides and g0/g1/g2 edge continuity), `plasticity_convert_reference_mesh_to_polysplines` (quad reference mesh to a PolySplines solid; the mesh is consumed) and `plasticity_show_face_control_points` / `plasticity_move_face_control_points` (Sheet and Solid face CVs). Live script: `accept:native-patch-polysplines-facepoints`.
+- Live acceptance scripts for the three new groups now require `PLASTICITY_CDP_URL`, force `PLASTICITY_AUTO_LAUNCH=0` and `PLASTICITY_HUD=0`, and recover the baseline in `finally`. Native enum lookups (sweep guide method, extension shape and type, continuity) fail with a clear error when the build lacks the member.
 - Polish IGES/SAT export: always stage `geometry.igs`, report a missing file clearly, fix the validator wording. `plasticity_clear_selection` is strict, non-destructive and findable as deselect, unselect or select none.
 
 ## 0.2.2 — 2026-10-11

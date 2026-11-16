@@ -48,6 +48,8 @@ const HELP = `Usage:
   node scripts/verify-native-iges-sat-clear-selection-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY
 
 With no arguments or --help, this command performs no connection and no mutation.
+PLASTICITY_CDP_URL is mandatory: set it to the isolated Plasticity instance. The command never launches Plasticity
+(it forces PLASTICITY_AUTO_LAUNCH=0 and PLASTICITY_HUD=0) and refuses to start without the variable.
 Live mode takes a baseline, creates one disposable box, exports it to IGES (.igs and .iges) and SAT,
 checks the saved .igs, .iges and .sat files, selects the box, clears the selection, checks the selection
 is empty and that clearing added no Undo entry, then undoes back to the baseline.
@@ -57,15 +59,17 @@ async function main(): Promise<void> {
   const options = parseIgesSatClearSelectionArgs(process.argv.slice(2));
   if (options.help) { console.log(HELP); return; }
   const output = resolve(options.output!);
+  if (!process.env.PLASTICITY_CDP_URL) throw new Error("PLASTICITY_CDP_URL is mandatory and must name the isolated Plasticity instance; nothing was created");
   await mkdir(output, { mode: 0o700 });
   const igesPath = join(output, "box-20x10x5.igs");
   const longIgesPath = join(output, "box-20x10x5.iges");
   const satPath = join(output, "box-20x10x5.sat");
   const evidence: Record<string, unknown> = { schemaVersion: 1, startedAt: new Date().toISOString(), targetId: options.target! };
+  const serverStderr: string[] = [];
   let live: LiveMcp | undefined;
   let baseline: any;
   try {
-    live = await startMcp();
+    live = await startMcp(serverStderr);
     const windows = await call(live.client, "plasticity_list_windows", {});
     requireCondition(windows.some((window: { targetId: string }) => window.targetId === options.target), "Explicit Plasticity target was not found");
     baseline = await call(live.client, "plasticity_connect", { targetId: options.target });
@@ -115,25 +119,28 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({ ok: true, output, files: [igesPath, longIgesPath, satPath], evidence: join(output, "evidence.json") }, null, 2));
   } catch (error) {
     evidence.failure = boundedError(error);
-    if (live && baseline) evidence.cleanup = await recover(live.client, baseline).catch((cleanupError) => ({ restored: false, reason: boundedError(cleanupError) }));
-    await writeExclusive(join(output, "failure.json"), evidence).catch(() => {});
     throw error;
   } finally {
+    // Recovery runs on every exit path; after a clean run it finds the baseline and does nothing.
+    if (live && baseline) evidence.cleanup = await recover(live.client, baseline).catch((cleanupError) => ({ restored: false, reason: boundedError(cleanupError) }));
+    if (evidence.failure !== undefined) {
+      evidence.serverStderr = serverStderr.join("").slice(-8192);
+      await writeExclusive(join(output, "failure.json"), evidence).catch(() => {});
+    }
     await live?.client.close().catch(() => {});
   }
 }
 
-async function startMcp(): Promise<LiveMcp> {
+async function startMcp(stderr: string[]): Promise<LiveMcp> {
   const endpoint = process.env.PLASTICITY_CDP_URL;
   if (!endpoint) throw new Error("PLASTICITY_CDP_URL must name the isolated Plasticity instance");
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [join(projectRoot, "scripts", "run-server.ts")],
     cwd: projectRoot,
-    env: { ...selectedEnvironment(process.env), PLASTICITY_CDP_URL: endpoint },
+    env: { ...selectedEnvironment(process.env), PLASTICITY_CDP_URL: endpoint, PLASTICITY_AUTO_LAUNCH: "0", PLASTICITY_HUD: "0" },
     stderr: "pipe",
   });
-  const stderr: string[] = [];
   transport.stderr?.on("data", (chunk) => { stderr.push(String(chunk).slice(-4096)); while (stderr.join("").length > 16384) stderr.shift(); });
   const client = new Client({ name: "plasticity-iges-sat-clear-selection-live", version: "1.0.0" });
   await client.connect(transport);

@@ -47,12 +47,14 @@ const HELP = `Usage:
   node scripts/verify-native-extend-sweep-label-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY
 
 With no arguments or --help, this command performs no connection and no mutation.
+PLASTICITY_CDP_URL is mandatory: set it to the isolated Plasticity instance. The command never launches Plasticity
+(it forces PLASTICITY_AUTO_LAUNCH=0 and PLASTICITY_HUD=0) and refuses to start without the variable.
 Live mode takes a baseline, then builds disposable geometry at x >= 1990 mm and checks, by reading
 bounds, topology and measurements back through plasticity_status and plasticity_list_measurements:
   - plasticity_extend_sheet_edges: shape linear, soft, natural and reflective, merge=false, targetId.
-  - plasticity_sweep_curves: open arc, closed circle, guide rail, twistDegrees and scale.
+  - plasticity_sweep_curves: open arc, closed circle, arc plus circle on one spine (two Sheets), guide rail, twistDegrees and scale.
   - plasticity_sweep_regions with a guide rail.
-  - plasticity_move_measurement_label: two offsets, the measurement name survives.
+  - plasticity_move_measurement_label: X-, Y- and Z-direction measurements, two offsets each within 0.01 mm, the measurement name survives.
 It undoes back to the baseline Undo depth and body count and never saves the document.
 Run it only against an isolated Plasticity instance.`;
 
@@ -60,12 +62,14 @@ async function main(): Promise<void> {
   const options = parseExtendSweepLabelArgs(process.argv.slice(2));
   if (options.help) { console.log(HELP); return; }
   const output = resolve(options.output!);
+  if (!process.env.PLASTICITY_CDP_URL) throw new Error("PLASTICITY_CDP_URL is mandatory and must name the isolated Plasticity instance; nothing was created");
   await mkdir(output, { mode: 0o700 });
   const evidence: Record<string, unknown> = { schemaVersion: 1, startedAt: new Date().toISOString(), targetId: options.target! };
+  const serverStderr: string[] = [];
   let live: LiveMcp | undefined;
   let baseline: any;
   try {
-    live = await startMcp();
+    live = await startMcp(serverStderr);
     const client = live.client;
     const windows = await call(client, "plasticity_list_windows", {});
     requireCondition(windows.some((window: { targetId: string }) => window.targetId === options.target), "Explicit Plasticity target was not found");
@@ -73,6 +77,7 @@ async function main(): Promise<void> {
     baseline = await status(client);
     evidence.baseline = summary(baseline);
     const baselineMeasurements = (await call(client, "plasticity_list_measurements", {})).measurements.length;
+    baseline.measurementCount = baselineMeasurements;
     const known = new Set<number>(baseline.bodies.map((body: { id: number }) => body.id));
     const checks: Record<string, unknown> = {};
 
@@ -177,6 +182,19 @@ async function main(): Promise<void> {
     requireCondition(openArc.faces === 1 && openArc.edges === 4 && openArc.vertices === 4, `Open arc sweep must be 1F/4E/4V, got ${openArc.faces}F/${openArc.edges}E/${openArc.vertices}V`);
     const closedCircle = await sweepVariant("closed_circle", "plasticity_sweep_curves", { profileIds: [circle.id], spineId: spine.id }, "Sheet");
     requireBounds(closedCircle.boundsMm, [1995, -5, 0], [2005, 5, 60], "Closed circle sweep bounds");
+    // Several profiles on one spine: live probe (2026-11) showed one Sheet per profile from a single command.
+    {
+      const before = await status(client);
+      await call(client, "plasticity_sweep_curves", { profileIds: [arc.id, circle.id], spineId: spine.id, revision: before.revision });
+      const after = await status(client);
+      const sheets = after.bodies.filter((body: any) => !known.has(body.id));
+      requireCondition(sheets.length === 2 && sheets.every((body: any) => body.type === "Sheet"), `Multi-profile sweep: expected two new Sheets, got ${sheets.map((body: any) => body.type).join(",")}`);
+      requireCondition(after.undoDepth === sweepCheckpoint + 1, "The multi-profile sweep must add exactly one Undo entry");
+      const widths = sheets.map((body: any) => Math.round(body.boundsMm.max[0] - body.boundsMm.min[0])).sort((left: number, right: number) => left - right);
+      requireCondition(widths[0] === 10 && widths[1] === 20, `Multi-profile sweep widths must be 10 (circle) and 20 (arc), got ${widths}`);
+      checks.sweep_multi_profile = sheets.map((body: any) => ({ type: body.type, boundsMm: body.boundsMm, faces: body.faceCount }));
+      await undoTo(sweepCheckpoint);
+    }
     const regionPlain = await sweepVariant("region_no_guide", "plasticity_sweep_regions", { regionIds: [circleRegion.id], spineId: spine.id }, "Solid");
     requireNear(regionPlain.boundsMm.max[0], 2005, "Region sweep max x without a guide");
     const regionRail = await sweepVariant("region_rail", "plasticity_sweep_regions", { regionIds: [circleRegion.id], spineId: spine.id, guideIds: [rail.id], guideMethod: "curve" }, "Solid");
@@ -222,8 +240,8 @@ async function main(): Promise<void> {
       const moved = (await call(client, "plasticity_list_measurements", {})).measurements.find((measurement: { id: number }) => measurement.id === created.id);
       requireCondition(moved, `The measurement disappeared after moving its label to ${offset}`);
       requireCondition(moved.name === measurementName, `The measurement lost its name after moving its label to ${offset}`);
-      requireNear(moved.offsetMm[0], offset[0], `Label along offset ${offset}`);
-      requireNear(moved.offsetMm[1], offset[1], `Label perpendicular offset ${offset}`);
+      requireNear(moved.offsetMm[0], offset[0], `Label along offset ${offset}`, 0.01);
+      requireNear(moved.offsetMm[1], offset[1], `Label perpendicular offset ${offset}`, 0.01);
       requireCondition(moved.versionId > previousVersion, "The measurement version did not advance");
       previousVersion = moved.versionId;
       moves.push({ requested: offset, offsetMm: moved.offsetMm, name: moved.name, versionId: moved.versionId });
@@ -240,6 +258,27 @@ async function main(): Promise<void> {
     requireNear(movedDiagonal.offsetMm[1], 4, "Diagonal label perpendicular offset");
     requireCondition(movedDiagonal.name === "label-move-diagonal", "The diagonal measurement lost its name");
     checks.label_diagonal = { direction: movedDiagonal.direction, normal: movedDiagonal.normal, offsetMm: movedDiagonal.offsetMm, name: movedDiagonal.name };
+    // Y- and Z-direction measurements: the label offset must round-trip on every axis the dimension can lie along.
+    const axisChecks: Record<string, unknown> = {};
+    for (const [axisName, endpoint] of [["y", [2800, 10, 0]], ["z", [2800, 0, 5]]] as Array<[string, number[]]>) {
+      const endVertex = vertexAt(endpoint[0]!, endpoint[1]!, endpoint[2]!);
+      requireCondition(endVertex, `The ${axisName} measurement end vertex was not found`);
+      const axisMeasurementName = `label-move-${axisName}`;
+      await mutate("plasticity_create_vertex_distance_measurement", { first: { bodyId: labelBox.id, vertexId: v0.id }, second: { bodyId: labelBox.id, vertexId: endVertex.id }, name: axisMeasurementName });
+      const axisMeasurement = await findMeasurement(axisMeasurementName);
+      requireCondition(axisMeasurement, `The ${axisName} measurement was not created`);
+      const axisMoves: unknown[] = [];
+      for (const offset of [[0, 5], [3, 4]] as Array<[number, number]>) {
+        await mutate("plasticity_move_measurement_label", { id: axisMeasurement.id, offsetMm: offset });
+        const movedAxis = (await call(client, "plasticity_list_measurements", {})).measurements.find((measurement: { id: number }) => measurement.id === axisMeasurement.id);
+        requireCondition(movedAxis && movedAxis.name === axisMeasurementName, `The ${axisName} measurement lost its name after the label move`);
+        requireNear(movedAxis.offsetMm[0], offset[0], `${axisName}-direction label along offset ${offset}`, 0.01);
+        requireNear(movedAxis.offsetMm[1], offset[1], `${axisName}-direction label perpendicular offset ${offset}`, 0.01);
+        axisMoves.push({ requested: offset, offsetMm: movedAxis.offsetMm, direction: movedAxis.direction, normal: movedAxis.normal });
+      }
+      axisChecks[axisName] = axisMoves;
+    }
+    checks.label_axes = axisChecks;
     await rejects("plasticity_move_measurement_label", { id: 999999, offsetMm: [0, 0] }, /unknown/i, "unknown measurement");
 
     // ---- restore the baseline
@@ -257,25 +296,28 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({ ok: true, output, baseline: evidence.baseline, restored: evidence.restored, checks }, null, 2));
   } catch (error) {
     evidence.failure = boundedError(error);
-    if (live && baseline) evidence.cleanup = await recover(live.client, baseline).catch((cleanupError) => ({ restored: false, reason: boundedError(cleanupError) }));
-    await writeExclusive(join(output, "failure.json"), evidence).catch(() => {});
     throw error;
   } finally {
+    // Recovery runs on every exit path; after a clean run it finds the baseline and does nothing.
+    if (live && baseline) evidence.cleanup = await recover(live.client, baseline).catch((cleanupError) => ({ restored: false, reason: boundedError(cleanupError) }));
+    if (evidence.failure !== undefined) {
+      evidence.serverStderr = serverStderr.join("").slice(-8192);
+      await writeExclusive(join(output, "failure.json"), evidence).catch(() => {});
+    }
     await live?.client.close().catch(() => {});
   }
 }
 
-async function startMcp(): Promise<LiveMcp> {
+async function startMcp(stderr: string[]): Promise<LiveMcp> {
   const endpoint = process.env.PLASTICITY_CDP_URL;
   if (!endpoint) throw new Error("PLASTICITY_CDP_URL must name the isolated Plasticity instance");
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [join(projectRoot, "scripts", "run-server.ts")],
     cwd: projectRoot,
-    env: selectedEnvironment(process.env),
+    env: { ...selectedEnvironment(process.env), PLASTICITY_CDP_URL: endpoint, PLASTICITY_AUTO_LAUNCH: "0", PLASTICITY_HUD: "0" },
     stderr: "pipe",
   });
-  const stderr: string[] = [];
   transport.stderr?.on("data", (chunk) => { stderr.push(String(chunk).slice(-4096)); while (stderr.join("").length > 16384) stderr.shift(); });
   const client = new Client({ name: "plasticity-extend-sweep-label-live", version: "1.0.0" });
   await client.connect(transport);
@@ -306,7 +348,10 @@ async function recover(client: Client, initial: any): Promise<Record<string, unk
   for (let count = 0; count < 24; count += 1) {
     const current = await status(client);
     if (current.documentToken !== initial.documentToken) return { restored: false, reason: "document-changed" };
-    if (current.undoDepth <= initial.undoDepth) return { restored: current.bodies.length === initial.bodies.length };
+    if (current.undoDepth <= initial.undoDepth) {
+      const measurementCount = (await call(client, "plasticity_list_measurements", {})).measurements.length;
+      return { restored: current.bodies.length === initial.bodies.length && (initial.measurementCount === undefined || measurementCount === initial.measurementCount), bodyCount: current.bodies.length, measurementCount };
+    }
     await call(client, "plasticity_undo", { intent: "Recover extend/sweep/label acceptance", revision: current.revision });
   }
   return { restored: false, reason: "undo-limit" };

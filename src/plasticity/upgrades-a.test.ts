@@ -316,3 +316,73 @@ test("rejects invalid moveMeasurementLabel inputs before mutation", async () => 
   await assert.rejects(ops.moveMeasurementLabel(1, [0, 0], "stale"), /stale reference/i);
   assert.equal(f.calls.length, 0);
 });
+
+test("moveMeasurementLabel offsets round-trip on a Z-direction measurement", async () => {
+  const f = fixture();
+  const measurement = f.state.measurements![0]!;
+  measurement.first!.positionMm = [2800, 0, 0];
+  measurement.second!.positionMm = [2800, 0, 5];
+  measurement.direction = [0, 0, 1];
+  measurement.normal = [1, 0, 0];
+  await f.operations.moveMeasurementLabel(1, [0, 5], "r1");
+  // across = normal x direction = (1,0,0) x (0,0,1) = (0,-1,0)
+  close(f.created[0]!.offset.value, [2.8, -0.005, 0]);
+  const second = fixture();
+  const other = second.state.measurements![0]!;
+  other.second!.positionMm = [2800, 0, 5];
+  other.direction = [0, 0, 1];
+  other.normal = [1, 0, 0];
+  await second.operations.moveMeasurementLabel(1, [3, 4], "r1");
+  close(second.created[0]!.offset.value, [2.8, -0.004, 0.003]);
+});
+
+// A Plasticity build without an enum member must fail with a named error, not hand undefined to the factory.
+async function withoutEnumMember(enumName: string, member: string, run: () => Promise<void>): Promise<void> {
+  const original = ENUMS[enumName]![member]!;
+  delete ENUMS[enumName]![member];
+  try { await run(); } finally { ENUMS[enumName]![member] = original; }
+}
+
+test("a missing SweepGuideMethod member throws a clear native error before any guide is assigned", async () => {
+  await withoutEnumMember("SweepGuideMethod", "Curve", async () => {
+    const curves = fixture();
+    await assert.rejects(curves.operations.sweepCurves([7], 8, { guideIds: [9], guideMethod: "curve" }, "r1"), /Plasticity build has no SweepGuideMethod\.Curve/);
+    assert.equal(curves.created.length, 0, "the factory is never committed");
+    const regions = fixture();
+    await assert.rejects(regions.operations.sweepRegions(["12r34"], 8, { guideIds: [9], guideMethod: "curve" }, "r1"), /Plasticity build has no SweepGuideMethod\.Curve/);
+    assert.equal(regions.created.length, 0);
+    // Other members of the same enum and the no-method path still work.
+    const chord = fixture();
+    await chord.operations.sweepCurves([7], 8, { guideIds: [9], guideMethod: "chord" }, "r1");
+    assert.equal(chord.created[0]!.guideMethod, ENUMS.SweepGuideMethod!.Chord);
+  });
+});
+
+test("a missing ExtensionShape member throws a clear native error", async () => {
+  await withoutEnumMember("ExtensionShape", "Soft", async () => {
+    const f = fixture();
+    await assert.rejects(f.operations.extendSheetEdges(5, ["e1"], 10, "r1", { shape: "soft" }), /Plasticity build has no ExtensionShape\.Soft/);
+    assert.equal(f.created.length, 0);
+  });
+  await withoutEnumMember("ExtensionShape", "Linear", async () => {
+    // The default shape is looked up by name too.
+    const f = fixture();
+    await assert.rejects(f.operations.extendSheetEdges(5, ["e1"], 10, "r1"), /Plasticity build has no ExtensionShape\.Linear/);
+  });
+});
+
+test("a missing BodyExtensionType or ExtensionLimit member throws a clear native error", async () => {
+  await withoutEnumMember("BodyExtensionType", "Target", async () => {
+    const f = fixture();
+    await assert.rejects(f.operations.extendSheetEdges(5, ["e1"], undefined, "r1", { targetId: 10 }), /Plasticity build has no BodyExtensionType\.Target/);
+    // Distance extensions do not need the Target member.
+    await f.operations.extendSheetEdges(5, ["e1"], 10, "r1");
+    assert.equal(f.created[0]!.type, ENUMS.BodyExtensionType!.Distance);
+  });
+  await withoutEnumMember("BodyExtensionType", "Distance", async () => {
+    await assert.rejects(fixture().operations.extendSheetEdges(5, ["e1"], 10, "r1"), /Plasticity build has no BodyExtensionType\.Distance/);
+  });
+  await withoutEnumMember("ExtensionLimit", "Minimal", async () => {
+    await assert.rejects(fixture().operations.extendSheetEdges(5, ["e1"], 10, "r1"), /Plasticity build has no ExtensionLimit\.Minimal/);
+  });
+});
