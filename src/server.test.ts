@@ -6340,3 +6340,154 @@ test("the new sweep and label tools are reachable through plasticity_call and wo
   assert.deepEqual(calls[2]?.args, [1, [3, 4], "r3"], "the second step takes the revision the first step left");
   await close();
 });
+
+test("MCP registers each Upgrades B tool once with strict schemas and only the exposed inputs", async () => {
+  await withOperationsClient({}, async (client) => {
+    const tools = (await client.listTools()).tools;
+    const names = ["plasticity_xsided_patch", "plasticity_convert_reference_mesh_to_polysplines", "plasticity_show_face_control_points", "plasticity_move_face_control_points"];
+    for (const name of names) {
+      assert.equal(tools.filter((entry) => entry.name === name).length, 1, name);
+      const schema = tools.find((entry) => entry.name === name)?.inputSchema as { additionalProperties?: unknown };
+      assert.equal(schema.additionalProperties, false, `${name} rejects unknown keys`);
+    }
+    const properties = (name: string) => Object.keys((tools.find((entry) => entry.name === name)?.inputSchema as { properties?: Record<string, unknown> }).properties ?? {}).sort();
+    assert.deepEqual(properties("plasticity_xsided_patch"), ["continuity", "curveIds", "edges", "guideIds", "intent", "revision"]);
+    assert.deepEqual(properties("plasticity_convert_reference_mesh_to_polysplines"), ["intent", "interpolateBoundary", "mergePatches", "referenceMeshId", "revision"]);
+    assert.deepEqual(properties("plasticity_show_face_control_points"), ["bodyId", "faceIds", "intent", "revision"]);
+    assert.deepEqual(properties("plasticity_move_face_control_points"), ["bodyId", "cvIds", "deltaMm", "intent", "revision"]);
+    const xsided = tools.find((entry) => entry.name === "plasticity_xsided_patch")?.description ?? "";
+    assert.match(xsided, /plasticity_patch_closed_wires/);
+    assert.match(xsided, /plasticity_create_constrained_surface/);
+    assert.match(tools.find((entry) => entry.name === "plasticity_convert_reference_mesh_to_polysplines")?.description ?? "", /consumed/);
+    assert.match(tools.find((entry) => entry.name === "plasticity_show_face_control_points")?.description ?? "", /history step/);
+  });
+});
+
+test("MCP forwards plasticity_xsided_patch and requires exactly one boundary", async () => {
+  let received: unknown[] | undefined;
+  await withOperationsClient({
+    async xsidedPatch(...args: unknown[]) { received = args; return emptyState(); },
+    async state() { return emptyState(); },
+  }, async (client) => {
+    const curves = await client.callTool({ name: "plasticity_xsided_patch", arguments: { curveIds: [7, 8, 9, 11], guideIds: [13], revision: "r1" } });
+    assert.equal(curves.isError, undefined, JSON.stringify(curves.content));
+    assert.deepEqual(received, [{ curveIds: [7, 8, 9, 11], edges: undefined, guideIds: [13], continuity: undefined }, "r1"]);
+    const edges = await client.callTool({ name: "plasticity_xsided_patch", arguments: { edges: { bodyId: 5, edgeIds: ["e1", "e2"] }, continuity: "g1", revision: "r1" } });
+    assert.equal(edges.isError, undefined, JSON.stringify(edges.content));
+    assert.deepEqual(received, [{ curveIds: undefined, edges: { bodyId: 5, edgeIds: ["e1", "e2"] }, guideIds: undefined, continuity: "g1" }, "r1"]);
+    received = undefined;
+    for (const bad of [
+      {},
+      { curveIds: [7, 8, 9], edges: { bodyId: 5, edgeIds: ["e1"] } },
+      { guideIds: [13] },
+      { curveIds: [7, 8] },
+      { curveIds: [7, 7, 8] },
+      { curveIds: [7, 8, 9], continuity: "g1" },
+      { edges: { bodyId: 5, edgeIds: ["e1"] }, continuity: "g3" },
+      { edges: { bodyId: 5, edgeIds: [] } },
+      { edges: { bodyId: 5, edgeIds: ["e1"], edgeContinuity: [] } },
+      { curveIds: [7, 8, 9], uDegree: 3 },
+      { curveIds: [7, 8, 9], controlType: "explicit" },
+    ]) {
+      const response = await client.callTool({ name: "plasticity_xsided_patch", arguments: { revision: "r1", ...bad } });
+      assert.equal(response.isError, true, JSON.stringify(bad));
+    }
+    assert.equal(received, undefined, "a rejected call must not reach the operation");
+  });
+});
+
+test("MCP forwards plasticity_convert_reference_mesh_to_polysplines with mergePatches defaulting to true", async () => {
+  let received: unknown[] | undefined;
+  await withOperationsClient({
+    async convertReferenceMeshToPolySplines(...args: unknown[]) { received = args; return emptyState(); },
+    async state() { return emptyState(); },
+  }, async (client) => {
+    const plain = await client.callTool({ name: "plasticity_convert_reference_mesh_to_polysplines", arguments: { referenceMeshId: 0, revision: "r1" } });
+    assert.equal(plain.isError, undefined, JSON.stringify(plain.content));
+    assert.deepEqual(received, [0, { mergePatches: true, interpolateBoundary: undefined }, "r1"]);
+    const full = await client.callTool({ name: "plasticity_convert_reference_mesh_to_polysplines", arguments: { referenceMeshId: 3, mergePatches: false, interpolateBoundary: true, revision: "r1" } });
+    assert.equal(full.isError, undefined, JSON.stringify(full.content));
+    assert.deepEqual(received, [3, { mergePatches: false, interpolateBoundary: true }, "r1"]);
+    received = undefined;
+    for (const bad of [{}, { referenceMeshId: -1 }, { referenceMeshId: 1.5 }, { referenceMeshId: 3, roundedCorners: true }, { referenceMeshId: 3, mergePatches: "yes" }]) {
+      const response = await client.callTool({ name: "plasticity_convert_reference_mesh_to_polysplines", arguments: { revision: "r1", ...bad } });
+      assert.equal(response.isError, true, JSON.stringify(bad));
+    }
+    assert.equal(received, undefined);
+  });
+});
+
+test("MCP returns the face control points next to the state from show and move", async () => {
+  let shown: unknown[] | undefined;
+  let moved: unknown[] | undefined;
+  const points = [{ cvId: 2, positionMm: [2913.333, 0, 13.333] }, { cvId: 3, positionMm: [2913.333, 20, 13.333] }];
+  await withOperationsClient({
+    async showFaceControlPoints(...args: unknown[]) { shown = args; return { state: emptyState(), controlPoints: points }; },
+    async moveFaceControlPoints(...args: unknown[]) { moved = args; return { state: emptyState(), controlPoints: points.map((point) => ({ ...point, positionMm: [point.positionMm[0], point.positionMm[1], point.positionMm[2]! + 10] })) }; },
+    async state() { return emptyState(); },
+  }, async (client) => {
+    const show = await client.callTool({ name: "plasticity_show_face_control_points", arguments: { bodyId: 5, faceIds: ["f1"], revision: "r1" } });
+    assert.equal(show.isError, undefined, JSON.stringify(show.content));
+    assert.deepEqual(shown, [5, ["f1"], "r1"]);
+    const shownJson = parseToolJson(show);
+    assert.deepEqual(shownJson.controlPoints, points);
+    assert.equal(typeof shownJson.revision, "string", "the state fields stay next to controlPoints");
+    const move = await client.callTool({ name: "plasticity_move_face_control_points", arguments: { bodyId: 5, cvIds: [2, 3], deltaMm: [0, 0, 10], revision: "r1" } });
+    assert.equal(move.isError, undefined, JSON.stringify(move.content));
+    assert.deepEqual(moved, [5, [2, 3], [0, 0, 10], "r1"]);
+    assert.deepEqual((parseToolJson(move).controlPoints as Array<{ positionMm: number[] }>).map((point) => point.positionMm[2]), [23.333, 23.333]);
+    shown = undefined;
+    moved = undefined;
+    for (const bad of [{ faceIds: [] }, { faceIds: ["f1", "f1"] }, { faceIds: ["f1"], hide: true }, { bodyId: 0 }]) {
+      const response = await client.callTool({ name: "plasticity_show_face_control_points", arguments: { bodyId: 5, faceIds: ["f1"], revision: "r1", ...bad } });
+      assert.equal(response.isError, true, JSON.stringify(bad));
+    }
+    for (const bad of [{ cvIds: [] }, { cvIds: [1, 1] }, { cvIds: [-1] }, { deltaMm: [0, 0, 0] }, { deltaMm: [1, 2] }, { faceId: "f1" }]) {
+      const response = await client.callTool({ name: "plasticity_move_face_control_points", arguments: { bodyId: 5, cvIds: [2], deltaMm: [0, 0, 10], revision: "r1", ...bad } });
+      assert.equal(response.isError, true, JSON.stringify(bad));
+    }
+    assert.equal(shown, undefined);
+    assert.equal(moved, undefined);
+  });
+});
+
+test("the Upgrades B tools are reachable through plasticity_call and work as batch steps with revision auto-fill", async () => {
+  let state: RuntimeState = emptyState();
+  const calls: Array<{ op: string; args: unknown[] }> = [];
+  const advance = (revision: string) => { state = { ...state, revision, undoDepth: state.undoDepth + 1 }; return state; };
+  const operations = {
+    async state() { return state; },
+    async xsidedPatch(...args: unknown[]) { calls.push({ op: "xsidedPatch", args }); return advance(`r${calls.length + 1}`); },
+    async convertReferenceMeshToPolySplines(...args: unknown[]) { calls.push({ op: "convertReferenceMeshToPolySplines", args }); return advance(`r${calls.length + 1}`); },
+    async showFaceControlPoints(...args: unknown[]) { calls.push({ op: "showFaceControlPoints", args }); return { state: advance(`r${calls.length + 1}`), controlPoints: [{ cvId: 0, positionMm: [0, 0, 0] }] }; },
+    async moveFaceControlPoints(...args: unknown[]) { calls.push({ op: "moveFaceControlPoints", args }); return { state: advance(`r${calls.length + 1}`), controlPoints: [{ cvId: 0, positionMm: [0, 0, 10] }] }; },
+  } as unknown as PlasticityOperations;
+  const fake = {
+    async windows() { return []; }, async connect() { return state; }, get() { return operations; },
+    capabilities() { return { bindings: [], operations: unavailableConstruction() }; },
+    async captureSnapshot() { return {}; }, async changesSince() { return {}; }, async waitForChange() { return {}; },
+  } satisfies SessionLike;
+  const { client, close } = await batchClient(fake);
+  const direct = await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_xsided_patch", arguments: { curveIds: [7, 8, 9], revision: "r1" } } });
+  assert.equal(direct.isError, undefined, JSON.stringify(direct.content));
+  assert.deepEqual(calls[0], { op: "xsidedPatch", args: [{ curveIds: [7, 8, 9], edges: undefined, guideIds: undefined, continuity: undefined }, "r1"] });
+  const viaCall = await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_show_face_control_points", arguments: { bodyId: 5, faceIds: ["f1"], revision: "r2" } } });
+  assert.equal(viaCall.isError, undefined, JSON.stringify(viaCall.content));
+  assert.deepEqual(parseToolJson(viaCall).controlPoints, [{ cvId: 0, positionMm: [0, 0, 0] }]);
+
+  const before = calls.length;
+  const batch = await client.callTool({ name: "plasticity_batch", arguments: { steps: [
+    { toolName: "plasticity_convert_reference_mesh_to_polysplines", arguments: { referenceMeshId: 3 } },
+    { toolName: "plasticity_show_face_control_points", arguments: { bodyId: 5, faceIds: ["f1"] } },
+    { toolName: "plasticity_move_face_control_points", arguments: { bodyId: 5, cvIds: [0], deltaMm: [0, 0, 10] } },
+    { toolName: "plasticity_xsided_patch", arguments: { edges: { bodyId: 5, edgeIds: ["e1"] }, continuity: "g1" } },
+  ] } });
+  assert.equal(batch.isError, undefined, JSON.stringify(batch.content));
+  const stepCalls = calls.slice(before);
+  assert.deepEqual(stepCalls.map((entry) => entry.op), ["convertReferenceMeshToPolySplines", "showFaceControlPoints", "moveFaceControlPoints", "xsidedPatch"]);
+  const revisionOf = (entry: { op: string; args: unknown[] }) => entry.args[entry.args.length - 1];
+  const expected = ["r3", "r4", "r5", "r6"];
+  assert.deepEqual(stepCalls.map(revisionOf), expected, "each step takes the revision the previous step left");
+  assert.deepEqual(stepCalls[0]!.args, [3, { mergePatches: true, interpolateBoundary: undefined }, "r3"]);
+  await close();
+});

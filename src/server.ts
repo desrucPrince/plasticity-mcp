@@ -3551,6 +3551,35 @@ function createServerWithCatalog(
     revision,
   }).strict(), async ({ points, deltaMm, intent: purpose, revision: current }) =>
     await journaled("move-curve-control-points", purpose, { points, deltaMm }, () => session.get().moveCurveControlPoints(points, deltaMm, current)));
+  tool("plasticity_show_face_control_points", "Show the control points (B-Surface CVs) of Sheet or Solid faces and return each as { cvId, positionMm }. This is a Plasticity history step, so it occupies one Undo entry. Use it before plasticity_move_face_control_points, which only accepts the returned cvId values; they stay valid until the body is edited again. Positions are millimeters. Unlike plasticity_list_curve_control_points, this reads face (surface) points, not Wire handles.", z.object({
+    bodyId: z.number().int().positive(),
+    faceIds: z.array(z.string().min(1)).min(1).max(256).refine((values) => new Set(values).size === values.length, "Face IDs must be unique"),
+    intent,
+    revision,
+  }).strict(), async ({ bodyId, faceIds, intent: purpose, revision: current }) => {
+    let controlPoints: unknown;
+    const result = await journaled("show-face-control-points", purpose, { bodyId, faceIds }, async () => {
+      const shown = await session.get().showFaceControlPoints(bodyId, faceIds, current);
+      controlPoints = shown.controlPoints;
+      return shown.state;
+    });
+    return { ...(result as unknown as Record<string, unknown>), controlPoints };
+  }, false, { destructiveHint: false });
+  tool("plasticity_move_face_control_points", "Move shown face control points by a shared world-space millimeter delta in one Plasticity history step and return their new positions. cvIds must come from plasticity_show_face_control_points on the same body at the current state; unknown IDs are rejected and ask for that call first. Re-read exact B-Rep geometry afterward.", z.object({
+    bodyId: z.number().int().positive(),
+    cvIds: z.array(z.number().int().nonnegative()).min(1).max(4096).refine((values) => new Set(values).size === values.length, "Control point IDs must be unique"),
+    deltaMm: vector.refine((value) => Math.hypot(...value) > 0, "Face control point move delta must be nonzero"),
+    intent,
+    revision,
+  }).strict(), async ({ bodyId, cvIds, deltaMm, intent: purpose, revision: current }) => {
+    let controlPoints: unknown;
+    const result = await journaled("move-face-control-points", purpose, { bodyId, cvIds, deltaMm }, async () => {
+      const moved = await session.get().moveFaceControlPoints(bodyId, cvIds, deltaMm, current);
+      controlPoints = moved.controlPoints;
+      return moved.state;
+    });
+    return { ...(result as unknown as Record<string, unknown>), controlPoints };
+  });
   tool("plasticity_slide_curve_control_points", "Slide one or more exact current Wire handles by a positive millimeter distance along each handle's local positive-U or negative-U control-polygon direction. Use the unit directions returned by plasticity_list_curve_control_points to predict the world-space result. All handles share one direction sense and distance, and the edit occupies one Plasticity history step. Re-read handles and exact B-Rep geometry afterward.", z.object({
     points: curveControlPointRefs,
     direction: z.enum(["positive-u", "negative-u"]),
@@ -3733,6 +3762,25 @@ function createServerWithCatalog(
     await journaled("patch-regions", purpose, { regionIds: selectedRegions }, () => session.get().patchRegions(selectedRegions, current)));
   tool("plasticity_patch_closed_wires", "Create independent native Sheet patches from current closed Wire bodies while preserving every source Wire. Unlike planar Region patching, this accepts nonplanar closed boundaries and can create B-Surfaces. Re-read exact boundaries, surface structure, area, and native validity; the native fill is not a constrained engineering surface unless those properties are separately verified.", z.object({ ids: uniqueBodyIds, intent, revision }).strict(), async ({ ids: wireIds, intent: purpose, revision: current }) =>
     await journaled("patch-closed-wires", purpose, { wireIds }, () => session.get().patchClosedWires(wireIds, current)), false, { destructiveHint: false });
+  tool("plasticity_xsided_patch", "Fill an N-sided boundary with one new native Sheet, from 3 or more boundary Wires (curveIds) or from boundary edges of one Sheet or Solid (edges), optionally pulled toward interior Wire guideIds. Unlike plasticity_patch_closed_wires, which fills each closed Wire alone, this joins several open Wires into one patch and can match the neighbouring surface: continuity g0 (default, flat), g1 or g2 applies to edge boundaries only. Unlike plasticity_create_constrained_surface, the boundary is exact geometry, not points and normals. Source Wires and Sheet stay. Check the result by type and face and edge counts, because reported bounds can overshoot the boundary.", z.object({
+    curveIds: z.array(z.number().int().positive()).min(3).max(64).refine((values) => new Set(values).size === values.length, "Boundary curve IDs must be unique").optional(),
+    edges: z.object({
+      bodyId: z.number().int().positive(),
+      edgeIds: z.array(z.string().min(1)).min(1).max(256).refine((values) => new Set(values).size === values.length, "Boundary edge IDs must be unique"),
+    }).strict().optional(),
+    guideIds: z.array(z.number().int().positive()).min(1).max(64).refine((values) => new Set(values).size === values.length, "Guide curve IDs must be unique").optional(),
+    continuity: z.enum(["g0", "g1", "g2"]).optional(),
+    intent,
+    revision,
+  }).strict().superRefine((input, context) => {
+    if ((input.curveIds === undefined) === (input.edges === undefined)) {
+      context.addIssue({ code: "custom", path: ["curveIds"], message: "Give exactly one of curveIds and edges" });
+    }
+    if (input.continuity !== undefined && input.edges === undefined) {
+      context.addIssue({ code: "custom", path: ["continuity"], message: "continuity applies to edges only" });
+    }
+  }), async ({ curveIds, edges, guideIds, continuity, intent: purpose, revision: current }) =>
+    await journaled("xsided-patch", purpose, { curveIds, edges, guideIds, continuity }, () => session.get().xsidedPatch({ curveIds, edges, guideIds, continuity }, current)), false, { destructiveHint: false });
   tool("plasticity_bridge_surface", "Create a native G2 transition surface between boundary sides of two Sheet faces. Pick points and width are millimeters; each pick point must lie on the intended boundary edge.", z.object({
     first: faceRef.extend({ pickPointMm: vector }).strict(),
     second: faceRef.extend({ pickPointMm: vector }).strict(),
@@ -4184,6 +4232,15 @@ function createServerWithCatalog(
     revision,
   }).strict(), async ({ path, sourceUnit, intent: purpose, revision: current }) =>
     await journaled("import-reference-mesh", purpose, { path, sourceUnit }, () => session.get().importReferenceMesh(path, sourceUnit, current)));
+  tool("plasticity_convert_reference_mesh_to_polysplines", "Convert one quad-dominant reference mesh into a native PolySplines Solid or Sheet. The reference mesh is consumed (it disappears from plasticity_list_reference_meshes). The result is the smooth subdivision-limit surface of the mesh, not its exact corners: a 10 mm quad cube becomes about 8.4 mm and rounded. mergePatches (default true) merges patches into fewer faces; interpolateBoundary pins open boundaries to the mesh. Import the mesh with plasticity_import_reference_mesh first.", z.object({
+    referenceMeshId: z.number().int().nonnegative(),
+    mergePatches: z.boolean().default(true),
+    interpolateBoundary: z.boolean().optional(),
+    intent,
+    revision,
+  }).strict(), async ({ referenceMeshId, mergePatches, interpolateBoundary, intent: purpose, revision: current }) =>
+    await journaled("convert-reference-mesh-to-polysplines", purpose, { referenceMeshId, mergePatches, interpolateBoundary }, () =>
+      session.get().convertReferenceMeshToPolySplines(referenceMeshId, { mergePatches, interpolateBoundary }, current)), false, { destructiveHint: false });
   tool("plasticity_import_reference_3mf", "Import a local 3MF as approximate reference mesh geometry through Plasticity's native importer. The file's embedded unit determines scale; read the returned mesh bounds and keep them distinct from exact native B-rep dimensions. The server stores the artifact hash, import-time document/revision, mesh IDs, bounds and topology counts in the persistent CAD reference-import registry; optional source URLs are redacted and retain license and confidence. Read the historical record with plasticity_get_cad_reference_import.", z.object({
     path: z.string().min(1),
     source: importedReferenceSourceSchema.optional(),

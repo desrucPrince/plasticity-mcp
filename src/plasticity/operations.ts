@@ -437,6 +437,23 @@ export type SheetExtensionShape = keyof typeof SHEET_EXTENSION_SHAPES;
 export const SWEEP_GUIDE_METHODS = { point: "Point", chord: "Chord", curve: "Curve" } as const;
 export type SweepGuideMethodName = keyof typeof SWEEP_GUIDE_METHODS;
 
+// ContinuityType members the MCP exposes for X-sided patch boundary edges (FINDINGS gap 2); resolved by name
+// from the bound enum. G1/G2 bulge the patch off the rim and G0 stays flat. C1-C3, G3 and Free stay out.
+export const XSIDED_CONTINUITY = { g0: "G0", g1: "G1", g2: "G2" } as const;
+export type XSidedContinuity = keyof typeof XSIDED_CONTINUITY;
+
+export interface FaceControlPoint {
+  cvId: number;
+  positionMm: Vector3;
+}
+
+// Native face control points are float32; rounding to a micrometre hides the float noise.
+const FACE_CONTROL_POINT_READ = `const view = find(args.bodyId);
+  return Array.from(view.high?.cvs ?? []).map(cv => ({
+    cvId: Number(cv.id),
+    positionMm: [cv.position.x, cv.position.y, cv.position.z].map(value => Math.round(value * 1000 * 1000) / 1000),
+  }));`;
+
 // Guide rails for a sweep (FINDINGS gap 1): Wire guides plus an optional SweepGuideMethod resolved by name.
 const sweepGuides = `
       if (args.guideIds !== undefined) {
@@ -7133,6 +7150,169 @@ export class PlasticityOperations {
       if (failure) throw failure;
     }`, ["PatchHoleInWireFactory", "PatchHoleInCurveCommand"], [{ ids }]);
     return await this.state();
+  }
+
+  // X-sided patch (FINDINGS gaps 2 and 6). PatchCommand drives XSidedFactory for boundary curves or edges; with
+  // interior guide curves XNurbsCommand drives the same factory. The source Wires and Sheet stay.
+  async xsidedPatch(
+    input: {
+      curveIds?: number[] | undefined;
+      edges?: { bodyId: number; edgeIds: string[] } | undefined;
+      guideIds?: number[] | undefined;
+      continuity?: XSidedContinuity | undefined;
+    },
+    revision: string,
+  ): Promise<RuntimeState> {
+    const state = await this.assertRevision(revision);
+    const { curveIds, edges, guideIds, continuity } = input;
+    if (curveIds === undefined && edges === undefined) {
+      throw new Error(guideIds?.length ? "X-sided patch guides need a boundary: give curveIds or edges" : "X-sided patch requires exactly one of curveIds and edges");
+    }
+    if (curveIds !== undefined && edges !== undefined) throw new Error("X-sided patch requires exactly one of curveIds and edges, not both");
+    const wires = new Set(state.bodies.filter((body) => body.type === "Wire").map((body) => body.id));
+    if (curveIds !== undefined) {
+      if (curveIds.length < 3 || new Set(curveIds).size !== curveIds.length) throw new Error("X-sided patch curveIds must be a unique list of at least 3 Wire IDs");
+      const invalid = curveIds.filter((id) => !wires.has(id));
+      if (invalid.length > 0) throw new Error(`X-sided patch boundary curves must be current Wire IDs: ${invalid.join(", ")}`);
+      if (continuity !== undefined) throw new Error("X-sided patch continuity applies to boundary edges only; use edges");
+    }
+    if (edges !== undefined) {
+      const body = state.bodies.find((candidate) => candidate.id === edges.bodyId);
+      if (!body || (body.type !== "Sheet" && body.type !== "Solid")) throw new Error(`X-sided patch edges need a current Sheet or Solid body: ${edges.bodyId}`);
+      if (edges.edgeIds.length === 0 || new Set(edges.edgeIds).size !== edges.edgeIds.length) throw new Error("X-sided patch edge IDs must be a nonempty unique list");
+      const unknown = edges.edgeIds.filter((id) => !body.edgeIds.includes(id));
+      if (unknown.length > 0) throw new Error(`Stale or unknown X-sided patch edges: ${unknown.join(", ")}`);
+    }
+    if (continuity !== undefined && !(continuity in XSIDED_CONTINUITY)) {
+      throw new Error(`X-sided patch continuity must be one of: ${Object.keys(XSIDED_CONTINUITY).join(", ")}`);
+    }
+    const guided = guideIds !== undefined && guideIds.length > 0;
+    if (guideIds !== undefined) {
+      if (guideIds.length === 0 || new Set(guideIds).size !== guideIds.length) throw new Error("X-sided patch guide IDs must be a nonempty unique list");
+      const invalid = guideIds.filter((id) => !wires.has(id));
+      if (invalid.length > 0) throw new Error(`X-sided patch guides must be current Wire IDs: ${invalid.join(", ")}`);
+      if (guideIds.some((id) => curveIds?.includes(id))) throw new Error("X-sided patch guide must not be one of the boundary curves");
+    }
+    await this.runtime.mutate(nativeFunction`async function (Factory${continuity !== undefined ? ", ContinuityType" : ""}, args) {
+      ${findView}
+      ${commandStart(guided ? "XNurbsCommand" : "PatchCommand")}
+      const wire = id => {
+        const view = find(id);
+        if (view.constructor.name !== 'Wire') throw new Error('X-sided patch curves must be Wires: ' + id);
+        return view;
+      };
+      if (args.curveIds) factory.curves = args.curveIds.map(wire);
+      if (args.edges) {
+        const view = find(args.edges.bodyId);
+        factory.edges = args.edges.edgeIds.map(edgeId => {
+          const index = view.high.edges.versionIds.indexOf(edgeId);
+          if (index < 0) throw new Error('Stale or unknown edge: ' + args.edges.bodyId + ':' + edgeId);
+          return view.high.edges.get(index);
+        });
+        if (args.continuityName !== undefined) factory.continuity = ContinuityType[args.continuityName];
+      }
+      if (args.guideIds) factory.guides = args.guideIds.map(wire);
+      ${commandEnd}
+    }`, ["XSidedFactory", ...(continuity !== undefined ? ["ContinuityType"] : [])], [{
+      ...(curveIds !== undefined ? { curveIds } : {}),
+      ...(edges !== undefined ? { edges } : {}),
+      ...(guided ? { guideIds } : {}),
+      ...(continuity !== undefined ? { continuityName: XSIDED_CONTINUITY[continuity] } : {}),
+    }]);
+    return await this.state();
+  }
+
+  // Converts one quad-dominant reference mesh into a native PolySplines body (FINDINGS gap 7). The reference mesh
+  // is consumed and the result is a subdivision-limit surface, so a 10 mm cube comes out about 8.4 mm and rounded.
+  async convertReferenceMeshToPolySplines(
+    referenceMeshId: number,
+    options: { mergePatches?: boolean | undefined; interpolateBoundary?: boolean | undefined },
+    revision: string,
+  ): Promise<RuntimeState> {
+    const state = await this.assertRevision(revision);
+    requireReferenceMeshIds(state, [referenceMeshId]);
+    for (const [name, value] of Object.entries(options)) {
+      if (value !== undefined && typeof value !== "boolean") throw new Error(`PolySplines ${name} must be a boolean`);
+    }
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
+      ${commandStart("PolySplinesCommand")}
+      const empty = nativeApi.db.lookupEmptyById(args.referenceMeshId);
+      if (!nativeApi.isReferenceMesh(empty)) throw new Error('Unknown native reference mesh ID: ' + args.referenceMeshId);
+      factory.empties = [empty];
+      if (args.mergePatches !== undefined) factory.mergePatches = args.mergePatches;
+      if (args.interpolateBoundary !== undefined) factory.interpolateBoundary = args.interpolateBoundary;
+      ${commandEnd}
+    }`, ["ConvertMeshToPolySplinesFactory"], [{
+      referenceMeshId,
+      ...(options.mergePatches !== undefined ? { mergePatches: options.mergePatches } : {}),
+      ...(options.interpolateBoundary !== undefined ? { interpolateBoundary: options.interpolateBoundary } : {}),
+    }]);
+    return await this.state();
+  }
+
+  // Shows the control points of Sheet or Solid faces (FINDINGS gap 5). This is a history step. The points then
+  // live in view.high.cvs of the body and stay valid until the next edit of that body.
+  async showFaceControlPoints(
+    bodyId: number,
+    faceIds: string[],
+    revision: string,
+  ): Promise<{ state: RuntimeState; controlPoints: FaceControlPoint[] }> {
+    const state = await this.assertRevision(revision);
+    const body = state.bodies.find((candidate) => candidate.id === bodyId);
+    if (!body || (body.type !== "Sheet" && body.type !== "Solid")) throw new Error(`Face control points need a current Sheet or Solid body: ${bodyId}`);
+    if (faceIds.length === 0 || new Set(faceIds).size !== faceIds.length) throw new Error("Face control point face IDs must be a nonempty unique list");
+    const unknown = faceIds.filter((id) => !body.faceIds.includes(id));
+    if (unknown.length > 0) throw new Error(`Stale or unknown faces: ${unknown.map((id) => `${bodyId}:${id}`).join(", ")}`);
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
+      ${findView}
+      ${commandStart("TogglePointsCommand")}
+      const view = find(args.bodyId);
+      factory.faces = args.faceIds.map(faceId => {
+        const index = view.high.faces.versionIds.indexOf(faceId);
+        if (index < 0) throw new Error('Stale or unknown face: ' + args.bodyId + ':' + faceId);
+        return view.high.faces.get(index);
+      });
+      ${commandEnd}
+    }`, ["ShowFacePointsFactory"], [{ bodyId, faceIds }]);
+    return { state: await this.state(), controlPoints: await this.readFaceControlPoints(bodyId) };
+  }
+
+  // Moves shown face control points by a shared world-space delta (FINDINGS gap 5). The ids come from
+  // showFaceControlPoints; points that are not shown are rejected before any native edit.
+  async moveFaceControlPoints(
+    bodyId: number,
+    cvIds: number[],
+    deltaMm: Vector3,
+    revision: string,
+  ): Promise<{ state: RuntimeState; controlPoints: FaceControlPoint[] }> {
+    const state = await this.assertRevision(revision);
+    const body = state.bodies.find((candidate) => candidate.id === bodyId);
+    if (!body || (body.type !== "Sheet" && body.type !== "Solid")) throw new Error(`Face control points need a current Sheet or Solid body: ${bodyId}`);
+    if (cvIds.length === 0 || new Set(cvIds).size !== cvIds.length) throw new Error("Face control point IDs must be a nonempty unique list");
+    if (deltaMm.length !== 3 || deltaMm.some((value) => !Number.isFinite(value)) || Math.hypot(...deltaMm) === 0) {
+      throw new Error("Face control point move delta must be a finite nonzero vector");
+    }
+    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
+      ${findView}
+      const available = new Map(Array.from(find(args.bodyId).high?.cvs ?? []).map(cv => [Number(cv.id), cv]));
+      const missing = args.cvIds.filter(id => !available.has(id));
+      if (missing.length > 0) throw new Error('Unknown face control point IDs on body ' + args.bodyId + ': ' + missing.join(', ') + '. Call plasticity_show_face_control_points first and use the cvId values it returns.');
+      const cvs = args.cvIds.map(id => available.get(id));
+      ${commandStart("MoveControlPointCommand")}
+      factory.cvs = cvs;
+      factory.move.fromArray(args.delta);
+      ${commandEnd}
+    }`, ["MultiMoveControlPointFactory"], [{ bodyId, cvIds, delta: toMeters(deltaMm) }]);
+    const wanted = new Set(cvIds);
+    const points = (await this.readFaceControlPoints(bodyId)).filter((point) => wanted.has(point.cvId));
+    return { state: await this.state(), controlPoints: points };
+  }
+
+  private async readFaceControlPoints(bodyId: number): Promise<FaceControlPoint[]> {
+    return await this.runtime.read<FaceControlPoint[]>(nativeFunction`function (args) {
+      ${findView}
+      ${FACE_CONTROL_POINT_READ}
+    }`, [{ bodyId }]);
   }
 
   async bridgeSurface(

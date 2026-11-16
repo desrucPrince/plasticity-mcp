@@ -263,6 +263,14 @@ groups and controlled through the mixed-node visibility and lock tools. These
 bounds can guide placement and visual comparison, but they cannot prove a
 manufacturing dimension or replace manufacturer CAD, drawings, or
 user-confirmed measurements.
+`plasticity_convert_reference_mesh_to_polysplines` turns one quad-dominant
+reference mesh into a native PolySplines Solid or Sheet. The reference mesh is
+consumed: it disappears from `plasticity_list_reference_meshes`. The result is
+the smooth subdivision-limit surface, so a 10 mm quad cube becomes a rounded
+cube about 8.4 mm across (6 faces, 12 edges, 8 vertices). `mergePatches`
+defaults to true; `interpolateBoundary` is optional. `roundedCorners` showed no
+effect and is not exposed, and PolySplines import is not driven. Triangle meshes
+are untested.
 
 When a product search yields a directly downloadable public STL or OBJ,
 `plasticity_download_and_import_reference_mesh` can fetch and import only the
@@ -1183,6 +1191,21 @@ spatial boundaries that cannot form planar Regions and can therefore produce a
 nonplanar B-Surface. The native fill defaults do not establish a requested
 continuity or engineering surface: inspect the exact boundary, surface
 structure, face properties, and validity before joining or thickening it.
+`plasticity_xsided_patch` fills an N-sided boundary with one new native Sheet.
+Give exactly one of `curveIds` (three or more current boundary Wires, which need
+not form one closed Wire) or `edges` (`{ bodyId, edgeIds }`, boundary edges of one
+Sheet or Solid). Optional `guideIds` are interior Wire curves that pull the
+surface toward them. Optional `continuity` (`g0` default, `g1`, `g2`) applies to
+all `edges` and is rejected with `curveIds`: g0 stays flat at the rim, g1 and g2
+bulge off it. Use it instead of `plasticity_patch_closed_wires` when several
+open Wires or Sheet edges bound the patch or the patch must match the
+neighbouring surface, and instead of `plasticity_create_constrained_surface`
+when the boundary is exact geometry rather than points and normals. Source Wires
+and Sheet stay. Without guides it runs `PatchCommand`; with guides it runs
+`XNurbsCommand`, both on `XSidedFactory`. Degree, spans, control type, bending,
+stretch, per-edge continuity and the C1-C3, G3 and Free types are not exposed.
+Verify the result by type and face and edge counts: reported bounds can
+overshoot the boundary.
 
 The guarded nonplanar-Wire acceptance patches two independent spatial Wires in
 one native history step, verifies both resulting Sheets through exact B-Rep
@@ -1636,6 +1659,17 @@ world-space millimeter delta. `plasticity_slide_curve_control_points` moves the
 selected handles by one positive distance along each handle's chosen local U
 direction, which lets the agent edit along the control polygon without deriving
 that direction from display geometry.
+`plasticity_show_face_control_points` shows the control points (B-Surface CVs) of
+Sheet or Solid faces and returns `controlPoints: [{ cvId, positionMm }]`
+(millimeters, rounded to a micrometer because Plasticity stores float32). Showing
+the points is a Plasticity history step and takes one Undo entry. The `cvId`
+values stay valid until the body is edited again, and the point count matches
+`plasticity_inspect_surface_structure` (a 4 x 2 Sheet shows 8). Hiding is not
+exposed. `plasticity_move_face_control_points` moves shown points by one shared
+world-space millimeter `deltaMm` in one history step and returns the new
+positions of the moved points. It rejects any `cvId` that is not currently shown
+and asks for `plasticity_show_face_control_points` first. Re-read exact B-Rep
+geometry afterward.
 `plasticity_rotate_curve_control_points` rotates handles around an explicit
 world pivot and axis, while
 `plasticity_scale_curve_control_points` applies positive XYZ factors around an
@@ -2056,6 +2090,7 @@ npm run accept:solid-properties -- --target <target-id> --allow-disposable-mutat
 npm run accept:native-parasolid -- --target <target-id> --allow-disposable-mutations --output <new-directory>
 npm run accept:native-iges-sat-clear-selection -- --target <target-id> --allow-disposable-mutations --output <new-directory>
 npm run accept:native-extend-sweep-label -- --target <target-id> --allow-disposable-mutations --output <new-directory>
+npm run accept:native-patch-polysplines-facepoints -- --target <target-id> --allow-disposable-mutations --output <new-directory>
 ```
 
 The live acceptance run created an 80 × 40 × 8 mm plate with two Ø6 mm
