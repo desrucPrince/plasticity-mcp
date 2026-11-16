@@ -3790,7 +3790,7 @@ function createServerWithCatalog(
     z.object({ ...bracketFields, profile: z.literal("Z"), legs: z.object({ lowerMm: mateMm, webMm: mateMm, upperMm: mateMm }).strict() }).strict(),
     z.object({ ...bracketFields, profile: z.literal("flat"), legs: z.object({ lengthMm: mateMm }).strict() }).strict(),
   ]);
-  tool("plasticity_create_bracket", "Build an L, U, Z or flat sheet-style bracket as one Solid in one call, in mm. originMm is the bounds minimum; width runs along +Y, the profile lies in XZ; legs are outer sizes. Holes sit in a leg frame [along, across] from the leg's outer-face corner at the bend; derived gives each leg's planeNormal, frameOriginMm, alongAxis, acrossAxis and flatSpanMm, the hole, bend and corner axes and gusset bounds, computed from the inputs and read back. Gussets (L only) use rib side centered. Inputs are checked before any native call; a failed step is undone; undoSteps is measured.", bracketInputSchema, async ({ intent: purpose, ...input }) => {
+  tool("plasticity_create_bracket", "Build an L, U, Z or flat sheet-style bracket as one Solid in one call, in mm (no size over 10,000). originMm is the bounds minimum; width runs along +Y, the profile lies in XZ; legs are outer sizes. Holes sit in a leg frame [along, across] from the leg outer-face corner at the bend; derived gives leg frames, hole, bend and corner axes and gusset bounds in the build position (stale after a move). Gussets (L only): a too-large sizeMm is refused with the largest allowed. Inputs are checked before any native call; a failed step or read-back (slivers, validity) is undone.", bracketInputSchema, async ({ intent: purpose, ...input }) => {
     const { createBracket } = await import("./plasticity/bracket-recipe.ts");
     return await journaled("recipe-bracket", purpose, input, () => createBracket(session.get(), input));
   });
@@ -3807,10 +3807,12 @@ function createServerWithCatalog(
     gapMm: z.number().finite().optional(),
     rotate: z.object({ axis: z.enum(["x", "y", "z"]), quarterTurns: z.union([z.literal(1), z.literal(2), z.literal(3)]) }).strict().optional(),
     copy: z.boolean().optional(),
+    relation: z.enum(["mating", "aligned"]).optional(),
+    allowOverlap: z.boolean().optional(),
     intent,
     revision,
   }).strict();
-  tool("plasticity_place_body", "Move one body (or a copy) so an anchor on it lands on an anchor of another body. An anchor is a bounds point (min, max, center, bottom-center, top-center, x--center ... z+-center) or an explicit planar faceId: its kernel midpoint, the centerMm find_faces reports. rotate first turns the body in quarter turns about its bounds centre. Two faces must be mating or parallel after that; it never turns a body to make faces mate. gapMm runs along the fixed face normal (positive = apart); offsetMm is added last. The result is read back; a mismatch is a certain error that undo restores.", placeBodySchema, async ({ intent: purpose, ...input }) => {
+  tool("plasticity_place_body", "Move one body (or a copy) so an anchor on it lands on an anchor of another body. An anchor is a bounds point (min, max, center, bottom-center, top-center, x--center ... z+-center) or a planar faceId (its kernel midpoint). rotate first turns it in quarter turns about its bounds centre; no other rotation, and twist about the mate normal is not removed. Two faces must mate (opposed normals); same-facing faces need relation aligned. gapMm runs along the fixed face normal; a negative one needs allowOverlap. offsetMm is added last. A read-back miss is undone.", placeBodySchema, async ({ intent: purpose, ...input }) => {
     const { placeBody } = await import("./plasticity/mate.ts");
     return await journaled("place-body", purpose, input, () => placeBody(session.get(), input));
   });
@@ -3821,7 +3823,7 @@ function createServerWithCatalog(
       radiusMm: mateMm,
       toleranceMm: z.number().finite().nonnegative().max(1).optional(),
       axis: z.union([z.enum(["x", "y", "z"]), vector]).optional(),
-      kind: z.enum(["hole", "boss"]).optional(),
+      kind: z.enum(["hole", "boss", "any"]).optional(),
       withinMm: z.object({ min: vector, max: vector }).strict().optional(),
     }).strict().optional(),
     // leg, diameterMm, slot and countersunk are accepted (and ignored) so derived.holeAxesMm items pass as they are.
@@ -3838,12 +3840,13 @@ function createServerWithCatalog(
       countersunk: z.object({ headDiameterMm: mateMm }).strict().optional(),
       counterbore: z.object({ diameterMm: mateMm, depthMm: mateMm }).strict().optional(),
     }).strict(),
+    onMiss: z.enum(["error", "skip"]).optional(),
     intent,
     revision,
   }).strict()
     .refine((value) => (value.select === undefined) !== (value.axesMm === undefined), "give exactly one of select or axesMm")
     .refine((value) => (value.hole.depthMm === undefined) !== (value.hole.through === undefined), "hole needs exactly one of depthMm or through: true");
-  tool("plasticity_transfer_holes", "Cut holes into a target that line up with cylinder axes of a source. select picks full-turn cylinder faces by exact radius (axis, kind and a box optional; arcs and blends never), or give axesMm. The drill runs from the source side into the target; the entry is the first planar target face normal to the axis, and the rim must fit in it. through cuts to the far target bounds; depthMm is blind; countersunk and counterbore are through. Existing hole recipes cut. Each hole is read back coaxial within 1e-6 mm; a mismatch is a certain error that undo restores. No match lists the source radii.", transferHolesSchema, async ({ intent: purpose, ...input }) => {
+  tool("plasticity_transfer_holes", "Cut holes into a target coaxial with full-turn cylinder axes of a source: select by radius within toleranceMm (default 0.01), axis, kind (hole by default, boss, any) and a box, or give axesMm. The entry must be the first material: a planar target face normal to the axis. Non-planar or oblique entries, an existing hole on the axis and overlapping holes are refused; onMiss skip passes over axes that miss. through drills every wall after the entry; depthMm stays in the local wall. Each bore is read back whole and coaxial, else undone; holeCount counts bores.", transferHolesSchema, async ({ intent: purpose, ...input }) => {
     const { transferHoles } = await import("./plasticity/mate.ts");
     return await journaled("transfer-holes", purpose, input, () => transferHoles(session.get(), input));
   });
