@@ -355,7 +355,7 @@ function analyze(lines: Array<{ t: number; e: any }>, wallMs: number) {
 // ---------- verification ----------
 async function allFaces(s: Session, bodyId: number): Promise<Face[]> {
   const st = await s.status();
-  const r = await s.call("plasticity_find_faces", { revision: st.revision, query: { bodyIds: [bodyId] } });
+  const r = await s.call("plasticity_find_faces", { revision: st.revision, query: { bodyIds: [bodyId] }, limit: 1000 });
   return r.matches as Face[];
 }
 
