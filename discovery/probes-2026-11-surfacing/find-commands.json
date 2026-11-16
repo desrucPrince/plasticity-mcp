@@ -1,0 +1,17 @@
+{
+ "commands": [
+  "CurveArrayCommand",
+  "MeasureContinuityCommand",
+  "FindBoundaryEdgesCommand",
+  "SquareCommand",
+  "AlignCommand"
+ ],
+ "registryHits": [],
+ "editorKeys": [
+  "keymaps",
+  "commands",
+  "registry",
+  "registrar"
+ ],
+ "registryType": "CommandRegistry"
+}

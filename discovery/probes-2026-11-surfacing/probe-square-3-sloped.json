@@ -1,0 +1,95 @@
+{
+ "startUndo": 0,
+ "trials": {
+  "G0": {
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "state": {
+    "edges": 1,
+    "wires": 3,
+    "edge2continuity": [
+     23156
+    ]
+   },
+   "depthAfter": 6,
+   "square": {
+    "id": 144,
+    "name": "XNurbs.001",
+    "faceCount": 1,
+    "edgeCount": 4,
+    "boundsMm": {
+     "min": [
+      6199.999999999999,
+      -1.7917441772301168e-22,
+      -3.7949142606643412e-22
+     ],
+     "max": [
+      6240.0000000000155,
+      40.00000000000003,
+      8.00002300637741
+     ]
+    }
+   },
+   "join": "ok",
+   "continuity": [
+    {
+     "edge": "274e17737",
+     "gapMm": 0,
+     "angleDeg": 24.775140545577553,
+     "relG2": 1,
+     "relG2AtMm": [
+      6199.999809265137,
+      0,
+      0
+     ],
+     "angleAtMm": [
+      6239.999771118164,
+      0,
+      0
+     ],
+     "achieved": "G0"
+    }
+   ]
+  },
+  "G1": {
+   "error": "Plasticity command failed: Error: XNurbs operation failed with error `30`.",
+   "state": {
+    "edges": 1,
+    "wires": 3,
+    "edge2continuity": [
+     23153
+    ]
+   }
+  },
+  "G2": {
+   "error": "Plasticity command failed: Error: XNurbs operation failed with error `30`.",
+   "state": {
+    "edges": 1,
+    "wires": 3,
+    "edge2continuity": [
+     23154
+    ]
+   }
+  }
+ },
+ "sloped": true,
+ "fixture": {
+  "neighbour": 140,
+  "sharedEdge": "262e17737",
+  "wires": [
+   141,
+   142,
+   143
+  ],
+  "fixtureDepth": 5
+ },
+ "endUndo": 0,
+ "endBodies": [
+  1,
+  5,
+  3,
+  4
+ ]
+}

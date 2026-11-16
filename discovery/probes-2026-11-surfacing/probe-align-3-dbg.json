@@ -1,0 +1,279 @@
+{
+ "startUndo": 0,
+ "trials": {
+  "G1": {
+   "run": {
+    "log": [
+     {
+      "ev": "selected",
+      "undo": 4,
+      "active": null,
+      "edges": [
+       "121e10228",
+       "118e10023"
+      ]
+     },
+     {
+      "ev": "captured",
+      "undo": 4,
+      "active": "AlignEdgeCommand",
+      "factory": "AlignAndRebuildFactory",
+      "dialog": "Constructor",
+      "dialogKeys": [
+       "params",
+       "makeElement",
+       "dynamicName",
+       "signals",
+       "state",
+       "handleInput",
+       "__k"
+      ],
+      "paramsKeys": [
+       "editor",
+       "changed",
+       "updated",
+       "refine",
+       "temps",
+       "phantoms",
+       "diagnoses",
+       "executor",
+       "_state",
+       "partition",
+       "phantomPartition",
+       "continuities",
+       "isDirty",
+       "needsUpdate",
+       "needsRemove",
+       "_controlType",
+       "_uDegree",
+       "_vDegree",
+       "_uSpans",
+       "_vSpans",
+       "_weight",
+       "_adaptiveTolerance",
+       "_preferToProduceSurface",
+       "_tolerance",
+       "_angularTolerance",
+       "_maxCVs",
+       "_quadSided",
+       "_stretch",
+       "_bending",
+       "_changeInBending",
+       "_boundaryCondition",
+       "_parameterization",
+       "_enforceTolerance",
+       "analysis",
+       "_guides",
+       "_edge2constraint",
+       "isoparm2refinement",
+       "_segment2constraint",
+       "_continuity",
+       "_blending"
+      ],
+      "paramsIsFactory": true
+     },
+     {
+      "ev": "continuity set",
+      "undo": 4,
+      "active": "AlignEdgeCommand",
+      "before": {
+       "continuity": 23156,
+       "edge2continuity": [
+        [
+         "10023:10023",
+         23156
+        ]
+       ],
+       "pairs": [
+        "121e10228",
+        "118e10023"
+       ],
+       "targets": [
+        "118e10023"
+       ]
+      },
+      "afterSet": {
+       "continuity": 23156,
+       "edge2continuity": [
+        [
+         "10023:10023",
+         23153
+        ]
+       ]
+      },
+      "refFound": true,
+      "movFound": true
+     },
+     {
+      "ev": "updated",
+      "undo": 4,
+      "active": "AlignEdgeCommand"
+     },
+     {
+      "ev": "finish called",
+      "undo": 4,
+      "active": "AlignEdgeCommand"
+     },
+     {
+      "ev": "end",
+      "undo": 4,
+      "active": null,
+      "settled": true,
+      "execError": "AlreadyFinishedError:Error::Error\n    at AlignEdgeCommand.register (evalmachine.<anonymous>:1:5287413)\n    at CancellablePromise.resource (evalmachine.<anonymous>:1:5284298)\n    at startQuasimode (evalmachine.<anonymous>:1:9166091)\n    at AlignEdgeCommand.execute (evalmachine.<anonymous>:1:9166118)\n    at async AlignEdgeCommand.execute (<anonymous>:283:49)\n    at async CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823177)\n    at async CommandExecutor.dequeue (evalmachine.<anonymous>:1:9821064)\n    at async CommandExecutor.exec (evalmachine.<anonymous>:1:9820102)\n    at async Editor.exec (evalmachine.<anonymo"
+     }
+    ],
+    "execError": "AlreadyFinishedError:Error::Error\n    at AlignEdgeCommand.register (evalmachine.<anonymous>:1:5287413)\n    at CancellablePromise.resource (evalmachine.<anonymous>:1:5284298)\n    at startQuasimode (evalmachine.<anonymous>:1:9166091)\n    at AlignEdgeCommand.execute (evalmachine.<anonymous>:1:9166118)\n    at async AlignEdgeCommand.execute (<anonymous>:283:49)\n    at async CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823177)\n    at async CommandExecutor.dequeue (evalmachine.<anonymous>:1:9821064)\n    at async CommandExecutor.exec (evalmachine.<anonymous>:1:9820102)\n    at async Editor.exec (evalmachine.<anonymo",
+    "settled": true
+   },
+   "undoAfter": 4,
+   "bodies": [
+    {
+     "id": 75,
+     "type": "Wire",
+     "faceCount": 0,
+     "edgeCount": 0,
+     "boundsMm": {
+      "min": [
+       5000,
+       0,
+       0
+      ],
+      "max": [
+       5030,
+       5,
+       0
+      ]
+     }
+    },
+    {
+     "id": 76,
+     "type": "Sheet",
+     "faceCount": 1,
+     "edgeCount": 4,
+     "boundsMm": {
+      "min": [
+       5000,
+       0,
+       0
+      ],
+      "max": [
+       5030,
+       5,
+       20
+      ]
+     }
+    },
+    {
+     "id": 77,
+     "type": "Wire",
+     "faceCount": 0,
+     "edgeCount": 0,
+     "boundsMm": {
+      "min": [
+       5030.5,
+       5.3,
+       0
+      ],
+      "max": [
+       5054,
+       30,
+       0
+      ]
+     }
+    },
+    {
+     "id": 78,
+     "type": "Sheet",
+     "faceCount": 1,
+     "edgeCount": 4,
+     "boundsMm": {
+      "min": [
+       5030.5,
+       5.3,
+       0
+      ],
+      "max": [
+       5054,
+       30,
+       20
+      ]
+     }
+    }
+   ],
+   "sheetB": {
+    "surface": [
+     "BSurf"
+    ],
+    "vertical": [
+     {
+      "id": "121e10225",
+      "centerMm": [
+       5054,
+       30,
+       10
+      ]
+     },
+     {
+      "id": "121e10228",
+      "centerMm": [
+       5030.5,
+       5.3,
+       10
+      ]
+     }
+    ]
+   },
+   "sheetAunchanged": true,
+   "join": "Plasticity command failed: Error: Operation failed at PK_BODY_sew_bodies with error `PK_ERROR_bodies_dont_knit` (1041) ",
+   "cancel": {
+    "before": {
+     "active": null,
+     "busy": false,
+     "undo": 4
+    },
+    "after": {
+     "active": null,
+     "busy": false,
+     "undo": 4
+    }
+   },
+   "depthAfterUndo": 4
+  }
+ },
+ "fixture": {
+  "sheetA": 76,
+  "sheetB": 78,
+  "edgeA": "118e10023",
+  "edgeB": "121e10228",
+  "fixtureDepth": 4,
+  "edgeBcenterBefore": [
+   5030.5,
+   5.3,
+   10
+  ],
+  "edgeAcenter": [
+   5030,
+   5,
+   10
+  ]
+ },
+ "finalCancel": {
+  "before": {
+   "active": null,
+   "busy": false,
+   "undo": 4
+  },
+  "after": {
+   "active": null,
+   "busy": false,
+   "undo": 4
+  }
+ },
+ "endUndo": 0,
+ "endBodies": [
+  1,
+  5,
+  3,
+  4
+ ]
+}

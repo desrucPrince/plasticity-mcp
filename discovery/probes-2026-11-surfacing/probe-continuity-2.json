@@ -1,0 +1,137 @@
+{
+ "startUndo": 0,
+ "edge": {
+  "id": "28e3167",
+  "curveType": "Line",
+  "line": true,
+  "circle": false,
+  "lengthMm": 20,
+  "centerMm": [
+   5119.999999999999,
+   15,
+   10
+  ],
+  "tangent": [
+   0,
+   0,
+   1
+  ],
+  "boundsMm": {
+   "min": [
+    5119.999885559082,
+    14.999999664723873,
+    0
+   ],
+   "max": [
+    5119.999885559082,
+    14.999999664723873,
+    19.999999552965164
+   ]
+  },
+  "faceIds": [
+   "28f3038",
+   "28f3132"
+  ],
+  "vertexIds": [
+   3158,
+   3163
+  ]
+ },
+ "native": {
+  "measurementOwn": {
+   "versionId": 0,
+   "tmin": 0,
+   "tmax": 1,
+   "continuity": 23154,
+   "referenceEdge": "Target",
+   "referenceFace": "Target",
+   "targetEdge": "Target",
+   "targetFace": "Target",
+   "userData": "Object"
+  },
+  "measurementChain": [
+   "SurfaceContinuityMeasurement: targets,clone/0,copy/1",
+   "Measurement: isNew,copy/1"
+  ],
+  "viewOwn": {
+   "sphere": "Sphere",
+   "analysis": "ContinuityAnalysis",
+   "type": 23154,
+   "g0maxBase": "Vector3",
+   "g1maxBase": "Vector3",
+   "g2maxBase": "Vector3",
+   "g0maxTip": "Vector3",
+   "g1maxTip": "Vector3",
+   "g2maxTip": "Vector3",
+   "g0max": 0,
+   "g1max": 0,
+   "g2max": 1,
+   "isG2Threshold": true
+  },
+  "viewChain": [
+   "SurfaceContinuityMeasurementView: ",
+   "MeasurementView: "
+  ],
+  "evalKeys": [
+   "measurements",
+   "views"
+  ],
+  "viewArrays": {},
+  "measurementJSON": "\"SurfaceContinuityMeasurement\"",
+  "edgeCollChain": [
+   "EdgeCollection: Size/0,Sort/0,GetIntervals/0,GetIds/0,Get/0,GetOriginals/0,GetOriginals_async/0,Original2Product/0,GetEdges/0,GetBodies/0,GetPoints/0,GetPoints_async/0,GetBases/0,GetBases_async/0,Circular/0,Circular_async/0,Existing/0,ExistingWithin/0,GetCentroid/0,FindOrderedVertices/0,InsertMatchingVertex/0,Slice/0,IsLaminar/0,IsClosed/0,GetCVs/0,GetCVs_async/0,FindConnectedTangent/0,Laminar/0,NonLaminar/0,SortChains/0,GetWallAndCenterFaces/0,PartitionIntoTangentChains/0,GetPrimaryAndSecondaryFaces/0,FindParallel/0,FindPlanarBasis/0,RemapIntervals/0,EvaluateMassProperties/0,EvaluateMassProperties_async/0,GetStableIds/0,GetVertices/0,GetVerticesAndFaceTangents/0,Rebuild/0,DeleteRedundant/0,GetPrecisions/0,ResetPrecisions/0,Repair/0"
+  ],
+  "edgeCollLen": 15,
+  "laminarCount": 0,
+  "isLaminar": false,
+  "isClosed": true,
+  "analysisOwn": {},
+  "analysisChain": [
+   "ContinuityAnalysis: TransformBoth/0,TransformReference/0,TransformTarget/0,g0spikes,g1spikes,g2spikes,maxes,maxCounts,maxPositions,boxMin,boxMax,sphereCenter,sphereRadius"
+  ],
+  "analysisArrays": {},
+  "modelEdgeChain": [
+   "Edge: Raycast/0,FindPointNear/0,FindPointsTangential/0,GetBody/0,GetPoint/0,GetPointAndTangent/0,EvalFaceNormal/0,EvalBasis/0,EvalDerivatives/0,FindLength/0,GetFaces/0,GetOppositeFace/0,IsIsoparam/0,GetCurve/0,IsLine/0,IsCircle/0,IsBCurve/0,GetInterval/0,IsTrimmed/0,IsSideTrimmed/0,IsLaminar/0,GetOrientedEdges/0,GetLoops/0,GetEndLoops/0,SplitAt/0,GetCVs/0,RaiseDegree/0,Subdivide/0,InsertKnot/0,ReplaceCurve/0,IsPeriodic/0,AttachCurve/0,FindAdjacentLaminar/0,GetVertices/0,Normalize/0,Denormalize/0,AngleTo/0,IntersectWithPlane/0,GetBox/0,Id/0,Class/0,GetIdentifier/0,GetPartition/0,GetName/0,SetName/0,GetAttributes/0",
+   "Entity: Id/0,Class/0,GetIdentifier/0,GetPartition/0,GetName/0,SetName/0,GetAttributes/0"
+  ],
+  "faceCollChain": [
+   "FaceCollection: Size/0,GetIds/0,Get/0,GetFaces/0,GetBodies/0,GetEdges/0,Planar/0,Analytic/0,Existing/0,ExistingWithin/0,GetOriginals/0,GetOriginals_async/0,Original2Product/0,GetMidpoints/0,GetMidpoints_async/0,FindMidpoints/0,FindMidpoints_async/0,EvaluateMassProperties/0,EvaluateMassProperties_async/0,GetCentroid/0,GetMedian/0,GetBox/0,Sort/0,GetStableIds/0,GetAdjacent/0,IdentifyBlends/0,IdentifyBlends_async/0,Unique/0,ShowPoints/0,HasShownPoints/0,GetCVs/0,GetCVs_async/0"
+  ],
+  "faceCollOwn": {},
+  "faceCount": 7,
+  "cylFaceChain": [
+   "Face: GetAnyPointOn/0,FindUVMidpoint/0,FindPolygonalMidpoint/0,FindMidpoint/0,GetPoint/0,FindPointNear/0,EvalNormal/0,EvalBasis/0,GetSurface/0,IsPlanar/0,IsBlend/0,GetRadius/0,FindLongestLinearEdge/0,MakeIsoparams/0,MakeIsoparams_async/0,ImprintIsoparams/0,ImprintIsoparams_async/0,GetEdges/0,GetOuterLoop/0,GetLoops/0,GetInnerLoops/0,GetBlendRadius/0,FindSimilar/0,Unembed/0,Untrim/0,IsUntrimmed/0,UntrimNominal/0,Check/0,GetBody/0,EvalGrid/0,Extend/0,Shrink/0,FindEdgesCommon/0,Stretch/0,Id/0,Class/0,GetIdentifier/0,GetPartition/0,GetName/0,SetName/0,GetAttributes/0",
+   "Entity: Id/0,Class/0,GetIdentifier/0,GetPartition/0,GetName/0,SetName/0,GetAttributes/0"
+  ],
+  "surfaceType": "Object",
+  "surfaceOwn": {
+   "surface": "Cylinder",
+   "orientation": true,
+   "uMin": 0,
+   "vMin": 0,
+   "uMax": 1.5707963267948966,
+   "vMax": 0.02
+  },
+  "surfaceChain2": [],
+  "tries": {
+   "FindPointNear(P)": "err Invalid argument 'position' for Face::FindPointNear",
+   "EvalNormal(P)": "err Invalid argument 'u' for Face::EvalNormal",
+   "FindUVMidpoint()": "{\"position\":{},\"normal\":{}}",
+   "GetPoint(0.5,0.5)": [
+    5.118535533905932,
+    0.01853553390593274,
+    0.01
+   ],
+   "EvalBasis(P)": "err Invalid argument 'u' for Face::EvalBasis",
+   "EvalBasis(0.5,0.5)": "{\"normal\":{},\"uDirection\":{},\"vDirection\":{},\"uCurvature\":0,\"vCurvature\":200}",
+   "edge.GetCurve()": "Object",
+   "edge.FindPointNear": "err Invalid argument 'point' for Edge::FindPointNear",
+   "edge.GetPoint": [
+    5.119999999999999,
+    0.015,
+    0.01
+   ]
+  }
+ },
+ "endUndo": 0
+}

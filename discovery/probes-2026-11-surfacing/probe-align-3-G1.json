@@ -1,0 +1,127 @@
+{
+ "startUndo": 0,
+ "trials": {
+  "G1": {
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'match')\n    at TopologyItem.decompose (evalmachine.<anonymous>:1:5117206)\n    at GeometryDatabase.lookupTopologyItemById (evalmachine.<anonymous>:1:10465702)\n    at GeometryDatabase.lookupTopologyItem (evalmachine.<anonymous>:1:10467366)\n    at Database.lookupTopologyItem (evalmachine.<anonymous>:1:5981424)\n    at AlignAndRebuildFactory.setContinuityForEdge (evalmachine.<anonymous>:1:7086296)\n    at Editor.<anonymous> (<anonymous>:292:61)\n    at Editor.<anonymous> (<anonymous>:308:4)",
+   "logAfterError": [
+    {
+     "ev": "selected",
+     "undo": 4,
+     "active": null,
+     "edges": [
+      "109e9010",
+      "106e8805"
+     ]
+    },
+    {
+     "ev": "captured",
+     "undo": 4,
+     "active": "AlignEdgeCommand",
+     "factory": "AlignAndRebuildFactory",
+     "dialog": "Constructor",
+     "dialogKeys": [
+      "params",
+      "makeElement",
+      "dynamicName",
+      "signals",
+      "state",
+      "handleInput",
+      "__k"
+     ],
+     "paramsKeys": [
+      "editor",
+      "changed",
+      "updated",
+      "refine",
+      "temps",
+      "phantoms",
+      "diagnoses",
+      "executor",
+      "_state",
+      "partition",
+      "phantomPartition",
+      "continuities",
+      "isDirty",
+      "needsUpdate",
+      "needsRemove",
+      "_controlType",
+      "_uDegree",
+      "_vDegree",
+      "_uSpans",
+      "_vSpans",
+      "_weight",
+      "_adaptiveTolerance",
+      "_preferToProduceSurface",
+      "_tolerance",
+      "_angularTolerance",
+      "_maxCVs",
+      "_quadSided",
+      "_stretch",
+      "_bending",
+      "_changeInBending",
+      "_boundaryCondition",
+      "_parameterization",
+      "_enforceTolerance",
+      "analysis",
+      "_guides",
+      "_edge2constraint",
+      "isoparm2refinement",
+      "_segment2constraint",
+      "_continuity",
+      "_blending"
+     ],
+     "paramsIsFactory": true
+    }
+   ],
+   "cancel": {
+    "before": {
+     "active": "AlignEdgeCommand",
+     "busy": true,
+     "undo": 4
+    },
+    "after": {
+     "active": null,
+     "busy": false,
+     "undo": 4
+    }
+   },
+   "depthAfterUndo": 4
+  }
+ },
+ "fixture": {
+  "sheetA": 68,
+  "sheetB": 70,
+  "edgeA": "106e8805",
+  "edgeB": "109e9010",
+  "fixtureDepth": 4,
+  "edgeBcenterBefore": [
+   5030.5,
+   5.3,
+   10
+  ],
+  "edgeAcenter": [
+   5030,
+   5,
+   10
+  ]
+ },
+ "finalCancel": {
+  "before": {
+   "active": null,
+   "busy": false,
+   "undo": 4
+  },
+  "after": {
+   "active": null,
+   "busy": false,
+   "undo": 4
+  }
+ },
+ "endUndo": 0,
+ "endBodies": [
+  1,
+  5,
+  3,
+  4
+ ]
+}

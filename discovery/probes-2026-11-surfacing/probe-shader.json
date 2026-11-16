@@ -1,0 +1,437 @@
+{
+ "startUndo": 0,
+ "shots": {
+  "default": {
+   "capture": {
+    "path": "$TMPDIR/surfacing-shots-XXXXXX/shader-default.png",
+    "bytes": 426682
+   },
+   "captureMode": "window",
+   "stats": {
+    "width": 2800,
+    "height": 2048,
+    "meanLuminance": 45.516745540367296
+   },
+   "file": "shot-shader-default.png",
+   "undo": 3
+  },
+  "isophotes": {
+   "set": {
+    "before": {
+     "shader": null,
+     "tag": "uniform",
+     "undo": 3,
+     "memento": {
+      "mode": "uniform",
+      "shader": null,
+      "isTinted": false,
+      "isSectioned": false,
+      "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+     }
+    },
+    "after": {
+     "shader": "isophotes",
+     "tag": "uniform",
+     "undo": 3,
+     "memento": {
+      "mode": "uniform",
+      "shader": "isophotes",
+      "isSectioned": false,
+      "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+     }
+    }
+   },
+   "capture": {
+    "path": "$TMPDIR/surfacing-shots-XXXXXX/shader-isophotes.png",
+    "bytes": 444842
+   },
+   "captureMode": "window",
+   "stats": {
+    "width": 2800,
+    "height": 2048,
+    "meanLuminance": 45.20080626190854,
+    "meanAbsDiffVsDefault": 13.20786225813647,
+    "fractionChangedVsDefault": 0.20208408900669642
+   },
+   "file": "shot-shader-isophotes.png",
+   "restored": {
+    "shader": null,
+    "tag": "uniform",
+    "undo": 3,
+    "memento": {
+     "mode": "uniform",
+     "shader": null,
+     "isTinted": false,
+     "isSectioned": false,
+     "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+    }
+   },
+   "undo": 3
+  },
+  "draft": {
+   "set": {
+    "before": {
+     "shader": null,
+     "tag": "uniform",
+     "undo": 3,
+     "memento": {
+      "mode": "uniform",
+      "shader": null,
+      "isTinted": false,
+      "isSectioned": false,
+      "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+     }
+    },
+    "after": {
+     "shader": "draft",
+     "tag": "uniform",
+     "undo": 3,
+     "memento": {
+      "mode": "uniform",
+      "shader": "draft",
+      "isSectioned": false,
+      "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+     }
+    }
+   },
+   "capture": {
+    "path": "$TMPDIR/surfacing-shots-XXXXXX/shader-draft.png",
+    "bytes": 287933
+   },
+   "captureMode": "window",
+   "stats": {
+    "width": 2800,
+    "height": 2048,
+    "meanLuminance": 43.32912936055801,
+    "meanAbsDiffVsDefault": 18.44882190510063,
+    "fractionChangedVsDefault": 0.2022401646205357
+   },
+   "file": "shot-shader-draft.png",
+   "restored": {
+    "shader": null,
+    "tag": "uniform",
+    "undo": 3,
+    "memento": {
+     "mode": "uniform",
+     "shader": null,
+     "isTinted": false,
+     "isSectioned": false,
+     "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+    }
+   },
+   "undo": 3
+  },
+  "faceDirection": {
+   "set": {
+    "before": {
+     "shader": null,
+     "tag": "uniform",
+     "undo": 3,
+     "memento": {
+      "mode": "uniform",
+      "shader": null,
+      "isTinted": false,
+      "isSectioned": false,
+      "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+     }
+    },
+    "after": {
+     "shader": "faceDirection",
+     "tag": "uniform",
+     "undo": 3,
+     "memento": {
+      "mode": "uniform",
+      "shader": "faceDirection",
+      "isSectioned": false,
+      "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+     }
+    }
+   },
+   "capture": {
+    "path": "$TMPDIR/surfacing-shots-XXXXXX/shader-faceDirection.png",
+    "bytes": 288961
+   },
+   "captureMode": "window",
+   "stats": {
+    "width": 2800,
+    "height": 2048,
+    "meanLuminance": 42.635079408976736,
+    "meanAbsDiffVsDefault": 14.121645275295101,
+    "fractionChangedVsDefault": 0.2014892578125
+   },
+   "file": "shot-shader-faceDirection.png",
+   "restored": {
+    "shader": null,
+    "tag": "uniform",
+    "undo": 3,
+    "memento": {
+     "mode": "uniform",
+     "shader": null,
+     "isTinted": false,
+     "isSectioned": false,
+     "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+    }
+   },
+   "undo": 3
+  },
+  "zebraVertical": {
+   "set": {
+    "before": {
+     "shader": null,
+     "tag": "uniform",
+     "undo": 3,
+     "memento": {
+      "mode": "uniform",
+      "shader": null,
+      "isTinted": false,
+      "isSectioned": false,
+      "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+     }
+    },
+    "after": {
+     "shader": "zebraVertical",
+     "tag": "uniform",
+     "undo": 3,
+     "memento": {
+      "mode": "uniform",
+      "shader": "zebraVertical",
+      "isSectioned": false,
+      "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+     }
+    }
+   },
+   "capture": {
+    "path": "$TMPDIR/surfacing-shots-XXXXXX/shader-zebraVertical.png",
+    "bytes": 314723
+   },
+   "captureMode": "window",
+   "stats": {
+    "width": 2800,
+    "height": 2048,
+    "meanLuminance": 49.01976423417303,
+    "meanAbsDiffVsDefault": 25.231375034660434,
+    "fractionChangedVsDefault": 0.20170026506696428
+   },
+   "file": "shot-shader-zebraVertical.png",
+   "restored": {
+    "shader": null,
+    "tag": "uniform",
+    "undo": 3,
+    "memento": {
+     "mode": "uniform",
+     "shader": null,
+     "isTinted": false,
+     "isSectioned": false,
+     "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+    }
+   },
+   "undo": 3
+  },
+  "zebraHorizontal": {
+   "set": {
+    "before": {
+     "shader": null,
+     "tag": "uniform",
+     "undo": 3,
+     "memento": {
+      "mode": "uniform",
+      "shader": null,
+      "isTinted": false,
+      "isSectioned": false,
+      "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+     }
+    },
+    "after": {
+     "shader": "zebraHorizontal",
+     "tag": "uniform",
+     "undo": 3,
+     "memento": {
+      "mode": "uniform",
+      "shader": "zebraHorizontal",
+      "isSectioned": false,
+      "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+     }
+    }
+   },
+   "capture": {
+    "path": "$TMPDIR/surfacing-shots-XXXXXX/shader-zebraHorizontal.png",
+    "bytes": 306815
+   },
+   "captureMode": "window",
+   "stats": {
+    "width": 2800,
+    "height": 2048,
+    "meanLuminance": 50.35895974633052,
+    "meanAbsDiffVsDefault": 23.860031272965546,
+    "fractionChangedVsDefault": 0.20170235770089287
+   },
+   "file": "shot-shader-zebraHorizontal.png",
+   "restored": {
+    "shader": null,
+    "tag": "uniform",
+    "undo": 3,
+    "memento": {
+     "mode": "uniform",
+     "shader": null,
+     "isTinted": false,
+     "isSectioned": false,
+     "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+    }
+   },
+   "undo": 3
+  },
+  "topo": {
+   "set": {
+    "before": {
+     "shader": null,
+     "tag": "uniform",
+     "undo": 3,
+     "memento": {
+      "mode": "uniform",
+      "shader": null,
+      "isTinted": false,
+      "isSectioned": false,
+      "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+     }
+    },
+    "after": {
+     "shader": "topo",
+     "tag": "uniform",
+     "undo": 3,
+     "memento": {
+      "mode": "uniform",
+      "shader": "topo",
+      "isSectioned": false,
+      "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+     }
+    }
+   },
+   "capture": {
+    "path": "$TMPDIR/surfacing-shots-XXXXXX/shader-topo.png",
+    "bytes": 279785
+   },
+   "captureMode": "window",
+   "stats": {
+    "width": 2800,
+    "height": 2048,
+    "meanLuminance": 30.28087995108452,
+    "meanAbsDiffVsDefault": 17.470932675557556,
+    "fractionChangedVsDefault": 0.17246023995535714
+   },
+   "file": "shot-shader-topo.png",
+   "restored": {
+    "shader": null,
+    "tag": "uniform",
+    "undo": 3,
+    "memento": {
+     "mode": "uniform",
+     "shader": null,
+     "isTinted": false,
+     "isSectioned": false,
+     "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+    }
+   },
+   "undo": 3
+  }
+ },
+ "saved": {
+  "shader": null,
+  "tag": "uniform",
+  "undo": 0,
+  "memento": {
+   "mode": "uniform",
+   "shader": null,
+   "isTinted": false,
+   "isSectioned": false,
+   "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+  },
+  "keys": [
+   "isophotes",
+   "draft",
+   "faceDirection",
+   "zebraVertical",
+   "zebraHorizontal",
+   "topo"
+  ]
+ },
+ "cameraBefore": {
+  "target": [
+   0.03999999910593033,
+   0.014999999664723873,
+   0.014999999664723873
+  ],
+  "zoom": 66.25891712591013,
+  "q": [
+   0.7556195206396241,
+   0.19359722231853035,
+   0.15530617525728405,
+   0.6061676727324079
+  ],
+  "position": [
+   0.10740723254173949,
+   -0.10791167985216893,
+   -0.016144194935711176
+  ]
+ },
+ "fixtures": [
+  {
+   "id": 33,
+   "type": "Solid"
+  },
+  {
+   "id": 34,
+   "type": "Solid"
+  }
+ ],
+ "camera": {
+  "position": [
+   5.060843163084618,
+   -0.08607546806594914,
+   -0.0026470285580883907
+  ],
+  "target": [
+   5.012,
+   0,
+   0.008
+  ],
+  "mode": "orthographic"
+ },
+ "undoAfterFixtures": 3,
+ "defaultAgain": {
+  "meanAbsDiffVsDefault": 0.000008719308035714285,
+  "fractionChangedVsDefault": 0
+ },
+ "finalShading": {
+  "shader": null,
+  "tag": "uniform",
+  "undo": 3,
+  "memento": {
+   "mode": "uniform",
+   "shader": null,
+   "isTinted": false,
+   "isSectioned": false,
+   "matcap": "1b8e145e-78f6-4dd8-9456-7fec4145fa95"
+  }
+ },
+ "cameraRestored": {
+  "target": [
+   0.03999999910593033,
+   0.014999999664723873,
+   0.014999999664723873
+  ],
+  "zoom": 66.25891712591013,
+  "q": [
+   0.5141340539496848,
+   0.15330537382315515,
+   0.24539907300239308,
+   0.8074298309424608
+  ]
+ },
+ "endUndo": 0,
+ "endBodies": [
+  1,
+  5,
+  3,
+  4
+ ]
+}

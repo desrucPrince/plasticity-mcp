@@ -1,0 +1,248 @@
+{
+ "startUndo": 0,
+ "runs": {
+  "lsheet_select_true": {
+   "failure": null,
+   "settled": true,
+   "cancelled": true,
+   "trace": [
+    {
+     "label": "selected",
+     "at": 1794860963225,
+     "undo": 2,
+     "active": null,
+     "edges": [],
+     "solids": 0,
+     "sheets": 1
+    },
+    {
+     "label": "execute-returned",
+     "at": 1794860963226,
+     "undo": 2,
+     "active": "FindBoundaryEdgesCommand",
+     "edges": [
+      "48e4589",
+      "48e4591",
+      "48e4617",
+      "48e4613",
+      "48e4611",
+      "48e4623"
+     ],
+     "solids": 0,
+     "sheets": 0
+    },
+    {
+     "label": "poll2",
+     "at": 1794860963381,
+     "undo": 3,
+     "active": "ExtendSheetCommand",
+     "edges": [
+      "48e4589",
+      "48e4591",
+      "48e4617",
+      "48e4613",
+      "48e4611",
+      "48e4623"
+     ],
+     "solids": 0,
+     "sheets": 0
+    },
+    {
+     "label": "poll19",
+     "at": 1794860964263,
+     "undo": 3,
+     "active": "ExtendSheetCommand",
+     "edges": [
+      "48e4589",
+      "48e4591",
+      "48e4617",
+      "48e4613",
+      "48e4611",
+      "48e4623"
+     ],
+     "solids": 0,
+     "sheets": 0
+    },
+    {
+     "label": "before-cancel",
+     "at": 1794860964263,
+     "undo": 3,
+     "active": "ExtendSheetCommand",
+     "edges": [
+      "48e4589",
+      "48e4591",
+      "48e4617",
+      "48e4613",
+      "48e4611",
+      "48e4623"
+     ],
+     "solids": 0,
+     "sheets": 0
+    },
+    {
+     "label": "after-cancel",
+     "at": 1794860964323,
+     "undo": 3,
+     "active": null,
+     "edges": [
+      "48e4589",
+      "48e4591",
+      "48e4617",
+      "48e4613",
+      "48e4611",
+      "48e4623"
+     ],
+     "solids": 0,
+     "sheets": 0
+    },
+    {
+     "label": "cleared",
+     "at": 1794860964324,
+     "undo": 3,
+     "active": null,
+     "edges": [],
+     "solids": 0,
+     "sheets": 0
+    }
+   ],
+   "undoAfterMcp": 3
+  },
+  "lsheet_select_false": {
+   "failure": null,
+   "settled": true,
+   "cancelled": null,
+   "trace": [
+    {
+     "label": "selected",
+     "at": 1794860964337,
+     "undo": 3,
+     "active": null,
+     "edges": [],
+     "solids": 0,
+     "sheets": 0
+    },
+    {
+     "label": "execute-returned",
+     "at": 1794860964337,
+     "undo": 3,
+     "active": "FindBoundaryEdgesCommand",
+     "edges": [],
+     "solids": 0,
+     "sheets": 0
+    },
+    {
+     "label": "before-cancel",
+     "at": 1794860964389,
+     "undo": 4,
+     "active": null,
+     "edges": [],
+     "solids": 0,
+     "sheets": 0
+    },
+    {
+     "label": "after-cancel",
+     "at": 1794860964389,
+     "undo": 4,
+     "active": null,
+     "edges": [],
+     "solids": 0,
+     "sheets": 0
+    },
+    {
+     "label": "cleared",
+     "at": 1794860964389,
+     "undo": 4,
+     "active": null,
+     "edges": [],
+     "solids": 0,
+     "sheets": 0
+    }
+   ],
+   "undoAfterMcp": 4
+  }
+ },
+ "lsheet": {
+  "id": 29,
+  "oneFaceEdges": [
+   "48e4589",
+   "48e4623",
+   "48e4611",
+   "48e4617",
+   "48e4591",
+   "48e4613"
+  ]
+ },
+ "cylinderParts": [
+  {
+   "id": 30,
+   "type": "Sheet",
+   "faces": [
+    "Plane"
+   ],
+   "edges": [
+    {
+     "id": "52e4659",
+     "curveType": "Circle",
+     "faces": 1
+    }
+   ]
+  },
+  {
+   "id": 31,
+   "type": "Sheet",
+   "faces": [
+    "Plane"
+   ],
+   "edges": [
+    {
+     "id": "50e4651",
+     "curveType": "Circle",
+     "faces": 1
+    }
+   ]
+  },
+  {
+   "id": 32,
+   "type": "Sheet",
+   "faces": [
+    "Cylinder"
+   ],
+   "edges": [
+    {
+     "id": "51e4710",
+     "curveType": "Circle",
+     "faces": 1
+    },
+    {
+     "id": "51e4707",
+     "curveType": "Circle",
+     "faces": 1
+    }
+   ]
+  }
+ ],
+ "wallValidate": {
+  "id": 32,
+  "versionId": 51,
+  "type": "Sheet",
+  "name": null,
+  "measurementSource": "native-brep",
+  "faceCount": 1,
+  "edgeCount": 2,
+  "boundaryEdgeIds": [
+   "51e4710",
+   "51e4707"
+  ],
+  "closed": false,
+  "nativeCheckCodes": [],
+  "nativeValid": true,
+  "printableSolid": false
+ },
+ "endUndo": 0,
+ "endBodies": [
+  1,
+  5,
+  3,
+  4
+ ]
+}

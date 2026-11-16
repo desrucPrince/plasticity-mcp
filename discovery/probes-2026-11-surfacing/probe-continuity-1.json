@@ -1,0 +1,357 @@
+{
+ "startUndo": 0,
+ "startRevision": "r0.e1e29962802939c5",
+ "cases": {},
+ "fixtures": {
+  "wedge": {
+   "wireId": 10,
+   "solidId": 11
+  },
+  "round": {
+   "solidId": 12
+  },
+  "g2": {
+   "solidId": 13
+  },
+  "e30": [
+   "18e2163"
+  ],
+  "roundEdges": [
+   "20e2371",
+   "20e2349"
+  ],
+  "g2Edges": [
+   "22e2600",
+   "22e2564"
+  ],
+  "roundFace": [
+   {
+    "id": "20f2314",
+    "surfaceType": "Cylinder",
+    "radiusMm": 5
+   }
+  ],
+  "g2Face": [
+   {
+    "id": "22f2503",
+    "surfaceType": "BSurf",
+    "radiusMm": null
+   }
+  ]
+ },
+ "analyzer": {
+  "documentToken": "01a1e50b-82f6-7c36-a2c6-9e2e7e4ff8b3",
+  "revision": "r6.6a60486a74a625dd",
+  "analyses": [
+   {
+    "edge": {
+     "bodyId": 11,
+     "edgeId": "18e2163"
+    },
+    "adjacentFaces": [
+     {
+      "bodyId": 11,
+      "faceId": "18f2176"
+     },
+     {
+      "bodyId": 11,
+      "faceId": "18f2180"
+     }
+    ],
+    "bodyVersionId": 18,
+    "measurementSource": "native-brep-100-samples",
+    "sampleCount": 100,
+    "maximumPositionDeviationMm": 0,
+    "maximumPositionDeviationAtMm": [
+     5019.999980926514,
+     0,
+     9.999999776482582
+    ],
+    "maximumNormalAngleDeviationDeg": 29.999999999999876,
+    "maximumNormalAngleDeviationAtMm": [
+     5019.999980926514,
+     0,
+     9.999999776482582
+    ],
+    "maximumRelativeCurvatureDeviation": 0,
+    "maximumRelativeCurvatureDeviationAtMm": [
+     5019.999980926514,
+     0,
+     9.999999776482582
+    ],
+    "tolerances": {
+     "positionMm": 0.01,
+     "normalAngleDeg": 0.1,
+     "relativeCurvature": 0.05
+    },
+    "passes": {
+     "G0": true,
+     "G1": false,
+     "G2": false
+    },
+    "achievedContinuity": "G0"
+   },
+   {
+    "edge": {
+     "bodyId": 12,
+     "edgeId": "20e2371"
+    },
+    "adjacentFaces": [
+     {
+      "bodyId": 12,
+      "faceId": "20f2260"
+     },
+     {
+      "bodyId": 12,
+      "faceId": "20f2314"
+     }
+    ],
+    "bodyVersionId": 20,
+    "measurementSource": "native-brep-100-samples",
+    "sampleCount": 100,
+    "maximumPositionDeviationMm": 2.222614453595284e-15,
+    "maximumPositionDeviationAtMm": [
+     5114.999771118164,
+     19.999999552965164,
+     0.20202020823489875
+    ],
+    "maximumNormalAngleDeviationDeg": 0,
+    "maximumNormalAngleDeviationAtMm": [
+     5114.999771118164,
+     19.999999552965164,
+     19.999999552965164
+    ],
+    "maximumRelativeCurvatureDeviation": 1,
+    "maximumRelativeCurvatureDeviationAtMm": [
+     5114.999771118164,
+     19.999999552965164,
+     19.999999552965164
+    ],
+    "tolerances": {
+     "positionMm": 0.01,
+     "normalAngleDeg": 0.1,
+     "relativeCurvature": 0.05
+    },
+    "passes": {
+     "G0": true,
+     "G1": true,
+     "G2": false
+    },
+    "achievedContinuity": "G1"
+   },
+   {
+    "edge": {
+     "bodyId": 12,
+     "edgeId": "20e2349"
+    },
+    "adjacentFaces": [
+     {
+      "bodyId": 12,
+      "faceId": "20f2220"
+     },
+     {
+      "bodyId": 12,
+      "faceId": "20f2314"
+     }
+    ],
+    "bodyVersionId": 20,
+    "measurementSource": "native-brep-100-samples",
+    "sampleCount": 100,
+    "maximumPositionDeviationMm": 0,
+    "maximumPositionDeviationAtMm": [
+     5119.999885559082,
+     14.999999664723873,
+     0
+    ],
+    "maximumNormalAngleDeviationDeg": 0,
+    "maximumNormalAngleDeviationAtMm": [
+     5119.999885559082,
+     14.999999664723873,
+     0
+    ],
+    "maximumRelativeCurvatureDeviation": 1,
+    "maximumRelativeCurvatureDeviationAtMm": [
+     5119.999885559082,
+     14.999999664723873,
+     0
+    ],
+    "tolerances": {
+     "positionMm": 0.01,
+     "normalAngleDeg": 0.1,
+     "relativeCurvature": 0.05
+    },
+    "passes": {
+     "G0": true,
+     "G1": true,
+     "G2": false
+    },
+    "achievedContinuity": "G1"
+   },
+   {
+    "edge": {
+     "bodyId": 13,
+     "edgeId": "22e2600"
+    },
+    "adjacentFaces": [
+     {
+      "bodyId": 13,
+      "faceId": "22f2447"
+     },
+     {
+      "bodyId": 13,
+      "faceId": "22f2503"
+     }
+    ],
+    "bodyVersionId": 22,
+    "measurementSource": "native-brep-100-samples",
+    "sampleCount": 100,
+    "maximumPositionDeviationMm": 3.469446951953614e-15,
+    "maximumPositionDeviationAtMm": [
+     5215.000152587891,
+     19.999999552965164,
+     18.98989826440811
+    ],
+    "maximumNormalAngleDeviationDeg": 8.537736462515939e-7,
+    "maximumNormalAngleDeviationAtMm": [
+     5215.000152587891,
+     19.999999552965164,
+     19.999999552965164
+    ],
+    "maximumRelativeCurvatureDeviation": 0,
+    "maximumRelativeCurvatureDeviationAtMm": [
+     5215.000152587891,
+     19.999999552965164,
+     19.999999552965164
+    ],
+    "tolerances": {
+     "positionMm": 0.01,
+     "normalAngleDeg": 0.1,
+     "relativeCurvature": 0.05
+    },
+    "passes": {
+     "G0": true,
+     "G1": true,
+     "G2": true
+    },
+    "achievedContinuity": "G2"
+   },
+   {
+    "edge": {
+     "bodyId": 13,
+     "edgeId": "22e2564"
+    },
+    "adjacentFaces": [
+     {
+      "bodyId": 13,
+      "faceId": "22f2407"
+     },
+     {
+      "bodyId": 13,
+      "faceId": "22f2503"
+     }
+    ],
+    "bodyVersionId": 22,
+    "measurementSource": "native-brep-100-samples",
+    "sampleCount": 100,
+    "maximumPositionDeviationMm": 3.469446951953614e-15,
+    "maximumPositionDeviationAtMm": [
+     5219.99979019165,
+     14.999999664723873,
+     19.191918894648552
+    ],
+    "maximumNormalAngleDeviationDeg": 8.537736462515939e-7,
+    "maximumNormalAngleDeviationAtMm": [
+     5219.99979019165,
+     14.999999664723873,
+     0.606060610152781
+    ],
+    "maximumRelativeCurvatureDeviation": 0,
+    "maximumRelativeCurvatureDeviationAtMm": [
+     5219.99979019165,
+     14.999999664723873,
+     -2.1684043449710089e-16
+    ],
+    "tolerances": {
+     "positionMm": 0.01,
+     "normalAngleDeg": 0.1,
+     "relativeCurvature": 0.05
+    },
+    "passes": {
+     "G0": true,
+     "G1": true,
+     "G2": true
+    },
+    "achievedContinuity": "G2"
+   }
+  ]
+ },
+ "native": {
+  "factoryOwn": {
+   "editor": "Editor",
+   "changed": "Signal",
+   "updated": "Signal",
+   "refine": "RefineScope",
+   "temps": "Array[0]",
+   "phantoms": "Array[0]",
+   "diagnoses": "Array[0]",
+   "executor": "TransactionExecutor",
+   "_state": "AtomicRef",
+   "g0Scale": 10,
+   "g1Scale": 10,
+   "g2Scale": 0.1,
+   "curvatureScale": 0.1,
+   "g0Tolerance": 0.00001,
+   "g1Tolerance": 0.0017453293,
+   "g2Tolerance": 0.05,
+   "continuities": "Array[3]",
+   "continuity": 23156
+  },
+  "factoryChain": [
+   "MeasureContinuityFactory: g1ToleranceDegrees,cycle,edges,doCommit,doUpdate,calculate,doCancel,toJSON,fromJSON",
+   "SimpleStatefulFactory: state,db,signals,embed,beforeFirstUpdate,beforeUpdatePreEmbed,beforeUpdatePostEmbed,onInterruptUpdate,onUpdateFailed,beforeFirstCommit,beforeCommit,doPhantoms,doDiagnostics,onInterruptCommit,beforeCancel,beforePause,afterPause,doCommitFromUpdateCache,update,updateAndIgnoreErrors,cancel,commit,supportsCommitFromUpdateCache,pause",
+   "AbstractFactory: originalItem,originalItems,cleanupTemps,cleanupPhantoms,cleanupDiagnoses,swapTemps,finalize,dispose,embed,update,commit,cancel,finish,interrupt,pause,resource"
+  ],
+  "ContinuityType": {
+   "C1": 23150,
+   "C2": 23151,
+   "C3": 23152,
+   "G1": 23153,
+   "G2": 23154,
+   "G3": 23155,
+   "G0": 23156,
+   "Free": 23157
+  },
+  "edgeView": {
+   "keys": [
+    "versionId",
+    "entityId",
+    "layers",
+    "group",
+    "index",
+    "parent"
+   ],
+   "entityId": 2371
+  },
+  "modelEdgesType": "EdgeCollection",
+  "modelEdgeChain": null,
+  "modelFaceChain": [
+   "Face: GetAnyPointOn,FindUVMidpoint,FindPolygonalMidpoint,FindMidpoint,GetPoint,FindPointNear,EvalNormal,EvalBasis,GetSurface,IsPlanar,IsBlend,GetRadius,FindLongestLinearEdge,MakeIsoparams,MakeIsoparams_async,ImprintIsoparams,ImprintIsoparams_async,GetEdges,GetOuterLoop,GetLoops,GetInnerLoops,GetBlendRadius,FindSimilar,Unembed,Untrim,IsUntrimmed,UntrimNominal,Check,GetBody,EvalGrid,Extend,Shrink,FindEdgesCommon,Stretch,Id,Class,GetIdentifier,GetPartition,GetName,SetName,GetAttributes",
+   "Entity: Id,Class,GetIdentifier,GetPartition,GetName,SetName,GetAttributes"
+  ],
+  "curveChain": "null",
+  "surfaceChain": [],
+  "modelBodyChain": [
+   "SolidBody: Hollow,Hollow_async,SweepTool,SweepTool_async,CreateIntersectionCurves,CreateIntersectionCurves_async,ImprintIntersectionCurve,ImprintIntersectionCurve_async,ProjectWires,ProjectWires_async,ImprintWires,ImprintWires_async,GetCVs,OffsetFaceLoops,OffsetFaceLoops_async,OffsetEdges,OffsetEdges_async,DissolveFaces,DissolveFaces_async,DeleteFaces,DeleteFaces_async,BlendEdges,BlendEdges_async,BlendEdgeChains,BlendEdgeChains_async,FullRound,FullRound_async,ExtendEdges,ExtendEdges_async,ChamferEdges,ChamferEdges_async,ReblendFaces,ReblendFaces_async,OffsetFaces,OffsetFaces_async,DraftAdjacentFaces,DraftAdjacentFaces_async,DraftFaces,DraftFaces_async,ReplaceFaces,ReplaceFaces_async,DeformFaces,DeformFaces_async,PatternFaces,PatternFaces_async,TransformFaces,TransformFaces_async,TransformControlPoints,TransformControlPoints_async,SlideControlPoints,SlideControlPoints_async,RaiseDegreeFaces,RaiseDegreeFaces_async,TransformEdges,TransformEdges_async,IdentifyBlends,IdentifyBlends_async,RemoveFaceCollections,RemoveFaceCollections_async,CreateSolidFromFaces,CreateSolidFromFaces_async,ReverseOrientation,Unjoin,CoverFaces,CoverFaces_async,Heal,Heal_async,SimplifyFaces,SimplifyFaces_async,Extrude,Extrude_async,Sweep,Sweep_async,Spin,Spin_async,GetVertices,GetEdges,GetFaces,FindVertexByIdentifier,FindEdgeByIdentifier,FindFaceByIdentifier,FindEdgesByIdentifier,FindFacesByIdentifier,IsA,Clone,Clone_async,CloneTo,CloneTo_async,CopyAndTransform,CopyAndTransform_async,DeleteEdges,DeleteEdges_async,SectionWithSheet,SectionWithSheet_async,Transform,Transform_async,Boolean,Boolean_async,MakeRegions,MakeRegions_async,FindBox,CloneStamp,CloneStamp_async,SetData,GetData,UnData,HasChildren,Disjoin,AddConstructionGeometry,GetConstructionGeometry,Simplify,Serialize,Serialize_async,GetMemoryUsage,DeleteRedundant,DeleteRedundant_async,GetColor,SetColor,GetCentroid,Check,GetPivot,SetPivot,Id,Class,GetIdentifier,GetPartition,GetName,SetName,GetAttributes",
+   "ShellBody: CreateIntersectionCurves,CreateIntersectionCurves_async,ImprintIntersectionCurve,ImprintIntersectionCurve_async,ProjectWires,ProjectWires_async,ImprintWires,ImprintWires_async,GetCVs,OffsetFaceLoops,OffsetFaceLoops_async,OffsetEdges,OffsetEdges_async,DissolveFaces,DissolveFaces_async,DeleteFaces,DeleteFaces_async,BlendEdges,BlendEdges_async,BlendEdgeChains,BlendEdgeChains_async,FullRound,FullRound_async,ExtendEdges,ExtendEdges_async,ChamferEdges,ChamferEdges_async,ReblendFaces,ReblendFaces_async,OffsetFaces,OffsetFaces_async,DraftAdjacentFaces,DraftAdjacentFaces_async,DraftFaces,DraftFaces_async,ReplaceFaces,ReplaceFaces_async,DeformFaces,DeformFaces_async,PatternFaces,PatternFaces_async,TransformFaces,TransformFaces_async,TransformControlPoints,TransformControlPoints_async,SlideControlPoints,SlideControlPoints_async,RaiseDegreeFaces,RaiseDegreeFaces_async,TransformEdges,TransformEdges_async,IdentifyBlends,IdentifyBlends_async,RemoveFaceCollections,RemoveFaceCollections_async,CreateSolidFromFaces,CreateSolidFromFaces_async,ReverseOrientation,Unjoin,CoverFaces,CoverFaces_async,Heal,Heal_async,SimplifyFaces,SimplifyFaces_async,Extrude,Extrude_async,Sweep,Sweep_async,Spin,Spin_async,GetVertices,GetEdges,GetFaces,FindVertexByIdentifier,FindEdgeByIdentifier,FindFaceByIdentifier,FindEdgesByIdentifier,FindFacesByIdentifier,IsA,Clone,Clone_async,CloneTo,CloneTo_async,CopyAndTransform,CopyAndTransform_async,DeleteEdges,DeleteEdges_async,SectionWithSheet,SectionWithSheet_async,Transform,Transform_async,Boolean,Boolean_async,MakeRegions,MakeRegions_async,FindBox,CloneStamp,CloneStamp_async,SetData,GetData,UnData,HasChildren,Disjoin,AddConstructionGeometry,GetConstructionGeometry,Simplify,Serialize,Serialize_async,GetMemoryUsage,DeleteRedundant,DeleteRedundant_async,GetColor,SetColor,GetCentroid,Check,GetPivot,SetPivot,Id,Class,GetIdentifier,GetPartition,GetName,SetName,GetAttributes",
+   "Body: Extrude,Extrude_async,Sweep,Sweep_async,Spin,Spin_async,GetVertices,GetEdges,GetFaces,FindVertexByIdentifier,FindEdgeByIdentifier,FindFaceByIdentifier,FindEdgesByIdentifier,FindFacesByIdentifier,IsA,Clone,Clone_async,CloneTo,CloneTo_async,CopyAndTransform,CopyAndTransform_async,DeleteEdges,DeleteEdges_async,SectionWithSheet,SectionWithSheet_async,Transform,Transform_async,Boolean,Boolean_async,MakeRegions,MakeRegions_async,FindBox,CloneStamp,CloneStamp_async,SetData,GetData,UnData,HasChildren,Disjoin,AddConstructionGeometry,GetConstructionGeometry,Simplify,Serialize,Serialize_async,GetMemoryUsage,DeleteRedundant,DeleteRedundant_async,GetColor,SetColor,GetCentroid,Check,GetPivot,SetPivot,Id,Class,GetIdentifier,GetPartition,GetName,SetName,GetAttributes",
+   "Entity: Id,Class,GetIdentifier,GetPartition,GetName,SetName,GetAttributes"
+  ]
+ },
+ "endUndo": 0,
+ "endBodies": [
+  1,
+  5,
+  3,
+  4
+ ]
+}

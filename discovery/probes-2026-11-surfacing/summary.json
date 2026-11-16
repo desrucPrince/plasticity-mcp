@@ -1,0 +1,9 @@
+{
+ "note": "Running verdicts; the full findings are in the worker report.",
+ "item1": {"verdict": "DRIVABLE (shipped plasticity_analyze_surface_continuity validated on 3 cases)", "raw": ["probe-continuity-1.json", "probe-continuity-2.json", "kernel-tries2-round.json"]},
+ "item2": {"verdict": "DRIVABLE (kernel EdgeCollection.Laminar read-only; FindBoundaryEdgesCommand selects edges then chains ExtendSheetCommand)", "raw": ["probe-boundary.json", "probe-boundary-cmd.json"]},
+ "item3": {"verdict": "DRIVABLE (ViewportShading.setShader(name2shader[k]) + restoreFromMemento, no undo step; 6 modes, no curvature shader in 26.1.3)", "raw": ["probe-shader.json", "shot-shader-*.png", "restore-camera.json"]},
+ "item4": {"verdict": "DRIVABLE via AlignEdgeCommand + dialog finish (factory-direct BLOCKED: pairs setter needs _face set by the command)", "raw": ["probe-align-1.json", "probe-align-1b.json", "probe-align-1c.json", "probe-align-2-rebuild_G0.json", "probe-align-3.json", "probe-align-3-G0.json", "probe-align-3-dbg.json"]},
+ "item5": {"verdict": "DRIVABLE factory-direct (SquareFactory.boundaries flat edges/wires); G2 at a corner-incompatible boundary measured G1", "raw": ["probe-square-router.json", "probe-square-2.json", "probe-square-2-edgesFlat-edgesG0-edgesG1-edgesG2-edgesG1global.json", "probe-square-3.json"]},
+ "item6": {"verdict": "Curve Array already shipped and validated; Vertex Align PARTIAL (commit seen, G1 not verified)", "raw": ["probe-item6.json"]}
+}

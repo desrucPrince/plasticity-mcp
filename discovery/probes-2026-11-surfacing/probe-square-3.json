@@ -1,0 +1,178 @@
+{
+ "startUndo": 0,
+ "trials": {
+  "G0": {
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "state": {
+    "edges": 1,
+    "wires": 3,
+    "edge2continuity": [
+     23156
+    ]
+   },
+   "depthAfter": 6,
+   "square": {
+    "id": 128,
+    "name": "XNurbs.001",
+    "faceCount": 1,
+    "edgeCount": 4,
+    "boundsMm": {
+     "min": [
+      6199.999999999997,
+      -4.444420604565685e-23,
+      0
+     ],
+     "max": [
+      6240.000000000006,
+      40,
+      5.000000000000001
+     ]
+    }
+   },
+   "join": "ok",
+   "continuity": [
+    {
+     "edge": "241e16006",
+     "gapMm": 0,
+     "angleDeg": 0.0003959319478146999,
+     "relG2": 1,
+     "relG2AtMm": [
+      6199.999809265137,
+      0,
+      0
+     ],
+     "angleAtMm": [
+      6219.7980880737305,
+      0,
+      0
+     ],
+     "achieved": "G1"
+    }
+   ]
+  },
+  "G1": {
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "state": {
+    "edges": 1,
+    "wires": 3,
+    "edge2continuity": [
+     23153
+    ]
+   },
+   "depthAfter": 6,
+   "square": {
+    "id": 129,
+    "name": "XNurbs.001",
+    "faceCount": 1,
+    "edgeCount": 4,
+    "boundsMm": {
+     "min": [
+      6199.999999999994,
+      -4.3664178586437084e-11,
+      -1.4415743293914837e-8
+     ],
+     "max": [
+      6240.000000000027,
+      40.000000000043705,
+      5.000000000000004
+     ]
+    }
+   },
+   "join": "ok",
+   "continuity": [
+    {
+     "edge": "243e16006",
+     "gapMm": 0,
+     "angleDeg": 8.537736462515939e-7,
+     "relG2": 1,
+     "relG2AtMm": [
+      6199.999809265137,
+      0,
+      0
+     ],
+     "angleAtMm": [
+      6202.020168304443,
+      0,
+      0
+     ],
+     "achieved": "G1"
+    }
+   ]
+  },
+  "G2": {
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "state": {
+    "edges": 1,
+    "wires": 3,
+    "edge2continuity": [
+     23154
+    ]
+   },
+   "depthAfter": 6,
+   "square": {
+    "id": 130,
+    "name": "XNurbs.001",
+    "faceCount": 1,
+    "edgeCount": 4,
+    "boundsMm": {
+     "min": [
+      6199.999999999961,
+      -1.7729844541117638e-10,
+      -3.0709626981460705
+     ],
+     "max": [
+      6240.000000000059,
+      40.000000000177344,
+      5
+     ]
+    }
+   },
+   "join": "ok",
+   "continuity": [
+    {
+     "edge": "245e16006",
+     "gapMm": 0,
+     "angleDeg": 0.0001391153356260745,
+     "relG2": 1,
+     "relG2AtMm": [
+      6199.999809265137,
+      0,
+      0
+     ],
+     "angleAtMm": [
+      6219.7980880737305,
+      0,
+      0
+     ],
+     "achieved": "G1"
+    }
+   ]
+  }
+ },
+ "fixture": {
+  "neighbour": 124,
+  "sharedEdge": "229e16006",
+  "wires": [
+   125,
+   126,
+   127
+  ],
+  "fixtureDepth": 5
+ },
+ "endUndo": 0,
+ "endBodies": [
+  1,
+  5,
+  3,
+  4
+ ]
+}

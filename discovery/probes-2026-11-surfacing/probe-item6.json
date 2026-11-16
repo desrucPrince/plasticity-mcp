@@ -1,0 +1,650 @@
+{
+ "startUndo": 0,
+ "curveArray": {
+  "targetId": "B2E05AAD1D2C4EB2C2376DF616C21E87",
+  "title": "Untitled - Plasticity",
+  "documentToken": "01a1e50b-82f6-7c36-a2c6-9e2e7e4ff8b3",
+  "revision": "r3.e8150001f11105f1",
+  "dbVersion": 471,
+  "undoDepth": 3,
+  "redoDepth": 0,
+  "materials": [],
+  "measurements": [],
+  "sectionAnalyses": [],
+  "instances": [],
+  "referenceMeshes": [],
+  "activeGroupId": 0,
+  "groups": [
+   {
+    "id": 0,
+    "name": "Scene",
+    "parentId": null,
+    "childGroupIds": [],
+    "bodyIds": [
+     1,
+     3,
+     4,
+     5,
+     131,
+     132,
+     133,
+     134,
+     135,
+     136
+    ],
+    "instanceIds": [],
+    "referenceMeshIds": [],
+    "otherNodeKeys": [],
+    "visible": true,
+    "hidden": false,
+    "locked": false
+   }
+  ],
+  "construction": {
+   "planes": [],
+   "activePlaneId": "standard:top",
+   "planeStateToken": "planes:50b2ca886dad7e7f",
+   "viewStateToken": "workplane:standard:top:0.00000000000,0.00000000000,0.00000000000,0.00000000000,0.00000000000,1.00000000000,1.00000000000,0.00000000000,0.00000000000,0.00000000000,1.00000000000,0.00000000000",
+   "standardPlaneIds": [
+    "standard:back",
+    "standard:bottom",
+    "standard:front",
+    "standard:left",
+    "standard:right",
+    "standard:top"
+   ]
+  },
+  "regions": [],
+  "bodies": [
+   {
+    "id": 1,
+    "versionId": 1,
+    "type": "Solid",
+    "name": "test-block",
+    "materialId": 0,
+    "visible": true,
+    "hidden": false,
+    "locked": false,
+    "boundsMm": {
+     "min": [
+      0,
+      0,
+      0
+     ],
+     "max": [
+      40.00000000000001,
+      30,
+      10
+     ]
+    },
+    "boundsMethod": "native-box",
+    "faceCount": 11,
+    "edgeCount": 26,
+    "vertexCount": 16
+   },
+   {
+    "id": 5,
+    "versionId": 2,
+    "type": "Sheet",
+    "name": "Swept.001",
+    "materialId": 0,
+    "visible": true,
+    "hidden": false,
+    "locked": false,
+    "boundsMm": {
+     "min": [
+      60,
+      0,
+      0
+     ],
+     "max": [
+      80.00000000000001,
+      5,
+      30
+     ]
+    },
+    "boundsMethod": "native-box",
+    "faceCount": 1,
+    "edgeCount": 4,
+    "vertexCount": 4
+   },
+   {
+    "id": 3,
+    "versionId": 3,
+    "type": "Wire",
+    "name": "Curve.001",
+    "materialId": 0,
+    "visible": true,
+    "hidden": false,
+    "locked": false,
+    "boundsMm": {
+     "min": [
+      60.00000000000001,
+      0,
+      0
+     ],
+     "max": [
+      80.00000000000001,
+      5,
+      0
+     ]
+    },
+    "boundsMethod": "native-box",
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   },
+   {
+    "id": 4,
+    "versionId": 4,
+    "type": "Wire",
+    "name": "Curve.002",
+    "materialId": 0,
+    "visible": true,
+    "hidden": false,
+    "locked": false,
+    "boundsMm": {
+     "min": [
+      60,
+      0,
+      0
+     ],
+     "max": [
+      60,
+      0,
+      30
+     ]
+    },
+    "boundsMethod": "native-box",
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   },
+   {
+    "id": 131,
+    "versionId": 246,
+    "type": "Wire",
+    "name": "Curve.003",
+    "materialId": 0,
+    "visible": true,
+    "hidden": false,
+    "locked": false,
+    "boundsMm": {
+     "min": [
+      6300,
+      0,
+      0
+     ],
+     "max": [
+      6360,
+      20,
+      0
+     ]
+    },
+    "boundsMethod": "native-box",
+    "faceCount": 0,
+    "edgeCount": 0,
+    "vertexCount": 0
+   },
+   {
+    "id": 132,
+    "versionId": 248,
+    "type": "Solid",
+    "name": null,
+    "materialId": 0,
+    "visible": true,
+    "hidden": false,
+    "locked": false,
+    "boundsMm": {
+     "min": [
+      6298,
+      -2,
+      -2
+     ],
+     "max": [
+      6302,
+      2,
+      2
+     ]
+    },
+    "boundsMethod": "native-box",
+    "faceCount": 6,
+    "edgeCount": 12,
+    "vertexCount": 8
+   },
+   {
+    "id": 133,
+    "versionId": 249,
+    "type": "Solid",
+    "name": "Solid.001",
+    "materialId": 0,
+    "visible": true,
+    "hidden": false,
+    "locked": false,
+    "boundsMm": {
+     "min": [
+      6312.932258146304,
+      0.7371134262195156,
+      -2
+     ],
+     "max": [
+      6318.099216601414,
+      5.904071881329909,
+      2
+     ]
+    },
+    "boundsMethod": "native-box",
+    "faceCount": 6,
+    "edgeCount": 12,
+    "vertexCount": 8
+   },
+   {
+    "id": 134,
+    "versionId": 250,
+    "type": "Solid",
+    "name": "Solid.002",
+    "materialId": 0,
+    "visible": true,
+    "hidden": false,
+    "locked": false,
+    "boundsMm": {
+     "min": [
+      6327.316711752096,
+      7.316715089548342,
+      -2
+     ],
+     "max": [
+      6332.683274898095,
+      12.68327823554749,
+      2
+     ]
+    },
+    "boundsMethod": "native-box",
+    "faceCount": 6,
+    "edgeCount": 12,
+    "vertexCount": 8
+   },
+   {
+    "id": 135,
+    "versionId": 251,
+    "type": "Solid",
+    "name": "Solid.003",
+    "materialId": 0,
+    "visible": true,
+    "hidden": false,
+    "locked": false,
+    "boundsMm": {
+     "min": [
+      6341.900767708296,
+      14.095921948470647,
+      -2
+     ],
+     "max": [
+      6347.0677266622815,
+      19.262880902454427,
+      2
+     ]
+    },
+    "boundsMethod": "native-box",
+    "faceCount": 6,
+    "edgeCount": 12,
+    "vertexCount": 8
+   },
+   {
+    "id": 136,
+    "versionId": 252,
+    "type": "Solid",
+    "name": "Solid.004",
+    "materialId": 0,
+    "visible": true,
+    "hidden": false,
+    "locked": false,
+    "boundsMm": {
+     "min": [
+      6358.000000000001,
+      18.000000000000004,
+      -2
+     ],
+     "max": [
+      6362,
+      22,
+      2
+     ]
+    },
+    "boundsMethod": "native-box",
+    "faceCount": 6,
+    "edgeCount": 12,
+    "vertexCount": 8
+   }
+  ],
+  "bodyPagination": {
+   "offset": 0,
+   "limit": 20,
+   "total": 10,
+   "nextOffset": null
+  },
+  "change": {
+   "sceneChanged": true,
+   "revisionChanged": true,
+   "changed": true,
+   "documentChanged": false,
+   "added": [
+    {
+     "id": 133,
+     "versionId": 249,
+     "type": "Solid",
+     "name": "Solid.001",
+     "boundsMm": {
+      "min": [
+       6312.932258146304,
+       0.7371134262195156,
+       -2
+      ],
+      "max": [
+       6318.099216601414,
+       5.904071881329909,
+       2
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 134,
+     "versionId": 250,
+     "type": "Solid",
+     "name": "Solid.002",
+     "boundsMm": {
+      "min": [
+       6327.316711752096,
+       7.316715089548342,
+       -2
+      ],
+      "max": [
+       6332.683274898095,
+       12.68327823554749,
+       2
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 135,
+     "versionId": 251,
+     "type": "Solid",
+     "name": "Solid.003",
+     "boundsMm": {
+      "min": [
+       6341.900767708296,
+       14.095921948470647,
+       -2
+      ],
+      "max": [
+       6347.0677266622815,
+       19.262880902454427,
+       2
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    },
+    {
+     "id": 136,
+     "versionId": 252,
+     "type": "Solid",
+     "name": "Solid.004",
+     "boundsMm": {
+      "min": [
+       6358.000000000001,
+       18.000000000000004,
+       -2
+      ],
+      "max": [
+       6362,
+       22,
+       2
+      ]
+     },
+     "boundsMethod": "native-box",
+     "faceCount": 6,
+     "edgeCount": 12,
+     "vertexCount": 8
+    }
+   ],
+   "removed": [],
+   "modified": [],
+   "regionsAdded": [],
+   "regionsRemoved": [],
+   "regionsModified": [],
+   "constructionPlanesAdded": [],
+   "constructionPlanesRemoved": [],
+   "constructionPlanesModified": [],
+   "activeWorkplaneChanged": null,
+   "materialsChanged": false,
+   "measurementsChanged": false,
+   "sectionAnalysesChanged": false,
+   "instancesChanged": false,
+   "referenceMeshesChanged": false,
+   "groupsChanged": true
+  }
+ },
+ "curveArrayReadBack": {
+  "undoDelta": 1,
+  "newBodies": [
+   {
+    "id": 133,
+    "type": "Solid",
+    "centerMm": [
+     6315.515737373858,
+     3.320592653774712,
+     0
+    ]
+   },
+   {
+    "id": 134,
+    "type": "Solid",
+    "centerMm": [
+     6329.999993325096,
+     9.999996662547916,
+     0
+    ]
+   },
+   {
+    "id": 135,
+    "type": "Solid",
+    "centerMm": [
+     6344.484247185289,
+     16.679401425462537,
+     0
+    ]
+   },
+   {
+    "id": 136,
+    "type": "Solid",
+    "centerMm": [
+     6360,
+     20,
+     0
+    ]
+   }
+  ]
+ },
+ "vertexFixture": {
+  "ca": 137,
+  "cb": 138,
+  "fixtureDepth": 2
+ },
+ "vertexAlign": {
+  "log": [
+   {
+    "ev": "wire keys",
+    "undo": 2,
+    "active": null,
+    "vkeys": [
+     "segments",
+     "_vertices",
+     "_cvs"
+    ],
+    "highKeys": null,
+    "ctor": "Wire",
+    "ownKeys": [
+     "isObject3D",
+     "uuid",
+     "name",
+     "type",
+     "parent",
+     "children",
+     "up",
+     "position",
+     "rotation",
+     "quaternion",
+     "scale",
+     "matrix",
+     "matrixWorld",
+     "matrixAutoUpdate",
+     "matrixWorldAutoUpdate",
+     "matrixWorldNeedsUpdate",
+     "layers",
+     "visible",
+     "castShadow",
+     "receiveShadow",
+     "frustumCulled",
+     "renderOrder",
+     "animations",
+     "customDepthMaterial",
+     "customDistanceMaterial",
+     "static",
+     "userData",
+     "pivot",
+     "clippingLayers",
+     "segments",
+     "_vertices",
+     "_cvs"
+    ]
+   },
+   {
+    "ev": "vertices",
+    "undo": 2,
+    "active": null,
+    "a": [
+     "CurveVertex:253v17253",
+     "CurveVertex:253v17255"
+    ],
+    "b": [
+     "CurveVertex:255v17358",
+     "CurveVertex:255v17360"
+    ]
+   },
+   {
+    "ev": "selected",
+    "undo": 2,
+    "active": null,
+    "counts": {
+     "vertices": 0,
+     "curves": 0,
+     "edges": 0,
+     "controlPoints": 0,
+     "cvs": 0
+    }
+   },
+   {
+    "ev": "captured",
+    "undo": 2,
+    "active": "AlignVertexCommand",
+    "factory": "AlignVertexFactory",
+    "dialog": "Constructor",
+    "params": "AlignVertexFactory",
+    "execError": null,
+    "settled": false
+   },
+   {
+    "ev": "factory state",
+    "undo": 2,
+    "active": "AlignVertexCommand",
+    "continuity": 23156,
+    "movings": "undefined",
+    "targets": "undefined"
+   },
+   {
+    "ev": "updated",
+    "undo": 2,
+    "active": "AlignVertexCommand"
+   },
+   {
+    "ev": "finish called",
+    "undo": 2,
+    "active": "AlignVertexCommand"
+   },
+   {
+    "ev": "end",
+    "undo": 3,
+    "active": null,
+    "settled": true,
+    "execError": null
+   }
+  ],
+  "execError": null,
+  "settled": true
+ },
+ "vertexAfter": {
+  "undo": 3,
+  "bodies": [
+   {
+    "id": 137,
+    "boundsMm": {
+     "min": [
+      6400,
+      0,
+      0
+     ],
+     "max": [
+      6440,
+      5,
+      0
+     ]
+    }
+   },
+   {
+    "id": 138,
+    "boundsMm": {
+     "min": [
+      6440,
+      5,
+      0
+     ],
+     "max": [
+      6470,
+      30,
+      0
+     ]
+    }
+   }
+  ]
+ },
+ "finalCancel": {
+  "before": {
+   "active": null,
+   "busy": false,
+   "undo": 3
+  },
+  "after": {
+   "active": null,
+   "busy": false,
+   "undo": 3
+  }
+ },
+ "endUndo": 0,
+ "endBodies": [
+  1,
+  5,
+  3,
+  4
+ ]
+}

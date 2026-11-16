@@ -1,0 +1,661 @@
+{
+ "startUndo": 0,
+ "trials": {
+  "G1": {
+   "run": {
+    "log": [
+     {
+      "ev": "selected",
+      "undo": 4,
+      "active": null,
+      "edges": [
+       "127e10795",
+       "124e10590"
+      ]
+     },
+     {
+      "ev": "captured",
+      "undo": 4,
+      "active": "AlignEdgeCommand",
+      "factory": "AlignAndRebuildFactory",
+      "dialog": "Constructor",
+      "dialogKeys": [
+       "params",
+       "makeElement",
+       "dynamicName",
+       "signals",
+       "state",
+       "handleInput",
+       "__k"
+      ],
+      "paramsKeys": [
+       "editor",
+       "changed",
+       "updated",
+       "refine",
+       "temps",
+       "phantoms",
+       "diagnoses",
+       "executor",
+       "_state",
+       "partition",
+       "phantomPartition",
+       "continuities",
+       "isDirty",
+       "needsUpdate",
+       "needsRemove",
+       "_controlType",
+       "_uDegree",
+       "_vDegree",
+       "_uSpans",
+       "_vSpans",
+       "_weight",
+       "_adaptiveTolerance",
+       "_preferToProduceSurface",
+       "_tolerance",
+       "_angularTolerance",
+       "_maxCVs",
+       "_quadSided",
+       "_stretch",
+       "_bending",
+       "_changeInBending",
+       "_boundaryCondition",
+       "_parameterization",
+       "_enforceTolerance",
+       "analysis",
+       "_guides",
+       "_edge2constraint",
+       "isoparm2refinement",
+       "_segment2constraint",
+       "_continuity",
+       "_blending"
+      ],
+      "paramsIsFactory": true
+     },
+     {
+      "ev": "after settle wait",
+      "undo": 4,
+      "active": "AlignEdgeCommand"
+     },
+     {
+      "ev": "continuity set",
+      "undo": 4,
+      "active": "AlignEdgeCommand",
+      "before": {
+       "continuity": 23156,
+       "edge2continuity": [
+        [
+         "10590:10590",
+         23156
+        ]
+       ],
+       "pairs": [
+        "127e10795",
+        "124e10590"
+       ],
+       "targets": [
+        "124e10590"
+       ]
+      },
+      "afterSet": {
+       "continuity": 23156,
+       "edge2continuity": [
+        [
+         "10590:10590",
+         23153
+        ]
+       ]
+      },
+      "refFound": true,
+      "movFound": true
+     },
+     {
+      "ev": "updated",
+      "undo": 4,
+      "active": "AlignEdgeCommand"
+     },
+     {
+      "ev": "finish called",
+      "undo": 4,
+      "active": "AlignEdgeCommand"
+     },
+     {
+      "ev": "factory.commit called",
+      "undo": 4,
+      "active": "AlignEdgeCommand"
+     },
+     {
+      "ev": "factory.commit resolved",
+      "undo": 4,
+      "active": "AlignEdgeCommand",
+      "r": "Sheet"
+     },
+     {
+      "ev": "execute returned",
+      "undo": 4,
+      "active": "AlignEdgeCommand",
+      "ret": "undefined"
+     },
+     {
+      "ev": "end",
+      "undo": 5,
+      "active": null,
+      "settled": true,
+      "execError": null
+     }
+    ],
+    "execError": null,
+    "settled": true
+   },
+   "undoAfter": 5,
+   "bodies": [
+    {
+     "id": 79,
+     "type": "Wire",
+     "faceCount": 0,
+     "edgeCount": 0,
+     "boundsMm": {
+      "min": [
+       5000,
+       0,
+       0
+      ],
+      "max": [
+       5030,
+       5,
+       0
+      ]
+     }
+    },
+    {
+     "id": 80,
+     "type": "Sheet",
+     "faceCount": 1,
+     "edgeCount": 4,
+     "boundsMm": {
+      "min": [
+       5000,
+       0,
+       0
+      ],
+      "max": [
+       5030,
+       5,
+       20
+      ]
+     }
+    },
+    {
+     "id": 81,
+     "type": "Wire",
+     "faceCount": 0,
+     "edgeCount": 0,
+     "boundsMm": {
+      "min": [
+       5030.5,
+       5.3,
+       0
+      ],
+      "max": [
+       5054,
+       30,
+       0
+      ]
+     }
+    },
+    {
+     "id": 82,
+     "type": "Sheet",
+     "faceCount": 1,
+     "edgeCount": 4,
+     "boundsMm": {
+      "min": [
+       5029.99995,
+       4.99995,
+       -0.000049999999999999996
+      ],
+      "max": [
+       5054.00005,
+       30.00005,
+       20.00005
+      ]
+     }
+    }
+   ],
+   "sheetB": {
+    "surface": [
+     "BSurf"
+    ],
+    "vertical": [
+     {
+      "id": "128e10792",
+      "centerMm": [
+       5054,
+       30,
+       10
+      ]
+     },
+     {
+      "id": "128e10795",
+      "centerMm": [
+       5030,
+       5,
+       10
+      ]
+     }
+    ]
+   },
+   "sheetAunchanged": true,
+   "join": "ok",
+   "continuity": [
+    {
+     "edge": {
+      "bodyId": 80,
+      "edgeId": "129e10590"
+     },
+     "adjacentFaces": [
+      {
+       "bodyId": 80,
+       "faceId": "129f10596"
+      },
+      {
+       "bodyId": 80,
+       "faceId": "129f10798"
+      }
+     ],
+     "bodyVersionId": 129,
+     "measurementSource": "native-brep-100-samples",
+     "sampleCount": 100,
+     "maximumPositionDeviationMm": 0,
+     "maximumPositionDeviationAtMm": [
+      5030.00020980835,
+      4.999999888241291,
+      0
+     ],
+     "maximumNormalAngleDeviationDeg": 8.537736462515939e-7,
+     "maximumNormalAngleDeviationAtMm": [
+      5030.00020980835,
+      4.999999888241291,
+      1.61616166587919
+     ],
+     "maximumRelativeCurvatureDeviation": 0.7845833180790841,
+     "maximumRelativeCurvatureDeviationAtMm": [
+      5030.00020980835,
+      4.999999888241291,
+      19.999999552965164
+     ],
+     "tolerances": {
+      "positionMm": 0.01,
+      "normalAngleDeg": 0.1,
+      "relativeCurvature": 0.05
+     },
+     "passes": {
+      "G0": true,
+      "G1": true,
+      "G2": false
+     },
+     "achievedContinuity": "G1"
+    }
+   ],
+   "cancel": {
+    "before": {
+     "active": null,
+     "busy": false,
+     "undo": 6
+    },
+    "after": {
+     "active": null,
+     "busy": false,
+     "undo": 6
+    }
+   },
+   "depthAfterUndo": 4
+  },
+  "G2": {
+   "run": {
+    "log": [
+     {
+      "ev": "selected",
+      "undo": 4,
+      "active": null,
+      "edges": [
+       "127e10795",
+       "124e10590"
+      ]
+     },
+     {
+      "ev": "captured",
+      "undo": 4,
+      "active": "AlignEdgeCommand",
+      "factory": "AlignAndRebuildFactory",
+      "dialog": "Constructor",
+      "dialogKeys": [
+       "params",
+       "makeElement",
+       "dynamicName",
+       "signals",
+       "state",
+       "handleInput",
+       "__k"
+      ],
+      "paramsKeys": [
+       "editor",
+       "changed",
+       "updated",
+       "refine",
+       "temps",
+       "phantoms",
+       "diagnoses",
+       "executor",
+       "_state",
+       "partition",
+       "phantomPartition",
+       "continuities",
+       "isDirty",
+       "needsUpdate",
+       "needsRemove",
+       "_controlType",
+       "_uDegree",
+       "_vDegree",
+       "_uSpans",
+       "_vSpans",
+       "_weight",
+       "_adaptiveTolerance",
+       "_preferToProduceSurface",
+       "_tolerance",
+       "_angularTolerance",
+       "_maxCVs",
+       "_quadSided",
+       "_stretch",
+       "_bending",
+       "_changeInBending",
+       "_boundaryCondition",
+       "_parameterization",
+       "_enforceTolerance",
+       "analysis",
+       "_guides",
+       "_edge2constraint",
+       "isoparm2refinement",
+       "_segment2constraint",
+       "_continuity",
+       "_blending"
+      ],
+      "paramsIsFactory": true
+     },
+     {
+      "ev": "after settle wait",
+      "undo": 4,
+      "active": "AlignEdgeCommand"
+     },
+     {
+      "ev": "continuity set",
+      "undo": 4,
+      "active": "AlignEdgeCommand",
+      "before": {
+       "continuity": 23156,
+       "edge2continuity": [
+        [
+         "10590:10590",
+         23156
+        ]
+       ],
+       "pairs": [
+        "127e10795",
+        "124e10590"
+       ],
+       "targets": [
+        "124e10590"
+       ]
+      },
+      "afterSet": {
+       "continuity": 23156,
+       "edge2continuity": [
+        [
+         "10590:10590",
+         23154
+        ]
+       ]
+      },
+      "refFound": true,
+      "movFound": true
+     },
+     {
+      "ev": "updated",
+      "undo": 4,
+      "active": "AlignEdgeCommand"
+     },
+     {
+      "ev": "finish called",
+      "undo": 4,
+      "active": "AlignEdgeCommand"
+     },
+     {
+      "ev": "factory.commit called",
+      "undo": 4,
+      "active": "AlignEdgeCommand"
+     },
+     {
+      "ev": "factory.commit resolved",
+      "undo": 4,
+      "active": "AlignEdgeCommand",
+      "r": "Sheet"
+     },
+     {
+      "ev": "execute returned",
+      "undo": 4,
+      "active": "AlignEdgeCommand",
+      "ret": "undefined"
+     },
+     {
+      "ev": "end",
+      "undo": 5,
+      "active": null,
+      "settled": true,
+      "execError": null
+     }
+    ],
+    "execError": null,
+    "settled": true
+   },
+   "undoAfter": 5,
+   "bodies": [
+    {
+     "id": 79,
+     "type": "Wire",
+     "faceCount": 0,
+     "edgeCount": 0,
+     "boundsMm": {
+      "min": [
+       5000,
+       0,
+       0
+      ],
+      "max": [
+       5030,
+       5,
+       0
+      ]
+     }
+    },
+    {
+     "id": 80,
+     "type": "Sheet",
+     "faceCount": 1,
+     "edgeCount": 4,
+     "boundsMm": {
+      "min": [
+       5000,
+       0,
+       0
+      ],
+      "max": [
+       5030,
+       5,
+       20
+      ]
+     }
+    },
+    {
+     "id": 81,
+     "type": "Wire",
+     "faceCount": 0,
+     "edgeCount": 0,
+     "boundsMm": {
+      "min": [
+       5030.5,
+       5.3,
+       0
+      ],
+      "max": [
+       5054,
+       30,
+       0
+      ]
+     }
+    },
+    {
+     "id": 82,
+     "type": "Sheet",
+     "faceCount": 1,
+     "edgeCount": 4,
+     "boundsMm": {
+      "min": [
+       5029.99995,
+       4.99995,
+       -0.000049999999999999996
+      ],
+      "max": [
+       5054.00005,
+       30.00005,
+       20.00005
+      ]
+     }
+    }
+   ],
+   "sheetB": {
+    "surface": [
+     "BSurf"
+    ],
+    "vertical": [
+     {
+      "id": "130e10792",
+      "centerMm": [
+       5054,
+       30,
+       10
+      ]
+     },
+     {
+      "id": "130e10795",
+      "centerMm": [
+       5030,
+       5,
+       10
+      ]
+     }
+    ]
+   },
+   "sheetAunchanged": true,
+   "join": "ok",
+   "continuity": [
+    {
+     "edge": {
+      "bodyId": 80,
+      "edgeId": "131e10590"
+     },
+     "adjacentFaces": [
+      {
+       "bodyId": 80,
+       "faceId": "131f10596"
+      },
+      {
+       "bodyId": 80,
+       "faceId": "131f10798"
+      }
+     ],
+     "bodyVersionId": 131,
+     "measurementSource": "native-brep-100-samples",
+     "sampleCount": 100,
+     "maximumPositionDeviationMm": 0,
+     "maximumPositionDeviationAtMm": [
+      5030.00020980835,
+      4.999999888241291,
+      0
+     ],
+     "maximumNormalAngleDeviationDeg": 0.0000012074182697257333,
+     "maximumNormalAngleDeviationAtMm": [
+      5030.00020980835,
+      4.999999888241291,
+      0
+     ],
+     "maximumRelativeCurvatureDeviation": 7.54448507100177e-8,
+     "maximumRelativeCurvatureDeviationAtMm": [
+      5030.00020980835,
+      4.999999888241291,
+      19.999999552965164
+     ],
+     "tolerances": {
+      "positionMm": 0.01,
+      "normalAngleDeg": 0.1,
+      "relativeCurvature": 0.05
+     },
+     "passes": {
+      "G0": true,
+      "G1": true,
+      "G2": true
+     },
+     "achievedContinuity": "G2"
+    }
+   ],
+   "cancel": {
+    "before": {
+     "active": null,
+     "busy": false,
+     "undo": 6
+    },
+    "after": {
+     "active": null,
+     "busy": false,
+     "undo": 6
+    }
+   },
+   "depthAfterUndo": 4
+  }
+ },
+ "fixture": {
+  "sheetA": 80,
+  "sheetB": 82,
+  "edgeA": "124e10590",
+  "edgeB": "127e10795",
+  "fixtureDepth": 4,
+  "edgeBcenterBefore": [
+   5030.5,
+   5.3,
+   10
+  ],
+  "edgeAcenter": [
+   5030,
+   5,
+   10
+  ]
+ },
+ "finalCancel": {
+  "before": {
+   "active": null,
+   "busy": false,
+   "undo": 4
+  },
+  "after": {
+   "active": null,
+   "busy": false,
+   "undo": 4
+  }
+ },
+ "endUndo": 0,
+ "endBodies": [
+  1,
+  5,
+  3,
+  4
+ ]
+}

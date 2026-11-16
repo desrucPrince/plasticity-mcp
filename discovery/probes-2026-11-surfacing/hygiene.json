@@ -1,0 +1,18 @@
+{
+ "patches": {
+  "AlignEdgeFactory": [],
+  "AlignAndRebuildFactory": [],
+  "SquareFactory": [],
+  "AlignVertexFactory": [],
+  "AlignEdgeDialog": [],
+  "SquareDialog": [],
+  "AlignVertexDialog": [],
+  "pairsSetterIsNative": true
+ },
+ "globalsRemoved": [
+  "__alignLog"
+ ],
+ "remaining": [],
+ "active": null,
+ "undo": 0
+}

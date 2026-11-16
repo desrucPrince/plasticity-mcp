@@ -1,0 +1,99 @@
+{
+ "at": "2026-11-16T20:19:47.174Z",
+ "revision": "r0.8faa1825e323c999",
+ "undoDepth": 0,
+ "bodies": [
+  {
+   "id": 1,
+   "versionId": 1,
+   "type": "Solid",
+   "name": "test-block",
+   "boundsMm": {
+    "min": [
+     0,
+     0,
+     0
+    ],
+    "max": [
+     40.00000000000001,
+     30,
+     10
+    ]
+   },
+   "faceCount": 11,
+   "edgeCount": 26
+  },
+  {
+   "id": 5,
+   "versionId": 2,
+   "type": "Sheet",
+   "name": "Swept.001",
+   "boundsMm": {
+    "min": [
+     60,
+     0,
+     0
+    ],
+    "max": [
+     80.00000000000001,
+     5,
+     30
+    ]
+   },
+   "faceCount": 1,
+   "edgeCount": 4
+  },
+  {
+   "id": 3,
+   "versionId": 3,
+   "type": "Wire",
+   "name": "Curve.001",
+   "boundsMm": {
+    "min": [
+     60.00000000000001,
+     0,
+     0
+    ],
+    "max": [
+     80.00000000000001,
+     5,
+     0
+    ]
+   },
+   "faceCount": 0,
+   "edgeCount": 0
+  },
+  {
+   "id": 4,
+   "versionId": 4,
+   "type": "Wire",
+   "name": "Curve.002",
+   "boundsMm": {
+    "min": [
+     60,
+     0,
+     0
+    ],
+    "max": [
+     60,
+     0,
+     30
+    ]
+   },
+   "faceCount": 0,
+   "edgeCount": 0
+  }
+ ],
+ "measurements": [],
+ "native": {
+  "undo": 0,
+  "redo": 0,
+  "modeTag": "uniform",
+  "shader": "undefined",
+  "isUsingShader": {},
+  "isUsingMatcap": {},
+  "isUsingEnvironment": {},
+  "measurements": null,
+  "active": null
+ }
+}

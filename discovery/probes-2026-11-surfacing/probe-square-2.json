@@ -1,0 +1,246 @@
+{
+ "startUndo": 0,
+ "trials": {
+  "edgesFlat": {
+   "input": "edges",
+   "shape": "flat",
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "state": {
+    "boundaries": [
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge"
+    ],
+    "edges": [
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge"
+    ],
+    "wires": [],
+    "edge2continuity": 4
+   },
+   "reads": [
+    "continuity",
+    "db",
+    "clearEdgeConstraints",
+    "clearSegmentConstraints",
+    "addEdgeConstraint",
+    "boundaries",
+    "edges",
+    "wires",
+    "edge2continuity",
+    "commit",
+    "createInitialMark",
+    "state",
+    "signals",
+    "updateAndCommitBehaviorAreIdentical",
+    "constructor",
+    "doCommit",
+    "calculateForCommit",
+    "calculate",
+    "controlType",
+    "solve",
+    "adaptiveTolerance",
+    "preferToProduceSurface",
+    "tolerance",
+    "angularTolerance",
+    "maxCVs",
+    "quadSided",
+    "stretch",
+    "bending",
+    "changeInBending",
+    "boundaryCondition",
+    "parameterization",
+    "enforceTolerance",
+    "uDegree",
+    "vDegree",
+    "uSpans",
+    "vSpans",
+    "weight",
+    "edge2constraint",
+    "segment2constraint",
+    "emitWarnings",
+    "calculateAnalysis",
+    "calculateRefinements",
+    "zip",
+    "originalItems",
+    "originalItem",
+    "shouldRemoveOriginalItemOnCommit",
+    "collections",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose"
+   ],
+   "depthAfter": 7,
+   "created": [
+    {
+     "id": 106,
+     "type": "Sheet",
+     "name": "XNurbs.001",
+     "faces": [
+      "BSurf"
+     ],
+     "edges": 4,
+     "boundsMm": {
+      "min": [
+       6099.999999999998,
+       -2.9530490183580216e-22,
+       19.999999999999996
+      ],
+      "max": [
+       6140.000000000006,
+       40.00000000000002,
+       20.00000000000001
+      ]
+     }
+    }
+   ]
+  },
+  "edgesNested": {
+   "input": "edges",
+   "shape": "nested",
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'match')\n    at TopologyItem.decompose (evalmachine.<anonymous>:1:5117206)\n    at GeometryDatabase.lookupTopologyItemById (evalmachine.<anonymous>:1:10465702)\n    at GeometryDatabase.lookupTopologyItem (evalmachine.<anonymous>:1:10467366)\n    at Database.lookupTopologyItem (evalmachine.<anonymous>:1:5981424)\n    at set boundaries (evalmachine.<anonymous>:1:7099419)\n    at SquareEdgeCommand.execute (<anonymous>:295:30)\n    at evalmachine.<anonymous>:1:5306148\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at SquareEdgeCommand.run (evalmachine.<anonymous>:1:5306048)\n    at CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823191)",
+   "state": null,
+   "reads": null
+  },
+  "wiresFlat": {
+   "input": "wires",
+   "shape": "flat",
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "state": {
+    "boundaries": [
+     "Wire",
+     "Wire",
+     "Wire",
+     "Wire"
+    ],
+    "edges": [],
+    "wires": [
+     "Wire",
+     "Wire",
+     "Wire",
+     "Wire"
+    ],
+    "edge2continuity": 0
+   },
+   "reads": [
+    "continuity",
+    "db",
+    "clearEdgeConstraints",
+    "clearSegmentConstraints",
+    "addSegmentConstraint",
+    "boundaries",
+    "edges",
+    "wires",
+    "edge2continuity",
+    "commit",
+    "createInitialMark",
+    "state",
+    "signals",
+    "updateAndCommitBehaviorAreIdentical",
+    "constructor",
+    "doCommit",
+    "calculateForCommit",
+    "calculate",
+    "controlType",
+    "solve",
+    "adaptiveTolerance",
+    "preferToProduceSurface",
+    "tolerance",
+    "angularTolerance",
+    "maxCVs",
+    "quadSided",
+    "stretch",
+    "bending",
+    "changeInBending",
+    "boundaryCondition",
+    "parameterization",
+    "enforceTolerance",
+    "uDegree",
+    "vDegree",
+    "uSpans",
+    "vSpans",
+    "weight",
+    "edge2constraint",
+    "segment2constraint",
+    "emitWarnings",
+    "calculateAnalysis",
+    "calculateRefinements",
+    "zip",
+    "originalItems",
+    "originalItem",
+    "shouldRemoveOriginalItemOnCommit",
+    "collections",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose"
+   ],
+   "depthAfter": 7,
+   "created": [
+    {
+     "id": 107,
+     "type": "Sheet",
+     "name": "XNurbs.001",
+     "faces": [
+      "BSurf"
+     ],
+     "edges": 4,
+     "boundsMm": {
+      "min": [
+       5999.999999999995,
+       -3.5481824268179734e-22,
+       -3.9999999999316294
+      ],
+      "max": [
+       6040.000000000014,
+       40.00000000000002,
+       6.3333333332319945
+      ]
+     }
+    }
+   ]
+  },
+  "wiresNested": {
+   "input": "wires",
+   "shape": "nested",
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'match')\n    at TopologyItem.decompose (evalmachine.<anonymous>:1:5117206)\n    at GeometryDatabase.lookupTopologyItemById (evalmachine.<anonymous>:1:10465702)\n    at GeometryDatabase.lookupTopologyItem (evalmachine.<anonymous>:1:10467366)\n    at Database.lookupTopologyItem (evalmachine.<anonymous>:1:5981424)\n    at set boundaries (evalmachine.<anonymous>:1:7099419)\n    at SquareEdgeCommand.execute (<anonymous>:295:30)\n    at evalmachine.<anonymous>:1:5306148\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at SquareEdgeCommand.run (evalmachine.<anonymous>:1:5306048)\n    at CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823191)",
+   "state": null,
+   "reads": null
+  }
+ },
+ "fixture": {
+  "wires": [
+   101,
+   102,
+   103,
+   104
+  ],
+  "box": 105,
+  "laminar": [
+   "187e13992",
+   "187e13987",
+   "187e13982",
+   "187e13977"
+  ],
+  "fixtureDepth": 6
+ },
+ "endUndo": 0,
+ "endBodies": [
+  1,
+  5,
+  3,
+  4
+ ]
+}

@@ -1,0 +1,518 @@
+{
+ "SquareFactory": {
+  "chain": [
+   {
+    "name": "SquareFactory",
+    "methods": [
+     "calculateAnalysis/1"
+    ],
+    "accessors": [
+     "boundariesgs",
+     "edgesg",
+     "wiresg"
+    ]
+   },
+   {
+    "name": "XNurbsFactory",
+    "methods": [
+     "clearEdgeConstraints/0",
+     "addEdgeConstraint/1",
+     "removeEdgeConstraint/1",
+     "getContinuityForEdge/1",
+     "setContinuityForEdge/2",
+     "clearSegmentConstraints/0",
+     "addSegmentConstraint/1",
+     "getContinuityForSegment/1",
+     "setContinuityForSegment/2",
+     "setContinuityForConstraint/2",
+     "cycle/0",
+     "solve/0",
+     "calculate/0",
+     "emitWarnings/1",
+     "calculateAnalysis/1",
+     "calculateRefinements/0",
+     "toJSON/0",
+     "fromJSON/1",
+     "dispose/0"
+    ],
+    "accessors": [
+     "controlTypegs",
+     "uDegreegs",
+     "vDegreegs",
+     "uSpansgs",
+     "vSpansgs",
+     "weightgs",
+     "adaptiveTolerancegs",
+     "preferToProduceSurfacegs",
+     "satisfyPrecisionRequirementsgs",
+     "tolerancegs",
+     "angularTolerancegs",
+     "maxCVsgs",
+     "quadSidedgs",
+     "flatnessgs",
+     "stretchgs",
+     "bendinggs",
+     "changeInBendinggs",
+     "boundaryConditiongs",
+     "parameterizationgs",
+     "enforceTolerancegs",
+     "guidesgs",
+     "edge2constraintg",
+     "edge2continuityg",
+     "segment2constraintg",
+     "shouldDirtyOnContinuityChangeg",
+     "segment2continuityg",
+     "continuitygs",
+     "blendinggs",
+     "refinementsg"
+    ]
+   },
+   {
+    "name": "GeometryFactory",
+    "methods": [
+     "embed/1",
+     "update/1",
+     "updateAndIgnoreErrors/0",
+     "calculateForUpdate/0",
+     "calculateForCommit/0",
+     "calculate/0",
+     "calculateDiagnostics/1",
+     "createInitialMark/0",
+     "continueUpdatingIfMoreWork/2",
+     "notifyOfError/1",
+     "commit/0",
+     "cancel/0",
+     "pause/0"
+    ],
+    "accessors": [
+     "stategs",
+     "phantomArgumentsg",
+     "doneg",
+     "updateAndCommitBehaviorAreIdenticalg",
+     "isPausedg"
+    ]
+   }
+  ],
+  "own": {
+   "editor": "Editor",
+   "changed": "Signal",
+   "updated": "Signal",
+   "refine": "RefineScope",
+   "temps": "Array[0]",
+   "phantoms": "Array[0]",
+   "diagnoses": "Array[0]",
+   "executor": "TransactionExecutor",
+   "_state": "AtomicRef",
+   "partition": "Partition",
+   "phantomPartition": "Partition",
+   "continuities": "Array[4]",
+   "isDirty": true,
+   "needsUpdate": "Map",
+   "needsRemove": "Set",
+   "_controlType": 1,
+   "_uDegree": 3,
+   "_vDegree": 3,
+   "_uSpans": 1,
+   "_vSpans": 1,
+   "_weight": 1,
+   "_adaptiveTolerance": false,
+   "_preferToProduceSurface": true,
+   "_tolerance": 0.00001,
+   "_angularTolerance": 0.1,
+   "_maxCVs": 4000,
+   "_quadSided": true,
+   "_stretch": 0,
+   "_bending": 0,
+   "_changeInBending": 1,
+   "_boundaryCondition": 2,
+   "_parameterization": 2,
+   "_enforceTolerance": 5,
+   "analysis": "Object",
+   "_guides": "Object",
+   "_edge2constraint": "Map",
+   "isoparm2refinement": "Map",
+   "_segment2constraint": "Map",
+   "_continuity": 23156,
+   "_blending": 0.5,
+   "vsurf": "XNurbs",
+   "shouldErrorOnImpossibleQuadSided": true,
+   "__accessorValues": {
+    "boundarie": "undefined",
+    "edge": "undefined",
+    "wire": "undefined",
+    "controlType": 1,
+    "uDegree": 3,
+    "vDegree": 3,
+    "uSpan": "undefined",
+    "vSpan": "undefined",
+    "weight": 1,
+    "adaptiveTolerance": false,
+    "preferToProduceSurface": true,
+    "satisfyPrecisionRequirement": "undefined",
+    "tolerance": 0.00001,
+    "angularTolerance": 0.1,
+    "maxCV": "undefined",
+    "quadSided": true,
+    "flatne": "undefined",
+    "stretch": 0,
+    "bendin": "undefined",
+    "changeInBendin": "undefined",
+    "boundaryCondition": 2,
+    "parameterization": 2,
+    "enforceTolerance": 5,
+    "guide": "undefined",
+    "edge2constraint": "Map",
+    "edge2continuity": "Map",
+    "segment2constraint": "Map",
+    "shouldDirtyOnContinuityChange": false,
+    "segment2continuity": "Map",
+    "continuity": 23156,
+    "blendin": "undefined",
+    "refinement": "undefined",
+    "state": "Object",
+    "phantomArgument": "undefined",
+    "done": false,
+    "updateAndCommitBehaviorAreIdentical": true,
+    "isPaused": false
+   }
+  },
+  "statics": []
+ },
+ "SquareCommand": {
+  "chain": [
+   {
+    "name": "SquareCommand",
+    "methods": [
+     "execute/0"
+    ],
+    "accessors": []
+   },
+   {
+    "name": "RouterCommand",
+    "methods": [
+     "shouldPropagateClickPoint/0"
+    ],
+    "accessors": []
+   },
+   {
+    "name": "Command",
+    "methods": [
+     "run/0",
+     "shouldAddToHistory/1",
+     "shouldUpdateBackup/0",
+     "shouldPropagateClickPoint/0",
+     "shouldDisableViewportSelector/0",
+     "repeat/1",
+     "embed/1",
+     "forward/1"
+    ],
+    "accessors": [
+     "titleg",
+     "identifierg",
+     "hitsg",
+     "clickPointg",
+     "clickNormalg"
+    ]
+   }
+  ],
+  "own": null,
+  "statics": []
+ },
+ "SquareEdgeCommand": {
+  "chain": [
+   {
+    "name": "SquareEdgeCommand",
+    "methods": [
+     "execute/0"
+    ],
+    "accessors": []
+   },
+   {
+    "name": "Command",
+    "methods": [
+     "run/0",
+     "shouldAddToHistory/1",
+     "shouldUpdateBackup/0",
+     "shouldPropagateClickPoint/0",
+     "shouldDisableViewportSelector/0",
+     "repeat/1",
+     "embed/1",
+     "forward/1"
+    ],
+    "accessors": [
+     "titleg",
+     "identifierg",
+     "hitsg",
+     "clickPointg",
+     "clickNormalg"
+    ]
+   }
+  ],
+  "own": null,
+  "statics": []
+ },
+ "SquareFaceCommand": {
+  "chain": [
+   {
+    "name": "SquareFaceCommand",
+    "methods": [
+     "execute/0"
+    ],
+    "accessors": []
+   },
+   {
+    "name": "Command",
+    "methods": [
+     "run/0",
+     "shouldAddToHistory/1",
+     "shouldUpdateBackup/0",
+     "shouldPropagateClickPoint/0",
+     "shouldDisableViewportSelector/0",
+     "repeat/1",
+     "embed/1",
+     "forward/1"
+    ],
+    "accessors": [
+     "titleg",
+     "identifierg",
+     "hitsg",
+     "clickPointg",
+     "clickNormalg"
+    ]
+   }
+  ],
+  "own": null,
+  "statics": []
+ },
+ "AlignVertexFactory": {
+  "chain": [
+   {
+    "name": "AlignVertexFactory",
+    "methods": [
+     "cycle/0",
+     "calculate/0",
+     "availableMovingCVs/0"
+    ],
+    "accessors": [
+     "continuitygs",
+     "continuitiesg",
+     "targets",
+     "movings",
+     "positiong",
+     "tgs",
+     "refinementsg",
+     "originalItemg"
+    ]
+   },
+   {
+    "name": "GeometryFactory",
+    "methods": [
+     "embed/1",
+     "update/1",
+     "updateAndIgnoreErrors/0",
+     "calculateForUpdate/0",
+     "calculateForCommit/0",
+     "calculate/0",
+     "calculateDiagnostics/1",
+     "createInitialMark/0",
+     "continueUpdatingIfMoreWork/2",
+     "notifyOfError/1",
+     "commit/0",
+     "cancel/0",
+     "pause/0"
+    ],
+    "accessors": [
+     "stategs",
+     "phantomArgumentsg",
+     "doneg",
+     "updateAndCommitBehaviorAreIdenticalg",
+     "isPausedg"
+    ]
+   }
+  ],
+  "own": {
+   "editor": "Editor",
+   "changed": "Signal",
+   "updated": "Signal",
+   "refine": "RefineScope",
+   "temps": "Array[0]",
+   "phantoms": "Array[0]",
+   "diagnoses": "Array[0]",
+   "executor": "TransactionExecutor",
+   "_state": "AtomicRef",
+   "partition": "Partition",
+   "phantomPartition": "Partition",
+   "_continuity": 23156,
+   "analysis": "Object",
+   "tensions1": "Array[0]",
+   "__accessorValues": {
+    "continuity": 23156,
+    "continuitie": "undefined",
+    "movin": "undefined",
+    "position": "err",
+    "t": "err",
+    "refinement": "undefined",
+    "originalItem": "err",
+    "state": "Object",
+    "phantomArgument": "undefined",
+    "done": false,
+    "updateAndCommitBehaviorAreIdentical": true,
+    "isPaused": false
+   }
+  },
+  "statics": []
+ },
+ "AlignVertexFactory_continuities": {
+  "exists": false,
+  "value": "Array[4]",
+  "own": {
+   "0": 23156,
+   "1": 23153,
+   "2": 23154,
+   "3": 23155
+  }
+ },
+ "CurveArrayFactory": {
+  "chain": [
+   {
+    "name": "CurveArrayFactory",
+    "methods": [],
+    "accessors": [
+     "centroidg",
+     "numgs",
+     "twistDegreesgs",
+     "curves",
+     "matricesg"
+    ]
+   },
+   {
+    "name": "AbstractRepeatItemsFactory",
+    "methods": [
+     "doCommit/0",
+     "doUpdate/1",
+     "doCancel/0",
+     "makeTemporaryInstances/1"
+    ],
+    "accessors": [
+     "itemsgs",
+     "emptiesgs"
+    ]
+   },
+   {
+    "name": "RollbackStatefulFactory",
+    "methods": [
+     "initializeStages/0",
+     "invalidate/1",
+     "beforeFirstUpdate/0",
+     "beforeFirstCommit/0",
+     "beforeUpdatePreEmbed/1",
+     "beforeUpdatePostEmbed/1",
+     "beforeCommit/1",
+     "beforeCancel/0",
+     "onInterruptUpdate/0",
+     "onInterruptCommit/0",
+     "beforePause/0",
+     "afterPause/1",
+     "doPhantoms/1",
+     "doDiagnostics/2",
+     "calculatePhantoms/1",
+     "calculateDiagnostics/2"
+    ],
+    "accessors": []
+   },
+   {
+    "name": "SimpleStatefulFactory",
+    "methods": [
+     "embed/1",
+     "beforeFirstUpdate/0",
+     "beforeUpdatePreEmbed/1",
+     "beforeUpdatePostEmbed/1",
+     "onInterruptUpdate/0",
+     "onUpdateFailed/0",
+     "beforeFirstCommit/0",
+     "beforeCommit/1",
+     "doPhantoms/1",
+     "doDiagnostics/2",
+     "onInterruptCommit/0",
+     "beforeCancel/0",
+     "beforePause/0",
+     "afterPause/1",
+     "doCommitFromUpdateCache/2",
+     "update/1",
+     "updateAndIgnoreErrors/0",
+     "cancel/0",
+     "commit/0",
+     "supportsCommitFromUpdateCache/1",
+     "pause/0"
+    ],
+    "accessors": [
+     "stategs",
+     "dbg",
+     "signalsg"
+    ]
+   },
+   {
+    "name": "AbstractFactory",
+    "methods": [
+     "cleanupTemps/0",
+     "cleanupPhantoms/1",
+     "cleanupDiagnoses/1",
+     "swapTemps/2",
+     "finalize/0",
+     "dispose/0",
+     "embed/1",
+     "update/0",
+     "commit/0",
+     "cancel/0",
+     "finish/0",
+     "interrupt/1",
+     "pause/0",
+     "resource/1"
+    ],
+    "accessors": [
+     "originalItemg",
+     "originalItemsg"
+    ]
+   }
+  ],
+  "own": {
+   "editor": "Editor",
+   "changed": "Signal",
+   "updated": "Signal",
+   "refine": "RefineScope",
+   "temps": "Array[0]",
+   "phantoms": "Array[0]",
+   "diagnoses": "Array[0]",
+   "executor": "TransactionExecutor",
+   "_state": "AtomicRef",
+   "stages": "StageManager",
+   "partition": "Partition",
+   "phantomPartition": "Partition",
+   "helper": "FactoryHelper",
+   "shouldMakeInstances": false,
+   "_empties": "Object",
+   "scratchPartition": "Partition",
+   "orientations": "TransformOrientationCalculator",
+   "alignment": 21560,
+   "distance": 1,
+   "distanceMethod": 24881,
+   "step": 0,
+   "_num": 8,
+   "twist": 0,
+   "scale": 1,
+   "__accessorValues": {
+    "centroid": "err",
+    "num": 8,
+    "twistDegree": "undefined",
+    "matrice": "undefined",
+    "item": "undefined",
+    "emptie": "undefined",
+    "state": "Object",
+    "db": "Database",
+    "signal": "undefined",
+    "originalItem": "undefined"
+   }
+  },
+  "statics": []
+ }
+}

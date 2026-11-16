@@ -1,0 +1,244 @@
+{
+ "startUndo": 0,
+ "which": "router",
+ "cases": {
+  "curves": {
+   "depthBefore": 4,
+   "bodiesBefore": [
+    96,
+    97,
+    98,
+    99
+   ],
+   "run": {
+    "log": [
+     {
+      "ev": "selected",
+      "undo": 4,
+      "active": null,
+      "edges": 0,
+      "curves": 4,
+      "sheets": 0
+     },
+     {
+      "ev": "execute returned",
+      "undo": 4,
+      "active": "SquareCommand",
+      "ret": "undefined"
+     },
+     {
+      "ev": "captured",
+      "undo": 4,
+      "active": "SquareEdgeCommand",
+      "factory": "null",
+      "dialog": "Constructor",
+      "params": "SquareFactory",
+      "paramsChain": [
+       "SquareFactory",
+       "XNurbsFactory",
+       "GeometryFactory",
+       "AbstractGeometryFactory"
+      ],
+      "paramsIsFactory": false,
+      "execError": null,
+      "settled": false
+     },
+     {
+      "ev": "before config",
+      "undo": 4,
+      "active": "SquareEdgeCommand",
+      "state": {
+       "continuity": 23156,
+       "wires": "err",
+       "edges": "err",
+       "boundaries": "err",
+       "edge2continuity": [],
+       "segment2continuity": [],
+       "quadSided": true,
+       "uDegree": 3,
+       "vDegree": 3,
+       "controlType": 1
+      }
+     },
+     {
+      "ev": "update error",
+      "undo": 4,
+      "active": "SquareEdgeCommand",
+      "error": "XNurbs operation failed with error `3`."
+     },
+     {
+      "ev": "finish called",
+      "undo": 4,
+      "active": "SquareEdgeCommand"
+     },
+     {
+      "ev": "factory.commit called",
+      "undo": 4,
+      "active": "SquareEdgeCommand"
+     },
+     {
+      "ev": "factory.commit rejected",
+      "undo": 4,
+      "active": "SquareEdgeCommand",
+      "e": "XNurbs operation failed with error `3`."
+     },
+     {
+      "ev": "end",
+      "undo": 4,
+      "active": null,
+      "settled": true,
+      "execError": null
+     }
+    ],
+    "execError": null,
+    "settled": true
+   },
+   "depthAfter": 4,
+   "created": [],
+   "cancel": {
+    "before": {
+     "active": null,
+     "busy": false,
+     "undo": 4
+    },
+    "after": {
+     "active": null,
+     "busy": false,
+     "undo": 4
+    }
+   }
+  },
+  "edgesG1": {
+   "openBox": {
+    "id": 100,
+    "type": "Sheet",
+    "laminar": [
+     "173e13468",
+     "173e13463",
+     "173e13458",
+     "173e13453"
+    ]
+   },
+   "depthBefore": 2,
+   "bodiesBefore": [
+    100
+   ],
+   "run": {
+    "log": [
+     {
+      "ev": "selected",
+      "undo": 2,
+      "active": null,
+      "edges": 4,
+      "curves": 0,
+      "sheets": 0
+     },
+     {
+      "ev": "execute returned",
+      "undo": 2,
+      "active": "SquareCommand",
+      "ret": "undefined"
+     },
+     {
+      "ev": "captured",
+      "undo": 2,
+      "active": "SquareEdgeCommand",
+      "factory": "null",
+      "dialog": "Constructor",
+      "params": "SquareFactory",
+      "paramsChain": [
+       "SquareFactory",
+       "XNurbsFactory",
+       "GeometryFactory",
+       "AbstractGeometryFactory"
+      ],
+      "paramsIsFactory": false,
+      "execError": null,
+      "settled": false
+     },
+     {
+      "ev": "before config",
+      "undo": 2,
+      "active": "SquareEdgeCommand",
+      "state": {
+       "continuity": 23156,
+       "wires": "err",
+       "edges": "err",
+       "boundaries": "err",
+       "edge2continuity": [],
+       "segment2continuity": [],
+       "quadSided": true,
+       "uDegree": 3,
+       "vDegree": 3,
+       "controlType": 1
+      }
+     },
+     {
+      "ev": "update error",
+      "undo": 2,
+      "active": "SquareEdgeCommand",
+      "error": "XNurbs operation failed with error `3`."
+     },
+     {
+      "ev": "finish called",
+      "undo": 2,
+      "active": "SquareEdgeCommand"
+     },
+     {
+      "ev": "factory.commit called",
+      "undo": 2,
+      "active": "SquareEdgeCommand"
+     },
+     {
+      "ev": "factory.commit rejected",
+      "undo": 2,
+      "active": "SquareEdgeCommand",
+      "e": "XNurbs operation failed with error `3`."
+     },
+     {
+      "ev": "end",
+      "undo": 2,
+      "active": null,
+      "settled": true,
+      "execError": null
+     }
+    ],
+    "execError": null,
+    "settled": true
+   },
+   "depthAfter": 2,
+   "created": [],
+   "cancel": {
+    "before": {
+     "active": null,
+     "busy": false,
+     "undo": 2
+    },
+    "after": {
+     "active": null,
+     "busy": false,
+     "undo": 2
+    }
+   }
+  }
+ },
+ "finalCancel": {
+  "before": {
+   "active": null,
+   "busy": false,
+   "undo": 0
+  },
+  "after": {
+   "active": null,
+   "busy": false,
+   "undo": 0
+  }
+ },
+ "endUndo": 0,
+ "endBodies": [
+  1,
+  5,
+  3,
+  4
+ ]
+}

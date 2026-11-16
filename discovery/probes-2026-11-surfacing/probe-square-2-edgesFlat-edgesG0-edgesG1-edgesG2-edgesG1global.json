@@ -1,0 +1,514 @@
+{
+ "startUndo": 0,
+ "trials": {
+  "edgesFlat": {
+   "input": "edges",
+   "shape": "flat",
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "state": {
+    "boundaries": [
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge"
+    ],
+    "edges": [
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge"
+    ],
+    "wires": [],
+    "edge2continuity": 4
+   },
+   "reads": [
+    "continuity",
+    "db",
+    "clearEdgeConstraints",
+    "clearSegmentConstraints",
+    "addEdgeConstraint",
+    "boundaries",
+    "edges",
+    "wires",
+    "edge2continuity",
+    "commit",
+    "createInitialMark",
+    "state",
+    "signals",
+    "updateAndCommitBehaviorAreIdentical",
+    "constructor",
+    "doCommit",
+    "calculateForCommit",
+    "calculate",
+    "controlType",
+    "solve",
+    "adaptiveTolerance",
+    "preferToProduceSurface",
+    "tolerance",
+    "angularTolerance",
+    "maxCVs",
+    "quadSided",
+    "stretch",
+    "bending",
+    "changeInBending",
+    "boundaryCondition",
+    "parameterization",
+    "enforceTolerance",
+    "uDegree",
+    "vDegree",
+    "uSpans",
+    "vSpans",
+    "weight",
+    "edge2constraint",
+    "segment2constraint",
+    "emitWarnings",
+    "calculateAnalysis",
+    "calculateRefinements",
+    "zip",
+    "originalItems",
+    "originalItem",
+    "shouldRemoveOriginalItemOnCommit",
+    "collections",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose"
+   ],
+   "depthAfter": 7,
+   "created": [
+    {
+     "id": 113,
+     "type": "Sheet",
+     "name": "XNurbs.001",
+     "faces": [
+      "BSurf"
+     ],
+     "edges": 4,
+     "boundsMm": {
+      "min": [
+       6099.999999999998,
+       -2.9530490183580216e-22,
+       19.999999999999996
+      ],
+      "max": [
+       6140.000000000006,
+       40.00000000000002,
+       20.00000000000001
+      ]
+     }
+    }
+   ],
+   "join": "ok",
+   "joinedType": "Solid",
+   "continuity": [
+    {
+     "edge": "205e14721",
+     "gapMm": 0,
+     "angleDeg": 90,
+     "relG2": 0,
+     "achieved": "G0"
+    },
+    {
+     "edge": "205e14716",
+     "gapMm": 0,
+     "angleDeg": 90,
+     "relG2": 0,
+     "achieved": "G0"
+    },
+    {
+     "edge": "205e14711",
+     "gapMm": 0,
+     "angleDeg": 90,
+     "relG2": 0,
+     "achieved": "G0"
+    },
+    {
+     "edge": "205e14706",
+     "gapMm": 6.938893903907228e-15,
+     "angleDeg": 90,
+     "relG2": 0,
+     "achieved": "G0"
+    }
+   ]
+  },
+  "edgesG0": {
+   "input": "edges",
+   "shape": "flat",
+   "continuity": [
+    {
+     "edge": "207e14721",
+     "gapMm": 0,
+     "angleDeg": 90,
+     "relG2": 0,
+     "achieved": "G0"
+    },
+    {
+     "edge": "207e14716",
+     "gapMm": 0,
+     "angleDeg": 90,
+     "relG2": 0,
+     "achieved": "G0"
+    },
+    {
+     "edge": "207e14711",
+     "gapMm": 0,
+     "angleDeg": 90,
+     "relG2": 0,
+     "achieved": "G0"
+    },
+    {
+     "edge": "207e14706",
+     "gapMm": 6.938893903907228e-15,
+     "angleDeg": 90,
+     "relG2": 0,
+     "achieved": "G0"
+    }
+   ],
+   "commit": {
+    "committed": true,
+    "result": "Sheet"
+   },
+   "state": {
+    "boundaries": [
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge"
+    ],
+    "edges": [
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge"
+    ],
+    "wires": [],
+    "edge2continuity": 4
+   },
+   "reads": [
+    "continuity",
+    "db",
+    "clearEdgeConstraints",
+    "clearSegmentConstraints",
+    "addEdgeConstraint",
+    "setContinuityForEdge",
+    "setContinuityForConstraint",
+    "shouldDirtyOnContinuityChange",
+    "boundaries",
+    "edges",
+    "wires",
+    "edge2continuity",
+    "commit",
+    "createInitialMark",
+    "state",
+    "signals",
+    "updateAndCommitBehaviorAreIdentical",
+    "constructor",
+    "doCommit",
+    "calculateForCommit",
+    "calculate",
+    "controlType",
+    "solve",
+    "adaptiveTolerance",
+    "preferToProduceSurface",
+    "tolerance",
+    "angularTolerance",
+    "maxCVs",
+    "quadSided",
+    "stretch",
+    "bending",
+    "changeInBending",
+    "boundaryCondition",
+    "parameterization",
+    "enforceTolerance",
+    "uDegree",
+    "vDegree",
+    "uSpans",
+    "vSpans",
+    "weight",
+    "edge2constraint",
+    "segment2constraint",
+    "emitWarnings",
+    "calculateAnalysis",
+    "calculateRefinements",
+    "zip",
+    "originalItems",
+    "originalItem",
+    "shouldRemoveOriginalItemOnCommit",
+    "collections",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose"
+   ],
+   "depthAfter": 7,
+   "created": [
+    {
+     "id": 114,
+     "type": "Sheet",
+     "name": "XNurbs.001",
+     "faces": [
+      "BSurf"
+     ],
+     "edges": 4,
+     "boundsMm": {
+      "min": [
+       6099.999999999998,
+       -2.9530490183580216e-22,
+       19.999999999999996
+      ],
+      "max": [
+       6140.000000000006,
+       40.00000000000002,
+       20.00000000000001
+      ]
+     }
+    }
+   ],
+   "join": "ok",
+   "joinedType": "Solid"
+  },
+  "edgesG1": {
+   "input": "edges",
+   "shape": "flat",
+   "continuity": "G1",
+   "error": "Plasticity command failed: Error: XNurbs operation failed with error `30`. | proto reads: continuity,db,clearEdgeConstraints,clearSegmentConstraints,addEdgeConstraint,setContinuityForEdge,setContinuityForConstraint,shouldDirtyOnContinuityChange,boundaries,edges,wires,edge2continuity,commit,createInitialMark,state,signals,updateAndCommitBehaviorAreIdentical,constructor,doCommit,calculateForCommit,calculate,controlType,solve,adaptiveTolerance,preferToProduceSurface,tolerance,angularTolerance,maxCVs,quadSided,stretch,bending,changeInBending,boundaryCondition,parameterization,enforceTolerance,uDegree,vDegree,uSpans,vSpans,weight,edge2constraint,segment2constraint,finalize,cleanupTemps,cleanupPhantoms,cleanupDiagnoses,dispose,doCancel",
+   "state": {
+    "boundaries": [
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge"
+    ],
+    "edges": [
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge"
+    ],
+    "wires": [],
+    "edge2continuity": 4
+   },
+   "reads": [
+    "continuity",
+    "db",
+    "clearEdgeConstraints",
+    "clearSegmentConstraints",
+    "addEdgeConstraint",
+    "setContinuityForEdge",
+    "setContinuityForConstraint",
+    "shouldDirtyOnContinuityChange",
+    "boundaries",
+    "edges",
+    "wires",
+    "edge2continuity",
+    "commit",
+    "createInitialMark",
+    "state",
+    "signals",
+    "updateAndCommitBehaviorAreIdentical",
+    "constructor",
+    "doCommit",
+    "calculateForCommit",
+    "calculate",
+    "controlType",
+    "solve",
+    "adaptiveTolerance",
+    "preferToProduceSurface",
+    "tolerance",
+    "angularTolerance",
+    "maxCVs",
+    "quadSided",
+    "stretch",
+    "bending",
+    "changeInBending",
+    "boundaryCondition",
+    "parameterization",
+    "enforceTolerance",
+    "uDegree",
+    "vDegree",
+    "uSpans",
+    "vSpans",
+    "weight",
+    "edge2constraint",
+    "segment2constraint",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose",
+    "doCancel"
+   ]
+  },
+  "edgesG2": {
+   "input": "edges",
+   "shape": "flat",
+   "continuity": "G2",
+   "error": "Plasticity command failed: Error: XNurbs operation failed with error `30`. | proto reads: continuity,db,clearEdgeConstraints,clearSegmentConstraints,addEdgeConstraint,setContinuityForEdge,setContinuityForConstraint,shouldDirtyOnContinuityChange,boundaries,edges,wires,edge2continuity,commit,createInitialMark,state,signals,updateAndCommitBehaviorAreIdentical,constructor,doCommit,calculateForCommit,calculate,controlType,solve,adaptiveTolerance,preferToProduceSurface,tolerance,angularTolerance,maxCVs,quadSided,stretch,bending,changeInBending,boundaryCondition,parameterization,enforceTolerance,uDegree,vDegree,uSpans,vSpans,weight,edge2constraint,segment2constraint,finalize,cleanupTemps,cleanupPhantoms,cleanupDiagnoses,dispose,doCancel",
+   "state": {
+    "boundaries": [
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge"
+    ],
+    "edges": [
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge"
+    ],
+    "wires": [],
+    "edge2continuity": 4
+   },
+   "reads": [
+    "continuity",
+    "db",
+    "clearEdgeConstraints",
+    "clearSegmentConstraints",
+    "addEdgeConstraint",
+    "setContinuityForEdge",
+    "setContinuityForConstraint",
+    "shouldDirtyOnContinuityChange",
+    "boundaries",
+    "edges",
+    "wires",
+    "edge2continuity",
+    "commit",
+    "createInitialMark",
+    "state",
+    "signals",
+    "updateAndCommitBehaviorAreIdentical",
+    "constructor",
+    "doCommit",
+    "calculateForCommit",
+    "calculate",
+    "controlType",
+    "solve",
+    "adaptiveTolerance",
+    "preferToProduceSurface",
+    "tolerance",
+    "angularTolerance",
+    "maxCVs",
+    "quadSided",
+    "stretch",
+    "bending",
+    "changeInBending",
+    "boundaryCondition",
+    "parameterization",
+    "enforceTolerance",
+    "uDegree",
+    "vDegree",
+    "uSpans",
+    "vSpans",
+    "weight",
+    "edge2constraint",
+    "segment2constraint",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose",
+    "doCancel"
+   ]
+  },
+  "edgesG1global": {
+   "input": "edges",
+   "shape": "flat",
+   "continuity": "G1global",
+   "error": "Plasticity command failed: Error: XNurbs operation failed with error `30`. | proto reads: continuity,db,clearEdgeConstraints,clearSegmentConstraints,addEdgeConstraint,setContinuityForConstraint,shouldDirtyOnContinuityChange,boundaries,edges,wires,edge2continuity,commit,createInitialMark,state,signals,updateAndCommitBehaviorAreIdentical,constructor,doCommit,calculateForCommit,calculate,controlType,solve,adaptiveTolerance,preferToProduceSurface,tolerance,angularTolerance,maxCVs,quadSided,stretch,bending,changeInBending,boundaryCondition,parameterization,enforceTolerance,uDegree,vDegree,uSpans,vSpans,weight,edge2constraint,segment2constraint,finalize,cleanupTemps,cleanupPhantoms,cleanupDiagnoses,dispose,doCancel",
+   "state": {
+    "boundaries": [
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge"
+    ],
+    "edges": [
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge",
+     "ShellEdge"
+    ],
+    "wires": [],
+    "edge2continuity": 4
+   },
+   "reads": [
+    "continuity",
+    "db",
+    "clearEdgeConstraints",
+    "clearSegmentConstraints",
+    "addEdgeConstraint",
+    "setContinuityForConstraint",
+    "shouldDirtyOnContinuityChange",
+    "boundaries",
+    "edges",
+    "wires",
+    "edge2continuity",
+    "commit",
+    "createInitialMark",
+    "state",
+    "signals",
+    "updateAndCommitBehaviorAreIdentical",
+    "constructor",
+    "doCommit",
+    "calculateForCommit",
+    "calculate",
+    "controlType",
+    "solve",
+    "adaptiveTolerance",
+    "preferToProduceSurface",
+    "tolerance",
+    "angularTolerance",
+    "maxCVs",
+    "quadSided",
+    "stretch",
+    "bending",
+    "changeInBending",
+    "boundaryCondition",
+    "parameterization",
+    "enforceTolerance",
+    "uDegree",
+    "vDegree",
+    "uSpans",
+    "vSpans",
+    "weight",
+    "edge2constraint",
+    "segment2constraint",
+    "finalize",
+    "cleanupTemps",
+    "cleanupPhantoms",
+    "cleanupDiagnoses",
+    "dispose",
+    "doCancel"
+   ]
+  }
+ },
+ "fixture": {
+  "wires": [
+   108,
+   109,
+   110,
+   111
+  ],
+  "box": 112,
+  "laminar": [
+   "203e14721",
+   "203e14716",
+   "203e14711",
+   "203e14706"
+  ],
+  "fixtureDepth": 6
+ },
+ "endUndo": 0,
+ "endBodies": [
+  1,
+  5,
+  3,
+  4
+ ]
+}

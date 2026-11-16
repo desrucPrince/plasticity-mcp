@@ -1,0 +1,309 @@
+{
+ "startUndo": 0,
+ "bodies": {
+  "openLSheet": {
+   "bodyId": 20,
+   "type": "Sheet",
+   "faces": 2,
+   "edges": 7,
+   "readModelOneFaceEdges": [
+    "35e3833",
+    "35e3867",
+    "35e3855",
+    "35e3861",
+    "35e3835",
+    "35e3857"
+   ],
+   "kernel": {
+    "type": "Sheet",
+    "edgeCount": 7,
+    "laminarCount": 6,
+    "laminarIds": [
+     "35e3833",
+     "35e3867",
+     "35e3855",
+     "35e3861",
+     "35e3835",
+     "35e3857"
+    ],
+    "perEdgeIsLaminar": [
+     "35e3833",
+     "35e3867",
+     "35e3855",
+     "35e3861",
+     "35e3835",
+     "35e3857"
+    ],
+    "collIsLaminar": false,
+    "collIsClosed": true,
+    "nonLaminar": 1,
+    "check": []
+   },
+   "validate": {
+    "id": 20,
+    "versionId": 35,
+    "type": "Sheet",
+    "name": "Extruded.001",
+    "measurementSource": "native-brep",
+    "faceCount": 2,
+    "edgeCount": 7,
+    "boundaryEdgeIds": [
+     "35e3833",
+     "35e3867",
+     "35e3855",
+     "35e3861",
+     "35e3835",
+     "35e3857"
+    ],
+    "closed": false,
+    "nativeCheckCodes": [],
+    "nativeValid": true,
+    "printableSolid": false
+   },
+   "commandError": "CDP request timed out: Runtime.callFunctionOn",
+   "undoAfter": 3
+  },
+  "closedBox": {
+   "bodyId": 21,
+   "type": "Solid",
+   "faces": 6,
+   "edges": 12,
+   "readModelOneFaceEdges": [],
+   "kernel": {
+    "type": "Solid",
+    "edgeCount": 12,
+    "laminarCount": 0,
+    "laminarIds": [],
+    "perEdgeIsLaminar": [],
+    "collIsLaminar": false,
+    "collIsClosed": true,
+    "nonLaminar": 12,
+    "check": []
+   },
+   "validate": {
+    "id": 21,
+    "versionId": 36,
+    "type": "Solid",
+    "name": null,
+    "measurementSource": "native-brep",
+    "faceCount": 6,
+    "edgeCount": 12,
+    "boundaryEdgeIds": [],
+    "closed": true,
+    "nativeCheckCodes": [],
+    "nativeValid": true,
+    "printableSolid": true
+   },
+   "commandError": "Previous mutation outcome is uncertain; call reconcile before another mutation",
+   "undoAfter": 4
+  },
+  "sheetWithHole": {
+   "bodyId": 24,
+   "type": "Sheet",
+   "faces": 1,
+   "edges": 5,
+   "readModelOneFaceEdges": [
+    "40e4228",
+    "40e4225",
+    "40e4222",
+    "40e4219",
+    "40e4216"
+   ],
+   "kernel": {
+    "type": "Sheet",
+    "edgeCount": 5,
+    "laminarCount": 5,
+    "laminarIds": [
+     "40e4228",
+     "40e4225",
+     "40e4222",
+     "40e4219",
+     "40e4216"
+    ],
+    "perEdgeIsLaminar": [
+     "40e4228",
+     "40e4225",
+     "40e4222",
+     "40e4219",
+     "40e4216"
+    ],
+    "collIsLaminar": true,
+    "collIsClosed": true,
+    "nonLaminar": 0,
+    "check": []
+   },
+   "validate": {
+    "id": 24,
+    "versionId": 40,
+    "type": "Sheet",
+    "name": null,
+    "measurementSource": "native-brep",
+    "faceCount": 1,
+    "edgeCount": 5,
+    "boundaryEdgeIds": [
+     "40e4228",
+     "40e4225",
+     "40e4222",
+     "40e4219",
+     "40e4216"
+    ],
+    "closed": false,
+    "nativeCheckCodes": [],
+    "nativeValid": true,
+    "printableSolid": false
+   },
+   "commandError": "Previous mutation outcome is uncertain; call reconcile before another mutation",
+   "undoAfter": 8
+  },
+  "holedBoxRemainder": {
+   "bodyId": 22,
+   "type": "Sheet",
+   "faces": 6,
+   "edges": 14,
+   "readModelOneFaceEdges": [
+    "41e4042",
+    "41e4037",
+    "41e4032",
+    "41e4027",
+    "41e4140"
+   ],
+   "kernel": {
+    "type": "Sheet",
+    "edgeCount": 14,
+    "laminarCount": 5,
+    "laminarIds": [
+     "41e4042",
+     "41e4037",
+     "41e4032",
+     "41e4027",
+     "41e4140"
+    ],
+    "perEdgeIsLaminar": [
+     "41e4042",
+     "41e4037",
+     "41e4032",
+     "41e4027",
+     "41e4140"
+    ],
+    "collIsLaminar": false,
+    "collIsClosed": true,
+    "nonLaminar": 9,
+    "check": []
+   },
+   "validate": {
+    "id": 22,
+    "versionId": 41,
+    "type": "Sheet",
+    "name": null,
+    "measurementSource": "native-brep",
+    "faceCount": 6,
+    "edgeCount": 14,
+    "boundaryEdgeIds": [
+     "41e4042",
+     "41e4037",
+     "41e4032",
+     "41e4027",
+     "41e4140"
+    ],
+    "closed": false,
+    "nativeCheckCodes": [],
+    "nativeValid": true,
+    "printableSolid": false
+   },
+   "commandError": "Previous mutation outcome is uncertain; call reconcile before another mutation",
+   "undoAfter": 8
+  },
+  "cylinderWallSheet": {
+   "bodyId": 26,
+   "type": "Sheet",
+   "faces": 1,
+   "edges": 1,
+   "readModelOneFaceEdges": [
+    "43e4254"
+   ],
+   "kernel": {
+    "type": "Sheet",
+    "edgeCount": 1,
+    "laminarCount": 1,
+    "laminarIds": [
+     "43e4254"
+    ],
+    "perEdgeIsLaminar": [
+     "43e4254"
+    ],
+    "collIsLaminar": true,
+    "collIsClosed": true,
+    "nonLaminar": 0,
+    "check": []
+   },
+   "validate": {
+    "id": 26,
+    "versionId": 43,
+    "type": "Sheet",
+    "name": null,
+    "measurementSource": "native-brep",
+    "faceCount": 1,
+    "edgeCount": 1,
+    "boundaryEdgeIds": [
+     "43e4254"
+    ],
+    "closed": false,
+    "nativeCheckCodes": [],
+    "nativeValid": true,
+    "printableSolid": false
+   },
+   "commandError": "Previous mutation outcome is uncertain; call reconcile before another mutation",
+   "undoAfter": 10
+  },
+  "cylinderRemainder": {
+   "bodyId": 25,
+   "type": "Sheet",
+   "faces": 1,
+   "edges": 1,
+   "readModelOneFaceEdges": [
+    "45e4262"
+   ],
+   "kernel": {
+    "type": "Sheet",
+    "edgeCount": 1,
+    "laminarCount": 1,
+    "laminarIds": [
+     "45e4262"
+    ],
+    "perEdgeIsLaminar": [
+     "45e4262"
+    ],
+    "collIsLaminar": true,
+    "collIsClosed": true,
+    "nonLaminar": 0,
+    "check": []
+   },
+   "validate": {
+    "id": 25,
+    "versionId": 45,
+    "type": "Sheet",
+    "name": "Cylinder.001",
+    "measurementSource": "native-brep",
+    "faceCount": 1,
+    "edgeCount": 1,
+    "boundaryEdgeIds": [
+     "45e4262"
+    ],
+    "closed": false,
+    "nativeCheckCodes": [],
+    "nativeValid": true,
+    "printableSolid": false
+   },
+   "commandError": "Previous mutation outcome is uncertain; call reconcile before another mutation",
+   "undoAfter": 10
+  }
+ },
+ "depthAfterSheet": 2,
+ "endUndo": 0,
+ "endBodies": [
+  1,
+  5,
+  3,
+  4
+ ]
+}

@@ -1,0 +1,63 @@
+{
+ "startUndo": 0,
+ "trials": {
+  "rebuild_G0": {
+   "factory": "AlignAndRebuildFactory",
+   "continuity": "G0",
+   "mode": "perEdge",
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'model')\n    at set pairs (evalmachine.<anonymous>:1:9129263)\n    at AlignEdgeCommand.execute (<anonymous>:291:25)\n    at evalmachine.<anonymous>:1:5306148\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at AlignEdgeCommand.run (evalmachine.<anonymous>:1:5306048)\n    at CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823191)\n    at evalmachine.<anonymous>:1:9821684\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at CommandExecutor.execute (evalmachine.<anonymous>:1:9821643)\n    at CommandExecutor.dequeue (evalmachine.<anonymous>:1:9821075)",
+   "reads": null
+  },
+  "rebuild_G1": {
+   "factory": "AlignAndRebuildFactory",
+   "continuity": "G1",
+   "mode": "perEdge",
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'model')\n    at set pairs (evalmachine.<anonymous>:1:9129263)\n    at AlignEdgeCommand.execute (<anonymous>:291:25)\n    at evalmachine.<anonymous>:1:5306148\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at AlignEdgeCommand.run (evalmachine.<anonymous>:1:5306048)\n    at CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823191)\n    at evalmachine.<anonymous>:1:9821684\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at CommandExecutor.execute (evalmachine.<anonymous>:1:9821643)\n    at CommandExecutor.dequeue (evalmachine.<anonymous>:1:9821075)",
+   "reads": null
+  },
+  "rebuild_G2": {
+   "factory": "AlignAndRebuildFactory",
+   "continuity": "G2",
+   "mode": "perEdge",
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'model')\n    at set pairs (evalmachine.<anonymous>:1:9129263)\n    at AlignEdgeCommand.execute (<anonymous>:291:25)\n    at evalmachine.<anonymous>:1:5306148\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at AlignEdgeCommand.run (evalmachine.<anonymous>:1:5306048)\n    at CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823191)\n    at evalmachine.<anonymous>:1:9821684\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at CommandExecutor.execute (evalmachine.<anonymous>:1:9821643)\n    at CommandExecutor.dequeue (evalmachine.<anonymous>:1:9821075)",
+   "reads": null
+  },
+  "plain_G1": {
+   "factory": "AlignEdgeFactory",
+   "continuity": "G1",
+   "mode": "perEdge",
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'model')\n    at set pairs (evalmachine.<anonymous>:1:9129263)\n    at AlignEdgeCommand.execute (<anonymous>:291:25)\n    at evalmachine.<anonymous>:1:5306148\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at AlignEdgeCommand.run (evalmachine.<anonymous>:1:5306048)\n    at CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823191)\n    at evalmachine.<anonymous>:1:9821684\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at CommandExecutor.execute (evalmachine.<anonymous>:1:9821643)\n    at CommandExecutor.dequeue (evalmachine.<anonymous>:1:9821075)",
+   "reads": null
+  },
+  "rebuild_G2_global": {
+   "factory": "AlignAndRebuildFactory",
+   "continuity": "G2",
+   "mode": "global",
+   "error": "Plasticity command failed: TypeError: Cannot read properties of undefined (reading 'model')\n    at set pairs (evalmachine.<anonymous>:1:9129263)\n    at AlignEdgeCommand.execute (<anonymous>:291:25)\n    at evalmachine.<anonymous>:1:5306148\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at AlignEdgeCommand.run (evalmachine.<anonymous>:1:5306048)\n    at CommandExecutor.executeInScope (evalmachine.<anonymous>:1:9823191)\n    at evalmachine.<anonymous>:1:9821684\n    at withScope (evalmachine.<anonymous>:1:5143211)\n    at CommandExecutor.execute (evalmachine.<anonymous>:1:9821643)\n    at CommandExecutor.dequeue (evalmachine.<anonymous>:1:9821075)",
+   "reads": null
+  }
+ },
+ "fixture": {
+  "sheetA": 44,
+  "sheetB": 46,
+  "edgeA": "70e6027",
+  "edgeB": "73e6232",
+  "edgeBcenter": [
+   5030.5,
+   5.3,
+   10
+  ]
+ },
+ "fixtureDepth": 4,
+ "joinBefore": {
+  "ok": false,
+  "error": "Plasticity command failed: Error: Operation failed at PK_BODY_sew_bodies with error `PK_ERROR_bodies_dont_knit` (1041) "
+ },
+ "endUndo": 0,
+ "endBodies": [
+  1,
+  5,
+  3,
+  4
+ ]
+}

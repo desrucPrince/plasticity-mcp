@@ -1,0 +1,255 @@
+{
+ "kind": "round",
+ "file": "js/kernel-tries2.js",
+ "startUndo": 0,
+ "edge": {
+  "id": "32e3547",
+  "curveType": "Line",
+  "line": true,
+  "circle": false,
+  "lengthMm": 20,
+  "centerMm": [
+   5119.999999999999,
+   15,
+   10
+  ],
+  "tangent": [
+   0,
+   0,
+   1
+  ],
+  "boundsMm": {
+   "min": [
+    5119.999885559082,
+    14.999999664723873,
+    0
+   ],
+   "max": [
+    5119.999885559082,
+    14.999999664723873,
+    19.999999552965164
+   ]
+  },
+  "faceIds": [
+   "32f3418",
+   "32f3512"
+  ],
+  "vertexIds": [
+   3538,
+   3543
+  ]
+ },
+ "result": {
+  "faceEntityIds": [
+   3418,
+   3512
+  ],
+  "tries": {
+   "pointCtor": "Vector",
+   "edge.GetPointAndTangent(0.5)": {
+    "position": [
+     5.119999999999999,
+     0.015,
+     0.01
+    ],
+    "tangent": [
+     0,
+     0,
+     1
+    ]
+   },
+   "edge.GetPoint(0)": [
+    5.119999999999999,
+    0.015,
+    0
+   ],
+   "edge.GetPoint(1)": [
+    5.119999999999999,
+    0.015,
+    0.02
+   ],
+   "edge.GetPoint(0.01) (actual t?)": [
+    5.119999999999999,
+    0.015,
+    0.0002
+   ],
+   "edge.EvalFaceNormal(0.5)": {
+    "normal": [
+     1,
+     0,
+     0
+    ],
+    "faceNormal1": [
+     1,
+     0,
+     0
+    ],
+    "faceNormal2": [
+     1,
+     0,
+     0
+    ]
+   },
+   "edge.EvalFaceNormal(0.01)": {
+    "normal": [
+     1,
+     0,
+     0
+    ],
+    "faceNormal1": [
+     1,
+     0,
+     0
+    ],
+    "faceNormal2": [
+     1,
+     0,
+     0
+    ]
+   },
+   "edge.EvalBasis(0.5)": {
+    "normal": [
+     1,
+     0,
+     0
+    ],
+    "tangent": [
+     0,
+     0,
+     1
+    ],
+    "binormal": [
+     0,
+     0,
+     0
+    ],
+    "curvature": 0
+   },
+   "edge.EvalDerivatives(0.5,2)": [
+    [
+     0,
+     0,
+     1
+    ],
+    [
+     0,
+     0,
+     0
+    ]
+   ],
+   "edge.FindPointNear(kernelPoint)": {
+    "t": 0.5,
+    "exact": [
+     5.119999999999999,
+     0.015,
+     0.01
+    ]
+   },
+   "face0.Id": 3418,
+   "face0.FindPointNear(kernelPoint)": {
+    "u": 0.5,
+    "v": 1,
+    "exact": [
+     5.119999999999999,
+     0.015,
+     0.01
+    ]
+   },
+   "face0.EvalBasis(0.5,0.5)": {
+    "normal": [
+     1,
+     0,
+     0
+    ],
+    "uDirection": [
+     0,
+     0,
+     -1
+    ],
+    "vDirection": [
+     0,
+     -1,
+     0
+    ],
+    "uCurvature": 0,
+    "vCurvature": 0
+   },
+   "face0.EvalNormal(0.5,0.5)": {
+    "position": [
+     5.119999999999999,
+     0.0075,
+     0.01
+    ],
+    "normal": [
+     1,
+     0,
+     0
+    ]
+   },
+   "face0.GetPoint(0,0)": [
+    5.119999999999999,
+    0,
+    0.02
+   ],
+   "face0.GetPoint(1,1)": [
+    5.119999999999999,
+    0.015,
+    0
+   ],
+   "face0.EvalGrid.length": 0,
+   "face1.Id": 3512,
+   "face1.FindPointNear(kernelPoint)": {
+    "u": 0,
+    "v": 0.5,
+    "exact": [
+     5.119999999999999,
+     0.015,
+     0.01
+    ]
+   },
+   "face1.EvalBasis(0.5,0.5)": {
+    "normal": [
+     0.7071067811865822,
+     0.7071067811865128,
+     0
+    ],
+    "uDirection": [
+     0,
+     0,
+     1
+    ],
+    "vDirection": [
+     -0.7071067811865128,
+     0.7071067811865822,
+     0
+    ],
+    "uCurvature": 0,
+    "vCurvature": 200
+   },
+   "face1.EvalNormal(0.5,0.5)": {
+    "position": [
+     5.118535533905932,
+     0.01853553390593274,
+     0.01
+    ],
+    "normal": [
+     0.7071067811865822,
+     0.7071067811865128,
+     0
+    ]
+   },
+   "face1.GetPoint(0,0)": [
+    5.119999999999999,
+    0.015,
+    0
+   ],
+   "face1.GetPoint(1,1)": [
+    5.114999999999999,
+    0.02,
+    0.02
+   ],
+   "face1.EvalGrid.length": 0
+  }
+ },
+ "endUndo": 0
+}
