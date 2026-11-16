@@ -338,6 +338,8 @@ type CylinderGroup = {
   radiusMm: number; axis: string | number[]; kind?: "hole" | "boss"; count: number;
   // Distinct axes, keyed by their position across the axis. For an axis-aligned one, lo and hi are the faces' extent along it.
   points: Map<string, { point: number[]; lo: number; hi: number; index: number | undefined }>;
+  // Full-turn faces only (two circle edges): their axial extent, and for holes whether a floor closes one end.
+  closed: number; extents: Array<[number, number] | undefined>; floored: boolean[];
 };
 
 type PlaneEntry = { normal?: number[]; mm: number; count?: number; face: string }; // count is left out when it is 1
@@ -353,9 +355,12 @@ export interface BodyDescription {
   vertexCount: number;
   // xPos, xNeg, yPos, yNeg, zPos, zNeg and slanted each hold a list of plane entries; `more` maps a direction to the number of offsets left out.
   planes: { [direction: string]: PlaneEntry[] | Record<string, number> | undefined; more?: Record<string, number> };
-  cylinders: Array<{ radiusMm: number; axis: string | number[]; kind?: "hole" | "boss"; count: number; axisPointsMm: number[][]; more?: number }>;
+  // through and extentMm appear only when every face of the group is a full-turn face (two circle edges) and they agree.
+  cylinders: Array<{ radiusMm: number; axis: string | number[]; kind?: "hole" | "boss"; count: number; axisPointsMm: number[][]; more?: number; through?: boolean; extentMm?: number[] }>;
   otherSurfaces: Record<string, { count: number; halfAngleDeg?: number[] }>;
   blendRadii: Record<string, number>; // radius mm -> face count
+  // An open-top pocket read from the planes: the widest inward-facing wall pair on x and on y, and the floor z. Left out when not clear.
+  cavity?: { xMm: number[]; yMm: number[]; floorZMm: number };
   truncated?: true;
 }
 
@@ -364,6 +369,8 @@ export function describeBody(body: DescribedBody, revision: string): BodyDescrip
   const cylinders = new Map<string, CylinderGroup>();
   const others = new Map<string, { count: number; halfAngles: Set<number> }>();
   const blends = new Map<number, number>();
+  const edgeById = new Map((body.edges ?? []).map((edge) => [edge.id, edge]));
+  const faceById = new Map(body.faces.map((candidate) => [candidate.id, candidate]));
 
   for (const face of body.faces) {
     const blend = face.blendRadiusMm !== null && face.blendRadiusMm > 0 ? round4(face.blendRadiusMm) : undefined;
@@ -403,9 +410,25 @@ export function describeBody(body: DescribedBody, revision: string): BodyDescrip
       const axis: string | number[] = principal ? principal.slice(0, 1) : round4Vector(direction);
       const radiusMm = round4(face.radiusMm);
       const key = `${radiusMm}|${Array.isArray(axis) ? axis.join(",") : axis}|${kind ?? ""}`;
-      const group = cylinders.get(key) ?? { radiusMm, axis, ...(kind ? { kind } : {}), count: 0, points: new Map() };
+      const group: CylinderGroup = cylinders.get(key) ?? { radiusMm, axis, ...(kind ? { kind } : {}), count: 0, points: new Map(), closed: 0, extents: [], floored: [] };
       cylinders.set(key, group);
       group.count += 1;
+      // A full-turn face has two circle edges; only then do its bounds give its true length along the axis.
+      const circleEdges = face.edgeIds.map((edgeId) => edgeById.get(edgeId)).filter((edge) => edge?.circle === true);
+      if (circleEdges.length >= 2) {
+        group.closed += 1;
+        const axisIndex = [0, 1, 2].find((candidate) => Math.abs(direction[candidate]!) >= AXIS_ALIGNED);
+        group.extents.push(axisIndex === undefined ? undefined : [round4(face.boundsMm.min[axisIndex]!), round4(face.boundsMm.max[axisIndex]!)]);
+        if (kind === "hole") {
+          // A flat floor (one edge) or an apex closes a blind hole; anything else at both ends leaves it through.
+          group.floored.push(circleEdges.some((edge) => edge!.faceIds.some((otherId) => {
+            const other = otherId === face.id ? undefined : faceById.get(otherId);
+            if (!other) return false;
+            if (other.planar) return other.edgeIds.length === 1;
+            return (other.surfaceType === "Cone" || other.surfaceType === "Sphere") && other.edgeIds.filter((edgeId) => edgeById.get(edgeId)?.circle === true).length === 1;
+          })));
+        }
+      }
       // Distinct axes by their position across the axis (0.001 mm), not along it.
       const alongPoint = dot3(point, direction);
       const across = point.map((value, index) => value - alongPoint * direction[index]!);
@@ -449,18 +472,28 @@ export function describeBody(body: DescribedBody, revision: string): BodyDescrip
 
   const cylinderGroups = [...cylinders.values()]
     .sort((left, right) => left.radiusMm - right.radiusMm || String(left.axis).localeCompare(String(right.axis)) || (left.kind ?? "").localeCompare(right.kind ?? ""))
-    .map(({ points, ...group }) => ({ ...group, axisPointsMm: [...points.values()].map((entry) => {
-      // An axis-aligned axis is placed at the middle of its faces' extent, so a hole through a wall reads at mid-wall.
-      const at = [...entry.point];
-      if (entry.index !== undefined) at[entry.index] = (entry.lo + entry.hi) / 2;
-      return round4Vector(at);
-    }).sort((left, right) => left[0]! - right[0]! || left[1]! - right[1]! || left[2]! - right[2]!) } as BodyDescription["cylinders"][number]));
+    .map(({ points, closed, extents, floored, ...group }) => {
+      const described = { ...group, axisPointsMm: [...points.values()].map((entry) => {
+        // An axis-aligned axis is placed at the middle of its faces' extent, so a hole through a wall reads at mid-wall.
+        const at = [...entry.point];
+        if (entry.index !== undefined) at[entry.index] = (entry.lo + entry.hi) / 2;
+        return round4Vector(at);
+      }).sort((left, right) => left[0]! - right[0]! || left[1]! - right[1]! || left[2]! - right[2]!) } as BodyDescription["cylinders"][number];
+      // Reported only when every face of the group is a full-turn face and they all agree.
+      if (closed === group.count) {
+        if (group.kind === "hole" && floored.length === closed && floored.every((value) => value === floored[0])) described.through = !floored[0];
+        const first = extents[0];
+        if (first && extents.length === closed && extents.every((extent) => extent && Math.abs(extent[0] - first[0]) < 1e-3 && Math.abs(extent[1] - first[1]) < 1e-3)) described.extentMm = [...first];
+      }
+      return described;
+    });
 
   const otherSurfaces: BodyDescription["otherSurfaces"] = {};
   for (const [type, entry] of [...others].sort((left, right) => left[0].localeCompare(right[0]))) {
     otherSurfaces[type] = { count: entry.count, ...(entry.halfAngles.size > 0 ? { halfAngleDeg: [...entry.halfAngles].sort((left, right) => left - right) } : {}) };
   }
   const blendEntries = [...blends].sort((left, right) => left[0] - right[0]);
+  const cavity = body.boundsMm ? cavityFromPlanes(planes, body.boundsMm) : undefined;
 
   // Caps: at most 12 offsets per direction and 16 axis points per group, each with a `more` count.
   const planeMore = new Map<string, number>();
@@ -485,6 +518,7 @@ export function describeBody(body: DescribedBody, revision: string): BodyDescrip
     cylinders: cylinderGroups,
     otherSurfaces,
     blendRadii: Object.fromEntries(blendEntries.slice(0, keptBlends).map(([radius, count]) => [String(radius), count])),
+    ...(cavity ? { cavity } : {}),
     ...(truncated ? { truncated: true as const } : {}),
   });
 
@@ -503,4 +537,35 @@ export function describeBody(body: DescribedBody, revision: string): BodyDescrip
     lists.sort((left, right) => right.length - left.length)[0]!.drop();
   }
   return assemble();
+}
+
+// An open-top pocket from the planes alone. The walls are the widest pair of inward-facing planes on x and on y
+// (xPos left of xNeg, both strictly inside the bounds, ranked by the smaller face); the floor is the widest zPos plane
+// strictly inside the bounds, and it must cover at least half of the walls' footprint. Anything less clear is left out.
+function cavityFromPlanes(planes: Map<string, { offsets: Map<number, PlaneOffset> }>, bounds: { min: readonly number[]; max: readonly number[] }): BodyDescription["cavity"] | undefined {
+  const inside = (value: number, axis: number) => value > bounds.min[axis]! + 1e-3 && value < bounds.max[axis]! - 1e-3;
+  const wallPair = (axis: number): { lo: number; hi: number } | undefined => {
+    const low = planes.get(`${AXIS_NAMES[axis]}Pos`)?.offsets;
+    const high = planes.get(`${AXIS_NAMES[axis]}Neg`)?.offsets;
+    if (!low || !high) return undefined;
+    let best: { lo: number; hi: number; score: number } | undefined;
+    for (const lo of low.values()) {
+      for (const hi of high.values()) {
+        if (!(lo.mm < hi.mm) || !inside(lo.mm, axis) || !inside(hi.mm, axis)) continue;
+        const score = Math.min(lo.area, hi.area);
+        if (!best || score > best.score) best = { lo: lo.mm, hi: hi.mm, score };
+      }
+    }
+    return best;
+  };
+  const x = wallPair(0);
+  const y = wallPair(1);
+  const floors = planes.get("zPos")?.offsets;
+  if (!x || !y || !floors) return undefined;
+  let floor: PlaneOffset | undefined;
+  for (const candidate of floors.values()) {
+    if (inside(candidate.mm, 2) && (!floor || candidate.area > floor.area)) floor = candidate;
+  }
+  if (!floor || floor.area < 0.5 * (x.hi - x.lo) * (y.hi - y.lo)) return undefined;
+  return { xMm: [x.lo, x.hi], yMm: [y.lo, y.hi], floorZMm: floor.mm };
 }

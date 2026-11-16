@@ -659,6 +659,7 @@ const countersinkInputSchema = z.object({
   includedAngleDeg: z.number().finite().gt(0).lt(180),
   throughDepthMm: z.number().finite().positive(),
   overshootMm: z.number().finite().nonnegative().default(0.5),
+  keepProfile: z.boolean().optional(),
   intent,
   revision,
 }).strict().superRefine((input, context) => {
@@ -687,6 +688,7 @@ const countersinkPatternInputSchema = z.object({
   includedAngleDeg: z.number().finite().gt(0).lt(180),
   throughDepthMm: z.number().finite().positive(),
   overshootMm: z.number().finite().nonnegative().default(0.5),
+  keepProfile: z.boolean().optional(),
   intent,
   revision,
 }).strict().superRefine((input, context) => {
@@ -919,6 +921,8 @@ const ribInputSchema = z.object({
   targetId: z.number().int().positive(),
   profilePointsMm: z.array(vector).min(3).max(1000),
   thicknessMm: nonzeroDistance,
+  side: z.enum(["centered", "positive", "negative"]).optional(),
+  keepProfile: z.boolean().optional(),
   intent,
   revision,
 }).strict();
@@ -1389,6 +1393,44 @@ const edgeQuerySchema = z.object({
   // Narrow to a known set, e.g. a boolean's createdEdges, then filter by direction or length.
   edgeIds: z.array(z.string().min(1)).max(4096).optional(),
 }).strict();
+// edgeQuery / faceQuery on fillet, chamfer and extrude_faces: the find_edges / find_faces query without bodyIds (the
+// tool's id is implied), kept as a loose object in the tool list and checked against the real schema when it runs.
+// adjacentFace names a face by a query (one face; sortBy x/y/z with limit 1 picks among several) instead of by id.
+const adjacentFaceSchema = faceQuerySchema.omit({ bodyIds: true, adjacentEdgeIds: true }).extend({
+  sortBy: z.enum(["x", "y", "z"]).optional(),
+  order: z.enum(["asc", "desc"]).optional(),
+  limit: z.number().int().min(1).max(64).optional(),
+}).strict();
+const edgeSelectionQuerySchema = edgeQuerySchema.omit({ bodyIds: true }).extend({ adjacentFace: adjacentFaceSchema.optional() }).strict();
+const faceSelectionQuerySchema = faceQuerySchema.omit({ bodyIds: true }).strict();
+const edgeSelectionFields = {
+  edgeIds: z.array(z.string()).min(1).optional(),
+  edgeQuery: z.record(z.string(), z.unknown()).optional().describe("find_edges query without bodyIds"),
+  sortBy: z.enum(["length", "x", "y", "z"]).optional(),
+  order: z.enum(["asc", "desc"]).optional(),
+  limit: z.number().int().min(1).max(1000).optional(),
+};
+const requireEdgeSelection = (input: { edgeIds?: unknown; edgeQuery?: unknown; sortBy?: unknown; order?: unknown; limit?: unknown }, context: z.RefinementCtx) => {
+  if ((input.edgeIds === undefined) === (input.edgeQuery === undefined)) {
+    context.addIssue({ code: "custom", path: ["edgeIds"], message: "Pass exactly one of edgeIds or edgeQuery" });
+  } else if (input.edgeQuery === undefined && (input.sortBy !== undefined || input.order !== undefined || input.limit !== undefined)) {
+    context.addIssue({ code: "custom", path: ["limit"], message: "sortBy, order and limit apply to edgeQuery only" });
+  }
+};
+const faceSelectionFields = {
+  faceIds: z.array(z.string()).min(1).optional(),
+  faceQuery: z.record(z.string(), z.unknown()).optional().describe("find_faces query without bodyIds"),
+  sortBy: z.enum(["x", "y", "z"]).optional(),
+  order: z.enum(["asc", "desc"]).optional(),
+  limit: z.number().int().min(1).max(1000).optional(),
+};
+const requireFaceSelection = (input: { faceIds?: unknown; faceQuery?: unknown; sortBy?: unknown; order?: unknown; limit?: unknown }, context: z.RefinementCtx) => {
+  if ((input.faceIds === undefined) === (input.faceQuery === undefined)) {
+    context.addIssue({ code: "custom", path: ["faceIds"], message: "Pass exactly one of faceIds or faceQuery" });
+  } else if (input.faceQuery === undefined && (input.sortBy !== undefined || input.order !== undefined || input.limit !== undefined)) {
+    context.addIssue({ code: "custom", path: ["limit"], message: "sortBy, order and limit apply to faceQuery only" });
+  }
+};
 const referenceIdentitySchema = z.object({
   id: z.string().trim().min(1),
   sessionId: z.string().trim().min(1),
@@ -2044,11 +2086,20 @@ function resolveBatchReferences(value: unknown, steps: ReadonlyArray<BatchStepRe
 // A bigger result comes back as ids plus an explicit note, never silently cut.
 const BATCH_REPLY_LIMIT = 1_500;
 const BATCH_TRUNCATION_HINT = "add return: [...] to this step";
+// The concrete next move for a cut find reply, first in the reply (the generic hint key stays for older clients).
+function findTruncationNext(count: number | undefined, matches: ReadonlyArray<unknown> | undefined, via: "limit" | "return"): string {
+  const first = matches?.[0] as Record<string, unknown> | undefined;
+  const faces = first !== undefined && "surfaceType" in first;
+  const total = count === undefined ? "many matches" : `${count} matches`;
+  const move = via === "return" ? "add return: [\"matches[*].id\"] (or the fields you need) to this step" : "add limit (e.g. 20) with sortBy";
+  return `${total}; ${move}${faces ? ", or use plasticity_describe_body for hole, boss and plane positions" : ", or narrow the query"}`;
+}
 function summarizeBatchResult(value: unknown): unknown {
   const text = JSON.stringify(value) ?? "null";
   if (text.length <= BATCH_REPLY_LIMIT) return value;
   const record = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
   return {
+    ...(Array.isArray(record.matches) ? { next: findTruncationNext(typeof record.count === "number" ? record.count : record.matches.length, record.matches, "return") } : {}),
     truncated: true,
     bytes: text.length,
     ...(typeof record.count === "number" ? { count: record.count } : {}),
@@ -2209,7 +2260,23 @@ function isRecipeResult(value: unknown): value is { recipe: string; status: unkn
     && typeof (value as { recipe?: unknown }).recipe === "string" && "status" in value);
 }
 function leanRecipeSummary(value: { recipe: string; status: unknown } & Record<string, unknown>) {
-  return { status: value.status, ...leanOmitted(value, ["status"]) };
+  // ribBoundsMm is neither shown nor listed in a lean batch: ask for it with return: ["ribBoundsMm"].
+  return { status: value.status, ...leanOmitted(value, ["status", "ribBoundsMm"]) };
+}
+
+// plasticity_status as a lean batch step without return: the header, not a truncated blob.
+const LEAN_STATUS_BODIES = 20;
+function leanStatusSummary(value: unknown): unknown {
+  const record = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const bodies = Array.isArray(record.bodies) ? record.bodies as Array<Record<string, unknown>> : [];
+  const total = (record.bodyPagination as { total?: number } | undefined)?.total ?? bodies.length;
+  return {
+    revision: record.revision,
+    undoDepth: record.undoDepth,
+    bodyCount: total,
+    bodies: bodies.slice(0, LEAN_STATUS_BODIES).map((body) => ({ id: body.id, type: body.type, name: body.name, boundsMm: body.boundsMm })),
+    ...(total > LEAN_STATUS_BODIES ? { moreBodies: total - LEAN_STATUS_BODIES, hint: "plasticity_describe_body lists more; or add return: [...] to this step" } : {}),
+  };
 }
 
 // Sorting and limiting for plasticity_find_faces / plasticity_find_edges. Ties keep the original order.
@@ -2224,6 +2291,37 @@ function orderMatches<T>(matches: T[], sortBy: string | undefined, order: "asc" 
   }
   return limit === undefined ? ordered : ordered.slice(0, limit);
 }
+// Resolves an edgeQuery or faceQuery against the current state exactly as find_edges / find_faces would, on one body.
+// An empty match is an error that echoes the query.
+function pickEdgesByQuery(state: RuntimeState, id: number, rawQuery: unknown, sortBy: "length" | "x" | "y" | "z" | undefined, order: "asc" | "desc" | undefined, limit: number | undefined, expectedRevision: string): string[] {
+  if (state.revision !== expectedRevision) throw new Error(`Stale reference: expected revision ${expectedRevision}, current revision is ${state.revision}`);
+  const parsed = edgeSelectionQuerySchema.safeParse(rawQuery);
+  if (!parsed.success) throw new Error(`Invalid edgeQuery: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "(query)"}: ${issue.message}`).join("; ")}`);
+  if (!state.bodies.some((body) => body.id === id)) throw new Error(`Unknown body ID: ${id}`);
+  const { adjacentFace, ...rest } = parsed.data;
+  const echo = JSON.stringify(rawQuery);
+  const query: EdgeQuery = { ...rest, bodyIds: [id] };
+  if (adjacentFace) {
+    const { sortBy: faceSort, order: faceOrder, limit: faceLimit, ...faceQuery } = adjacentFace;
+    const faces = orderMatches(findFaces(state, { ...faceQuery, bodyIds: [id] }), faceSort, faceOrder, faceLimit, (face, key) => face.centerMm[COORDINATE_AXIS[key]!]!);
+    if (faces.length === 0) throw new Error(`edgeQuery.adjacentFace matched no faces on body ${id}: ${echo}`);
+    if (faces.length > 1) throw new Error(`edgeQuery.adjacentFace matched ${faces.length} faces on body ${id}; add sortBy (x, y or z) with limit 1, or narrow it: ${echo}`);
+    query.adjacentFaceIds = [...(query.adjacentFaceIds ?? []), faces[0]!.id];
+  }
+  const matches = orderMatches(findEdges(state, query), sortBy, order, limit, (edge, key) => (key === "length" ? edge.lengthMm : edge.centerMm[COORDINATE_AXIS[key]!]!));
+  if (matches.length === 0) throw new Error(`edgeQuery matched no edges on body ${id}: ${echo}`);
+  return matches.map((edge) => edge.id);
+}
+function pickFacesByQuery(state: RuntimeState, id: number, rawQuery: unknown, sortBy: "x" | "y" | "z" | undefined, order: "asc" | "desc" | undefined, limit: number | undefined, expectedRevision: string): string[] {
+  if (state.revision !== expectedRevision) throw new Error(`Stale reference: expected revision ${expectedRevision}, current revision is ${state.revision}`);
+  const parsed = faceSelectionQuerySchema.safeParse(rawQuery);
+  if (!parsed.success) throw new Error(`Invalid faceQuery: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "(query)"}: ${issue.message}`).join("; ")}`);
+  if (!state.bodies.some((body) => body.id === id)) throw new Error(`Unknown body ID: ${id}`);
+  const matches = orderMatches(findFaces(state, { ...parsed.data, bodyIds: [id] }), sortBy, order, limit, (face, key) => face.centerMm[COORDINATE_AXIS[key]!]!);
+  if (matches.length === 0) throw new Error(`faceQuery matched no faces on body ${id}: ${JSON.stringify(rawQuery)}`);
+  return matches.map((face) => face.id);
+}
+const DESCRIBE_ALL_BODIES = 8;
 const DIRECT_FIND_REPLY_BYTES = 8_000;
 const DIRECT_FIND_HINT = "add limit/sortBy or narrow the query";
 const BODY_INFO_HINT_BYTES = 20_000;
@@ -2396,16 +2494,18 @@ function createServerWithCatalog(
   const batchRunning = new AsyncLocalStorage<true>();
   // A direct find without limit never returns more than DIRECT_FIND_REPLY_BYTES: the clients cut or save oversized
   // replies to a file. The matches that fit stay in their order; count stays the total. An explicit limit is honoured.
-  const directFindReply = <T extends { matches: unknown[] }>(reply: T, limit: number | undefined): T | (T & { truncated: true; hint: string }) => {
+  const directFindReply = <T extends { matches: unknown[] }>(reply: T, limit: number | undefined): T | (T & { truncated: true; hint: string; next: string }) => {
     if (limit !== undefined || batchRunning.getStore() || Buffer.byteLength(JSON.stringify(reply)) <= DIRECT_FIND_REPLY_BYTES) return reply;
-    const fits = (keep: number) => Buffer.byteLength(JSON.stringify({ ...reply, matches: reply.matches.slice(0, keep), truncated: true, hint: DIRECT_FIND_HINT })) <= DIRECT_FIND_REPLY_BYTES;
+    const next = findTruncationNext((reply as { count?: number }).count, reply.matches, "limit");
+    const cut = (keep: number) => ({ next, ...reply, matches: reply.matches.slice(0, keep), truncated: true as const, hint: DIRECT_FIND_HINT });
+    const fits = (keep: number) => Buffer.byteLength(JSON.stringify(cut(keep))) <= DIRECT_FIND_REPLY_BYTES;
     let low = 0;
     let high = reply.matches.length;
     while (low < high) { // largest number of matches that fits
       const middle = Math.ceil((low + high) / 2);
       if (fits(middle)) low = middle; else high = middle - 1;
     }
-    return { ...reply, matches: reply.matches.slice(0, low), truncated: true, hint: DIRECT_FIND_HINT };
+    return cut(low);
   };
   const persistJournalEntry = async (entry: JournalEntry): Promise<void> => {
     if (!constructionHistory) return;
@@ -2816,6 +2916,7 @@ function createServerWithCatalog(
         });
         // What the caller sees: the asked-for projection, else the read result (or the tool's own fields), never cut silently.
         const unprojected = () => {
+          if (readOnly && lean && step.toolName === "plasticity_status" && (JSON.stringify(stepResult)?.length ?? 0) > BATCH_REPLY_LIMIT) return leanStatusSummary(stepResult);
           if (readOnly) return lean && referencedLater.has(index) ? referencedReadSummary(stepResult) : summarizeBatchResult(stepResult);
           const own = toolSpecificFields(stepResult, after);
           return own === undefined ? undefined : lean && isRecipeResult(own) ? leanRecipeSummary(own) : summarizeBatchResult(own);
@@ -3056,11 +3157,31 @@ function createServerWithCatalog(
     }
     return reply;
   }, true);
-  tool("plasticity_describe_body", "Describe one body compactly for sizing against it and verifying it: bounds and size, planar faces grouped by outward normal (xPos, xNeg, yPos, yNeg, zPos, zNeg, slanted) with each plane's coordinate mm on that axis (walls, cavity floor), face count (when over 1) and largest face, cylinders grouped by radius and axis with hole or boss and axis points, other surface counts and blend radii. Millimetres. Use plasticity_body_info for exact per-face and edge topology.", z.object({ id: z.number().int().positive() }).strict(), async ({ id }) => {
+  tool("plasticity_describe_body", "Describe bodies compactly to size against them and verify them: bounds and size; planar faces by outward normal (xPos, xNeg, yPos, yNeg, zPos, zNeg, slanted) with each plane's coordinate mm (walls, cavity floor); face count and largest face; cylinders by radius and axis, hole or boss, axis points, through or blind and axial extent when known; an open-top cavity; other surfaces; blend radii. Includes hole and boss axis positions: no face search needed for those. id: one body; ids (1-8): several, plus the revision; neither: every body when there are at most 8, else the body list. Millimetres. Use plasticity_body_info for exact topology.", z.object({ id: z.number().int().positive().optional(), ids: z.array(z.number().int().positive()).min(1).max(8).optional() }).strict().superRefine((input, context) => {
+    if (input.id !== undefined && input.ids !== undefined) context.addIssue({ code: "custom", path: ["ids"], message: "Pass id or ids, not both" });
+  }), async ({ id, ids: bodyIds }) => {
     const state = await session.get().state();
-    const body = state.bodies.find((candidate) => candidate.id === id);
-    if (!body) throw new Error(`Unknown body ID: ${id}`);
-    return describeBody(body, state.revision);
+    if (id !== undefined) {
+      const body = state.bodies.find((candidate) => candidate.id === id);
+      if (!body) throw new Error(`Unknown body ID: ${id}`);
+      return describeBody(body, state.revision);
+    }
+    if (bodyIds === undefined && state.bodies.length > DESCRIBE_ALL_BODIES) {
+      return {
+        revision: state.revision,
+        bodyCount: state.bodies.length,
+        bodies: state.bodies.slice(0, 50).map((body) => ({ id: body.id, type: body.type, name: body.name, boundsMm: body.boundsMm })),
+        hint: `${state.bodies.length} bodies; pass ids (1-${DESCRIBE_ALL_BODIES}) to describe them`,
+      };
+    }
+    const wanted = bodyIds ?? state.bodies.map((body) => body.id);
+    const bodies = wanted.map((wantedId) => {
+      const body = state.bodies.find((candidate) => candidate.id === wantedId);
+      if (!body) throw new Error(`Unknown body ID: ${wantedId}`);
+      const { revision: _revision, ...description } = describeBody(body, state.revision);
+      return description;
+    });
+    return { revision: state.revision, bodies };
   }, true);
   tool("plasticity_inspect_fastener_group", "Read exact in-plane centers and diameters from two or more explicitly selected cylindrical faces on one current Solid. The returned revision-bound native B-Rep evidence and assignments can be passed into fastener-group load distribution; coaxial duplicate faces, stale references, and axes not normal to the supplied frame are rejected.", fastenerGroupInspectionInputSchema, async (request) =>
     await session.get().inspectFastenerGroup(request), true);
@@ -3385,9 +3506,9 @@ function createServerWithCatalog(
   }).strict(), async ({ centerMm, majorRadiusMm, minorRadiusMm, axis, radialDirection, name, intent: purpose, revision: current }) =>
     await journaled("create-torus", purpose, { centerMm, majorRadiusMm, minorRadiusMm, axis, radialDirection, name }, () =>
       session.get().createTorus(centerMm, majorRadiusMm, minorRadiusMm, axis, radialDirection, name, current)));
-  tool("plasticity_create_countersink", "Cut an exact through hole with a concentric conical countersink into one Solid. The caller supplies the finished through diameter, major diameter, included angle, material depth, and an in-plane radial direction from the selected standard or manufacturer record. The recipe preserves its editable annular meridional Wire and records through cutter, profile, Revolve, and Boolean as four native history steps.", countersinkInputSchema, async ({ intent: purpose, ...input }) =>
+  tool("plasticity_create_countersink", "Cut an exact through hole with a concentric conical countersink into one Solid. The caller supplies the finished through diameter, major diameter, included angle, material depth, and an in-plane radial direction from the selected standard or manufacturer record. The recipe preserves its editable annular meridional Wire and records through cutter, profile, Revolve, and Boolean as four native history steps. keepProfile: false deletes the profile Wire in one more history step.", countersinkInputSchema, async ({ intent: purpose, ...input }) =>
     await journaled("recipe-countersink", purpose, input, () => new PlasticityRecipes(session.get()).createCountersink(input)));
-  tool("plasticity_create_countersink_pattern", "Cut 2-64 equal through holes with concentric conical countersinks at explicit entry centers on one current Solid. Each center creates a through cutter and an editable meridional Wire revolved into a countersink cutter; one final Boolean consumes every cutter while preserving the source Wires. Finished dimensions must come from the selected fastener standard, fit, process, and actual material depth.", countersinkPatternInputSchema, async ({ intent: purpose, ...input }) =>
+  tool("plasticity_create_countersink_pattern", "Cut 2-64 equal through holes with concentric conical countersinks at explicit entry centers on one current Solid. Each center creates a through cutter and an editable meridional Wire revolved into a countersink cutter; one final Boolean consumes every cutter while preserving the source Wires (keepProfile: false deletes them in one more history step). Finished dimensions must come from the selected fastener standard, fit, process, and actual material depth.", countersinkPatternInputSchema, async ({ intent: purpose, ...input }) =>
     await journaled("recipe-countersink-pattern", purpose, input, () => new PlasticityRecipes(session.get()).createCountersinkPattern(input)));
   tool("plasticity_create_hex_nut_pocket", "Cut an exact blind regular-hex pocket into one Solid. Across-flats size, pocket depth, material depth, orientation, and clearance must come from the selected nut, manufacturing process, and access requirements; nominal thread diameter is not used as pocket geometry. The profile Wire remains editable and the recipe records profile, Extrude, and Boolean as three native history steps.", hexNutPocketInputSchema, async ({ intent: purpose, ...input }) =>
     await journaled("recipe-hex-nut-pocket", purpose, input, () => new PlasticityRecipes(session.get()).createHexNutPocket(input)));
@@ -3529,7 +3650,7 @@ function createServerWithCatalog(
     await journaled("recipe-screw-boss", purpose, input, () => new PlasticityRecipes(session.get()).createScrewBoss(input)));
   tool("plasticity_create_screw_boss_pattern", "Create 2-64 equal exact cylindrical screw bosses at explicit base centers, join all bosses to one existing Solid in one native union, then cut every blind pilot in one native difference. The shared axis points outward; base overlap gives every boss real union volume. The recipe returns 2N+2 confirmed history steps.", screwBossPatternInputSchema, async ({ intent: purpose, ...input }) =>
     await journaled("recipe-screw-boss-pattern", purpose, input, () => new PlasticityRecipes(session.get()).createScrewBossPattern(input)));
-  tool("plasticity_create_rib", "Create an exact rib from a closed coplanar world-space profile, extrude it by a signed thickness, and join it to one existing Solid. The profile Wire remains editable. The recipe uses three explicit native history steps and returns each confirmed revision.", ribInputSchema, async ({ intent: purpose, ...input }) =>
+  tool("plasticity_create_rib", "Create an exact rib from a closed coplanar world-space profile, extrude it by a signed thickness, and join it to one existing Solid. Positive thickness runs along the profile's right-hand normal (points counter-clockwise seen from it): the rib fills [plane, plane + thickness]. side centered splits |thickness| about the plane; positive or negative pick the side. The reply has ribBoundsMm (in a lean batch, return it). The profile Wire stays unless keepProfile is false (one more history step). Three native history steps.", ribInputSchema, async ({ intent: purpose, ...input }) =>
     await journaled("recipe-rib", purpose, input, () => new PlasticityRecipes(session.get()).createRib(input)));
   tool("plasticity_create_round_vent_array", "Cut an exact rectangular array of round through-vents into one Solid. The first center lies on the entry surface, the axis points into it, and both array directions lie in that surface plane. One seed cylinder, one native rectangular pattern, and one Boolean produce up to 400 holes in three history steps.", roundVentArrayInputSchema, async ({ intent: purpose, ...input }) =>
     await journaled("recipe-round-vent-array", purpose, input, () => new PlasticityRecipes(session.get()).createRoundVentArray(input)));
@@ -3805,16 +3926,25 @@ function createServerWithCatalog(
       : { name: name!, colorHex: colorHex!, roughness: roughness ?? 0.6, metalness: metalness ?? 0, opacity: opacity ?? 1 };
     return await journaled("set-appearance-material", purpose, { bodyIds, material }, () => session.get().setAppearanceMaterial(bodyIds, material, current));
   });
-  tool("plasticity_fillet", "Fillet current edge IDs with a radius in millimeters. shape \"g2\" makes a curvature-continuous (G2) blend instead of the default circular \"round\" (G1).", z.object({ id: z.number().int().positive(), edgeIds: z.array(z.string()).min(1), radiusMm: z.number().finite().positive(), shape: z.enum(["round", "g2"]).default("round"), intent, revision }), async ({ id, edgeIds, radiusMm, shape, intent: purpose, revision: current }) =>
-    await journaled("fillet", purpose, { id, edgeIds, radiusMm, shape }, () => session.get().fillet(id, edgeIds, radiusMm, current, shape)));
-  tool("plasticity_chamfer", "Chamfer current edge IDs by an equal distance in millimeters.", z.object({ id: z.number().int().positive(), edgeIds: z.array(z.string()).min(1), distanceMm: z.number().finite().positive(), intent, revision }), async ({ id, edgeIds, distanceMm, intent: purpose, revision: current }) =>
-    await journaled("chamfer", purpose, { id, edgeIds, distanceMm }, () => session.get().chamfer(id, edgeIds, distanceMm, current)));
+  tool("plasticity_fillet", "Fillet current edges with a radius in millimeters, by edgeIds or edgeQuery (a find_edges query on this body; the reply adds edgeCount). shape \"g2\" makes a curvature-continuous (G2) blend instead of the default circular \"round\" (G1).", z.object({ id: z.number().int().positive(), ...edgeSelectionFields, radiusMm: z.number().finite().positive(), shape: z.enum(["round", "g2"]).default("round"), intent, revision }).superRefine(requireEdgeSelection), async ({ id, edgeIds, edgeQuery, sortBy, order, limit, radiusMm, shape, intent: purpose, revision: current }) => {
+    const picked = edgeIds ?? pickEdgesByQuery(await session.get().state(), id, edgeQuery, sortBy, order, limit, current);
+    const reply = await journaled("fillet", purpose, { id, edgeIds: picked, ...(edgeQuery ? { edgeQuery } : {}), radiusMm, shape }, () => session.get().fillet(id, picked, radiusMm, current, shape));
+    return edgeQuery ? { ...reply, edgeCount: picked.length } : reply;
+  });
+  tool("plasticity_chamfer", "Chamfer current edges by an equal distance in millimeters, by edgeIds or edgeQuery (a find_edges query on this body; the reply adds edgeCount).", z.object({ id: z.number().int().positive(), ...edgeSelectionFields, distanceMm: z.number().finite().positive(), intent, revision }).superRefine(requireEdgeSelection), async ({ id, edgeIds, edgeQuery, sortBy, order, limit, distanceMm, intent: purpose, revision: current }) => {
+    const picked = edgeIds ?? pickEdgesByQuery(await session.get().state(), id, edgeQuery, sortBy, order, limit, current);
+    const reply = await journaled("chamfer", purpose, { id, edgeIds: picked, ...(edgeQuery ? { edgeQuery } : {}), distanceMm }, () => session.get().chamfer(id, picked, distanceMm, current));
+    return edgeQuery ? { ...reply, edgeCount: picked.length } : reply;
+  });
   tool("plasticity_remove_fillets", "Remove every native fillet recognized on one or more current Solid or Sheet bodies.", z.object({ ids, intent, revision }).strict(), async ({ ids: bodyIds, intent: purpose, revision: current }) =>
     await journaled("remove-fillets", purpose, { ids: bodyIds }, () => session.get().removeFillets(bodyIds, current)));
   tool("plasticity_refillet_faces", "Change recognized native fillet faces by a signed radius delta in millimeters.", z.object({ faces: z.array(faceRef).min(1).max(4096), deltaMm: nonzeroDistance, intent, revision }).strict(), async ({ faces, deltaMm, intent: purpose, revision: current }) =>
     await journaled("refillet-faces", purpose, { faces, deltaMm }, () => session.get().refilletFaces(faces, deltaMm, current)));
-  tool("plasticity_extrude_faces", "Extrude current face IDs by a distance in millimeters.", z.object({ id: z.number().int().positive(), faceIds: z.array(z.string()).min(1), distanceMm: z.number().finite(), intent, revision }), async ({ id, faceIds, distanceMm, intent: purpose, revision: current }) =>
-    await journaled("extrude-faces", purpose, { id, faceIds, distanceMm }, () => session.get().extrudeFaces(id, faceIds, distanceMm, current)));
+  tool("plasticity_extrude_faces", "Extrude current faces by a distance in millimeters, by faceIds or faceQuery (a find_faces query on this body; the reply adds faceCount).", z.object({ id: z.number().int().positive(), ...faceSelectionFields, distanceMm: z.number().finite(), intent, revision }).superRefine(requireFaceSelection), async ({ id, faceIds, faceQuery, sortBy, order, limit, distanceMm, intent: purpose, revision: current }) => {
+    const picked = faceIds ?? pickFacesByQuery(await session.get().state(), id, faceQuery, sortBy, order, limit, current);
+    const reply = await journaled("extrude-faces", purpose, { id, faceIds: picked, ...(faceQuery ? { faceQuery } : {}), distanceMm }, () => session.get().extrudeFaces(id, picked, distanceMm, current));
+    return faceQuery ? { ...reply, faceCount: picked.length } : reply;
+  });
   tool("plasticity_extrude_profile", "Extrude one unambiguous closed planar Wire profile into a native Solid. options: reverseDistanceMm (two-sided), draftAngleDeg / reverseDraftAngleDeg, thicknessMm (thin wall).", z.object({ id: z.number().int().positive(), distanceMm: z.number().finite(), options: extrudeOptionsSchema, intent, revision }), async ({ id, distanceMm, options, intent: purpose, revision: current }) =>
     await journaled("extrude-profile", purpose, { id, distanceMm, options }, () => session.get().extrudeProfile(id, distanceMm, current, compactExtrudeOptions(options))));
   tool("plasticity_extrude_regions", "Extrude one or more explicit revision-bound planar regions into native solids. options: reverseDistanceMm (two-sided), draftAngleDeg / reverseDraftAngleDeg, thicknessMm (thin wall).", z.object({ regionIds, distanceMm: z.number().finite(), options: extrudeOptionsSchema, intent, revision }).strict(), async ({ regionIds: selectedRegions, distanceMm, options, intent: purpose, revision: current }) =>

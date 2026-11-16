@@ -195,7 +195,7 @@ test("describe_body is strict, read-only, in the compact list once, and reachabl
   const routed = json(await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_describe_body", arguments: { id: 1 } } }));
   assert.deepEqual(routed, direct);
 
-  for (const bad of [{}, { id: 0 }, { id: 1.5 }, { id: 1, extra: true }, { id: "1" }]) {
+  for (const bad of [{ id: 0 }, { id: 1.5 }, { id: 1, extra: true }, { id: "1" }]) { // {} is valid since tier 1d: it describes every body
     const response = await client.callTool({ name: "plasticity_describe_body", arguments: bad });
     assert.equal(response.isError, true, JSON.stringify(bad));
   }

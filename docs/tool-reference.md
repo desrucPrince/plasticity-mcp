@@ -158,6 +158,43 @@ A reply of 8,000 bytes or less is unchanged, an explicit `limit` is always
 honoured, and the steps of a `plasticity_batch` are never cut (a later step can
 reference every match).
 
+### Edge and face queries on edit tools (speed tier 1d)
+
+`plasticity_fillet` and `plasticity_chamfer` take `edgeQuery` instead of
+`edgeIds` (exactly one of the two; anything else is a validation error), so a
+fillet or chamfer needs no separate `plasticity_find_edges` step. `edgeQuery`
+is the `plasticity_find_edges` query without `bodyIds` (the tool's `id` is the
+body), with optional top-level `sortBy` (`length`, `x`, `y`, `z`), `order` and
+`limit` that pick among the matches exactly as in `plasticity_find_edges`
+(they are an error with `edgeIds`). The query is resolved against the current
+state first; it must match the revision (`Stale reference` otherwise). If it
+matches nothing the call fails with `edgeQuery matched no edges on body <id>:
+<the query as sent>`. The reply is the usual edit reply plus `edgeCount`
+(`edgeIds` calls reply as before). In a batch the revision auto-fills as for
+every other step.
+
+`edgeQuery.adjacentFace` names one face of the body by a query instead of by
+id: `{ planar, normal, ..., sortBy: "x"|"y"|"z", order, limit }` takes the
+`plasticity_find_faces` fields (without `bodyIds` and `adjacentEdgeIds`), and
+the edges of that face match. It must resolve to exactly one face (use `sortBy`
+with `limit: 1`). The top rim of a shell is one step:
+`{"toolName":"plasticity_chamfer","arguments":{"id":"$0.added[0]","edgeQuery":{"adjacentFace":{"planar":true,"normal":{"vector":[0,0,1]},"sortBy":"z","order":"desc","limit":1}},"distanceMm":1}}`
+instead of `find_faces` (top), `find_edges` (`adjacentFaceIds`), `chamfer`.
+`plasticity_extrude_faces` takes `faceQuery` (a `plasticity_find_faces` query
+without `bodyIds`, `sortBy` `x`/`y`/`z`, `order`, `limit`) instead of
+`faceIds` the same way and adds `faceCount`. In the tool list `edgeQuery` and
+`faceQuery` are plain objects; the full schema is checked when the call runs.
+
+A cut find reply now starts with `next`, a concrete move: a direct find reply
+over 8,000 bytes begins `{"next":"<count> matches; add limit (e.g. 20) with
+sortBy, or use plasticity_describe_body for hole, boss and plane positions", ...}`
+(for edges: `..., or narrow the query`), and a batch read cut at 1,500 bytes
+begins with `next: "<count> matches; add return: [\"matches[*].id\"] ..."`.
+`truncated` and the older `hint` stay. In a `detail: "lean"` batch,
+`plasticity_status` without `return` whose reply would be cut answers
+`{ revision, undoDepth, bodyCount, bodies: [{ id, type, name, boundsMm }, ...
+up to 20], moreBodies?, hint? }` instead.
+
 ### Describe a body (speed tier 1c)
 
 `plasticity_describe_body` (`{ id }`, strict, read-only, in the compact list)
@@ -185,6 +222,25 @@ longest lists are shortened first, with `more` counts).
   count. Cylindrical blend faces are not listed here.
 - `otherSurfaces`: face counts by surface type (`Cone` also has `halfAngleDeg`).
 - `blendRadii`: `{ "<radius mm>": faceCount }` for fillet and blend faces.
+- Tier 1d, in each `cylinders` group, only when every face of the group is a
+  full turn (two circle edges) and they agree: `extentMm: [from, to]`, the
+  group's length along its axis (axis-aligned axes), and for holes `through:
+  true|false` (false when a flat floor or an apex closes an end). A group with
+  mixed or unknown faces leaves them out.
+- Tier 1d `cavity: { xMm: [a, b], yMm: [c, d], floorZMm }`: an open-top pocket
+  read from the planes: the widest inward-facing wall pair on x and on y (both
+  strictly inside the bounds; ranked by the smaller of the two faces) and the
+  widest upward plane strictly between bottom and top, which must cover at least half the walls'
+  footprint. Left out when that is not clear (a solid block, a plate with a
+  through slot, a tilted part).
+
+Forms: `{ id }` replies with the description as above (unchanged shape).
+`{ ids: [1-8 ids] }` replies `{ revision, bodies: [description without its own
+revision, ...] }` in the order asked. `{}` describes every body the same way
+when the document has 8 or fewer, else replies `{ revision, bodyCount, bodies:
+[{ id, type, name, boundsMm }, ...up to 50], hint }`. Use `{}` as the first and
+last read of a part. An enclosure base reads in about 1.6 KB, and its hole and
+boss axis positions need no face search.
 
 All of these are plain keys, so `return` in a batch step can name them:
 `return: ["cylinders", "planes.zNeg", "blendRadii", "sizeMm"]`. A face id from
@@ -1211,9 +1267,27 @@ diameter, engagement depth, edge distance, and every center remain explicit.
 `plasticity_create_rib` accepts three or more coplanar world-space points and a
 signed extrusion thickness. It creates a closed profile, resolves its single
 native Region, extrudes a Solid, and joins that Solid to the selected target.
-The profile Wire remains in the document for inspection and direct editing.
 Non-coplanar and degenerate profiles are rejected before the first mutation;
 the three successful mutations are returned as separate Undo steps.
+Direction (verified live): a positive `thicknessMm` extrudes along the
+profile's right-hand normal, the one for which the points run counter-clockwise
+(for points A, B, C it is (B-A) x (C-A)); the rib fills `[plane, plane +
+thickness]` on that side, a negative thickness the other way. So points in the
+x-z plane at y = 13 that run x then z, with thickness +4, fill y 9..13. Optional
+`side` makes the intent explicit and ignores the sign of `thicknessMm`:
+`"centered"` splits `|thicknessMm|` evenly about the profile plane (a gusset at
+y = 15 with thickness 4 fills y 13..17, whatever the point order), `"positive"`
+runs along the normal, `"negative"` against it. Without `side` the call is as
+before. The reply adds `ribBoundsMm` (`{ min, max }` in mm, 4 decimals): the
+extruded solid's bounds before it is joined, i.e. where the rib landed. A lean
+batch leaves it out of the step reply (ask with `return: ["ribBoundsMm"]`).
+`keepProfile` (default true) keeps the editable profile Wire in the document,
+as before; `false` deletes it in a fourth Undo step (`steps` then ends with
+`delete-construction-profile`, the reply adds `profileDeleted: true`, and the
+batch `added` list no longer names the Wire). `plasticity_create_countersink`
+and `plasticity_create_countersink_pattern` take the same `keepProfile` (one
+extra delete step for all of their Wires; `profileDeleted` / `profilesDeleted`).
+`plasticity_create_through_hole_pattern` leaves no construction Wire.
 `plasticity_create_round_vent_array` cuts a one- or two-dimensional grid of
 round through-holes. The first center lies on the entry surface, the hole axis
 points into the target, and both grid directions must lie in that surface

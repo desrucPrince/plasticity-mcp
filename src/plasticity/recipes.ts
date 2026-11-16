@@ -5,6 +5,8 @@ type Vector3 = [number, number, number];
 
 export type RecipeOperations = Pick<PlasticityOperations, "state" | "createBox" | "createCylinder" | "createPolyline" | "extrudeRegions" | "rectangularPattern" | "createPipes" | "fillet" | "boolean"> & {
   revolveProfile?: PlasticityOperations["revolveProfile"];
+  // Only a recipe run with keepProfile: false deletes its construction Wire(s).
+  remove?: PlasticityOperations["remove"];
 };
 
 export interface CountersinkRecipeInput {
@@ -17,6 +19,8 @@ export interface CountersinkRecipeInput {
   includedAngleDeg: number;
   throughDepthMm: number;
   overshootMm: number;
+  // Default true: the editable profile Wire stays. false deletes it in one more undo step.
+  keepProfile?: boolean | undefined;
   revision: string;
 }
 
@@ -29,6 +33,8 @@ export interface CountersinkRecipeResult {
   targetId: number;
   countersinkDepthMm: number;
   profileBodyId: number;
+  // Present (true) only when keepProfile was false: profileBodyId names a deleted Wire.
+  profileDeleted?: true;
   resultBodyIds: number[];
   consumedToolIds: number[];
   undoSteps: number;
@@ -45,6 +51,7 @@ export interface CountersinkPatternRecipeInput {
   includedAngleDeg: number;
   throughDepthMm: number;
   overshootMm: number;
+  keepProfile?: boolean | undefined;
   revision: string;
 }
 
@@ -58,6 +65,7 @@ export interface CountersinkPatternRecipeResult {
   holeCount: number;
   countersinkDepthMm: number;
   profileBodyIds: number[];
+  profilesDeleted?: true;
   resultBodyIds: number[];
   consumedToolIds: number[];
   undoSteps: number;
@@ -295,6 +303,7 @@ export interface BlindHolePatternRecipeResult {
 export interface RecipeStep {
   operation:
     | "create-countersink-profile"
+    | "delete-construction-profile"
     | "revolve-countersink-cutter"
     | "create-hex-pocket-profile"
     | "extrude-hex-pocket-cutter"
@@ -497,6 +506,11 @@ export interface RibRecipeInput {
   targetId: number;
   profilePointsMm: Vector3[];
   thicknessMm: number;
+  // Omitted: thicknessMm is signed along the profile's right-hand normal. Otherwise |thicknessMm| is used:
+  // positive along the normal, negative against it, centered split evenly about the profile plane.
+  side?: "centered" | "positive" | "negative" | undefined;
+  // Default true: the editable profile Wire stays. false deletes it in one more undo step.
+  keepProfile?: boolean | undefined;
   revision: string;
 }
 
@@ -508,6 +522,9 @@ export interface RibRecipeResult {
   afterRevision: string;
   targetId: number;
   profileBodyId: number;
+  profileDeleted?: true;
+  // The extruded rib solid's bounds before it was joined to the target: where the rib landed.
+  ribBoundsMm?: { min: Vector3; max: Vector3 };
   resultBodyIds: number[];
   consumedToolIds: number[];
   undoSteps: number;
@@ -1310,6 +1327,7 @@ export class PlasticityRecipes {
   async createCountersink(input: CountersinkRecipeInput): Promise<CountersinkRecipeResult> {
     const countersinkDepthMm = validateCountersink(input);
     if (!this.operations.revolveProfile) throw new Error("Countersink requires native profile revolve support");
+    this.requireProfileDeleteSupport(input.keepProfile);
     const initial = await this.operations.state();
     requireCurrentSolid(initial, input.targetId, input.revision, "Countersink");
 
@@ -1360,6 +1378,8 @@ export class PlasticityRecipes {
         throw new Error(`Countersink profile was not preserved as a Wire: ${profileBodyId}`);
       }
       completedSteps.push(step("boolean-difference", beforeBoolean, current, resultBodyIds));
+      const profileDeleted = await this.deleteConstructionProfiles(input.keepProfile, [profileBodyId], current, completedSteps);
+      current = profileDeleted.state;
 
       return {
         recipe: "countersink",
@@ -1370,6 +1390,7 @@ export class PlasticityRecipes {
         targetId: input.targetId,
         countersinkDepthMm,
         profileBodyId,
+        ...(profileDeleted.deleted ? { profileDeleted: true as const } : {}),
         resultBodyIds,
         consumedToolIds: [throughCutterBodyId, countersinkCutterBodyId],
         undoSteps: completedSteps.length,
@@ -1384,6 +1405,7 @@ export class PlasticityRecipes {
   async createCountersinkPattern(input: CountersinkPatternRecipeInput): Promise<CountersinkPatternRecipeResult> {
     const countersinkDepthMm = validateCountersinkPattern(input);
     if (!this.operations.revolveProfile) throw new Error("Countersink pattern requires native profile revolve support");
+    this.requireProfileDeleteSupport(input.keepProfile);
     const initial = await this.operations.state();
     requireCurrentSolid(initial, input.targetId, input.revision, "Countersink pattern");
 
@@ -1442,6 +1464,8 @@ export class PlasticityRecipes {
         }
       }
       completedSteps.push(step("boolean-difference", beforeBoolean, current, resultBodyIds));
+      const profilesDeleted = await this.deleteConstructionProfiles(input.keepProfile, profileBodyIds, current, completedSteps);
+      current = profilesDeleted.state;
 
       return {
         recipe: "countersink-pattern",
@@ -1453,6 +1477,7 @@ export class PlasticityRecipes {
         holeCount: input.entryCentersMm.length,
         countersinkDepthMm,
         profileBodyIds,
+        ...(profilesDeleted.deleted ? { profilesDeleted: true as const } : {}),
         resultBodyIds,
         consumedToolIds: cutterBodyIds,
         undoSteps: completedSteps.length,
@@ -2400,6 +2425,7 @@ export class PlasticityRecipes {
 
   async createRib(input: RibRecipeInput): Promise<RibRecipeResult> {
     validateRib(input);
+    this.requireProfileDeleteSupport(input.keepProfile);
     const initial = await this.operations.state();
     requireCurrentSolid(initial, input.targetId, input.revision, "Rib");
 
@@ -2418,14 +2444,24 @@ export class PlasticityRecipes {
       completedSteps.push(step("create-rib-profile", beforeProfile, current, [profileBodyId]));
 
       const beforeExtrude = current;
-      current = await this.operations.extrudeRegions([matchingRegions[0]!.id], input.thicknessMm, current.revision);
+      const regionIds = [matchingRegions[0]!.id];
+      // Positive thickness runs along the profile's right-hand normal (live-verified); centered is a two-sided extrude.
+      const thickness = Math.abs(input.thicknessMm);
+      current = input.side === undefined
+        ? await this.operations.extrudeRegions(regionIds, input.thicknessMm, current.revision)
+        : input.side === "centered"
+          ? await this.operations.extrudeRegions(regionIds, thickness / 2, current.revision, { reverseDistanceMm: thickness / 2 })
+          : await this.operations.extrudeRegions(regionIds, input.side === "positive" ? thickness : -thickness, current.revision);
       ribBodyId = requireSingleAddedBody(beforeExtrude, current, "extruded rib");
+      const ribBounds = current.bodies.find((body) => body.id === ribBodyId)?.boundsMm ?? null;
       completedSteps.push(step("extrude-rib", beforeExtrude, current, [ribBodyId]));
 
       const beforeUnion = current;
       current = await this.operations.boolean([input.targetId], [ribBodyId], "union", false, current.revision);
       const resultBodyIds = requireRecipeResult(initial, current, input.targetId, [ribBodyId]);
       completedSteps.push(step("union-rib-to-target", beforeUnion, current, resultBodyIds));
+      const profileDeleted = await this.deleteConstructionProfiles(input.keepProfile, [profileBodyId], current, completedSteps);
+      current = profileDeleted.state;
 
       return {
         recipe: "rib",
@@ -2435,6 +2471,8 @@ export class PlasticityRecipes {
         afterRevision: current.revision,
         targetId: input.targetId,
         profileBodyId,
+        ...(profileDeleted.deleted ? { profileDeleted: true as const } : {}),
+        ...(ribBounds ? { ribBoundsMm: { min: roundVector(ribBounds.min), max: roundVector(ribBounds.max) } } : {}),
         resultBodyIds,
         consumedToolIds: [ribBodyId],
         undoSteps: completedSteps.length,
@@ -2444,6 +2482,21 @@ export class PlasticityRecipes {
       if (error instanceof RibRecipeError) throw error;
       throw new RibRecipeError(error, completedSteps, current.revision);
     }
+  }
+
+  private requireProfileDeleteSupport(keepProfile: boolean | undefined): void {
+    if (keepProfile === false && !this.operations.remove) throw new Error("keepProfile: false requires native delete support");
+  }
+
+  // keepProfile: false deletes the construction Wire(s) the recipe made, as one more undo step after the last one.
+  private async deleteConstructionProfiles(keepProfile: boolean | undefined, profileBodyIds: number[], current: RuntimeState, completedSteps: RecipeStep[]): Promise<{ deleted: boolean; state: RuntimeState }> {
+    if (keepProfile !== false) return { deleted: false, state: current };
+    const before = current;
+    const state = await this.operations.remove!(profileBodyIds, current.revision);
+    const remaining = profileBodyIds.filter((id) => state.bodies.some((body) => body.id === id));
+    if (remaining.length > 0) throw new Error(`Construction profile was not deleted: ${remaining.join(", ")}`);
+    completedSteps.push(step("delete-construction-profile", before, state, profileBodyIds));
+    return { deleted: true, state };
   }
 
   async createRoundVentArray(input: RoundVentArrayRecipeInput): Promise<RoundVentArrayRecipeResult> {
@@ -3975,6 +4028,10 @@ function requirePairedSolidResult(
 
 function requireSameDocument(before: RuntimeState, after: RuntimeState): void {
   if (before.documentToken !== after.documentToken) throw new Error("Plasticity document changed during recipe execution");
+}
+
+function roundVector(value: Vector3): Vector3 {
+  return value.map((component) => Math.round(component * 1e4) / 1e4 + 0) as Vector3;
 }
 
 function step(operation: RecipeStep["operation"], before: RuntimeState, after: RuntimeState, affectedBodyIds: number[]): RecipeStep {
