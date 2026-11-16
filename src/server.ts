@@ -3942,11 +3942,11 @@ function createServerWithCatalog(
   const boardCaseInputSchema = z.object({
     originMm: vector.describe("Outer bottom corner (min x, min y, min z) of the base"),
     board: z.object({
-      lengthMm: boardCaseMm.describe("Board size along x"),
-      widthMm: boardCaseMm.describe("Board size along y"),
+      lengthMm: boardCaseMm.describe("Board size along x; at most 500"),
+      widthMm: boardCaseMm.describe("Board size along y; at most 500"),
       thicknessMm: boardCaseMm.optional().describe("Default 1.6"),
-      holes: z.array(z.object({ xMm: boardCaseMm, yMm: boardCaseMm, diameterMm: boardCaseMm }).strict()).max(32).optional().describe("Positions from the board's min-x/min-y corner"),
-      componentHeightMm: boardCaseMm.describe("Tallest part above the board top"),
+      holes: z.array(z.object({ xMm: boardCaseMm, yMm: boardCaseMm, diameterMm: boardCaseMm }).strict()).max(32).optional().describe("Positions from the board's min-x/min-y corner; diameter at least 0.5"),
+      componentHeightMm: boardCaseMm.describe("Tallest part above the board top; heights at most 200"),
       undersideClearanceMm: boardCaseMm.optional().describe("Parts below the board; default 2"),
     }).strict(),
     fit: z.object({
@@ -3955,13 +3955,13 @@ function createServerWithCatalog(
     }).strict().optional(),
     walls: z.object({
       wallMm: boardCaseMm.optional().describe("Default 2, at least 0.8"),
-      floorMm: boardCaseMm.optional().describe("Default 2"),
+      floorMm: boardCaseMm.optional().describe("Default 2, at least 0.8"),
       lidMm: boardCaseMm.optional().describe("Lid plate thickness; default 2"),
-      outerCornerRadiusMm: boardCaseMm.optional().describe("Default 3; inner corners get radius minus wall"),
+      outerCornerRadiusMm: boardCaseMm.optional().describe("Default 3. Inner radius = min(radius - wall, the largest the board corner allows); the corner wall must stay at least max(0.8, 0.75 x wall)"),
     }).strict().optional(),
     standoffs: z.object({
       heightMm: boardCaseMm.optional().describe("Default = board.undersideClearanceMm"),
-      outerDiameterMm: boardCaseMm.optional().describe("Default board hole diameter + 3"),
+      outerDiameterMm: boardCaseMm.optional().describe("Default board hole diameter + 3; at least hole + 1, at most wall - 0.4 into the wall"),
       fastener: z.object({
         screw: boardCaseScrew,
         mode: z.enum(["pilot", "heat-set-insert", "through"]),
@@ -3973,12 +3973,14 @@ function createServerWithCatalog(
     }).strict().optional(),
     lid: z.object({
       lipDepthMm: boardCaseMm.optional().describe("Default 1.5"),
-      lipWallMm: boardCaseMm.optional().describe("Default 1.2"),
+      lipWallMm: boardCaseMm.optional().describe("Default 1.2, at least 0.4"),
       fasteners: z.object({
         screw: boardCaseScrew,
         count: z.literal(4).optional().describe("Four corner bosses"),
         bossDiameterMm: boardCaseMm.optional().describe("Default 6"),
-        bossStyle: z.enum(["tapered", "hanging", "floor"]).optional().describe("Default tapered: hanging bosses on a 45 degree gusset (wall top rises). hanging: flat underside. floor: bosses on the floor, cavity widens in one axis"),
+        bossStyle: z.enum(["tapered", "hanging", "floor"]).optional().describe("Default floor: bosses on the floor beside the board, cavity widens in one axis (the board drops in). tapered: hung bosses on a 45 degree gusset (wall top rises). hanging: flat underside. tapered and hanging overhang the board corners"),
+        allowBlockedBoard: z.boolean().optional().describe("Build tapered/hanging although the bosses block the board from dropping in (derived.assembly.boardDropIn false); default false: refused"),
+        growAxis: z.enum(["x", "y"]).optional().describe("floor only: the axis the cavity grows along; default the axis whose end walls carry no opening (required when both do)"),
         countersunk: z.boolean().optional().describe("Default true; sourced head only for M3"),
         headDiameterMm: boardCaseMm.optional().describe("Countersink head diameter for M2/M2.5 (not sourced here)"),
         base: z.enum(["pilot", "heat-set-insert"]),
@@ -4004,7 +4006,7 @@ function createServerWithCatalog(
       slots: z.number().int(),
       slotWidthMm: boardCaseMm,
       slotLengthMm: boardCaseMm.describe("Overall, round ends included; runs along y on the lid, vertical on a wall"),
-      pitchMm: boardCaseMm.describe("Slot spacing along x on the lid, along the wall on a wall"),
+      pitchMm: boardCaseMm.describe("Slot spacing along x on the lid, along the wall on a wall; at least slot width + 0.4"),
       centerAlongMm: boardCaseMm.optional().describe("From the board's min corner; default board centre"),
       centerAcrossMm: boardCaseMm.optional().describe("Lid: y from the board's min-y edge; wall: centre above the board top"),
     }).strict().optional(),
@@ -4014,11 +4016,11 @@ function createServerWithCatalog(
     intent,
     revision,
   }).strict();
-  tool("plasticity_create_board_case", "Build a two-part enclosure (base + lid) around a rectangular board in one call: shell, standoffs under the board holes, corner screw bosses (bossStyle tapered by default: 45° gusset; hanging; floor), a lid with a locating lip and countersunk or plain screw holes, openings, a slot vent and an optional board stand-in. The reply's derived holds every dimension (cavity, heights, axes, lip, openings, fastener values with sources), computed from the parameters. Rules are checked before any edit; a failure part-way undoes the recipe's own steps. Millimetres. Full reference: docs/tool-reference.md.", boardCaseInputSchema, async ({ intent: purpose, ...input }) => {
+  tool("plasticity_create_board_case", "Build a base + lid enclosure around a rectangular board in one call: shell, standoffs, corner screw bosses (bossStyle floor by default, so the board drops in; tapered and hanging need allowBlockedBoard), a lipped lid with screw holes, openings, a slot vent, an optional board stand-in. derived holds every dimension, computed from the parameters. All plan rules are checked before the first edit; the result is read back (bounds, validity, edges) and a failure or failed read-back undoes the recipe's steps. Millimetres. Reference: docs/tool-reference.md.", boardCaseInputSchema, async ({ intent: purpose, ...input }) => {
     const { BoardCaseRecipe } = await import("./plasticity/case-recipe.ts");
     return await journaled("recipe-board-case", purpose, input, () => new BoardCaseRecipe(session.get()).create(input));
   });
-  tool("plasticity_fastener_presets", "Read the sourced fastener values the board case uses: ISO 273 clearance holes (close, medium, free), CNC Kitchen heat-set insert pockets and the ISO 10642 M3 countersunk head, each with its source and confidence, and the values that are not sourced (pilot diameters, M2 and M2.5 countersunk heads).", z.object({ screw: boardCaseScrew.optional() }).strict(), async ({ screw }) =>
+  tool("plasticity_fastener_presets", "Read the sourced fastener values the board case uses: clearance holes (close, medium, free) following the ISO 273 pattern as two chart pages cite it, CNC Kitchen heat-set insert pockets (two of the sheet's three M3 inserts) and the ISO 10642 M3 countersunk head (6.72 = theoretical sharp-corner diameter), each with its source and confidence, and the values that are not sourced (pilot diameters, M2 and M2.5 countersunk heads).", z.object({ screw: boardCaseScrew.optional() }).strict(), async ({ screw }) =>
     (await import("./plasticity/fastener-presets.ts")).fastenerPresetTable(screw), true);
   tool("plasticity_create_mating_enclosure_joint", "Add an exact male lip and clearance-matched female groove to two existing axis-aligned enclosure halves. The seam origin is the lower-left outer corner at the mating plane. All temporary ring solids are consumed and eight native history steps are returned.", matingEnclosureJointInputSchema, async ({ intent: purpose, ...input }) =>
     await journaled("recipe-mating-enclosure-joint", purpose, input, () => new PlasticityRecipes(session.get()).createMatingEnclosureJoint(input)));

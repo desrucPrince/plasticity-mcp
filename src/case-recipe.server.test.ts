@@ -11,7 +11,9 @@ import { exposeDirectTool } from "./tool-catalog.ts";
 
 type V3 = [number, number, number];
 
-// A small stateful fake: enough native operations for a board case with standoffs, lid screws and an opening.
+// A small stateful fake: enough native operations for a board case with standoffs, lid screws and an opening. Bodies carry
+// box/cylinder bounds (a union grows the target, an intersection clips it) for the recipe's read-back; validateBodies is a
+// read and is not recorded in `calls`.
 function fakeOperations() {
   let revision = 0;
   let nextId = 10;
@@ -24,7 +26,12 @@ function fakeOperations() {
     construction: { planes: [], activePlaneId: null, planeStateToken: "p0", viewStateToken: "v0" }, regions: structuredClone(regions), bodies: structuredClone(bodies),
   });
   const edge = (id: string, tangent: V3) => ({ id, curveType: "Line", line: true, circle: false, lengthMm: 1, centerMm: [0, 0, 0] as V3, tangent, boundsMm: { min: [0, 0, 0] as V3, max: [0, 0, 0] as V3 }, faceIds: [], vertexIds: [] });
-  const solid = (id: number, name: string | null, tangents: V3[]) => ({ id, versionId: id, type: "Solid", name, boundsMm: { min: [0, 0, 0] as V3, max: [1, 1, 1] as V3 }, faceIds: [], edgeIds: tangents.map((_, index) => `e${id}-${index}`), faces: [], edges: tangents.map((tangent, index) => edge(`e${id}-${index}`, tangent)) });
+  const solid = (id: number, name: string | null, tangents: V3[], boundsMm: { min: V3; max: V3 } | null = null) => ({ id, versionId: id, type: "Solid", name, boundsMm, faceIds: [], edgeIds: tangents.map((_, index) => `e${id}-${index}`), faces: [], edges: tangents.map((tangent, index) => edge(`e${id}-${index}`, tangent)) });
+  const axial = (center: V3, axis: V3, height: number, radius: number) => {
+    const end = center.map((value, index) => value + axis[index]! * height) as V3;
+    const along = (index: number) => Math.abs(axis[index]!) > 0.5;
+    return { min: center.map((value, index) => along(index) ? Math.min(value, end[index]!) : value - radius) as V3, max: center.map((value, index) => along(index) ? Math.max(value, end[index]!) : value + radius) as V3 };
+  };
   const mutate = (operation: string, given: string | undefined, apply: () => void) => {
     calls.push(operation);
     if (given !== undefined && given !== `r${revision}`) throw new Error(`Stale reference: expected revision ${given}, current revision is r${revision}`);
@@ -36,12 +43,26 @@ function fakeOperations() {
   const vertical: V3[] = [[0, 0, 1], [0, 0, 1], [0, 0, 1], [0, 0, 1], [1, 0, 0], [0, 1, 0]];
   const operations = {
     async state() { return state(); },
-    async createBox(_origin: V3, _size: V3, name: string | undefined, given: string) { return mutate("createBox", given, () => { bodies.push(solid(nextId++, name ?? null, vertical)); }); },
-    async createCylinder(_center: V3, _radius: number, _height: number, _name: string | undefined, given: string) { return mutate("createCylinder", given, () => { bodies.push(solid(nextId++, null, [])); }); },
+    async createBox(origin: V3, size: V3, name: string | undefined, given: string) { return mutate("createBox", given, () => { bodies.push(solid(nextId++, name ?? null, vertical, { min: [...origin], max: origin.map((value, axis) => value + size[axis]!) as V3 })); }); },
+    async createCylinder(center: V3, radius: number, height: number, _name: string | undefined, given: string, axis: V3 = [0, 0, 1]) { return mutate("createCylinder", given, () => { bodies.push(solid(nextId++, null, [], axial(center, axis, height, radius))); }); },
     async fillet(_id: number, _edges: string[], _radius: number, given: string) { return mutate("fillet", given, () => {}); },
-    async boolean(_targets: number[], tools: number[], _kind: string, _keep: boolean, given: string) { return mutate("boolean", given, () => { bodies = bodies.filter((body) => !tools.includes(body.id)); }); },
-    async createCone(_center: V3, _radius: number, _topRadius: number, _height: number, _axis: V3, _radial: V3, _name: string | undefined, given: string) {
-      return mutate("createCone", given, () => { bodies.push({ ...solid(nextId++, null, []), type: "Wire" }); bodies.push(solid(nextId++, null, [])); });
+    async boolean(targets: number[], tools: number[], kind: string, _keep: boolean, given: string) {
+      return mutate("boolean", given, () => {
+        const target = bodies.find((body) => body.id === targets[0]);
+        for (const tool of bodies.filter((body) => tools.includes(body.id) && body.boundsMm)) {
+          if (!target?.boundsMm) break;
+          if (kind === "union") target.boundsMm = { min: target.boundsMm.min.map((value, axis) => Math.min(value, tool.boundsMm!.min[axis]!)) as V3, max: target.boundsMm.max.map((value, axis) => Math.max(value, tool.boundsMm!.max[axis]!)) as V3 };
+          if (kind === "intersection") target.boundsMm = { min: target.boundsMm.min.map((value, axis) => Math.max(value, tool.boundsMm!.min[axis]!)) as V3, max: target.boundsMm.max.map((value, axis) => Math.min(value, tool.boundsMm!.max[axis]!)) as V3 };
+        }
+        bodies = bodies.filter((body) => !tools.includes(body.id));
+      });
+    },
+    async createCone(center: V3, radius: number, topRadius: number, height: number, axis: V3, _radial: V3, _name: string | undefined, given: string) {
+      return mutate("createCone", given, () => { bodies.push({ ...solid(nextId++, null, []), type: "Wire" }); bodies.push(solid(nextId++, null, [], axial(center, axis, height, Math.max(radius, topRadius)))); });
+    },
+    async validateBodies(ids: number[], given: string) {
+      if (given !== `r${revision}`) throw new Error("stale validate");
+      return { documentToken: "doc-1", revision: given, measurementSource: "native-brep", bodies: ids.map((id) => ({ id, closed: true, nativeValid: true, printableSolid: true, nativeCheckCodes: [] })) };
     },
     async createPolyline(points: V3[], _closed: boolean, given: string) {
       return mutate("createPolyline", given, () => {
@@ -97,7 +118,8 @@ const CASE = {
   originMm: [2000, 0, 0],
   board: { lengthMm: 30, widthMm: 20, holes: [{ xMm: 3, yMm: 3, diameterMm: 2.5 }, { xMm: 27, yMm: 17, diameterMm: 2.5 }], componentHeightMm: 5 },
   standoffs: { heightMm: 3, fastener: { screw: "M2.5", mode: "pilot", pilotDiameterMm: 2 } },
-  lid: { fasteners: { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 5 } },
+  // bossStyle pinned to the previous default (tapered) with the A override, so the projected numbers below keep their values.
+  lid: { fasteners: { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 5, bossStyle: "tapered", allowBlockedBoard: true } },
   openings: [{ wall: "x-", shape: "rect", widthMm: 6, heightMm: 3, alongMm: 10, aboveBoardMm: 1 }],
 };
 
@@ -190,7 +212,7 @@ test("the board case works as a lean plasticity_batch step and return projects b
   });
 });
 
-test("lid.fasteners.bossStyle is a strict enum defaulting to tapered; each style builds through the server", async () => {
+test("lid.fasteners.bossStyle is a strict enum defaulting to floor; each style builds through the server", async () => {
   await withClient(async (client, calls) => {
     const tools = (await client.listTools()).tools;
     const schema = tools.find((entry) => entry.name === "plasticity_create_board_case")!.inputSchema as unknown as { properties: { lid: { properties: { fasteners: { properties: { bossStyle: { enum?: string[] } } } } } } };
@@ -199,17 +221,43 @@ test("lid.fasteners.bossStyle is a strict enum defaulting to tapered; each style
     assert.equal(bad.isError, true);
     assert.deepEqual(calls, []);
   });
-  for (const [style, expectedWallTop] of [[undefined, 24.928427], ["tapered", 24.928427], ["hanging", 18.6], ["floor", 14.1]] as const) {
+  // The tapered wall top: componentTop 6.6 + 5 + 1 = 12.6, + boss length 6, + reach (2.5 sqrt 2 + 3), - rise (1 mm inner radius x (sqrt 2 - 1)).
+  const taperedWallTop = Math.round((12.6 + 6 + 2.5 * Math.SQRT2 + 3 - (Math.SQRT2 - 1)) * 1e6) / 1e6;
+  // No bossStyle: the default floor style; CASE has an x- wall opening, so the cavity grows along y (B). "floor" with
+  // growAxis "x" keeps the x growth of the earlier rows.
+  for (const [style, growAxis, expectedWallTop] of [[undefined, undefined, 14.1], ["tapered", undefined, taperedWallTop], ["hanging", undefined, 18.6], ["floor", "x", 14.1]] as const) {
     await withClient(async (client) => {
-      const fasteners = style === undefined ? CASE.lid.fasteners : { ...CASE.lid.fasteners, bossStyle: style };
+      const { bossStyle: _pinned, ...unstyled } = CASE.lid.fasteners;
+      const fasteners = style === undefined ? unstyled : { ...unstyled, bossStyle: style, ...(growAxis ? { growAxis } : {}) };
       const result = json(await client.callTool({ name: "plasticity_create_board_case", arguments: { ...CASE, lid: { fasteners }, revision: "r0" } }));
-      assert.equal(result.derived.bossStyle, style ?? "tapered");
+      const effective = style ?? "floor";
+      assert.equal(result.derived.bossStyle, effective);
       assert.equal(Math.round(result.derived.wallTopZMm * 1e6) / 1e6, expectedWallTop, String(style));
       assert.equal(result.derived.printability.baseOrientation, "floor-down");
-      assert.equal(result.derived.printability.maxBossOverhangDeg, { tapered: 45, hanging: 90, floor: 0 }[style ?? "tapered"]);
-      assert.deepEqual(result.derived.boardWallClearanceMm, style === "floor" ? { xNeg: 6, xPos: 6, yNeg: 0.5, yPos: 0.5 } : { xNeg: 0.5, xPos: 0.5, yNeg: 0.5, yPos: 0.5 });
-      assert.equal(result.derived.bossTaper !== undefined, (style ?? "tapered") === "tapered");
-      assert.deepEqual(result.derived.cavityGrowthMm, style === "floor" ? [11, 0] : undefined);
+      assert.equal(result.derived.printability.maxBossOverhangDeg, { tapered: 45, hanging: 90, floor: 0 }[effective]);
+      assert.deepEqual(result.derived.boardWallClearanceMm, effective !== "floor" ? { xNeg: 0.5, xPos: 0.5, yNeg: 0.5, yPos: 0.5 } : growAxis === "x" ? { xNeg: 6, xPos: 6, yNeg: 0.5, yPos: 0.5 } : { xNeg: 0.5, xPos: 0.5, yNeg: 6, yPos: 6 });
+      assert.equal(result.derived.bossTaper !== undefined, effective === "tapered");
+      assert.deepEqual(result.derived.cavityGrowthMm, effective !== "floor" ? undefined : growAxis === "x" ? [11, 0] : [0, 11]);
+      assert.equal(result.derived.assembly.boardDropIn, effective === "floor");
+      assert.equal(result.undoSteps, result.derived.plannedUndoSteps);
     });
   }
+});
+
+test("allowBlockedBoard and growAxis are strict schema fields; the corner radius text states the inner radius rule", async () => {
+  await withClient(async (client, calls) => {
+    const tools = (await client.listTools()).tools;
+    const schema = tools.find((entry) => entry.name === "plasticity_create_board_case")!.inputSchema as unknown as { properties: { walls: { properties: { outerCornerRadiusMm: { description?: string } } }; lid: { properties: { fasteners: { properties: Record<string, { type?: string; enum?: string[]; description?: string }> } } } } };
+    const fasteners = schema.properties.lid.properties.fasteners.properties;
+    assert.equal(fasteners.allowBlockedBoard!.type, "boolean");
+    assert.deepEqual(fasteners.growAxis!.enum, ["x", "y"]);
+    assert.match(fasteners.bossStyle!.description ?? "", /^Default floor/);
+    assert.match(schema.properties.walls.properties.outerCornerRadiusMm.description ?? "", /min\(radius - wall, .*board corner/);
+    const blocked = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...CASE, lid: { fasteners: { ...CASE.lid.fasteners, allowBlockedBoard: undefined } }, revision: "r0" } });
+    assert.equal(blocked.isError, true);
+    assert.match(text(blocked), /hang over the board corners.*bossStyle "floor"/);
+    const wrongType = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...CASE, lid: { fasteners: { ...CASE.lid.fasteners, allowBlockedBoard: "yes" } }, revision: "r0" } });
+    assert.equal(wrongType.isError, true);
+    assert.deepEqual(calls, []);
+  });
 });

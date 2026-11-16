@@ -3,7 +3,9 @@ import { test } from "node:test";
 
 import {
   CLEARANCE_HOLE_SOURCE,
+  COUNTERSUNK_HEAD_NOTE,
   COUNTERSUNK_HEAD_SOURCE,
+  HEAT_SET_INSERT_NOTE,
   HEAT_SET_INSERT_SOURCE,
   UnsourcedFastenerValueError,
   clearanceHole,
@@ -71,4 +73,16 @@ test("the preset table carries a source and confidence for every value and lists
   assert.deepEqual(m3.clearanceHoles.rows, [{ screw: "M3", closeMm: 3.2, mediumMm: 3.4, freeMm: 3.6 }]);
   assert.deepEqual(m3.heatSetInserts.rows.map((row) => row.insert), ["M3x5.7", "M3x3"]);
   assert.deepEqual(m3.notSourced.map((entry) => entry.value), ["self-tapping pilot diameter for plastic"]);
+});
+
+test("I: the sources say what they are: the ISO 273 pattern as two pages cite it, 6.72 as the theoretical sharp-corner head, two of the three M3 inserts", () => {
+  assert.doesNotMatch(CLEARANCE_HOLE_SOURCE, /independent/);
+  assert.match(CLEARANCE_HOLE_SOURCE, /following the ISO 273 pattern as cited by two chart pages, not the standard itself/);
+  const table = fastenerPresetTable();
+  assert.equal(table.countersunkHeads.note, COUNTERSUNK_HEAD_NOTE);
+  assert.match(COUNTERSUNK_HEAD_NOTE, /^6\.72 mm is the theoretical sharp-corner head diameter/);
+  assert.equal(table.heatSetInserts.note, HEAT_SET_INSERT_NOTE);
+  assert.match(HEAT_SET_INSERT_NOTE, /three M3 inserts; this table holds two of them \(M3 x 5\.7 and M3 x 3\)\. M3 x 5 x 4 VORON \(length 4, hole 4\.4\) is not in the table/);
+  // The third M3 insert is refused as not sourced, not guessed.
+  assert.throws(() => heatSetInsert("M3", 4), /No sourced CNC Kitchen M3 insert 4 mm long; sourced lengths: 5\.7 or 3/);
 });

@@ -1,5 +1,6 @@
 // Fastener values that carry a recorded source and confidence (researched 2026-11-16). Nothing here is a guess: a value
 // that is not in these tables is refused with a message that says it is not sourced, and the caller must supply it.
+// The clearance holes follow the ISO 273 pattern as two chart pages cite it; they are not read from the standard.
 
 export type ScrewSize = "M2" | "M2.5" | "M3";
 export type ClearanceFit = "close" | "medium" | "free";
@@ -8,9 +9,12 @@ export type PresetConfidence = "medium";
 export const SCREW_SIZES: readonly ScrewSize[] = ["M2", "M2.5", "M3"];
 export const CLEARANCE_FITS: readonly ClearanceFit[] = ["close", "medium", "free"];
 
-export const CLEARANCE_HOLE_SOURCE = "ISO 273 clearance holes as reproduced by two independent references: amesweb.info/screws/Metric-Clearance-Hole-Chart.aspx (ASME B18.2.8-based chart) and fmcarbide.com/pages/clearance-hole-chart (researched 2026-11-16)";
+export const CLEARANCE_HOLE_SOURCE = "ISO 273 clearance holes (close, medium, free) following the ISO 273 pattern as cited by two chart pages, not the standard itself: amesweb.info/screws/Metric-Clearance-Hole-Chart.aspx (ASME B18.2.8-based chart) and fmcarbide.com/pages/clearance-hole-chart (cites ISO 273 / ASME B18.2.8) (researched 2026-11-16)";
 export const HEAT_SET_INSERT_SOURCE = "CNC Kitchen, Heat-Set Insert Dimensions and Design Guidelines, cnckitchen.com/s/CNCKitchen_Heat-Set-Insert-Dimensions-and-Design-Guidelines.pdf (CNC Kitchen inserts only; researched 2026-11-16)";
 export const COUNTERSUNK_HEAD_SOURCE = "ISO 10642 hexagon socket countersunk head screws, engineersedge.com/hardware/bs_en_iso_10642_14583.htm (researched 2026-11-16)";
+// Notes returned with the preset table.
+export const COUNTERSUNK_HEAD_NOTE = "6.72 mm is the theoretical sharp-corner head diameter (dk theoretical max. in ISO 10642), not a measured head; the countersink is cut to it.";
+export const HEAT_SET_INSERT_NOTE = "The CNC Kitchen sheet lists three M3 inserts; this table holds two of them (M3 x 5.7 and M3 x 3). M3 x 5 x 4 VORON (length 4, hole 4.4) is not in the table.";
 export const CALLER_SOURCE = "caller-supplied (not sourced by this server)";
 
 const CLEARANCE_HOLES_MM: Record<ScrewSize, Record<ClearanceFit, number>> = {
@@ -20,6 +24,8 @@ const CLEARANCE_HOLES_MM: Record<ScrewSize, Record<ClearanceFit, number>> = {
 };
 
 interface InsertRow { screw: ScrewSize; insertLengthMm: number; holeDiameterMm: number; minWallMm: number }
+// The CNC Kitchen sheet lists three M3 inserts; this table holds two of them (M3 x 5.7 and M3 x 3). The third,
+// M3 x 5 x 4 VORON (length 4, hole 4.4), is not in the table, so it is refused as not sourced here.
 const HEAT_SET_INSERTS: readonly InsertRow[] = [
   { screw: "M2", insertLengthMm: 3, holeDiameterMm: 3.2, minWallMm: 1.3 },
   { screw: "M2.5", insertLengthMm: 4, holeDiameterMm: 4.0, minWallMm: 1.6 },
@@ -127,6 +133,7 @@ export function fastenerPresetTable(screw?: ScrewSize) {
     heatSetInserts: {
       source: HEAT_SET_INSERT_SOURCE,
       confidence: "medium" as const,
+      note: HEAT_SET_INSERT_NOTE,
       blindHoleDepthRule: "insert length + 1 mm",
       rows: HEAT_SET_INSERTS.filter((row) => screws.includes(row.screw)).map((row) => ({
         screw: row.screw,
@@ -140,6 +147,7 @@ export function fastenerPresetTable(screw?: ScrewSize) {
     countersunkHeads: {
       source: COUNTERSUNK_HEAD_SOURCE,
       confidence: "medium" as const,
+      note: COUNTERSUNK_HEAD_NOTE,
       rows: screws.flatMap((size) => {
         const row = COUNTERSUNK_HEADS[size];
         return row ? [{ screw: size, headDiameterMaxMm: row.headDiameterMaxMm, includedAngleDeg: row.includedAngleDeg }] : [];
