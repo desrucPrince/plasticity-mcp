@@ -2349,6 +2349,28 @@ function orderPicked<T extends { id: string }>(matches: T[], sortBy: string | un
 const PICK_REPLY_IDS = 16;
 const PICK_ERROR_IDS = 8;
 const hasCriterion = (query: Record<string, unknown>, ignore: ReadonlyArray<string> = []): boolean => Object.entries(query).some(([key, value]) => value !== undefined && !ignore.includes(key));
+// A list criterion that is empty names nothing: it never means "all". Rejected before anything is picked or run.
+function rejectEmptyListCriteria(path: string, query: Record<string, unknown>): void {
+  for (const [key, value] of Object.entries(query)) {
+    if (Array.isArray(value) && value.length === 0) throw new Error(`Invalid ${path}: ${key} is an empty list, which names nothing and would match nothing. A query never means "all"; if the list came from a "$n" reference, that step matched nothing. Nothing ran.`);
+  }
+}
+// In a batch, an empty list that came from a "$n" reference is named with its reference, before the tool runs.
+function rejectEmptyReferenceCriteria(raw: unknown, resolved: unknown): void {
+  if (!raw || typeof raw !== "object" || !resolved || typeof resolved !== "object") return;
+  for (const queryKey of ["edgeQuery", "faceQuery"]) {
+    const rawQuery = (raw as Record<string, unknown>)[queryKey];
+    const resolvedQuery = (resolved as Record<string, unknown>)[queryKey];
+    if (!rawQuery || typeof rawQuery !== "object" || Array.isArray(rawQuery) || !resolvedQuery || typeof resolvedQuery !== "object") continue;
+    for (const [key, rawValue] of Object.entries(rawQuery)) {
+      const value = (resolvedQuery as Record<string, unknown>)[key];
+      if (!Array.isArray(value) || value.length !== 0) continue;
+      const reference = (Array.isArray(rawValue) ? rawValue : [rawValue]).find((item): item is string => typeof item === "string" && /^\$\d+\./.test(item));
+      if (reference === undefined) continue;
+      throw new Error(`Invalid ${queryKey}: ${key} is empty because ${reference} matched nothing in step ${reference.slice(1).split(".")[0]}. A query never means "all", so nothing ran; check that step's query.`);
+    }
+  }
+}
 function guardSelectionQuery(kind: "edgeQuery" | "faceQuery", rawQuery: unknown, sortBy: string | undefined, limit: number | undefined): void {
   const forbidden = forbiddenQueryKey(rawQuery, kind);
   if (forbidden !== undefined) throw new Error(`Invalid ${kind}: ${forbidden} is not allowed`);
@@ -2383,6 +2405,8 @@ function pickEdgesByQuery(state: RuntimeState, id: number, rawQuery: unknown, so
   const parsed = edgeSelectionQuerySchema.safeParse(rawQuery);
   if (!parsed.success) throw new Error(`Invalid edgeQuery: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "(query)"}: ${issue.message}`).join("; ")}`);
   const { adjacentFace, ...rest } = parsed.data;
+  rejectEmptyListCriteria("edgeQuery", rest);
+  if (adjacentFace) rejectEmptyListCriteria("edgeQuery.adjacentFace", adjacentFace);
   if (adjacentFace && !hasCriterion(adjacentFace, ["sortBy", "order", "limit"])) throw new Error("edgeQuery.adjacentFace needs at least one criterion");
   if (!hasCriterion(rest) && !adjacentFace) throw new Error("edgeQuery needs at least one criterion");
   if (adjacentFace?.limit !== undefined && adjacentFace.sortBy === undefined) throw new Error("edgeQuery.adjacentFace: limit needs sortBy");
@@ -2408,6 +2432,7 @@ function pickFacesByQuery(state: RuntimeState, id: number, rawQuery: unknown, so
   guardSelectionQuery("faceQuery", rawQuery, sortBy, limit);
   const parsed = faceSelectionQuerySchema.safeParse(rawQuery);
   if (!parsed.success) throw new Error(`Invalid faceQuery: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "(query)"}: ${issue.message}`).join("; ")}`);
+  rejectEmptyListCriteria("faceQuery", parsed.data);
   if (!hasCriterion(parsed.data)) throw new Error("faceQuery needs at least one criterion");
   if (!state.bodies.some((body) => body.id === id)) throw new Error(`Unknown body ID: ${id}`);
   const ordered = orderPicked(findFaces(state, { ...parsed.data, bodyIds: [id] }), sortBy, order, limit, (face, key) => face.centerMm[COORDINATE_AXIS[key]!]!);
@@ -2991,6 +3016,7 @@ function createServerWithCatalog(
       try {
         if (!selected || step.toolName === "plasticity_call" || step.toolName === "plasticity_batch") throw new Error(`Unknown Plasticity MCP operation: ${step.toolName}`);
         let args = resolveBatchReferences(step.arguments, stepChanges) as Record<string, unknown>;
+        rejectEmptyReferenceCriteria(step.arguments, args);
         if (acceptsRevision(selected.inputSchema) && args.revision === undefined) args = { ...args, revision: current.revision };
         const parsed = await selected.inputSchema.parseAsync(args);
         const response = await selected.callback(parsed, extra);
@@ -4377,7 +4403,7 @@ function createServerWithCatalog(
   }).strict().refine((value) => value.first.bodyId !== value.second.bodyId, "Surface Bridge requires two different Sheet bodies"), async ({ first, second, widthMm, softness, intent: purpose, revision: current }) =>
     await journaled("bridge-surface", purpose, { first, second, widthMm, softness }, () =>
       session.get().bridgeSurface(first, second, widthMm, softness, current)));
-  tool("plasticity_join_sheets", "Sew two or more native Sheet bodies along coincident edges.", z.object({ ids: ids.min(2), intent, revision }).strict(), async ({ ids: sheetIds, intent: purpose, revision: current }) =>
+  tool("plasticity_join_sheets", "Sew two or more native Sheet bodies along coincident edges. The edges must coincide exactly; a closed result becomes a Solid.", z.object({ ids: ids.min(2), intent, revision }).strict(), async ({ ids: sheetIds, intent: purpose, revision: current }) =>
     await journaled("join-sheets", purpose, { ids: sheetIds }, () => session.get().joinSheets(sheetIds, current)));
   tool("plasticity_create_constrained_surface", "Create a native B-Surface constrained by paired 3D points and normal vectors.", z.object({
     pointsMm: z.array(vector).min(4).max(1000),
@@ -4501,7 +4527,7 @@ function createServerWithCatalog(
     }
   }), async ({ id, edgeIds, distanceMm, targetId, shape, merge, intent: purpose, revision: current }) =>
     await journaled("extend-sheet-edges", purpose, { id, edgeIds, distanceMm, targetId, shape, merge }, () => session.get().extendSheetEdges(id, edgeIds, distanceMm, current, { shape, targetId, merge })));
-  tool("plasticity_create_pipes", "Create native solid or hollow circular pipes along one or more Wire spines. Diameter and optional wall thickness are millimeters.", z.object({
+  tool("plasticity_create_pipes", "Create native solid or hollow circular pipes along one or more Wire spines. Diameter and optional wall thickness are millimeters. The result is approximate, not dimensionally exact; use a sweep for exact pipes.", z.object({
     spineIds: ids,
     diameterMm: z.number().finite().positive(),
     wallThicknessMm: z.number().finite().nonnegative().default(0),

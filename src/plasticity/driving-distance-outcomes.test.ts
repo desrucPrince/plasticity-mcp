@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -28,7 +28,7 @@ const CANCELS = ["not-needed", "ok", "failed", "threw"] as const;
 type SettleKind = typeof SETTLE_KINDS[number];
 interface Row {
   finishCalled: boolean; settle: SettleKind; undoDelta: 0 | 1 | 2; landsLate: typeof LANDS_LATE[number];
-  ourActive: boolean; foreignActive: boolean; cancel: typeof CANCELS[number]; cleanup: "ok" | "threw"; geometry: "pass" | "fail" | null;
+  ourActive: boolean; foreignActive: boolean; cancel: typeof CANCELS[number]; cleanup: "ok" | "threw"; geometry: "pass" | "ambiguous" | "fail" | null;
 }
 // Error texts as the live probes recorded them (discovery/probes-2026-11-followups/probe-late-commit.json and the
 // probe-driving / probe-washer rejections); the cancel-like ones rotate through the three seen live.
@@ -46,23 +46,26 @@ const errorOf = (settle: SettleKind, index: number): { text: string | null; name
 // Pruning rule (impossible combinations), stated once:
 // P1 a commit can land late only after finish() (no commit without finish());
 // P2 a commit can land late only if none is counted yet (one command commits at most once): undoDelta 0;
-// P3 a commit cannot land late after Plasticity's no-effect rejection: it is the kernel refusing THIS commit, so
-//    nothing is pending (the spec's rejected-unchanged definition rests on this);
+// P3 ASSUMPTION (not proven): after our own execute() rejected with Plasticity's no-effect answer, only a DETACHED promise
+//    could still commit; Plasticity 26.1.3 has not been observed to do this (the probes saw the rejection and an unchanged
+//    document). The rejected-unchanged definition rests on it, and so does the tool's "the document is unchanged" claim
+//    after finish(). The table prunes those rows (reported below as P3-pruned), and the simulation (b) runs them as the
+//    "assumption-dependent" families instead of dropping them: it counts how many of them a late commit would contradict;
 // P4 "never settled" means the helper's cancel did not settle it: cancel is failed or threw;
 // P5 a cancel counts as ok only when our command is no longer active;
 // P6 the geometry check runs exactly when finish() was called and the Undo delta after the settle window is 1.
-function rows(): Row[] {
+function rows(onP3?: () => void): Row[] {
   const result: Row[] = [];
   for (const finishCalled of [false, true]) for (const settle of SETTLE_KINDS) for (const undoDelta of [0, 1, 2] as const)
     for (const landsLate of LANDS_LATE) for (const ourActive of [false, true]) for (const foreignActive of [false, true])
       for (const cancel of CANCELS) for (const cleanup of ["ok", "threw"] as const) {
         if (landsLate !== "no" && !finishCalled) continue; // P1
         if (landsLate !== "no" && undoDelta !== 0) continue; // P2
-        if (landsLate !== "no" && settle === "rejected-no-effect") continue; // P3
+        if (landsLate !== "no" && settle === "rejected-no-effect") { if (onP3 && cancel !== "failed" && cancel !== "threw") onP3(); continue; } // P3 (an assumption, counted)
         if (settle === "never" && cancel !== "failed" && cancel !== "threw") continue; // P4
         if (cancel === "ok" && ourActive) continue; // P5
         const afterSettle = undoDelta + (landsLate === "within-settle" ? 1 : 0);
-        const geometries = finishCalled && afterSettle === 1 ? (["pass", "fail"] as const) : [null]; // P6
+        const geometries = finishCalled && afterSettle === 1 ? (["pass", "ambiguous", "fail"] as const) : [null]; // P6
         for (const geometry of geometries) result.push({ finishCalled, settle, undoDelta, landsLate, ourActive, foreignActive, cancel, cleanup, geometry });
       }
   return result;
@@ -89,8 +92,8 @@ function expected(row: Row): Kind {
   if (row.cleanup === "threw" || row.cancel === "failed" || row.cancel === "threw" || row.settle === "never" || row.ourActive) return "undetermined";
   // finish() never called: no commit of ours can land; unchanged when the history did not change.
   if (!row.finishCalled) return afterSettle === 0 ? "rejected-unchanged" : "undetermined";
-  // COMMITTED-VERIFIED: one Undo step, nothing of ours active, the geometry check passes.
-  if (afterSettle === 1 && row.geometry === "pass") return "committed-verified";
+  // COMMITTED-VERIFIED: one Undo step, nothing of ours active, the geometry check passes (or is ambiguous: nothing contradicts the edit).
+  if (afterSettle === 1 && (row.geometry === "pass" || row.geometry === "ambiguous")) return "committed-verified";
   // COMMITTED-MISMATCH: a clean commit (execute() resolved, no error, no foreign command, no cancel) with wrong geometry.
   if (afterSettle === 1 && row.geometry === "fail" && row.settle === "resolved" && !row.foreignActive && row.cancel === "not-needed") return "committed-mismatch";
   // REJECTED-UNCHANGED after finish(): only the no-effect rejection, nothing active, no cancel, nothing landed.
@@ -100,7 +103,8 @@ function expected(row: Row): Kind {
 
 test("(a) classification table: every row of the pruned cross-product matches the spec's outcome and the invariant", async () => {
   const { classifyPickOutcome } = await classifierModule();
-  const all = rows();
+  let p3Combinations = 0;
+  const all = rows(() => { p3Combinations += 1; });
   const counts = new Map<Kind, number>();
   const failures: string[] = [];
   for (const [index, row] of all.entries()) {
@@ -111,9 +115,12 @@ test("(a) classification table: every row of the pruned cross-product matches th
     // The invariant against the ground truth the classifier cannot see.
     if (row.landsLate === "after-settle" && outcome.kind !== "undetermined") failures.push(`INVARIANT ${JSON.stringify(row)}: a commit lands after the settle window, but the outcome is ${outcome.kind}`);
     if (outcome.kind === "rejected-unchanged" && (row.landsLate !== "no" || row.undoDelta !== 0)) failures.push(`INVARIANT ${JSON.stringify(row)}: "unchanged" although a commit is counted or still lands`);
-    if (outcome.kind === "committed-verified" && row.geometry !== "pass") failures.push(`${JSON.stringify(row)}: success without a passing geometry check`);
+    if (outcome.kind === "committed-verified" && row.geometry !== "pass" && row.geometry !== "ambiguous") failures.push(`${JSON.stringify(row)}: success without a passing geometry check`);
+    if (row.geometry === "ambiguous" && outcome.kind === "committed-verified" && outcome.reason !== "verified-ambiguous") failures.push(`${JSON.stringify(row)}: an ambiguous check must say so (${outcome.reason})`);
   }
-  console.log(`classification table: ${all.length} rows (of ${2 * 6 * 3 * 3 * 2 * 2 * 4 * 2} before pruning, x2 geometry where it runs); ${[...counts].map(([kind, count]) => `${kind} ${count}`).join(", ")}`);
+  console.log(`classification table: ${all.length} rows (of ${2 * 6 * 3 * 3 * 2 * 2 * 4 * 2} before pruning, x3 geometry where it runs); ${[...counts].map(([kind, count]) => `${kind} ${count}`).join(", ")}`);
+  console.log(`classification table: P3-pruned (ASSUMPTION: no late commit after our own no-effect rejection): ${p3Combinations} lifecycle combinations are not rows; the simulation (b) runs them as assumption-dependent scenarios`);
+  assert.ok(p3Combinations > 0, "the P3 assumption prunes combinations, and says how many");
   assert.deepEqual(failures, []);
   assert.ok(all.length >= 1000, `${all.length} rows`);
   for (const kind of ["committed-verified", "committed-mismatch", "rejected-unchanged", "undetermined"] as const) assert.ok((counts.get(kind) ?? 0) > 0, `${kind} is reachable`);
@@ -168,6 +175,16 @@ interface WorldOptions {
   /** execute() rejects at once with this text, before any dialog; with foreignAfterReject a user command then starts. */
   rejectAtOnce?: string;
   foreignAfterReject?: boolean;
+  /** After finish(), execute() rejects with Plasticity's no-effect answer after this many ms and nothing lands (family a). */
+  rejectAfterFinishMs?: number;
+  /** With rejectAfterFinishMs: a DETACHED commit lands this many ms after finish() although execute() rejected (family b; the P3 assumption's opposite). */
+  detachedCommitMs?: number;
+  /** After a (wrong) commit, a second change lands this many ms later (family d). */
+  secondChangeMs?: number;
+  /** execute() resolves at finish() without a commit, and a LATER exec() rejection carries the no-effect phrase (a chained command's). */
+  chainedReject?: boolean;
+  /** The simulation family this scenario belongs to, for the tally. */
+  family?: string;
 }
 
 class Vector3 {
@@ -202,6 +219,7 @@ function world(options: WorldOptions) {
       const reference = faces.find((face) => face.id === "fxn")!;
       reference.centerMm = [1990, 5, 2.5]; reference.boundsMm = { min: [1990, 0, 0], max: [1990, 10, 5] };
     } else faces = boxFaces(2000, 2000 + distanceM * 1000);
+    if (options.secondChangeMs !== undefined) setTimeout(() => { undoStack.push(structuredClone(faces)); version += 1; revision += 1; faces = boxFaces(2000, 2045); }, options.secondChangeMs);
   };
 
   class DimensionDistanceCommand {
@@ -236,6 +254,12 @@ function world(options: WorldOptions) {
         };
         if (options.finish !== "never") {
           dialog.finish = () => {
+            if (options.chainedReject) { sceneObjects.length = 0; resolve(undefined); return; }
+            if (options.rejectAfterFinishMs !== undefined) {
+              setTimeout(() => { sceneObjects.length = 0; reject(new Error("Operation has no effect")); }, options.rejectAfterFinishMs);
+              if (options.detachedCommitMs !== undefined) setTimeout(() => { commitGeometry(dialog.params.distance as number); }, options.detachedCommitMs);
+              return;
+            }
             startCanceller();
             if (options.commitMs !== null) {
               this.timer = setTimeout(() => {
@@ -269,7 +293,10 @@ function world(options: WorldOptions) {
     },
     async exec(command: DimensionDistanceCommand) {
       executor.active = { command };
-      try { await command.execute(); } catch (error) { if (options.executor === "rejecting") throw error; }
+      try {
+        await command.execute();
+        if (options.chainedReject) throw new Error("Exec.execute:rejected CommandExecutor  Operation has no effect");
+      } catch (error) { if (options.executor === "rejecting" || options.chainedReject) throw error; }
       finally { if (executor.active?.command === command) executor.active = null; }
     },
     async undo() { const previous = undoStack.pop(); if (previous) { redoStack.push(faces); faces = previous; version += 1; revision += 1; } },
@@ -305,16 +332,30 @@ const RECONCILE = /the result is uncertain\. Call plasticity_reconcile before an
 
 // ---- (b) the simulation property test
 
-test("(b) simulation: in every lifecycle combination the invariant holds 3 s after the tool returned", { timeout: 60_000 }, async () => {
+test("(b) simulation: in every lifecycle combination the invariant holds 3 s after the tool returned", { timeout: 90_000 }, async () => {
   const scenarios: WorldOptions[] = [];
   for (const executor of ["rejecting", "swallowing"] as const) for (const canceller of ["nobody", "us", "ext5", "ext30", "ext200", "foreign"] as const)
     for (const commitMs of [null, 9, 100, 400, 1500]) for (const cancelDiscards of [true, false]) for (const finish of ["yes", "never", "throws"] as const) {
-      scenarios.push({ executor, canceller, commitMs, cancelDiscards, finish });
+      scenarios.push({ executor, canceller, commitMs, cancelDiscards, finish, family: "lifecycle" });
     }
+  // The families that reach the two certain outcomes after finish(). (b) and (d) rest on an ASSUMPTION (P3 above, and "one
+  // command commits at most once"): they are run and counted, never pruned, and a late change there is reported as
+  // assumption-dependent instead of as a violation.
+  for (const executor of ["rejecting", "swallowing"] as const) {
+    for (const rejectAfterFinishMs of [0, 5, 100]) scenarios.push({ executor, canceller: "nobody", commitMs: null, cancelDiscards: false, finish: "yes", rejectAfterFinishMs, family: "a: no-effect after finish(), nothing lands" });
+    for (const detachedCommitMs of [400, 1500]) scenarios.push({ executor, canceller: "nobody", commitMs: null, cancelDiscards: false, finish: "yes", rejectAfterFinishMs: 5, detachedCommitMs, family: "b: no-effect after finish(), a detached commit lands later (assumption)" });
+    scenarios.push({ executor, canceller: "nobody", commitMs: 9, cancelDiscards: false, finish: "yes", commitKind: "wrong-reference", family: "c: committed mismatch, nothing follows" });
+    scenarios.push({ executor, canceller: "nobody", commitMs: 9, cancelDiscards: false, finish: "yes", commitKind: "wrong-reference", secondChangeMs: 500, family: "d: committed mismatch, a second change lands at 500 ms (assumption)" });
+  }
   const SHORT: PickCommandTimeouts = { dialogMs: 200, finishMs: 50, cancelMs: 300, settleMs: 250 };
   const LONG: PickCommandTimeouts = { dialogMs: 200, finishMs: 2_500, cancelMs: 300, settleMs: 250 };
-  const describe = (s: WorldOptions) => `executor=${s.executor} canceller=${s.canceller} commit=${s.commitMs ?? "never"} cancel=${s.cancelDiscards ? "discards" : "keeps"} finish=${s.finish}`;
-  const results = await Promise.all(scenarios.map(async (scenario) => {
+  const describe = (s: WorldOptions) => `[${s.family}] executor=${s.executor} canceller=${s.canceller} commit=${s.commitMs ?? "never"} cancel=${s.cancelDiscards ? "discards" : "keeps"} finish=${s.finish}${s.rejectAfterFinishMs !== undefined ? ` rejectAfterFinish=${s.rejectAfterFinishMs}ms` : ""}${s.detachedCommitMs !== undefined ? ` detachedCommit=${s.detachedCommitMs}ms` : ""}${s.secondChangeMs !== undefined ? ` secondChange=${s.secondChangeMs}ms` : ""}`;
+  // Deterministic time: setTimeout and Date run on node:test mock timers, shared by the stub editor and the generated native
+  // source (both read the globals when they call them). One ticker advances virtual time in 5 ms steps and lets every promise
+  // settle between steps, so machine load cannot reorder a commit, a cancel and a settle window.
+  mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const run = Promise.all(scenarios.map(async (scenario) => {
     const w = world(scenario);
     const before = w.geometry();
     let said: { kind: "success" | "no-op" | "error"; text: string; mismatch: boolean };
@@ -338,17 +379,51 @@ test("(b) simulation: in every lifecycle combination the invariant holds 3 s aft
       if (said.mismatch) { if (!same(later, atReturn)) violation = `certain mismatch, but the document changed after it returned: ${JSON.stringify(atReturn)} -> ${JSON.stringify(later)}`; }
       else if (!same(later, before)) violation = `certain "${said.kind === "no-op" ? "no-op" : said.text.slice(0, 160)}", but 3 s later ${JSON.stringify(later)} (before ${JSON.stringify(before)})`;
     }
-    return { scenario, said, uncertainAtReturn, violation };
+    const family = scenario.family ?? "lifecycle";
+    const assumption = family.startsWith("b:") || family.startsWith("d:");
+    // The outcome kind the tool reported, read from what it returned.
+    const kind: Kind | "no-op" = uncertainAtReturn ? "undetermined" : said.kind === "success" ? "committed-verified" : said.kind === "no-op" ? "rejected-unchanged" : said.mismatch ? "committed-mismatch" : "rejected-unchanged";
+    const afterFinish = family.startsWith("a:") || family.startsWith("b:");
+    return { scenario, said, uncertainAtReturn, violation, family, assumption, kind, afterFinish };
   }));
-  const violations = results.filter((entry) => entry.violation !== null).map((entry) => `${describe(entry.scenario)}: ${entry.violation}`);
+  let results: Awaited<typeof run>;
+  try {
+    let finished = false;
+    void run.then(() => { finished = true; }, () => { finished = true; });
+    while (!finished) {
+      mock.timers.tick(5);
+      for (let turn = 0; turn < 25; turn += 1) await new Promise((resolve) => setImmediate(resolve));
+    }
+    results = await run;
+  } finally { mock.timers.reset(); }
+  const violations = results.filter((entry) => entry.violation !== null && !entry.assumption).map((entry) => `${describe(entry.scenario)}: ${entry.violation}`);
+  const assumed = results.filter((entry) => entry.assumption);
+  const assumedLate = assumed.filter((entry) => entry.violation !== null);
   const tally = (predicate: (entry: typeof results[number]) => boolean) => results.filter(predicate).length;
   console.log(`simulation: ${results.length} scenarios run; success ${tally((entry) => entry.said.kind === "success")}, certain errors ${tally((entry) => entry.said.kind === "error" && !entry.uncertainAtReturn)}, uncertain ${tally((entry) => entry.uncertainAtReturn)}, violations ${violations.length}`);
+  const byKind = new Map<string, number>();
+  for (const entry of results) byKind.set(`${entry.kind}${entry.kind === "rejected-unchanged" && entry.afterFinish ? " (after finish())" : ""}`, (byKind.get(`${entry.kind}${entry.kind === "rejected-unchanged" && entry.afterFinish ? " (after finish())" : ""}`) ?? 0) + 1);
+  console.log(`simulation tally by outcome kind: ${[...byKind].sort().map(([kind, count]) => `${kind} ${count}`).join("; ")}`);
+  const byFamily = new Map<string, number>();
+  for (const entry of results) byFamily.set(entry.family, (byFamily.get(entry.family) ?? 0) + 1);
+  console.log(`simulation families: ${[...byFamily].map(([family, count]) => `${family} ${count}`).join("; ")}`);
+  console.log(`simulation assumption-dependent cases: ${assumed.length} scenarios (families b and d; assumption P3 and "one command commits once"); the tool claimed certainty in ${assumed.filter((entry) => !entry.uncertainAtReturn).length} of them, and a later change contradicted that claim in ${assumedLate.length}`);
   for (const line of violations) console.log(`VIOLATION ${line}`);
   // The reviewer's scenario: an external cancel 30 ms after finish(), the commit at 400 ms, both executor modes.
-  const reviewer = results.filter((entry) => entry.scenario.canceller === "ext30" && entry.scenario.commitMs === 400 && entry.scenario.finish === "yes");
+  const reviewer = results.filter((entry) => entry.scenario.canceller === "ext30" && entry.scenario.commitMs === 400 && entry.scenario.finish === "yes" && entry.family === "lifecycle");
   assert.equal(reviewer.length, 4, "both executor modes x both cancel effects");
   for (const entry of reviewer) assert.equal(entry.uncertainAtReturn, true, `reviewer scenario ${describe(entry.scenario)} said ${JSON.stringify(entry.said)}`);
-  assert.ok(results.length >= 300, `${results.length} scenarios`);
+  assert.ok(results.length >= 360, `${results.length} scenarios`);
+  // The two certain outcomes after finish() are exercised, not pruned.
+  // Family a (6 scenarios) always ends here; family b ends here unless the late commit lands inside the settle window (a loaded machine), when the tool is uncertain instead.
+  assert.ok((byKind.get("rejected-unchanged (after finish())") ?? 0) >= 6, "REJECTED-UNCHANGED after finish() ends scenarios");
+  assert.ok((byKind.get("committed-mismatch") ?? 0) >= 4, "COMMITTED-MISMATCH ends scenarios");
+  assert.equal(assumed.length, 6, "families b (2 executors x 2 late commits) and d (2 executors) are counted, not pruned");
+  for (const entry of results.filter((candidate) => candidate.family.startsWith("a:") || candidate.family.startsWith("c:"))) {
+    assert.equal(entry.uncertainAtReturn, false, `${describe(entry.scenario)} said ${entry.said.text}`);
+    if (entry.family.startsWith("a:")) assert.match(entry.said.text, /^Driving distance failed: Operation has no effect; the document is unchanged$/, describe(entry.scenario));
+    else assert.equal(entry.said.mismatch, true, describe(entry.scenario));
+  }
   assert.deepEqual(violations, []);
 });
 
@@ -406,6 +481,123 @@ test("a plain no-effect rejection followed by an unrelated active command reads 
     }, executor);
     assert.equal(w.executor.active?.command, w.foreign, "the user's command is left alone");
     assert.equal(w.isUncertain(), false);
+  }
+});
+
+// ---- review follow-ups: the no-effect matcher, records missing facts, a chained rejection, the user's command
+
+test("no-effect matcher: cancel and abort are decided first; only the exact phrase and the known executor-prefixed forms are no-effect", async () => {
+  const { classifyPickOutcome, pickErrorKind } = await classifierModule();
+  // The texts the live probes recorded (discovery/probes-2026-11-pick and -followups).
+  for (const text of [
+    "Operation has no effect",
+    "Exec.execute:rejected CommandExecutor  Operation has no effect",
+    "Cmd.run:rejected DimensionDistanceCommand  Operation has no effect",
+    "Cmd.run:rejected DimensionPolylineCommand  Operation has no effect",
+    "GenDim.execute:rejected DimensionCommand  Operation has no effect",
+    "DDC.execute:rejected   Operation has no effect",
+  ]) assert.equal(pickErrorKind(text, "Error"), "no-effect", text);
+  // Misclassified before: each ends with the phrase but is a cancel or an abort.
+  assert.equal(pickErrorKind("Command cancelled: Operation has no effect", "Error"), "cancel");
+  assert.equal(pickErrorKind("Operation has no effect", "CancelError"), "cancel", "a CancelError whose message is the phrase");
+  assert.equal(pickErrorKind("Operation has no effect", "AbortError"), "abort", "an AbortError whose message is the phrase");
+  assert.equal(pickErrorKind("Operation has no effect", "InterruptError"), "cancel");
+  assert.equal(pickErrorKind("Command cancelled\nOperation has no effect", "Error"), "cancel", "a multi-line cancel text that ends with the phrase");
+  assert.equal(pickErrorKind("Command aborted: Operation has no effect", "Error"), "abort");
+  assert.equal(pickErrorKind("Operation failed at PK_TOPOL_facet_2 with error `PK_ERROR_aborted` (945) Operation has no effect", "Error"), "abort");
+  // Anything else that merely ends with the phrase is not an exact no-effect either.
+  assert.equal(pickErrorKind("Kernel failed. Operation has no effect", "Error"), "other");
+  assert.equal(pickErrorKind("Operation has no effect\nKernel failed", "Error"), "other");
+  assert.equal(pickErrorKind("Mystery.thing:rejected two words Operation has no effect", "Error"), "other");
+  // After finish(), a misclassified text is undetermined, never certain-unchanged.
+  const clean = {
+    malformed: null, finishCalled: true, lateFinish: false, settle: "rejected" as const, errorText: "Operation has no effect", errorName: "Error",
+    undoDeltaAtReturn: 0, undoDeltaAfterSettle: 0, ourActive: false, foreignActive: null, cancel: "not-needed" as const, cleanup: "ok" as const,
+    bodyChanged: false, geometry: null,
+  };
+  assert.equal(classifyPickOutcome(clean).kind, "rejected-unchanged");
+  for (const [text, name] of [["Command cancelled: Operation has no effect", "Error"], ["Operation has no effect", "CancelError"], ["Operation has no effect", "AbortError"], ["Command cancelled\nOperation has no effect", "Error"]] as const) {
+    const outcome = classifyPickOutcome({ ...clean, errorText: text, errorName: name });
+    assert.equal(outcome.kind, "undetermined", `${name}: ${text}`);
+    assert.notEqual(outcome.errorKind, "no-effect");
+  }
+});
+
+test("a chained rejection: our execute() resolved and a later exec() rejection carries the phrase: undetermined, never certain-unchanged", async () => {
+  const { classifyPickOutcome } = await classifierModule();
+  const clean = {
+    malformed: null, finishCalled: true, lateFinish: false, settle: "rejected" as const, errorText: "Operation has no effect", errorName: "Error",
+    undoDeltaAtReturn: 0, undoDeltaAfterSettle: 0, ourActive: false, foreignActive: null, cancel: "not-needed" as const, cleanup: "ok" as const,
+    bodyChanged: false, geometry: null,
+  };
+  assert.equal(classifyPickOutcome(clean).kind, "rejected-unchanged");
+  const chained = classifyPickOutcome({ ...clean, chainedRejection: true });
+  assert.equal(chained.kind, "undetermined");
+  assert.equal(chained.reason, "chained-rejection");
+  // End to end: the real native source tells our execute() error from a later exec() rejection.
+  for (const executor of ["rejecting", "swallowing"] as const) {
+    const w = world({ executor, canceller: "nobody", commitMs: null, cancelDiscards: false, finish: "yes", chainedReject: true });
+    await assert.rejects(w.operations.setDrivingDistance(PAIR, "r1", { dialogMs: 200, finishMs: 500, cancelMs: 200, settleMs: 100 }), (error: Error) => {
+      assert.match(error.message, /rejection that did not come from this command \(Exec\.execute:rejected CommandExecutor  Operation has no effect; our execute\(\) had already resolved\), so a commit may still land/, executor);
+      assert.match(error.message, RECONCILE);
+      assert.doesNotMatch(error.message, /the document is unchanged/);
+      return true;
+    }, executor);
+    assert.equal(w.isUncertain(), true, executor);
+  }
+  // Our own execute() rejecting with the same text is still the certain no-effect answer.
+  const own = world({ executor: "rejecting", canceller: "nobody", commitMs: null, cancelDiscards: false, finish: "yes", rejectAfterFinishMs: 5 });
+  await assert.rejects(own.operations.setDrivingDistance(PAIR, "r1", { dialogMs: 200, finishMs: 500, cancelMs: 200, settleMs: 100 }), /^Error: Driving distance failed: Operation has no effect; the document is unchanged$/);
+  assert.equal(own.isUncertain(), false);
+});
+
+test("a native record without foreignActive or cleanupError, or with them mistyped, is undetermined, never clean", async () => {
+  const tamper = (mutate: (record: Record<string, unknown>) => void, options: WorldOptions) => {
+    const w = world(options);
+    const original = w.runtime.mutate.bind(w.runtime);
+    (w.runtime as unknown as { mutate: unknown }).mutate = async (...args: Parameters<typeof original>) => {
+      const record = await original(...args) as Record<string, unknown>;
+      mutate(record);
+      return record;
+    };
+    return w;
+  };
+  const commit: WorldOptions = { executor: "swallowing", canceller: "nobody", commitMs: 9, cancelDiscards: false, finish: "yes" };
+  const noEffect: WorldOptions = { executor: "rejecting", canceller: "nobody", commitMs: null, cancelDiscards: false, finish: "yes", rejectAfterFinishMs: 5 };
+  const FASTER: PickCommandTimeouts = { dialogMs: 200, finishMs: 500, cancelMs: 200, settleMs: 100 };
+  // The controls: untouched records are a verified commit and a certain no-effect rejection.
+  assert.equal((await tamper(() => {}, commit).operations.setDrivingDistance(PAIR, "r1", FASTER)).changed, true);
+  await assert.rejects(tamper(() => {}, noEffect).operations.setDrivingDistance(PAIR, "r1", FASTER), /the document is unchanged$/);
+  const cases: Array<[string, (record: Record<string, unknown>) => void]> = [
+    ["foreignActive missing", (record) => { delete record.foreignActive; }],
+    ["foreignActive a number", (record) => { record.foreignActive = 0; }],
+    ["cleanupError missing", (record) => { delete record.cleanupError; }],
+    ["cleanupError 0", (record) => { record.cleanupError = 0; }],
+    ["cleanupError false", (record) => { record.cleanupError = false; }],
+  ];
+  for (const [label, mutate] of cases) {
+    for (const [name, options] of [["a verified commit", commit], ["a no-effect rejection", noEffect]] as const) {
+      const w = tamper(mutate, options);
+      await assert.rejects(w.operations.setDrivingDistance(PAIR, "r1", FASTER), (error: Error) => {
+        assert.match(error.message, RECONCILE, `${label} / ${name}`);
+        assert.doesNotMatch(error.message, /the document is unchanged/, `${label} / ${name}`);
+        return true;
+      }, `${label} / ${name}`);
+      assert.equal(w.isUncertain(), true, `${label} / ${name}`);
+    }
+  }
+});
+
+test("an early interruption while a user command is active says nothing of ours changed and names the command, not that the document is unchanged", async () => {
+  for (const executor of ["rejecting", "swallowing"] as const) {
+    const w = world({ executor, canceller: "nobody", commitMs: null, cancelDiscards: true, finish: "yes", rejectAtOnce: "Command interrupted", foreignAfterReject: true });
+    await assert.rejects(w.operations.setDrivingDistance(PAIR, "r1", { dialogMs: 100, finishMs: 100, cancelMs: 100 }), (error: Error) => {
+      assert.equal(error.message, "Driving distance was interrupted before its dialog opened by another Plasticity command (UserBoxCommand), which was left alone: Command interrupted; nothing of ours changed; the user's command UserBoxCommand is still active");
+      assert.doesNotMatch(error.message, /the document is unchanged/);
+      return true;
+    }, executor);
+    assert.equal(w.executor.active?.command, w.foreign, "the user's command is left alone");
+    assert.equal(w.isUncertain(), false, "the claim stays certain");
   }
 });
 

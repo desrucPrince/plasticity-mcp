@@ -204,7 +204,18 @@ without `bodyIds`, `sortBy` `x`/`y`/`z`, `order`, `limit`) instead of
 
 Guards: an empty query (`{}`, or an `adjacentFace` with no criterion besides
 `sortBy`, `order` and `limit`) is an error (`edgeQuery needs at least one
-criterion`), never "every edge" or "every face". The keys `__proto__`,
+criterion`), never "every edge" or "every face". So is a query with an empty
+list criterion (`adjacentFaceIds: []`, `adjacentEdgeIds: []`, `edgeIds: []`,
+`curveTypes: []`, `surfaceTypes: []`, also inside `adjacentFace`): the error
+names the key (`edgeQuery: adjacentFaceIds is an empty list ...`) and nothing
+runs. In a batch, when the empty list came from a `$n` reference, the error
+names the reference and says it matched nothing (`edgeQuery: adjacentFaceIds is
+empty because $0.result.matches[*].id matched nothing in step 0 ...`), before
+the step is called. An empty list names nothing, so it also matches nothing in
+the matchers behind `plasticity_find_edges` and `plasticity_find_faces`
+(`adjacentFaceIds: []` returns zero matches; it used to return every edge,
+because `[].every(...)` is true). The same holds for the other list criteria:
+`edgeIds`, `bodyIds`, `curveTypes` and `surfaceTypes` with `[]` match nothing. The keys `__proto__`,
 `constructor` and `prototype` are refused by name, at any depth (a raw
 `__proto__` key would otherwise be dropped and leave `{}`). `limit` needs
 `sortBy` (`limit needs sortBy`). Ties are deterministic: after `sortBy`, equal
@@ -301,7 +312,9 @@ cylinder groups take a few milliseconds. `revision` is always in the reply
   an internal cavity, and a hole in a leg or boss that does not reach the
   body's overall bounds (the hole of an L-bracket's leg) therefore carry no
   `through` field, though they may be through holes. Mixed faces in a group
-  leave it out too.
+  leave it out too. `through` is a claim about Solids only: a Sheet (a cup made
+  of a cylinder wall and a bottom disc) never carries it, whatever its bounds
+  say.
 
 Forms: `{ id }` replies with the description as above (unchanged shape).
 `{ ids: [1-8 ids] }` replies `{ revision, bodies: [description without its own
@@ -1601,7 +1614,25 @@ delta instead. Verified on Plasticity 26.1.3 only.
   `distanceMm` within 1e-6 mm; (5) along the normal no other plane appeared or
   disappeared, except the old and the target offsets and offsets strictly
   between them (a small step the move swallowed). The body version is not
-  checked: the planes and footprints prove the edit. A failed check after a clean
+  checked: the planes and footprints prove the edit. A bounds box cannot prove
+  "still at" or "reached" when a coplanar sibling's box covers the click point
+  (an island pad inside a ring-shaped face, a pad beside an L-shaped face) or
+  when the moved face shifts sideways (a slanted adjacent wall). The tool counts
+  the faces that cover the click point at the old offset before and after: if
+  the count fell, the moving face left and the rest are siblings. When a face
+  reached the target (over the click point, or adjoining the old footprint
+  swept to the target), the reference is intact and the measured distance is
+  right, but a sibling's box makes condition 1 or 2 unprovable, the call
+  succeeds with `verification: "ambiguous"` and a `note` naming the sibling
+  faces ("another coplanar face overlaps the footprint (5:ring); could not
+  prove which face moved"). A plain verified edit has no `verification` field.
+  The certain mismatch stays for: the moving face still there (the covering
+  count did not fall), no face at either target, a moved reference, a wrong
+  measured distance, or other planes changing. One case a bounds box cannot
+  tell from a correct edit: a different face that covers the click point (the
+  ring instead of the island) moving to the target. It is reported as ambiguous,
+  because a wrong "undo this" would make `undoOnError` undo a correct build. A
+  failed check after a clean
   commit is the certain "committed but does not match" error. A stepped face
   moved past the bottom of its block (5 mm below the upper face set to 12 mm) is
   removed by Plasticity; the error names the removed face and the Undo step, and
@@ -1633,6 +1664,25 @@ delta instead. Verified on Plasticity 26.1.3 only.
   before its dialog opens reads as "interrupted", naming that command. A build
   without `Face.GetAnyPointOn` fails before anything starts with "not supported
   on this Plasticity build".
+- Assumption (P3, not proven): after our own `execute()` rejected with
+  Plasticity's no-effect answer, only a detached promise could still commit;
+  Plasticity 26.1.3 has not been observed to do this. The "no effect, the
+  document is unchanged" claim after `finish()` rests on it, and so does the
+  classification table (`src/plasticity/driving-distance-outcomes.test.ts`
+  prunes those rows and the simulation runs them as assumption-dependent cases:
+  a no-effect rejection followed by a detached commit at 400 ms and 1,500 ms,
+  and a mismatch followed by a second change at 500 ms; it reports how many it
+  ran and how many the late change contradicts). The no-effect text must be the
+  exact phrase "Operation has no effect" or an executor-prefixed form seen live
+  (`Exec.execute:rejected CommandExecutor  Operation has no effect`); cancel and
+  abort (by error class and by text) are tested first, so "Command cancelled:
+  Operation has no effect" and an `AbortError` with that message are cancels. A
+  rejection of `exec()` after our own `execute()` resolved is a chained
+  command's, not ours: undetermined after `finish()`. A native record that lacks
+  `foreignActive` or `cleanupError`, or types them wrongly, is undetermined.
+  While a user's command is active, an early interruption says "nothing of ours
+  changed; the user's command <name> is still active" instead of "the document is
+  unchanged".
 - Lifecycle: everything runs in one native call. Plasticity's executor swallows
   command errors, so the tool reads the error inside the command. The native
   source reports facts only (whether the drive step called `finish()`, how the

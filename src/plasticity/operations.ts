@@ -754,7 +754,7 @@ export interface PickCommandSpec {
 
 export interface PickReadBack {
   bodyChanged: boolean | null;
-  geometry: "pass" | "fail" | null;
+  geometry: "pass" | "ambiguous" | "fail" | null;
   /** The document revision after the call. */
   revision: string;
   /** What the edit touches, for messages ("body 5"). */
@@ -806,6 +806,10 @@ interface PickCommandNativeResult {
   execError?: string | null;
   /** Constructor name of the execute() error, when there was one. */
   execErrorName?: string | null;
+  /** Our wrapped execute() resolved. */
+  executeResolved?: boolean;
+  /** execError came from a later exec() rejection, not from our execute(): with executeResolved it is a chained command's. */
+  execRejected?: boolean;
   /** "not-needed", "ok", "failed" (did not settle in time) or "threw". */
   cancel?: PickCancelResult;
   cancelError: string | null;
@@ -910,6 +914,8 @@ function pickCommandSource(drive: string): string {
       hits: hitSeeds.map(seed => seed.pointM),
     };
     let started = false, settled = false, execError = null, execErrorName = null, command = null, finishCalled = false;
+    // executeResolved: our wrapped execute() returned. execRejected: the error text came from a LATER exec() rejection, not from our execute().
+    let executeResolved = false, execRejected = false;
     let driveOpen = false, lateFinish = false, finishThrew = false, cancelStart = null;
     const ourActive = () => command !== null && executor.active?.command === command;
     // Cancels OUR command only, then waits until it has settled and is no longer active. Never throws.
@@ -944,12 +950,12 @@ function pickCommandSource(drive: string): string {
       // Clearing the selection before execute() returns stops the executor from chaining the default command
       // for the still-selected items (PushFace, then OffsetFace), which would keep exec() pending.
       command.execute = async function () {
-        try { return await original(); }
+        try { const value = await original(); executeResolved = true; return value; }
         catch (error) { execError = message(error); execErrorName = error?.constructor?.name ?? null; throw error; }
         finally { selection.selected.removeAll(); }
       };
       started = true;
-      editor.exec(command).then(() => { settled = true; }, error => { settled = true; execError = execError ?? message(error); });
+      editor.exec(command).then(() => { settled = true; }, error => { settled = true; if (execError === null) { execError = message(error); execRejected = true; } });
 
       const findDialog = () => {
         let found = null;
@@ -1048,6 +1054,8 @@ function pickCommandSource(drive: string): string {
       result.finishThrew = finishThrew;
       result.execError = execError;
       result.execErrorName = execErrorName;
+      result.executeResolved = executeResolved;
+      result.execRejected = execRejected;
       result.settled = settled;
       result.ourActive = ourActive();
       const active = executor.active;
@@ -1075,6 +1083,9 @@ function pickCommandFacts(native: PickCommandNativeResult): Omit<PickOutcomeFact
     Number.isInteger(native.undoDelta) ? null : "undoDelta",
     Number.isInteger(native.undoDeltaAtReturn) ? null : "undoDeltaAtReturn",
     native.execError === null || typeof native.execError === "string" ? null : "execError",
+    // The native source always reports both; a record that omits them or types them wrongly (cleanupError: 0) is never read as clean.
+    native.foreignActive === null || typeof native.foreignActive === "string" ? null : "foreignActive",
+    native.cleanupError === null || typeof native.cleanupError === "string" ? null : "cleanupError",
     typeof native.cancel === "string" && ["not-needed", "ok", "failed", "threw"].includes(native.cancel) ? null : "cancel",
   ].filter((name): name is string => name !== null);
   const execError = typeof native.execError === "string" ? native.execError : null;
@@ -1091,6 +1102,7 @@ function pickCommandFacts(native: PickCommandNativeResult): Omit<PickOutcomeFact
     foreignActive: typeof native.foreignActive === "string" && native.foreignActive !== "" ? native.foreignActive : null,
     cancel: native.cancel ?? (native.cancelError ? "threw" : "not-needed"),
     cleanup: native.cleanupError ? "threw" : "ok",
+    chainedRejection: native.executeResolved === true && native.execRejected === true,
   };
 }
 
@@ -1120,7 +1132,9 @@ function pickRejectedMessage(spec: { label: string; rejectedMessage: string }, r
   if (outcome.reason === "interrupted") {
     const by = native.foreignActive ? ` by another Plasticity command (${native.foreignActive}), which was left alone` : "";
     const when = native.outcome === "rejected" ? "before its dialog opened" : "before its dialog was finished";
-    return `${label} was interrupted ${when}${by}${execDetail}; the document is unchanged`;
+    // While a user's command is active, "unchanged" would claim more than we can see: say what is certain (nothing of ours changed).
+    const claim = native.foreignActive ? `nothing of ours changed; the user's command ${native.foreignActive} is still active` : "the document is unchanged";
+    return `${label} was interrupted ${when}${by}${execDetail}; ${claim}`;
   }
   if (outcome.reason === "cancelled") {
     if (native.phase === "unexpected") return `${label} failed${detail}; the document is unchanged${foreign}`;
@@ -1169,6 +1183,7 @@ function pickUndeterminedMessage(label: string, run: PickCommandRun<unknown>, ou
       return `${label} committed one Undo step${why}, but the read-back does not match: ${context.readback}; ${PICK_RECONCILE}`;
     }
     case "no-commit": return `${label} ended after its dialog was finished without an Undo step and without Plasticity's no-effect rejection (${context.noChange}); a commit that finish() started may still land${foreign}; ${PICK_RECONCILE}`;
+    case "chained-rejection": return `${label} ended after its dialog was finished with a rejection that did not come from this command (${facts.errorText}; our execute() had already resolved), so a commit may still land${foreign}; ${PICK_RECONCILE}`;
     case "no-effect-unclean": {
       const why = facts.foreignActive ? `another Plasticity command (${facts.foreignActive}) is active` : "the helper had to cancel it";
       return `${label} was refused after its dialog was finished (${facts.errorText}), but ${why}, so a commit may still land; ${PICK_RECONCILE}`;
@@ -1217,6 +1232,10 @@ export interface DrivingDistanceResult {
   planeOffsetMm: number;
   message?: string;
   warning?: string;
+  /** Present, as "ambiguous", only when a coplanar sibling's bounds box means the read-back cannot prove which face moved (nothing contradicts the edit). */
+  verification?: "ambiguous";
+  /** Why the verification is ambiguous, naming the sibling faces. */
+  note?: string;
 }
 
 /**
@@ -1264,6 +1283,10 @@ export interface DrivingDistanceGeometryCheck {
   ok: boolean;
   /** The first failed condition, naming what changed; null when ok. */
   problem: string | null;
+  /** ok, but a coplanar sibling's bounds box means the check cannot prove which face moved; nothing contradicts the edit. */
+  ambiguous: boolean;
+  /** The sibling faces behind an ambiguous result, in words; null otherwise. */
+  note: string | null;
   /** (1) the moving face left its old place, (2) a face reached the target over the hit point, (3) the reference stayed
    * (null: single-face mode with no verifiable reference face), (4) the distance matches, (5) no other plane changed. */
   conditions: { left: boolean; reached: boolean; reference: boolean | null; distance: boolean; others: boolean };
@@ -1351,18 +1374,56 @@ export function checkDrivingDistanceGeometry(input: DrivingDistanceGeometryInput
   const facesAt = (list: readonly DrivingDistanceGeometryFace[], planeOffset: number, point: Vector3, sameDirection = true) =>
     list.filter((face) => parallel(face) && same(face) === sameDirection && near(offset(face), planeOffset) && covers(face, point));
 
-  // (1) the moving face left its old place.
-  const left = near(expected, movingOffset) || facesAt(after, movingOffset, hit).length === 0;
-  // (2) a face reached the target over the projected hit point.
+  // (1) the moving face left its old place. A coplanar sibling whose bounds box covers the click point (an island inside a
+  // ring-shaped face, a pad beside an L-shaped face) keeps the old plane "occupied" after a correct edit, and a bounds box
+  // cannot tell that from a face that did not move. The count of covering faces can: when it fell, the moving face left
+  // and the rest are siblings (ambiguous: nothing proves which one moved); when it did not fall, the face is still there.
+  const coverBefore = facesAt(input.before, movingOffset, hit);
+  const coverAfter = facesAt(after, movingOffset, hit);
+  const leftState: "yes" | "ambiguous" | "no" = near(expected, movingOffset) || coverAfter.length === 0 ? "yes" : coverAfter.length < coverBefore.length ? "ambiguous" : "no";
+  const left = leftState !== "no";
+  const nearest = (candidates: readonly DrivingDistanceGeometryFace[], point: Vector3) =>
+    candidates.reduce((best, face) => Math.hypot(...subtract(face.centerMm, point)) < Math.hypot(...subtract(best.centerMm, point)) ? face : best);
+  // (2) a face reached the target over the projected hit point. The evidence is fresh when more faces cover the point than
+  // before; when a coplanar face already covered it, the reach is real but cannot be told from that face (ambiguous).
   let reachedOffset: number | null = null;
   let movedFace: DrivingDistanceGeometryFace | null = null;
+  let reachedFresh = false;
   for (const target of targets) {
-    const candidates = facesAt(after, target, atHit(target));
-    if (candidates.length === 0) continue;
-    reachedOffset = target;
     const point = atHit(target);
-    movedFace = candidates.reduce((best, face) => Math.hypot(...subtract(face.centerMm, point)) < Math.hypot(...subtract(best.centerMm, point)) ? face : best);
-    break;
+    const candidates = facesAt(after, target, point);
+    if (candidates.length === 0) continue;
+    const fresh = candidates.length > facesAt(input.before, target, point).length;
+    if (reachedOffset !== null && !(fresh && !reachedFresh)) continue;
+    reachedOffset = target;
+    reachedFresh = fresh;
+    movedFace = nearest(candidates, point);
+    if (fresh) break;
+  }
+  // The moved face can shift sideways (a slanted adjacent wall) so that its bounds box no longer covers the click point.
+  // A NEW face at the target whose bounds meet the footprint swept to the target then counts as a reach, as ambiguous.
+  let adjacentReach = false;
+  if (reachedOffset === null && moving.boundsMm) {
+    const meets = (face: DrivingDistanceGeometryFace, target: number) => {
+      const bounds = face.boundsMm;
+      if (!bounds) return false;
+      const shift = scale(normal, target - movingOffset);
+      return [0, 1, 2].every((axis) => {
+        const low = Math.min(moving.boundsMm!.min[axis]!, moving.boundsMm!.min[axis]! + shift[axis]!);
+        const high = Math.max(moving.boundsMm!.max[axis]!, moving.boundsMm!.max[axis]! + shift[axis]!);
+        return bounds.max[axis]! >= low - DRIVING_DISTANCE_LATERAL_TOLERANCE_MM && bounds.min[axis]! <= high + DRIVING_DISTANCE_LATERAL_TOLERANCE_MM;
+      });
+    };
+    const onTarget = (list: readonly DrivingDistanceGeometryFace[], target: number) => list.filter((face) => parallel(face) && same(face) && near(offset(face), target));
+    for (const target of targets) {
+      const now = onTarget(after, target);
+      const adjoining = now.filter((face) => meets(face, target));
+      if (adjoining.length === 0 || now.length <= onTarget(input.before, target).length) continue;
+      reachedOffset = target;
+      movedFace = nearest(adjoining, atHit(target));
+      adjacentReach = true;
+      break;
+    }
   }
   // (3) the reference stayed.
   const referenceSame = referenceFace ? same(referenceFace) : true;
@@ -1396,6 +1457,13 @@ export function checkDrivingDistanceGeometry(input: DrivingDistanceGeometryInput
   const others = strayGone.length === 0 && strayNew.length === 0;
 
   const ok = left && reachedOffset !== null && reference !== false && distance && others;
+  // ok with a doubt: nothing contradicts the edit, but a bounds box cannot prove which face moved.
+  const names = (list: readonly DrivingDistanceGeometryFace[]) => list.map((face) => `${input.bodyId}:${face.id}`).join(", ");
+  const doubts: string[] = [];
+  if (ok && leftState === "ambiguous") doubts.push(`another coplanar face overlaps the footprint (${names(coverBefore.filter((face) => face.id !== moving.id))}); could not prove which face moved`);
+  if (ok && reachedOffset !== null && !reachedFresh && !adjacentReach) doubts.push(`another coplanar face overlaps the footprint at the target offset (${names(facesAt(input.before, reachedOffset, atHit(reachedOffset)))}); could not prove which face moved`);
+  if (ok && adjacentReach) doubts.push(`the moved face no longer covers the click point (it shifted sideways) and ${names([movedFace!])} at the target adjoins the old footprint; could not prove which face moved`);
+  const ambiguous = ok && doubts.length > 0;
   const mm = (value: number) => `${roundMicro(value)} mm`;
   const id = (faceId: string) => `${input.bodyId}:${faceId}`;
   const normalText = `[${normal.join(", ")}]`;
@@ -1429,7 +1497,7 @@ export function checkDrivingDistanceGeometry(input: DrivingDistanceGeometryInput
   }
   const signature = (list: Plane[]) => list.map((plane) => `${plane.same ? "+" : "-"}${roundMicro(plane.offset)}`).sort().join(",");
   return {
-    ok, problem,
+    ok, problem, ambiguous, note: ambiguous ? doubts.join("; ") : null,
     conditions: { left, reached: reachedOffset !== null, reference, distance, others },
     normal, movingOffsetMm: movingOffset, referenceOffsetMm: referenceOffset, expectedOffsetMm: expected,
     movedFace, reachedOffsetMm: reachedOffset, measuredMm: measured,
@@ -8749,7 +8817,7 @@ export class PlasticityOperations {
         }
         return {
           bodyChanged: !bodyAfter || bodyAfter.versionId !== versionBefore || signatureOf(facesAfter) !== signatureBefore,
-          geometry: geometry === null ? null : geometry.ok ? "pass" : "fail",
+          geometry: geometry === null ? null : !geometry.ok ? "fail" : geometry.ambiguous ? "ambiguous" : "pass",
           revision: after.revision, subject: `body ${bodyId}`, readback, noChange,
         };
       },
@@ -8773,6 +8841,7 @@ export class PlasticityOperations {
     return {
       state: after!, changed: true, previousDistanceMm, distanceMm, undoSteps: 1, movedFaceId: moved.id, movingFaceId: moved.id,
       planeOffsetMm: roundMicro(dot(check!.normal, moved.centerMm)),
+      ...(check!.ambiguous ? { verification: "ambiguous" as const, note: check!.note! } : {}),
       ...(note ? { message: note } : {}),
       ...(run.native.foreignActive ? { warning: `Another Plasticity command (${run.native.foreignActive}) is active; it is not part of this edit and was left alone` } : {}),
     };

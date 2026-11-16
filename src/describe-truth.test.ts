@@ -78,6 +78,22 @@ test("through: a true through hole reaches the body bounds at both ends: true", 
   assert.equal("through" in throughOf(describeBody(short as never, "r1")), false);
 });
 
+test("through: a Sheet cup (cylinder wall plus bottom disc) says nothing; through is a claim about Solids", () => {
+  // The wall spans the whole body bounds along z, so the bounds test used to read "through" although a disc closes the bottom.
+  const faces = [bore("bore", AT, 2, 0, 10, ["ct", "cb"]), plane("floor", [20, 15, 0], [0, 0, 1], 2, ["cb"])];
+  const edges = [ring("ct", AT, 10, 2, ["bore"]), ring("cb", AT, 0, 2, ["bore", "floor"])];
+  const asSheet = { ...bodyOf(1, faces, edges), type: "Sheet" };
+  const sheet = describeBody(asSheet as never, "r1");
+  const group = throughOf(sheet);
+  assert.equal("through" in group, false, "a Sheet reports no through at all");
+  assert.deepEqual(group.extentMm, [0, 10], "the rest of the group is unchanged");
+  // The same faces on a Solid still read through by the bounds test (a Solid's wall reaching both ends is the proof).
+  assert.equal(throughOf(describeBody(bodyOf(1, faces, edges) as never, "r1")).through, true);
+  // A Sheet whose floor would read "blind" says nothing either.
+  const blind = { ...bodyOf(1, [...blockPlanes(["ct"], []), bore("bore", AT, 2, 4, 10, ["ct", "cf"]), plane("floor", [20, 15, 4], [0, 0, 1], 2, ["cf"])], [ring("ct", AT, 10, 2, ["bore", "top"]), ring("cf", AT, 4, 2, ["bore", "floor"])]), type: "Sheet" };
+  assert.equal("through" in throughOf(describeBody(blind as never, "r1")), false);
+});
+
 test("through: a flat disc floor that closes the bore at one end: false", () => {
   const faces = [...blockPlanes(["ct"], []), bore("bore", AT, 2, 4, 10, ["ct", "cf"]), plane("floor", [20, 15, 4], [0, 0, 1], 2, ["cf"])];
   const edges = [ring("ct", AT, 10, 2, ["bore", "top"]), ring("cf", AT, 4, 2, ["bore", "floor"])];
@@ -459,6 +475,15 @@ test("a rib warning is shown in a lean batch, and the tool descriptions say the 
     assert.match(JSON.stringify(found), /clears the current selection/, name);
   }
   assert.match(tools.find((tool) => tool.name === "plasticity_create_rib")!.description ?? "", /positive or negative pick the side and ignore the sign of thickness/);
+  await close();
+});
+
+test("tool descriptions: create_pipes says approximate, join_sheets says exact coincidence and a closed result becomes a Solid", async () => {
+  const fake = open([heavyBody(1)], {});
+  const { client, close } = await connect(fake);
+  const described = async (name: string) => JSON.stringify(json(await client.callTool({ name: "plasticity_call", arguments: { toolName: "catalog", query: name, limit: 1 } })));
+  assert.match(await described("plasticity_create_pipes"), /approximate, not dimensionally exact; use a sweep for exact pipes/);
+  assert.match(await described("plasticity_join_sheets"), /edges must coincide exactly; a closed result becomes a Solid/);
   await close();
 });
 

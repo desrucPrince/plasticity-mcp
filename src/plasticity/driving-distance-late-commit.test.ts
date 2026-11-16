@@ -416,7 +416,7 @@ test("an early interruption by a user command reads as interrupted, not as no ef
   for (const executor of ["rejecting", "swallowing"] as const) {
     const f = fixture("interrupted", { executor });
     await assert.rejects(f.operations.setDrivingDistance(PAIR, "r1", FAST), (error: Error) => {
-      assert.match(error.message, /^Driving distance was interrupted before its dialog opened by another Plasticity command \(UserBoxCommand\), which was left alone: Command interrupted; the document is unchanged$/);
+      assert.match(error.message, /^Driving distance was interrupted before its dialog opened by another Plasticity command \(UserBoxCommand\), which was left alone: Command interrupted; nothing of ours changed; the user's command UserBoxCommand is still active$/);
       assert.doesNotMatch(error.message, /no effect/);
       return true;
     });

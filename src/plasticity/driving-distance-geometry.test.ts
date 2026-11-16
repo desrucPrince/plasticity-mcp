@@ -173,6 +173,104 @@ test("the step-deleted case: the moving face is removed, and the check names it"
   assert.match(result.problem!, /^no face moved to -2 mm: the moving face 5:lower was removed \(no face facing \[0, 0, 1\] remains at 5 mm over its footprint, and none reached either distance from the reference\)$/);
 });
 
+// ---- ambiguity: a bounds box cannot prove "still at" or "reached" when a coplanar sibling's box covers the click point
+
+// Faces facing +x at 2040 over a -x face at 2000: the moving island/pad face and a coplanar sibling whose bounds box
+// covers the island's centre. The reference is the -x face at 2000.
+const wide = (id: string, normal: V, x: number, y: [number, number], z: [number, number]): Face => plane(id, normal, [x, (y[0] + y[1]) / 2, (z[0] + z[1]) / 2], [x, y[0], z[0]], [x, y[1], z[1]]);
+const SIBLING_NOTE = /another coplanar face overlaps the footprint \(5:fring\); could not prove which face moved/;
+
+test("island inside a ring-shaped coplanar face: the correct edit is an ambiguous success, not a mismatch", () => {
+  const ring = wide("fring", [1, 0, 0], 2040, [0, 40], [0, 20]);
+  const island = wide("fisl", [1, 0, 0], 2040, [15, 25], [5, 15]);
+  const ref = wide("fref", [-1, 0, 0], 2000, [0, 40], [0, 20]);
+  const after = [ring, wide("fisl2", [1, 0, 0], 2050, [15, 25], [5, 15]), ref];
+  const result = operationsModule.checkDrivingDistanceGeometry({ bodyId: 5, movingFaceId: "fisl", referenceFaceId: "fref", distanceMm: 50, before: [ring, island, ref], after });
+  assert.equal(result.ok, true, result.problem ?? "");
+  assert.equal(result.ambiguous, true);
+  assert.match(result.note!, SIBLING_NOTE);
+  assert.equal(result.movedFace!.id, "fisl2");
+  assert.equal(result.reachedOffsetMm, 2050);
+  assert.ok(Math.abs(result.measuredMm! - 50) <= 1e-6);
+});
+
+test("pad beside an L-shaped coplanar face whose bounds box covers the pad: ambiguous success", () => {
+  const ell = wide("fring", [1, 0, 0], 2040, [0, 40], [0, 40]);
+  const pad = wide("fpad", [1, 0, 0], 2040, [25, 40], [25, 40]);
+  const ref = wide("fref", [-1, 0, 0], 2000, [0, 40], [0, 40]);
+  const after = [ell, wide("fpad2", [1, 0, 0], 2047.5, [25, 40], [25, 40]), ref];
+  const result = operationsModule.checkDrivingDistanceGeometry({ bodyId: 5, movingFaceId: "fpad", referenceFaceId: "fref", distanceMm: 47.5, before: [ell, pad, ref], after });
+  assert.equal(result.ok, true, result.problem ?? "");
+  assert.equal(result.ambiguous, true);
+  assert.match(result.note!, SIBLING_NOTE);
+});
+
+test("a slanted adjacent wall shifts the moved face sideways off the click point: ambiguous success, but a face far away is still a mismatch", () => {
+  // The moving +x face (y 0..10) lands at 2030 with its footprint shifted 6 mm along y: its box no longer covers the click point (y 5).
+  const shifted = (shift: number) => [...without(box(), "fxp"), plane("fxp2", [1, 0, 0], [2030, 5 + shift, 2.5], [2030, shift, 0], [2030, 10 + shift, 5])];
+  const near6 = check(box(), shifted(6));
+  assert.equal(near6.ok, true, near6.problem ?? "");
+  assert.equal(near6.ambiguous, true);
+  assert.match(near6.note!, /the moved face no longer covers the click point \(it shifted sideways\) and 5:fxp2 at the target adjoins the old footprint; could not prove which face moved/);
+  assert.equal(near6.movedFace!.id, "fxp2");
+  // 500 mm away it is the sibling-moved case (ii): certain.
+  const far = check(box(), shifted(500));
+  assert.equal(far.ok, false);
+  assert.equal(far.ambiguous, false);
+  assert.match(far.problem!, /^no face moved to 2030 mm: the moving face 5:fxp was removed/);
+});
+
+test("ambiguity does not weaken the certain mismatches: the moving face stays, the reference moves, the distance is wrong", () => {
+  const ring = wide("fring", [1, 0, 0], 2040, [0, 40], [0, 20]);
+  const island = wide("fisl", [1, 0, 0], 2040, [15, 25], [5, 15]);
+  const ref = wide("fref", [-1, 0, 0], 2000, [0, 40], [0, 20]);
+  const pair = { bodyId: 5, movingFaceId: "fisl", referenceFaceId: "fref", distanceMm: 50, before: [ring, island, ref] };
+  // The island stays and a NEW face appears at 2050 over it: both faces still cover the click point at 2040.
+  const stays = operationsModule.checkDrivingDistanceGeometry({ ...pair, after: [ring, island, wide("fnew", [1, 0, 0], 2050, [15, 25], [5, 15]), ref] });
+  assert.equal(stays.ok, false);
+  assert.equal(stays.ambiguous, false);
+  assert.equal(stays.conditions.left, false, "the count of covering faces did not fall: the island is still there");
+  assert.match(stays.problem!, /^no face moved to 2050 mm \(the moving face 5:fisl is still at 2040 mm over its footprint\)$/);
+  // The reference moved: certain, whatever the siblings.
+  const refMoved = operationsModule.checkDrivingDistanceGeometry({ ...pair, after: [ring, wide("fisl2", [1, 0, 0], 2050, [15, 25], [5, 15]), wide("fref2", [-1, 0, 0], 1995, [0, 40], [0, 20])] });
+  assert.equal(refMoved.ok, false);
+  assert.equal(refMoved.conditions.reference, false);
+  // The measured distance is wrong: the island ends at 2049 (49 mm), certain.
+  const wrongDistance = operationsModule.checkDrivingDistanceGeometry({ ...pair, after: [ring, wide("fisl2", [1, 0, 0], 2049, [15, 25], [5, 15]), ref] });
+  assert.equal(wrongDistance.ok, false);
+  assert.equal(wrongDistance.ambiguous, false);
+});
+
+test("what a bounds box genuinely cannot tell: the ring moves to the target instead of the island, and both look like a correct edit", () => {
+  // Before: ring and island coplanar at 2040, the ring's box covers the island's centre. After: the island stays at 2040
+  // and a face whose box covers the click point sits at 2050. The covering count fell by one and a face reached the target:
+  // the same boxes as the correct edit, so the check says "ambiguous", never "still at" with an undo.
+  const ring = wide("fring", [1, 0, 0], 2040, [0, 40], [0, 20]);
+  const island = wide("fisl", [1, 0, 0], 2040, [15, 25], [5, 15]);
+  const ref = wide("fref", [-1, 0, 0], 2000, [0, 40], [0, 20]);
+  const result = operationsModule.checkDrivingDistanceGeometry({ bodyId: 5, movingFaceId: "fisl", referenceFaceId: "fref", distanceMm: 50, before: [ring, island, ref], after: [island, wide("fring2", [1, 0, 0], 2050, [0, 40], [0, 20]), ref] });
+  assert.equal(result.ok, true, result.problem ?? "");
+  assert.equal(result.ambiguous, true);
+});
+
+test("the four reviewer scenarios stay certain mismatches: a sibling's box never covers their click point, so none turns ambiguous", () => {
+  const step = plane("fstep", [1, 0, 0], [1970, 15, 2.5], [1970, 10, 0], [1970, 20, 5]);
+  const sibling = plane("fsib", [1, 0, 0], [2020, 505, 2.5], [2020, 500, 0], [2020, 510, 5]);
+  const other = plane("fother", [-1, 0, 0], [2000, 505, 2.5], [2000, 500, 0], [2000, 510, 5]);
+  const cases: Array<[string, Face[], Face[]]> = [
+    ["(i)", [...box(), step], [...box(), { ...step, id: "fstep2", centerMm: [2030, 15, 2.5], boundsMm: { min: [2030, 10, 0], max: [2030, 20, 5] } }]],
+    ["(ii)", [...box(), sibling], [...box(), { ...sibling, id: "fsib2", centerMm: [2030, 505, 2.5], boundsMm: { min: [2030, 500, 0], max: [2030, 510, 5] } }]],
+    ["(iii)", box(), [...box(), plane("fnew", [1, 0, 0], [2030, 5, 2.5], [2030, 0, 0], [2030, 10, 5])]],
+    ["(iv)", [...box(), other], [...without(box(1990, 2030), "fxn"), plane("fxn2", [-1, 0, 0], [1990, 5, 2.5], [1990, 0, 0], [1990, 10, 5]), other]],
+  ];
+  for (const [label, before, after] of cases) {
+    const result = check(before, after);
+    assert.equal(result.ok, false, label);
+    assert.equal(result.ambiguous, false, label);
+    assert.equal(result.note, null, label);
+  }
+});
+
 // ---- end to end: setDrivingDistance over a stub editor whose commit applies a given face list
 
 function commitWorld(before: Face[], afterOf: (distanceM: number) => Face[], options: { bumpVersion?: boolean } = {}) {
@@ -239,6 +337,39 @@ function commitWorld(before: Face[], afterOf: (distanceM: number) => Face[], opt
 
 const FAST: PickCommandTimeouts = { dialogMs: 100, finishMs: 200, cancelMs: 100 };
 const PAIR = { bodyId: 5, movingFaceId: "fxp", referenceFaceId: "fxn", distanceMm: 30 };
+
+test("end to end: the island, the L-pad and the slanted wall edits succeed with verification ambiguous and a note; undo stays available", async () => {
+  const ring = wide("fring", [1, 0, 0], 2040, [0, 40], [0, 20]);
+  const island = wide("fisl", [1, 0, 0], 2040, [15, 25], [5, 15]);
+  const ref = wide("fref", [-1, 0, 0], 2000, [0, 40], [0, 20]);
+  const pair = { bodyId: 5, movingFaceId: "fisl", referenceFaceId: "fref", distanceMm: 50 };
+  const w = commitWorld([ring, island, ref], () => [ring, wide("fisl2", [1, 0, 0], 2050, [15, 25], [5, 15]), ref]);
+  const result = await w.operations.setDrivingDistance(pair, "r1", FAST);
+  assert.equal(result.changed, true);
+  assert.equal(result.verification, "ambiguous");
+  assert.match(result.note!, /another coplanar face overlaps the footprint \(5:fring\); could not prove which face moved/);
+  assert.equal(result.movedFaceId, "fisl2");
+  assert.equal(result.planeOffsetMm, 2050);
+  assert.equal(result.undoSteps, 1);
+  assert.equal(w.isUncertain(), false);
+  // A plain verified edit carries no verification field.
+  const plain = commitWorld(box(), (distanceM) => box(2000, 2000 + distanceM * 1000, "'"));
+  const verified = await plain.operations.setDrivingDistance(PAIR, "r1", FAST);
+  assert.equal("verification" in verified, false);
+  assert.equal("note" in verified, false);
+  // The L-pad and the slanted wall.
+  const ell = wide("fring", [1, 0, 0], 2040, [0, 40], [0, 40]);
+  const pad = wide("fpad", [1, 0, 0], 2040, [25, 40], [25, 40]);
+  const lref = wide("fref", [-1, 0, 0], 2000, [0, 40], [0, 40]);
+  const lpad = commitWorld([ell, pad, lref], () => [ell, wide("fpad2", [1, 0, 0], 2047.5, [25, 40], [25, 40]), lref]);
+  const padResult = await lpad.operations.setDrivingDistance({ bodyId: 5, movingFaceId: "fpad", referenceFaceId: "fref", distanceMm: 47.5 }, "r1", FAST);
+  assert.equal(padResult.verification, "ambiguous");
+  const slanted = commitWorld(box(), () => [...without(box(2000, 2030, "'"), "fxp'"), plane("fxp2", [1, 0, 0], [2030, 11, 2.5], [2030, 6, 0], [2030, 16, 5])]);
+  const slantResult = await slanted.operations.setDrivingDistance(PAIR, "r1", FAST);
+  assert.equal(slantResult.verification, "ambiguous");
+  assert.match(slantResult.note!, /shifted sideways/);
+  assert.equal(slanted.isUncertain(), false);
+});
 
 test("end to end: the four reviewer scenarios are certain committed-mismatch errors that name the undo", async () => {
   const step = plane("fstep", [1, 0, 0], [1970, 15, 2.5], [1970, 10, 0], [1970, 20, 5]);

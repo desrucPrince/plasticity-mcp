@@ -77,7 +77,8 @@ export function findFaces(state: RuntimeState, query: FaceQuery): FaceMatch[] {
       if (query.center && !matchesPoint(face.centerMm, query.center)) return false;
       if (query.boundsMm && !boundsOverlap(face.boundsMm, query.boundsMm)) return false;
       if (query.edgeCount !== undefined && face.edgeIds.length !== query.edgeCount) return false;
-      if (query.adjacentEdgeIds && !query.adjacentEdgeIds.every((id) => face.edgeIds.includes(id))) return false;
+      // An empty list names nothing, so it matches nothing: [].every() would be true and select every face.
+      if (query.adjacentEdgeIds && (query.adjacentEdgeIds.length === 0 || !query.adjacentEdgeIds.every((id) => face.edgeIds.includes(id)))) return false;
       return true;
     });
 }
@@ -95,7 +96,7 @@ export function findEdges(state: RuntimeState, query: EdgeQuery): EdgeMatch[] {
       if (query.lengthMm && !matchesScalar(edge.lengthMm, query.lengthMm)) return false;
       if (query.center && !matchesPoint(edge.centerMm, query.center)) return false;
       if (query.boundsMm && !boundsOverlap(edge.boundsMm, query.boundsMm)) return false;
-      if (query.adjacentFaceIds && !query.adjacentFaceIds.every((id) => edge.faceIds.includes(id))) return false;
+      if (query.adjacentFaceIds && (query.adjacentFaceIds.length === 0 || !query.adjacentFaceIds.every((id) => edge.faceIds.includes(id)))) return false;
       return true;
     });
 }
@@ -588,7 +589,8 @@ export function describeBody(body: DescribedBody, revision: string, maxBytes: nu
       // Reported only when every face of the group is a full-turn face and they all agree.
       if (group.closed === group.faces) {
         const verdict = group.verdicts[0];
-        if (group.kind === "hole" && verdict !== undefined && group.verdicts.length === group.closed && group.verdicts.every((value) => value === verdict)) described.through = verdict === "through";
+        // through is a claim about a solid: a Sheet cup (cylinder wall plus bottom disc) has no inside to be through, so it says nothing.
+        if (body.type === "Solid" && group.kind === "hole" && verdict !== undefined && group.verdicts.length === group.closed && group.verdicts.every((value) => value === verdict)) described.through = verdict === "through";
         const firstExtent = group.extents[0];
         if (firstExtent && group.extents.length === group.closed && group.extents.every((extent) => extent && Math.abs(extent[0] - firstExtent[0]) < 1e-3 && Math.abs(extent[1] - firstExtent[1]) < 1e-3)) described.extentMm = [...firstExtent];
       }

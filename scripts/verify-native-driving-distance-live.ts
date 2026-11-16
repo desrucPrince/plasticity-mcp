@@ -66,6 +66,9 @@ Live mode takes a baseline, then builds disposable geometry at x >= 2400 mm and 
     the low part: a certain "committed but does not match" error naming the removed face and the Undo step, after
     which one plasticity_undo (no reconcile) restores the body;
   - slot walls that face each other: the slot width 10 -> 14 mm (one wall fixed) and single-face mode on a wall;
+  - an island pad inside a ring-shaped coplanar face (its top coplanar with the surrounding top face, whose bounds box
+    covers it): the pad's top is set to 14 mm above the bottom; the call must succeed (verified, or ambiguous with a note
+    naming the sibling) and an independent face read must show the ring at 10 mm and the island top at 14 mm;
   - single-face mode on the flat face of a half cylinder (a cylinder, not a parallel plane, lies behind it):
     Plasticity rejects it, no Undo entry;
   - every commit is read back: movedFaceId and planeOffsetMm must match the moved plane;
@@ -374,6 +377,58 @@ async function main(): Promise<void> {
       await layout("slot_walls_width", block.id, { moving: right, reference: left, fixedMm: 3115, axis: 0, distanceMm: 14, previousMm: 10, expectedMm: 3129 });
       // Single-face mode on a slot wall: Plasticity finds the facing wall itself.
       await layout("slot_wall_single_face", block.id, { moving: right, fixedMm: 3115, axis: 0, distanceMm: 12, previousMm: 10, expectedMm: 3127 });
+    }
+
+    // ---- island inside a ring-shaped coplanar face (review follow-up): a 60 x 60 x 10 block with a 20 x 20 pocket
+    // (x 3320..3340, y 20..40) whose floor is at z 3, and a 10 x 10 pad (x 3325..3335, y 25..35) standing on that floor
+    // up to z 10. Its top is coplanar with the surrounding ring-shaped top face, whose bounds box covers the pad. The pad's
+    // top moves to 14 mm above the bottom by driving distance: a correct edit that a bounds box used to report as "the moving
+    // face is still at 10 mm over its footprint, undo". It must succeed (verified, or ambiguous with a note naming the ring).
+    // The independent read is the body's face list after the edit, not the tool's own reply.
+    {
+      const block = await create("plasticity_create_box", { originMm: [3300, 0, 0], sizeMm: [60, 60, 10] });
+      const pocket = await create("plasticity_create_box", { originMm: [3320, 20, 3], sizeMm: [20, 20, 8] });
+      await call(client, "plasticity_boolean", { targetIds: [block.id], toolIds: [pocket.id], operation: "difference", revision: (await status(client)).revision });
+      const pad = await create("plasticity_create_box", { originMm: [3325, 25, 2], sizeMm: [10, 10, 8] });
+      await call(client, "plasticity_boolean", { targetIds: [block.id], toolIds: [pad.id], operation: "union", revision: (await status(client)).revision });
+      const faces = await facesOf(block.id);
+      const tops = faces.filter((face) => face.planar && face.normal[2] > 0.999 && Math.abs(face.centerMm[2] - 10) < 1e-6);
+      // Face bounds come from the float32 display mesh: extents match to about 1e-4 mm, so these checks use 0.01 mm slack.
+      requireCondition(tops.length === 2, `island: expected the ring face and the island top at z 10, found ${tops.length}`);
+      const extent = (face: any) => (face.boundsMm.max[0] - face.boundsMm.min[0]) * (face.boundsMm.max[1] - face.boundsMm.min[1]);
+      const [island, ring] = [...tops].sort((left, right) => extent(left) - extent(right));
+      requireNear(extent(island), 100, "island: the island top is 10 x 10", 0.05);
+      requireNear(extent(ring), 3600, "island: the ring face's bounds cover the whole block top", 0.5);
+      const bottom = only(faces, (face) => face.planar && face.normal[2] < -0.999 && Math.abs(face.centerMm[2]) < 1e-6, "island: bottom face");
+      const before = await status(client);
+      const result = await call(client, "plasticity_set_driving_distance", {
+        bodyId: block.id, movingFaceId: island.id, referenceFaceId: bottom.id, distanceMm: 14, revision: before.revision, intent: "Acceptance: island in a ring-shaped coplanar face",
+      });
+      const after = await status(client);
+      requireCondition(after.undoDepth === before.undoDepth + 1 && result.changed === true && result.undoSteps === 1, "island: expected one Undo step and a success");
+      requireCondition(result.verification === undefined || result.verification === "ambiguous", `island: unexpected verification ${String(result.verification)}`);
+      if (result.verification === "ambiguous") requireCondition(/another coplanar face overlaps the footprint \(.+\); could not prove which face moved/.test(result.note ?? ""), `island: an ambiguous result must carry the sibling note, got "${String(result.note)}"`);
+      // Independent read-back of the geometry.
+      const facesAfter = await facesOf(block.id);
+      const topsAfter = facesAfter.filter((face) => face.planar && face.normal[2] > 0.999).sort((left, right) => left.centerMm[2] - right.centerMm[2]);
+      const ringNow = topsAfter.filter((face) => Math.abs(face.centerMm[2] - 10) < 1e-6);
+      const islandNow = topsAfter.filter((face) => Math.abs(face.centerMm[2] - 14) < 1e-6);
+      requireCondition(ringNow.length === 1 && extent(ringNow[0]) > 3000, "island: the ring face stays at z 10");
+      requireCondition(islandNow.length === 1, `island: expected one top at z 14, found ${islandNow.length}`);
+      requireNear(extent(islandNow[0]), 100, "island: the raised top is still 10 x 10", 0.05);
+      requireNear(islandNow[0].boundsMm.min[0], 3325, "island: raised top x min", 0.01);
+      requireNear(islandNow[0].boundsMm.max[1], 35, "island: raised top y max", 0.01);
+      requireCondition(facesAfter.some((face) => face.planar && face.normal[2] < -0.999 && Math.abs(face.centerMm[2]) < 1e-6), "island: the bottom stays at z 0");
+      requireNear((await bodyOf(block.id)).boundsMm.max[2], 14, "island: the body is 14 mm tall", 0.01);
+      requireCondition(result.movedFaceId === islandNow[0].id, `island: movedFaceId ${String(result.movedFaceId)} is not the raised top ${islandNow[0].id}`);
+      requireNear(result.planeOffsetMm, 14, "island: planeOffsetMm", 0.01);
+      const clean = await requireClean("island");
+      await call(client, "plasticity_undo", { revision: after.revision, intent: "Undo acceptance: island" });
+      const undone = await status(client);
+      requireCondition(undone.undoDepth === before.undoDepth, "island: undo did not return to the checkpoint");
+      requireNear((await bodyOf(block.id)).boundsMm.max[2], 10, "island: undo restores the 10 mm height", 0.01);
+      checks.island_in_ring_coplanar = { verification: result.verification ?? "verified", note: result.note ?? null, movedFaceId: result.movedFaceId, planeOffsetMm: result.planeOffsetMm, ringTopAfterMm: ringNow[0].centerMm[2], islandTopAfterMm: islandNow[0].centerMm[2], undoDepth: [before.undoDepth, after.undoDepth, undone.undoDepth], clean };
+      console.error(`island_in_ring_coplanar: ok ${JSON.stringify({ verification: result.verification ?? "verified", note: result.note ?? null })}`);
     }
 
     // ---- single-face mode where the surface behind the face is not a parallel plane: the flat face of a half

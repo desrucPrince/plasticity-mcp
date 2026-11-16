@@ -1,7 +1,9 @@
 // Outcome classification for viewport-pick commands (runPickCommand / plasticity_set_driving_distance).
 //
 // The native source reports facts; this module classifies them. The result is exactly one of four kinds:
-//   committed-verified  one Undo step, nothing of ours active, the post-commit geometry check passed: success.
+//   committed-verified  one Undo step, nothing of ours active, the post-commit geometry check passed: success. The check
+//                       can also pass as "ambiguous" (a coplanar sibling's bounds box means it cannot prove which face
+//                       moved, but nothing contradicts the edit): the same success, reason "verified-ambiguous".
 //   committed-mismatch  one Undo step, a clean commit (execute() resolved, no error, nothing active), but the geometry
 //                       check failed: a certain error, the document is in a known state and plasticity_undo restores it.
 //   rejected-unchanged  finish() was never called and nothing changed; or finish() was called, Plasticity refused the
@@ -42,15 +44,17 @@ export interface PickOutcomeFacts {
   cleanup: "ok" | "threw";
   /** The body differs from its pre-edit snapshot; null when it could not be read. */
   bodyChanged: boolean | null;
-  /** Post-commit geometry check; null when it did not run. */
-  geometry: "pass" | "fail" | null;
+  /** Post-commit geometry check; null when it did not run. "ambiguous": no contradiction, but a bounds box cannot prove which face moved. */
+  geometry: "pass" | "ambiguous" | "fail" | null;
+  /** Our wrapped execute() resolved and a LATER exec() rejection carried the error: the rejection is not ours (a chained command's). */
+  chainedRejection?: boolean;
 }
 
 export type PickOutcomeReason =
   | "malformed" | "late-finish" | "cleanup-failed" | "cancel-failed" | "never-settled" | "still-active"
   | "history-changed-before-finish" | "body-changed-before-finish" | "body-unknown"
   | "no-effect" | "interrupted" | "cancelled" | "failed"
-  | "verified" | "mismatch" | "mismatch-unclean" | "readback-missing"
+  | "verified" | "verified-ambiguous" | "chained-rejection" | "mismatch" | "mismatch-unclean" | "readback-missing"
   | "too-many-steps" | "history-shrank" | "no-commit" | "body-changed-no-step" | "error-after-finish" | "no-effect-unclean";
 
 export interface PickOutcome {
@@ -59,19 +63,24 @@ export interface PickOutcome {
   errorKind: PickErrorKind;
 }
 
-// The only no-effect text the live probes recorded (discovery/probes-2026-11-*: "Operation has no effect", wrapped by the
-// executor as "Exec.execute:rejected CommandExecutor  Operation has no effect"). Anchored to the exact phrase.
-const NO_EFFECT = /(?:^|\s)Operation has no effect\s*$/;
+// The only no-effect texts the live probes recorded (discovery/probes-2026-11-pick and -followups): the bare phrase
+// "Operation has no effect", and the executor-prefixed forms "Exec.execute:rejected CommandExecutor  Operation has no effect",
+// "Cmd.run:rejected DimensionDistanceCommand  Operation has no effect", "DDC.execute:rejected   Operation has no effect".
+// Anchored at both ends: the exact phrase, or "<Class>.<method>:rejected [<Name>] " in front of it. Nothing else counts, so
+// "Command cancelled: Operation has no effect" and a multi-line cancel text that ends with the phrase do not.
+const NO_EFFECT = /^(?:[A-Za-z]\w*\.[A-Za-z]\w*:rejected\s+(?:\w+\s+)?)?Operation has no effect\s*$/;
 // Cancel-type texts seen live after a cancel (probe-late-commit.json): "invalid state: cancelled", "Invalid state
 // transition", and the stubs' "Cancelled". Interrupt and abort class names count too.
 const CANCEL_LIKE = /\bcancell?ed\b|\binvalid state\b|\binterrupt(?:ed)?\b/i;
 const ABORT_LIKE = /\bPK_ERROR_aborted\b|\babort(?:ed)?\b/i;
 
+// Order matters: an abort or a cancel (by error class, then by text) is decided FIRST, so a CancelError or AbortError whose
+// message happens to be the no-effect phrase is still a cancel or an abort.
 export function pickErrorKind(text: string | null, name: string | null): PickErrorKind {
   if (text === null || text === "") return name ? "other" : "none";
+  if (/^Abort/.test(name ?? "") || ABORT_LIKE.test(text)) return "abort";
+  if (/^(Cancel|Interrupt)/.test(name ?? "") || CANCEL_LIKE.test(text)) return "cancel";
   if (NO_EFFECT.test(text)) return "no-effect";
-  if (ABORT_LIKE.test(text) || /^Abort/.test(name ?? "")) return "abort";
-  if (CANCEL_LIKE.test(text) || /^(Cancel|Interrupt)/.test(name ?? "")) return "cancel";
   return "other";
 }
 
@@ -99,12 +108,15 @@ export const PICK_OUTCOME_TABLE: readonly Row[] = Object.freeze([
   { when: (f) => !f.finishCalled, kind: "rejected-unchanged", reason: "failed" },
   // finish() called, one Undo step after the settle window.
   { when: (f) => delta(f) === 1 && f.geometry === "pass", kind: "committed-verified", reason: "verified" },
+  { when: (f) => delta(f) === 1 && f.geometry === "ambiguous", kind: "committed-verified", reason: "verified-ambiguous" },
   { when: (f) => delta(f) === 1 && f.geometry === null, kind: "undetermined", reason: "readback-missing" },
   { when: (f, e) => delta(f) === 1 && f.geometry === "fail" && f.settle === "resolved" && e === "none" && f.foreignActive === null && f.cancel === "not-needed", kind: "committed-mismatch", reason: "mismatch" },
   { when: (f) => delta(f) === 1, kind: "undetermined", reason: "mismatch-unclean" },
   { when: (f) => delta(f) !== 0, kind: "undetermined", reason: "too-many-steps" },
   // finish() called, no Undo step after the settle window.
   { when: (f) => f.bodyChanged !== false, kind: "undetermined", reason: "body-changed-no-step" },
+  // Our execute() resolved and a later exec() rejection carried the phrase: that is a chained command's rejection, not ours.
+  { when: (f) => f.chainedRejection === true, kind: "undetermined", reason: "chained-rejection" },
   { when: (f, e) => f.settle === "rejected" && e === "no-effect" && f.foreignActive === null && f.cancel === "not-needed", kind: "rejected-unchanged", reason: "no-effect" },
   { when: (f, e) => f.settle === "rejected" && e === "no-effect", kind: "undetermined", reason: "no-effect-unclean" },
   { when: (f) => f.settle === "resolved" && f.errorText === null, kind: "undetermined", reason: "no-commit" },
