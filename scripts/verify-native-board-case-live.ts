@@ -1,9 +1,14 @@
 #!/usr/bin/env node
-// Live acceptance for plasticity_create_board_case. Builds three cases on an isolated Plasticity and checks every
+// Live acceptance for plasticity_create_board_case. Builds the board cases on an isolated Plasticity and checks every
 // `derived` field against INDEPENDENT reads (find_faces / find_edges with limit 1000, validate_bodies,
-// check_interference, parallel planar face clearance; never describe_body). After each case one batched undo of the
-// measured undoSteps must restore the document. A forced native failure (a corner fillet that cannot be built) must
-// undo itself. The script refuses to run without PLASTICITY_CDP_URL on 127.0.0.1 and restores the baseline in finally.
+// check_interference, parallel planar face clearance; never describe_body), including the read-back the recipe itself
+// reports (base bounds = outerMm, lid bounds = lidMm, closed and valid, no edge under 0.05 mm). Each case with a board
+// stand-in also lifts the board straight up in 3 mm steps until it clears the wall top and checks base-board interference
+// at every step: derived.assembly.boardDropIn must equal "no interference at any step". After each case one batched undo
+// of the measured undoSteps must restore the document. The "rejects" case sends the reviewer's bad inputs, each of which
+// must be refused with the Undo depth, the body count and the revision unchanged. The "failure" case passes the plan and
+// fails natively (see caseArguments) and must undo itself. The script refuses to run without PLASTICITY_CDP_URL on
+// 127.0.0.1 and restores the baseline in finally.
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -22,7 +27,7 @@ type Bounds = { min: V3; max: V3 };
 type Face = { id: string; bodyId: number; surfaceType: string; planar: boolean; normal: V3; radiusMm: number | null; axisOriginMm: V3 | null; axisDirection: V3 | null; boundsMm: Bounds; centerMm: V3; coneSemiAngleRad?: number };
 type Edge = { id: string; bodyId: number; curveType: string; circle: boolean; boundsMm: Bounds; centerMm: V3; circleGeometry?: { centerMm: V3; radiusMm: number; normal: V3 } };
 
-export const BOARD_CASES = ["benchmark", "benchmark-hanging", "benchmark-floor", "audit", "pod", "failure"] as const;
+export const BOARD_CASES = ["benchmark", "benchmark-tapered", "benchmark-hanging", "audit", "pod", "lip-notch", "rejects", "failure"] as const;
 type CaseName = typeof BOARD_CASES[number];
 
 interface Options { help: boolean; target?: string; output?: string; allowDisposableMutations: boolean; cases: CaseName[] }
@@ -55,19 +60,23 @@ export function parseBoardCaseAcceptanceArgs(argv: string[]): Options {
 const HELP = `Usage:
   PLASTICITY_CDP_URL=http://127.0.0.1:<port> node scripts/verify-native-board-case-live.ts --target ID --allow-disposable-mutations --output NEW_DIRECTORY [--case ${BOARD_CASES.join(",")}]
 
-Builds the board cases at x >= 2000 mm (the benchmark board in all three lid-boss styles: tapered by default, hanging, floor; the audit enclosure; the pod), verifies every derived field with independent reads, undoes each case with
-one batched undo of the measured undoSteps, forces one native failure and checks that it undid itself. The document's
-Undo depth and body count are restored. Run only against an isolated instance (npm run start:plasticity-isolated).`;
+Builds the board cases at x >= 2000 mm (the benchmark board in all three lid-boss styles: floor by default, tapered and
+hanging with allowBlockedBoard; the audit enclosure; the pod; the reviewer's square-corner case with box lip notches), verifies every derived field and the read-back with
+independent reads, lifts each board stand-in out of its base in 3 mm steps (boardDropIn), undoes each case with one
+batched undo of the measured undoSteps, sends the reviewer's bad inputs (each refused with nothing changed), and forces
+one native failure that must undo itself. The document's Undo depth and body count are restored. Run only against an
+isolated instance (npm run start:plasticity-isolated).`;
 
 // ------------------------------------------------------------------------------------------------- the three cases
 const HOLES_BENCHMARK = [[2.6, 2.6], [48.9, 2.6], [2.6, 25.7], [48.9, 25.7]].map(([xMm, yMm]) => ({ xMm, yMm, diameterMm: 3 }));
 export function caseArguments(name: CaseName): Record<string, unknown> {
-  if (name === "benchmark" || name === "benchmark-hanging" || name === "benchmark-floor") {
+  if (name === "benchmark" || name === "benchmark-tapered" || name === "benchmark-hanging") {
     // The multi-part benchmark's board: 51.5 x 28.3 x 1.6, four Ø3 holes, 8 mm parts, 4 mm standoffs with Ø2.5 pilots,
     // a 9.2 x 3.4 r1.2 opening centred on the x- wall 1.6 mm above the board top, four M3 countersunk lid screws into
-    // Ø2.5 pilots, a five-slot lid vent, board stand-in. "benchmark" leaves bossStyle out (the default, tapered);
-    // the two others name it.
-    const bossStyle = name === "benchmark-hanging" ? { bossStyle: "hanging" } : name === "benchmark-floor" ? { bossStyle: "floor" } : {};
+    // Ø2.5 pilots, a five-slot lid vent, board stand-in. "benchmark" leaves bossStyle out (the default, floor: the x-
+    // opening sends the cavity growth to y); the two hung styles name it and pass allowBlockedBoard (their bosses overhang
+    // the board corners, so boardDropIn is false).
+    const bossStyle = name === "benchmark-hanging" ? { bossStyle: "hanging", allowBlockedBoard: true } : name === "benchmark-tapered" ? { bossStyle: "tapered", allowBlockedBoard: true } : {};
     return {
       originMm: [2000, 0, 0],
       board: { lengthMm: 51.5, widthMm: 28.3, holes: HOLES_BENCHMARK, componentHeightMm: 8 },
@@ -76,12 +85,13 @@ export function caseArguments(name: CaseName): Record<string, unknown> {
       openings: [{ wall: "x-", shape: "rounded-rect", widthMm: 9.2, heightMm: 3.4, cornerRadiusMm: 1.2, alongMm: 14.15, aboveBoardMm: 1.6, label: "usb" }],
       vents: { on: "lid", slots: 5, slotWidthMm: 2, slotLengthMm: 12, pitchMm: 4 },
       boardStandIn: true,
-      name: name === "benchmark" ? "esp" : name === "benchmark-hanging" ? "esp-hanging" : "esp-floor",
+      name: name === "benchmark" ? "esp" : name === "benchmark-hanging" ? "esp-hanging" : "esp-tapered",
     };
   }
   if (name === "audit") {
-    // The audit enclosure equivalent: cavity 76 x 46 gives an 80 x 50 outer with 2 mm walls, 25 mm tall base; heat-set
-    // inserts in the standoffs (M2.5 x 4) and in the lid bosses (M3 x 3); a 12 x 6 r2 opening on the y- wall.
+    // The audit enclosure equivalent: a 75 x 45 board, heat-set inserts in the standoffs (M2.5 x 4) and in the Ø8 lid
+    // bosses (M3 x 3), a 12 x 6 r2 opening on the y- wall. Default (floor) bosses: the y- opening sends the 15 mm cavity
+    // growth to x, so the cavity is 91 x 46 and the outer 95 x 50.
     return {
       originMm: [2100, 0, 0],
       board: { lengthMm: 75, widthMm: 45, holes: [[4, 4], [71, 4], [4, 41], [71, 41]].map(([xMm, yMm]) => ({ xMm, yMm, diameterMm: 2.7 })), componentHeightMm: 10.4 },
@@ -92,8 +102,21 @@ export function caseArguments(name: CaseName): Record<string, unknown> {
       name: "audit",
     };
   }
+  if (name === "lip-notch") {
+    // The reviewer's P5 without the lift: square outer corners and Ø6 hanging bosses, where a round lip notch would leave
+    // a 0.075 mm lip sliver at each corner; the plan uses box notches instead, and the read-back must find no edge under
+    // 0.05 mm. The bosses overhang the board corners (allowBlockedBoard; boardDropIn false).
+    return {
+      originMm: [2300, 0, 0],
+      board: { lengthMm: 60, widthMm: 40, componentHeightMm: 8 },
+      walls: { outerCornerRadiusMm: 0 },
+      lid: { fasteners: { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 6, bossStyle: "hanging", allowBlockedBoard: true } },
+      boardStandIn: true,
+      name: "notch",
+    };
+  }
   // A small sensor pod: 17.8 x 15.2 x 1.6 board, no holes (friction fit, 0.15 mm clearance), a 10 x 4 notch on the x+
-  // wall, lid without screws. (The failure case reuses it with an outer corner radius the fillet cannot build.)
+  // wall, lid without screws. (The failure case reuses it with a board stand-in too thin to build.)
   const pod = {
     originMm: [2200, 0, 0],
     board: { lengthMm: 17.8, widthMm: 15.2, componentHeightMm: 3 },
@@ -101,12 +124,38 @@ export function caseArguments(name: CaseName): Record<string, unknown> {
     boardStandIn: true,
   };
   if (name === "failure") {
-    // Passes validation (every dimension positive) but the 1e-6 mm board stand-in is below the kernel's resolution, so
-    // its native box fails late in the build, after the base and the lid exist.
+    // The plan has no lower limit on board.thicknessMm, so a 1e-6 mm board passes it. The base and the lid are built
+    // (12 native steps), then Plasticity's box command refuses the 1e-6 mm stand-in ("invalid height", seen live on
+    // 2026-11-16), the call fails in stage "board-stand-in" and the recipe undoes all 12 steps. Were a build to accept the
+    // box, the read-back's 0.05 mm shortest-edge rule would fail it instead (stage "read-back"); the checks accept either
+    // stage and require the full undo back to the baseline.
     return { ...pod, board: { ...pod.board, thicknessMm: 0.000001 }, name: "fail" };
   }
   return { ...pod, openings: [{ wall: "x+", shape: "rect", widthMm: 10, heightMm: 4, alongMm: 7.6, aboveBoardMm: -0.5, label: "notch" }], name: "pod" };
 }
+
+// The reviewer's bad inputs (60 x 40 board, 8 mm parts unless stated); every one must be refused before any edit.
+const reviewBoard = (extra: Record<string, unknown> = {}) => ({ lengthMm: 60, widthMm: 40, componentHeightMm: 8, ...extra });
+const reviewLid = (extra: Record<string, unknown> = {}) => ({ fasteners: { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 6, ...extra } });
+export const REVIEW_REJECTS: Array<[string, Record<string, unknown>, RegExp]> = [
+  ["2a corner wall: wall 0.8, clearance 0.2", { board: reviewBoard(), walls: { wallMm: 0.8 }, fit: { boardClearanceMm: 0.2 } }, /the corner wall is 0\.122 mm/],
+  ["2b corner wall: wall 0.8", { board: reviewBoard(), walls: { wallMm: 0.8 } }, /the corner wall is 0\.546 mm/],
+  ["2c corner wall: outer radius 6", { board: reviewBoard(), walls: { outerCornerRadiusMm: 6 } }, /the corner wall is 1 mm/],
+  ["2d corner wall: outer radius 9, hanging", { board: reviewBoard(), walls: { outerCornerRadiusMm: 9 }, lid: reviewLid({ bossStyle: "hanging" }) }, /the corner wall is -0\.242 mm/],
+  ["2d corner wall: outer radius 12, floor", { board: reviewBoard(), walls: { outerCornerRadiusMm: 12 }, lid: reviewLid({ bossStyle: "floor" }) }, /the corner wall is -1\.485 mm/],
+  ["defect 1: hole at x 1.6 with 0.8 walls", { board: reviewBoard({ holes: [{ xMm: 1.6, yMm: 20, diameterMm: 3 }] }), walls: { wallMm: 0.8, outerCornerRadiusMm: 0 }, standoffs: { fastener: { screw: "M3", mode: "pilot", pilotDiameterMm: 2.5 } } }, /standoff 0 .* reaches 0\.9 mm into the wall/],
+  ["defect 1: standoff Ø30, holes 4 mm from the edges", { board: reviewBoard({ holes: [{ xMm: 4, yMm: 4, diameterMm: 3 }, { xMm: 50, yMm: 30, diameterMm: 3 }] }), standoffs: { outerDiameterMm: 30, fastener: { screw: "M3", mode: "pilot", pilotDiameterMm: 2.5 } } }, /standoff 0 .* reaches 10\.5 mm into the wall/],
+  ["defect 3: standoff Ø5 under a Ø6 hole", { board: reviewBoard({ holes: [{ xMm: 10, yMm: 10, diameterMm: 6 }, { xMm: 50, yMm: 30, diameterMm: 6 }] }), standoffs: { outerDiameterMm: 5, fastener: { screw: "M3", mode: "pilot", pilotDiameterMm: 2.5 } }, boardStandIn: true }, /outer diameter 5 must exceed the Ø6 board hole above it by at least 1 mm/],
+  ["A: tapered bosses over the board corners (no allowBlockedBoard)", { board: reviewBoard(), lid: { lipDepthMm: 6.5, ...reviewLid({ bossStyle: "tapered" }) }, boardStandIn: true }, /hang over the board corners.*bossStyle "floor"/],
+  ["defect 6: vent pitch = width + 1e-8", { board: reviewBoard(), vents: { on: "lid", slots: 3, slotWidthMm: 2, slotLengthMm: 10, pitchMm: 2 + 1e-8 } }, /vents\.pitchMm .* by at least 0\.4 mm/],
+  ["defect 6: board hole Ø1e-7", { board: reviewBoard({ holes: [{ xMm: 5, yMm: 5, diameterMm: 1e-7 }] }), boardStandIn: true }, /below the 0\.5 mm minimum hole diameter/],
+  ["defect 6: lip wall 1e-7", { board: reviewBoard(), lid: { lipWallMm: 1e-7 } }, /below the 0\.4 mm minimum lip wall/],
+  ["defect 6: two touching wall openings", { board: reviewBoard(), openings: [{ wall: "x-", shape: "rect", widthMm: 5, heightMm: 3, alongMm: 10, aboveBoardMm: 1 }, { wall: "x-", shape: "rect", widthMm: 5, heightMm: 3, alongMm: 15, aboveBoardMm: 1 }] }, /leave a 0 mm web between them/],
+  ["defect 6: a 1e6 mm board", { board: reviewBoard({ lengthMm: 1e6, widthMm: 1e6 }) }, /exceeds the 500 mm board size limit/],
+  ["defect 6: 1e7 mm parts", { board: reviewBoard({ componentHeightMm: 1e7 }) }, /exceeds the 200 mm height limit/],
+  ["D: Ø5 bosses in 1.2 mm walls", { board: reviewBoard(), walls: { wallMm: 1.2, outerCornerRadiusMm: 1 }, lid: reviewLid({ bossStyle: "hanging", bossDiameterMm: 5 }) }, /lid boss 0 \(Ø5\) is 0\.7 mm from the outer surface/],
+  ["B: openings on x and y walls with floor bosses (reviewer case C)", { board: { lengthMm: 120, widthMm: 30, holes: [{ xMm: 5, yMm: 6, diameterMm: 3.2 }, { xMm: 112, yMm: 6, diameterMm: 3.2 }, { xMm: 70, yMm: 25, diameterMm: 3.2 }], componentHeightMm: 2 }, standoffs: { fastener: { screw: "M3", mode: "through" } }, lid: { fasteners: { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 5, bossStyle: "floor" } }, openings: [{ wall: "x-", shape: "rounded-rect", widthMm: 9, heightMm: 1.2, cornerRadiusMm: 0.4, alongMm: 15, aboveBoardMm: 0.2, label: "usb" }], vents: { on: "y+", slots: 5, slotWidthMm: 1, slotLengthMm: 2.4, pitchMm: 3, centerAlongMm: 30 } }, /pass lid\.fasteners\.growAxis "x" or "y"/],
+];
 
 // --------------------------------------------------------------------------------------------------------- checks
 type Check = { field: string; check: string; ok: boolean; expected?: unknown; actual?: unknown };
@@ -175,12 +224,29 @@ async function verifyCase(client: Client, args: Record<string, unknown>, result:
 
   // Solids and validity.
   const validation = await call(client, "plasticity_validate_bodies", { ids, revision });
-  checks.add("bodies", "base, lid (and board) are native-valid printable Solids", validation.bodies.length === ids.length && validation.bodies.every((body: any) => body.nativeValid && body.printableSolid), ids, validation.bodies.map((body: any) => ({ id: body.id, nativeValid: body.nativeValid, printableSolid: body.printableSolid })));
+  checks.add("bodies", "base, lid (and board) are closed, native-valid printable Solids", validation.bodies.length === ids.length && validation.bodies.every((body: any) => body.closed && body.nativeValid && body.printableSolid), ids, validation.bodies.map((body: any) => ({ id: body.id, closed: body.closed, nativeValid: body.nativeValid, printableSolid: body.printableSolid })));
+  // Read-back, independently: no edge shorter than 0.05 mm on any body; the lid's face bounds are derived.lidMm; the
+  // recipe's own readBack says the same.
+  const shortest: Record<string, number> = {};
+  for (const id of ids) {
+    const edges = (await call(client, "plasticity_find_edges", { revision, query: { bodyIds: [id] }, limit: 1000 })).matches as Array<{ lengthMm: number }>;
+    shortest[String(id)] = Math.min(...edges.map((edge) => edge.lengthMm));
+  }
+  checks.add("readBack", "no edge shorter than 0.05 mm on base, lid or board (find_edges)", Object.values(shortest).every((length) => length >= 0.05), 0.05, shortest);
+  checks.boundsNear("lidMm", "union of the lid's face bounds", union(lidFaces.map((face) => face.boundsMm)), derived.lidMm);
+  const readBack = result.readBack;
+  checks.add("readBack", "the recipe's readBack: bodies closed and valid, shortest edge at least 0.05 mm", !!readBack && readBack.bodies.length === ids.length && readBack.bodies.every((body: any) => body.closed && body.nativeValid) && readBack.minEdgeMm >= 0.05 && Math.abs(readBack.minEdgeMm - Math.min(...Object.values(shortest))) <= TOL, Math.min(...Object.values(shortest)), readBack);
+  checks.boundsNear("readBack", "readBack.baseBoundsMm = derived.outerMm", readBack?.baseBoundsMm, derived.outerMm);
+  checks.boundsNear("readBack", "readBack.lidBoundsMm = derived.lidMm", readBack?.lidBoundsMm, derived.lidMm);
+  if (boardId !== undefined) checks.boundsNear("readBack", "readBack.boardBoundsMm = derived.boardMm", readBack?.boardBoundsMm, derived.boardMm);
+  checks.add("plannedUndoSteps", "derived.plannedUndoSteps = undoSteps", derived.plannedUndoSteps === result.undoSteps, derived.plannedUndoSteps, result.undoSteps);
+  const boxNotches = result.steps.filter((step: { operation: string }) => step.operation === "create-lip-corner-notch-cutter").length;
+  if (boxNotches > 0) checks.add("lid", "box lip notches (the round notch would leave a lip piece under 1 mm): four, and no lid edge under 0.05 mm", boxNotches === 4 && shortest[String(lidId)]! >= 0.05, 4, { boxNotches, lidShortestEdgeMm: shortest[String(lidId)] });
 
   // outerMm: bounds of every base face; the four outer corners keep the outer radius.
   checks.boundsNear("outerMm", "union of the base's face bounds", union(baseFaces.map((face) => face.boundsMm)), derived.outerMm);
   const outerRadius = (args.walls as { outerCornerRadiusMm?: number } | undefined)?.outerCornerRadiusMm ?? 3;
-  checks.add("outerMm", `four outer corner cylinders r${outerRadius} on the base`, cylinders(baseFaces, outerRadius).filter((face) => near(face.boundsMm.min[2], derived.outerMm.min[2]) && near(face.boundsMm.max[2], derived.outerMm.max[2])).length === 4);
+  checks.add("outerMm", outerRadius > 0 ? `four outer corner cylinders r${outerRadius} on the base` : "square outer corners: no corner cylinder spans the base height", (outerRadius > 0 ? cylinders(baseFaces, outerRadius) : baseFaces.filter((face) => /cylinder/i.test(face.surfaceType))).filter((face) => near(face.boundsMm.min[2], derived.outerMm.min[2]) && near(face.boundsMm.max[2], derived.outerMm.max[2])).length === (outerRadius > 0 ? 4 : 0));
   // cavityMm: the four flat inner walls at the cavity planes, the floor and the rim.
   const cav = derived.cavityMm as Bounds;
   const walls: Array<[string, V3, number, 0 | 1]> = [["x-", [1, 0, 0], cav.min[0], 0], ["x+", [-1, 0, 0], cav.max[0], 0], ["y-", [0, 1, 0], cav.min[1], 1], ["y+", [0, -1, 0], cav.max[1], 1]];
@@ -246,7 +312,7 @@ async function verifyCase(client: Client, args: Record<string, unknown>, result:
     const l = fasteners.lid;
     const style = derived.bossStyle as "tapered" | "hanging" | "floor";
     const overshoot = result.constants.overshootMm as number;
-    checks.add("bossStyle", `derived.bossStyle is ${style}`, style === ((args.lid as any).fasteners.bossStyle ?? "tapered"), (args.lid as any).fasteners.bossStyle ?? "tapered", style);
+    checks.add("bossStyle", `derived.bossStyle is ${style}`, style === ((args.lid as any).fasteners.bossStyle ?? "floor"), (args.lid as any).fasteners.bossStyle ?? "floor", style);
     // Inside the cavity only: the outer corner rounds can share the boss radius but run from the base bottom.
     const posts = cylinders(baseFaces, l.bossDiameterMm / 2).filter((face) => near(face.boundsMm.max[2], derived.wallTopZMm) && (style === "floor" ? near(face.boundsMm.min[2], derived.floorTopZMm) : face.boundsMm.min[2] > derived.floorTopZMm + TOL));
     checks.axesNear("lidBossAxesMm", `corner boss cylinders Ø${l.bossDiameterMm}`, uniqueAxes(posts), derived.lidBossAxesMm);
@@ -297,8 +363,14 @@ async function verifyCase(client: Client, args: Record<string, unknown>, result:
     checks.add("printability", `maxBossOverhangDeg ${printability.maxBossOverhangDeg} is ${style === "hanging" ? "90 (flat underside)" : style === "tapered" ? "45" : "0 (boss stands on the floor)"}, base floor-down`, printability.baseOrientation === "floor-down" && near(printability.maxBossOverhangDeg, { hanging: 90, tapered: 45, floor: 0 }[style], 1e-6), { hanging: 90, tapered: 45, floor: 0 }[style], printability.maxBossOverhangDeg);
   } else {
     checks.add("lidBossAxesMm", "no lid fasteners requested, none derived", derived.lidBossAxesMm.length === 0);
-    checks.add("printability", "no lid fasteners: no boss fields", derived.printability === undefined && derived.bossTaper === undefined && derived.cavityGrowthMm === undefined);
+    checks.add("printability", "no lid fasteners: no boss fields (printability without maxBossOverhangDeg)", derived.printability?.maxBossOverhangDeg === undefined && derived.bossTaper === undefined && derived.cavityGrowthMm === undefined);
   }
+
+  // printability: top face down for the lid, and every flat wall-opening ceiling over 6 mm (width - 2 x corner radius).
+  const ceilings = (derived.openings as Array<{ label: string; wall: string; shape: string; sizeMm: V2; cornerRadiusMm?: number }>)
+    .filter((opening) => opening.wall !== "lid" && opening.wall !== "floor" && opening.shape !== "circle" && opening.sizeMm[0] - 2 * (opening.cornerRadiusMm ?? 0) > 6)
+    .map((opening) => opening.label);
+  checks.add("printability", "openingCeilings lists every flat wall-opening ceiling wider than 6 mm; the lid prints top face down", derived.printability.lidPrintOrientation === "top face down" && JSON.stringify(derived.printability.openingCeilings.map((entry: { label: string }) => entry.label)) === JSON.stringify(ceilings), ceilings, derived.printability.openingCeilings);
 
   // Board stand-in: bounds, seat on the standoffs, clearance to each wall.
   if (boardId !== undefined) {
@@ -377,6 +449,38 @@ async function verifyCase(client: Client, args: Record<string, unknown>, result:
   return checks.list;
 }
 
+// Lift the board stand-in straight up in 3 mm steps until its bottom is above the wall top, checking base-board
+// interference at the start and after every step; then undo the lifts. derived.assembly.boardDropIn must equal "no
+// interference at any step" (an unsupported interference answer fails the check: it proves nothing).
+async function liftBoard(client: Client, result: any): Promise<Check[]> {
+  const derived = result.derived;
+  const { baseId, boardId } = result.bodies as { baseId: number; boardId: number };
+  const start = await call(client, "plasticity_status", {});
+  const need = derived.wallTopZMm - derived.boardMm.min[2];
+  const steps: Array<{ liftedMm: number; status: string }> = [];
+  let lifted = 0;
+  let revision = start.revision as string;
+  let moves = 0;
+  for (;;) {
+    const interference = await call(client, "plasticity_check_interference", { pairs: [{ firstBodyId: baseId, secondBodyId: boardId }], revision });
+    steps.push({ liftedMm: lifted, status: interference.pairs[0].status });
+    if (lifted > need) break;
+    await call(client, "plasticity_move", { ids: [boardId], deltaMm: [0, 0, 3], intent: "Board-case acceptance: lift the board stand-in 3 mm", revision });
+    moves += 1;
+    lifted += 3;
+    revision = (await call(client, "plasticity_status", {})).revision;
+  }
+  const now = await call(client, "plasticity_status", {});
+  if (moves > 0) await call(client, "plasticity_undo", { steps: moves, intent: "Board-case acceptance: put the board stand-in back", revision: now.revision });
+  const back = await call(client, "plasticity_status", {});
+  const clear = steps.every((step) => step.status === "no-volumetric-interference");
+  const decided = steps.every((step) => step.status === "no-volumetric-interference" || step.status === "interfere");
+  return [
+    { field: "assembly.boardDropIn", check: `lifting the board in 3 mm steps to ${r3(lifted)} mm (bottom above the wall top): boardDropIn ${derived.assembly.boardDropIn} = no interference at every step`, ok: decided && clear === derived.assembly.boardDropIn, expected: derived.assembly.boardDropIn, actual: steps },
+    { field: "assembly.boardDropIn", check: "the lifts were undone (Undo depth and bodies back to the built case)", ok: back.undoDepth === start.undoDepth && sameBodies(back, start), expected: start.undoDepth, actual: back.undoDepth },
+  ];
+}
+
 // ----------------------------------------------------------------------------------------------------------- main
 async function main(): Promise<void> {
   const options = parseBoardCaseAcceptanceArgs(process.argv.slice(2));
@@ -398,6 +502,20 @@ async function main(): Promise<void> {
     for (const name of options.cases) {
       const before = await call(client, "plasticity_status", {});
       requireCondition(before.undoDepth === baseline.undoDepth && sameBodies(before, baseline), `Document is not at the baseline before case ${name}`);
+      if (name === "rejects") {
+        const checks: Check[] = [];
+        for (const [label, input, pattern] of REVIEW_REJECTS) {
+          const status = await call(client, "plasticity_status", {});
+          const response = await client.callTool({ name: "plasticity_create_board_case", arguments: { originMm: [2600, 0, 0], name: "reject", ...input, revision: status.revision } }, undefined, LONG);
+          const reply = toolText(response);
+          const later = await call(client, "plasticity_status", {});
+          const unchanged = later.undoDepth === status.undoDepth && later.bodies.length === status.bodies.length && later.revision === status.revision;
+          checks.push({ field: "rejects", check: `refused, nothing changed: ${label}`, ok: "isError" in response && response.isError === true && pattern.test(reply) && unchanged, expected: String(pattern), actual: { reply: reply.slice(0, 300), undoDepth: later.undoDepth, bodies: later.bodies.length } });
+        }
+        cases[name] = { checks };
+        console.log(JSON.stringify({ case: name, inputs: REVIEW_REJECTS.length, passed: checks.filter((check) => check.ok).length, total: checks.length, failedChecks: checks.filter((check) => !check.ok) }));
+        continue;
+      }
       const args = caseArguments(name);
       const requestBytes = Buffer.byteLength(JSON.stringify(args));
       const startedAt = performance.now();
@@ -409,7 +527,7 @@ async function main(): Promise<void> {
         const failed = "isError" in response && response.isError === true;
         const checks: Check[] = [
           { field: "failure", check: "the call fails", ok: failed, actual: text.slice(0, 600) },
-          { field: "failure", check: "the error names the failed stage and the undo", ok: /failed in stage "[^"]+" after \d+ confirmed native steps; undid \d+ native steps; the document matches the start/.test(text), actual: text.slice(0, 400) },
+          { field: "failure", check: "the error names the failed stage (board-stand-in or read-back) and the undo", ok: /failed in stage "(board-stand-in|read-back)" after \d+ confirmed native steps; undid \d+ native steps; the document matches the start/.test(text), actual: text.slice(0, 400) },
           { field: "failure", check: "undo depth back at the baseline", ok: after.undoDepth === baseline.undoDepth, expected: baseline.undoDepth, actual: after.undoDepth },
           { field: "failure", check: "bodies back at the baseline", ok: sameBodies(after, baseline), expected: baseline.bodies.length, actual: after.bodies.length },
         ];
@@ -426,6 +544,7 @@ async function main(): Promise<void> {
       const checks = await verifyCase(client, args, result, after.revision);
       const baseFaceCount = (await call(client, "plasticity_find_faces", { revision: after.revision, query: { bodyIds: [result.bodies.baseId] }, limit: 1000 })).matches.length;
       const baseEdgeCount = (await call(client, "plasticity_find_edges", { revision: after.revision, query: { bodyIds: [result.bodies.baseId] }, limit: 1000 })).matches.length;
+      if (result.bodies.boardId !== undefined) checks.push(...await liftBoard(client, result));
       const measuredDepth = after.undoDepth - before.undoDepth;
       checks.push({ field: "undoSteps", check: "undoSteps equals the measured Undo depth change", ok: result.undoSteps === measuredDepth, expected: measuredDepth, actual: result.undoSteps });
       const expectedIds = [result.bodies.baseId, result.bodies.lidId, ...(result.bodies.boardId !== undefined ? [result.bodies.boardId] : [])].sort((a: number, b: number) => a - b);
@@ -445,7 +564,7 @@ async function main(): Promise<void> {
     const end = await call(client, "plasticity_status", {});
     evidence.end = summary(end);
     // Across styles: the tapered wall top is the hanging wall top plus the reported added height.
-    const tapered = cases["benchmark"] as any;
+    const tapered = cases["benchmark-tapered"] as any;
     const hanging = cases["benchmark-hanging"] as any;
     if (tapered?.derived?.bossTaper && hanging?.derived) {
       tapered.checks.push({ field: "bossTaper.addedHeightMm", check: "added height = tapered wall top - hanging wall top (two live builds)", ok: Math.abs(tapered.derived.bossTaper.addedHeightMm - (tapered.derived.wallTopZMm - hanging.derived.wallTopZMm)) <= TOL, expected: tapered.derived.wallTopZMm - hanging.derived.wallTopZMm, actual: tapered.derived.bossTaper.addedHeightMm });
