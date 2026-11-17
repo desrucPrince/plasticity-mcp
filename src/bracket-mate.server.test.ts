@@ -360,7 +360,7 @@ test("final review T1 through the server: a rim within 0.05 mm of the plate edge
   const kernel = boxKernel();
   const { client, close } = await connect(kernel.fake);
   const description = (await client.listTools()).tools.find((tool) => tool.name === "plasticity_transfer_holes")!.description!;
-  assert.match(description, /walls under 0\.05 mm beside the bore or under a blind floor/);
+  assert.match(description, /walls under 0\.05 mm beside a bore or counterbore \(cone and blind floor: sampled\)/);
   const call = async (toolName: string, args: Record<string, unknown>) => {
     const response = await client.callTool({ name: "plasticity_call", arguments: { toolName, arguments: { ...args, revision: kernel.state().revision } } });
     return { isError: response.isError === true, text: text(response) };
