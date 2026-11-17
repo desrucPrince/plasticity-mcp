@@ -15,6 +15,8 @@ function fixture() {
   let sections = 1;
   let version = 1;
   const mutations: Array<{ source: string; bindings: string[]; values: unknown[] }> = [];
+  // What the next native mutation returns (the renderer's own return value); {} when empty.
+  const nativeResults: unknown[] = [];
   const state = (): RuntimeState => ({
     targetId: "window-1", title: "Untitled - Plasticity", documentToken: "doc-1", revision: `r${version}`, dbVersion: version, undoDepth: 0, redoDepth: 0, regions: [],
     construction: { planes: [], activePlaneId: null, planeStateToken: "p", viewStateToken: "v" },
@@ -28,7 +30,7 @@ function fixture() {
       mutations.push({ source, bindings, values });
       if (/shading\.section = null/.test(source)) sections = 0;
       version += 1;
-      return {};
+      return nativeResults.shift() ?? {};
     },
     isUncertain() { return false; }, mutationCount() { return mutations.length; },
     async read() { return undefined; }, async readNative() { return undefined; },
@@ -43,7 +45,7 @@ function fixture() {
   const server = createCompactServer(session, undefined, undefined, undefined, history);
   const client = new Client({ name: "gaps", version: "1.0.0" });
   return {
-    mutations, state, client,
+    mutations, state, client, nativeResults,
     async open() { const [a, b] = InMemoryTransport.createLinkedPair(); await server.connect(b); await client.connect(a); },
     async call(name: string, args: Record<string, unknown>) {
       // Tools outside the compact list go through the plasticity_call router, like a client without them listed.
@@ -101,9 +103,10 @@ test("plasticity_boolean describes the multi-tool meaning and runs one native ca
     const result = await f.call("plasticity_boolean", { targetIds: [1], toolIds: [2, 3], operation: "intersection", revision: f.state().revision });
     assert.equal(result.isError, false, result.text);
     assert.equal(f.mutations.length, 1);
-    assert.deepEqual(f.mutations[0]!.bindings, ["BooleanFactory"]);
+    assert.deepEqual(f.mutations[0]!.bindings, ["BooleanFactory", "pk_default"]);
     assert.deepEqual(f.mutations[0]!.values, [{ targetIds: [1], toolIds: [2, 3], keepTools: false }]);
     assert.match(f.mutations[0]!.source, /for \(const toolId of args\.toolIds\)/);
+    assert.equal("unchangedBy" in result.json, false, "no unchangedBy when every tool cut the target");
   } finally { await f.close(); }
 });
 
@@ -232,6 +235,42 @@ test("plasticity_boolean describes several targets, and two targets with two too
     assert.equal(f.mutations.length, 1);
     assert.deepEqual(f.mutations[0]!.values, [{ targetIds: [1, 4], toolIds: [2, 3], keepTools: true }]);
     assert.match(f.mutations[0]!.source, /factory\.targets = \[find\(targetId\)\]/);
+  } finally { await f.close(); }
+});
+
+test("final review B1/B2: several targets with one tool go to the per-target native call; a containing tool comes back in unchangedBy", async () => {
+  const f = fixture();
+  await f.open();
+  try {
+    const description = (await f.client.listTools()).tools.find((tool) => tool.name === "plasticity_boolean")?.description ?? "";
+    assert.match(description, /With several targets, intersection applies to each target on its own, with one tool or several/);
+    assert.match(description, /A tool that contains the target leaves it unchanged/);
+    assert.match(description, /lists that tool in unchangedBy/);
+    assert.match(description, /still consumed unless keepTools/);
+    assert.match(description, /shares no volume with the target makes the intersection empty: the call fails/);
+    // B1: two targets, one tool: the per-target source, not the kernel's several-target intersection.
+    const two = await f.call("plasticity_boolean", { targetIds: [1, 4], toolIds: [2], operation: "intersection", keepTools: true, revision: f.state().revision });
+    assert.equal(two.isError, false, two.text);
+    assert.equal(f.mutations.length, 1);
+    assert.deepEqual(f.mutations[0]!.bindings, ["BooleanFactory", "pk_default"]);
+    assert.deepEqual(f.mutations[0]!.values, [{ targetIds: [1, 4], toolIds: [2], keepTools: true }]);
+    assert.match(f.mutations[0]!.source, /factory\.targets = \[find\(targetId\)\]/);
+    assert.match(f.mutations[0]!.source, /evaluator\.Collisions/);
+    // B2: the native call reports the passes that cut nothing; the reply names the tools once, and the pairs.
+    f.nativeResults.push({ unchanged: [{ targetId: 1, toolId: 5 }, { targetId: 4, toolId: 5 }] });
+    const contained = await f.call("plasticity_boolean", { targetIds: [1, 4], toolIds: [5, 2], operation: "intersection", revision: f.state().revision });
+    assert.equal(contained.isError, false, contained.text);
+    assert.deepEqual(contained.json.unchangedBy, [5]);
+    assert.deepEqual(contained.json.unchangedPairs, [{ targetId: 1, toolId: 5 }, { targetId: 4, toolId: 5 }]);
+    // Through plasticity_batch the same fields come back in the step result.
+    f.nativeResults.push({ unchanged: [{ targetId: 1, toolId: 5 }] });
+    const batch = await f.call("plasticity_batch", { steps: [{ toolName: "plasticity_boolean", arguments: { targetIds: [1], toolIds: [5], operation: "intersection", keepTools: true } }], verbose: true });
+    assert.equal(batch.isError, false, batch.text);
+    assert.match(batch.text, /"unchangedBy":\s*\[\s*5\s*\]/);
+    // Union and difference still ask for the factory alone.
+    const union = await f.call("plasticity_boolean", { targetIds: [1], toolIds: [2], operation: "union", revision: f.state().revision });
+    assert.equal(union.isError, false, union.text);
+    assert.deepEqual(f.mutations.at(-1)!.bindings, ["BooleanFactory"]);
   } finally { await f.close(); }
 });
 

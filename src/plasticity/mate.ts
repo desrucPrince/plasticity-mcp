@@ -520,10 +520,12 @@ export interface PlannedHole {
   headWallMm?: number; // the same over the head rays (countersink or counterbore)
   agree: boolean; // every bore ray meets the same faces at the same distances after the entry
   disagreement?: string; // why they do not, in words (a side wall, an oblique face, a curved face)
+  unproven?: string; // a ray that decides something carries unresolvedCrossings or grazing: the refusal, in words
+  thinWall?: string; // the clearance ring differs from the radius ring within the cut's reach: the refusal, in words
 }
 /** A per-axis refusal. code "miss" is the only one onMiss: "skip" passes over. */
 export class AxisRefusal extends Error {
-  readonly code: "miss" | "existing-hole" | "non-planar" | "between" | "rim" | "precedes" | "breakout";
+  readonly code: "miss" | "existing-hole" | "non-planar" | "between" | "rim" | "precedes" | "breakout" | "thin-wall" | "unproven";
   constructor(code: AxisRefusal["code"], message: string) { super(message); this.code = code; }
 }
 export interface TransferHolesResult {
@@ -542,6 +544,7 @@ export interface TransferHolesResult {
   skipped?: Array<{ axisIndex: number; pointMm: Vector3; axis: Vector3; reason: string }>;
   maxCoaxialOffsetMm: number;
   probe: { rays: number; calls: number; ms: number }; // the exact ray probe that planned the cut
+  floorProbe?: { rays: number; calls: number; ms: number }; // blind holes: the rays cast from each cut floor after the edit
   undoSteps: number;
   steps: MateStep[];
 }
@@ -672,29 +675,51 @@ const describeAxis = (index: number, axis: SourceAxis) => `axis ${index} (point 
 // ---------- the ray probe of one axis ----------
 //
 // Every axis is judged by exact kernel ray hits on the target (plasticity_probe_surface's operation), never by face
-// bounds. Rays run parallel to the axis: the axis itself and RIM_RAYS on the bore radius (and RIM_RAYS on the head
-// radius for a countersink or counterbore), in both directions. A selected source hole casts from its two ends (the
-// +direction rays from its upper end, the -direction rays from its lower end); an axesMm axis casts from pointMm.
+// bounds. Rays run parallel to the axis, in both directions: the axis itself, one ring on the bore radius (and one on
+// the head radius for a countersink or counterbore), and a clearance ring CLEARANCE_RING_MM outside each of those. A
+// ring has RIM_RAYS rays, or RIM_RAYS_LARGE when the widest probed diameter is above LARGE_BORE_MM. A selected source
+// hole casts from its two ends (the +direction rays from its upper end, the -direction rays from its lower end); an
+// axesMm axis casts from pointMm.
+//
+// What the rays cannot see: they are samples. A feature that lies wholly between two neighbouring rays of a ring (and
+// off the axis ray) is not met by any of them: a cross hole or slot narrower than the gap between rays, a thin rib, a
+// void corner. With 8 rays the gap is 0.77 x the radius (Ø4: 1.5 mm; Ø10: 3.8 mm); with 16 it is 0.39 x the radius. Such
+// a feature is caught only when the cut itself shows it (the read-back: a bore that is not a whole cylinder, an edge
+// shorter than MIN_FEATURE_MM, a body that is not closed and valid). A wall or membrane thinner than MIN_FEATURE_MM
+// that no ray crosses and that leaves the cut faces whole is not found.
 
-/** Rays on each probed radius. */
+/** Rays on each probed ring. */
 export const RIM_RAYS = 8;
+/** Rays on each ring when the widest probed diameter (the bore, its countersink head or counterbore) is above LARGE_BORE_MM. */
+export const RIM_RAYS_LARGE = 16;
+export const LARGE_BORE_MM = 10;
+/** The clearance ring lies this far outside the bore (and head) radius: a wall thinner than this beside the cut is refused. */
+export const CLEARANCE_RING_MM = MIN_FEATURE_MM;
 /** Two ray hits closer than this along the axis are at the same distance. */
 const RAY_AGREE_MM = 1e-5;
 
+/** Rays per ring for these probe radii. */
+export const rimRayCount = (radii: number[]): number => (2 * Math.max(...radii) > LARGE_BORE_MM ? RIM_RAYS_LARGE : RIM_RAYS);
+
 export interface AxisRayResults { plus: ProbeRayResult[]; minus: ProbeRayResult[] }
 
-/** Pure: the rays of one axis, as { plus, minus }, each [axis ray, then RIM_RAYS per radius in radii order]. */
-export function axisRays(axis: SourceAxis, radii: number[]): { plus: ProbeRay[]; minus: ProbeRay[] } {
+/**
+ * Pure: the rays of one axis, as { plus, minus }, each [axis ray, then perRing rays per radius in radii order, then perRing
+ * rays per radius + CLEARANCE_RING_MM in radii order, at the same angles].
+ */
+export function axisRays(axis: SourceAxis, radii: number[], perRing = rimRayCount(radii)): { plus: ProbeRay[]; minus: ProbeRay[] } {
   const d = unit(axis.direction, "axis");
   const u = perpendicular(d);
   const v = cross(d, u);
   const [lower, upper] = axis.endsMm ?? [axis.pointMm, axis.pointMm];
+  const ring = (origin: Vector3, direction: Vector3, radius: number): ProbeRay[] => Array.from({ length: perRing }, (_, k) => {
+    const angle = (2 * Math.PI * k) / perRing;
+    return { originMm: add(origin, add(scale(u, radius * Math.cos(angle)), scale(v, radius * Math.sin(angle)))), direction };
+  });
   const around = (origin: Vector3, direction: Vector3): ProbeRay[] => [
     { originMm: [...origin] as Vector3, direction },
-    ...radii.flatMap((radius) => Array.from({ length: RIM_RAYS }, (_, k) => {
-      const angle = (2 * Math.PI * k) / RIM_RAYS;
-      return { originMm: add(origin, add(scale(u, radius * Math.cos(angle)), scale(v, radius * Math.sin(angle)))), direction };
-    })),
+    ...radii.flatMap((radius) => ring(origin, direction, radius)),
+    ...radii.flatMap((radius) => ring(origin, direction, radius + CLEARANCE_RING_MM)),
   ];
   return { plus: around(upper, d), minus: around(lower, scale(d, -1)) };
 }
@@ -707,18 +732,57 @@ function entering(ray: ProbeRayResult, direction: Vector3): ProbeRayResult["inte
 const normalToAxis = (face: Face | undefined, direction: Vector3) => !!face && face.planar && parallelSine(face.normal, direction) <= PARALLEL_SINE;
 
 /**
+ * Why the crossings of one ray are not proven up to limitMm from its origin; undefined when they are. A probe ray is
+ * complete only without its two flags (plasticity_probe_surface):
+ *  - grazing: a face the ray passes within 0.001 mm of without a crossing there. Within the limit it is refused.
+ *  - unresolvedCrossings: crossings may be missing. One the probe cannot place (a display-mesh crossing no exact hit
+ *    explains) is refused wherever it is. The parity guard (an odd crossing count; it adds one to the count and says
+ *    "odd number of crossings" in unresolvedReason) is placed by the crossings themselves: they are proven up to the
+ *    limit when they alternate, into the material and out of it, through the first crossing past the limit. A
+ *    crossing missing or counted twice before that breaks the alternation. Any other unresolvedReason is refused: only
+ *    the parity text is known to mean "one, and it can be placed".
+ */
+// The whole reason of the probe's parity guard (surfacing.ts) and nothing else: a second reason joined to it is not parity alone.
+const PARITY_REASON = /^odd number of crossings \(\d+\) on a closed Solid from an outside origin: at least one crossing is missing or a tangent touch was counted$/;
+export function unprovenRay(ray: ProbeRayResult, direction: Vector3, limitMm: number): string | undefined {
+  for (const graze of ray.grazing ?? []) {
+    const along = dot(sub(graze.atMm, ray.originMm), direction);
+    if (along <= limitMm + RAY_AGREE_MM) return `it passes ${graze.minDistanceMm} mm from face ${graze.faceId} without a crossing (a grazing or tangent touch ${round6([along, 0, 0])[0]} mm along the ray)`;
+  }
+  const unresolved = ray.unresolvedCrossings ?? 0;
+  if (unresolved === 0) return undefined;
+  const parity = ray.unresolvedReason !== undefined && PARITY_REASON.test(ray.unresolvedReason) ? 1 : 0;
+  if (ray.unresolvedReason !== undefined && parity === 0) return `its crossings could not be resolved (${ray.unresolvedReason})`;
+  if (unresolved > parity) return `${unresolved - parity} of its crossings could not be resolved (the probe cannot say where)`;
+  let inside = false;
+  for (const hit of entering(ray, direction)) {
+    const into = dot(hit.normal, direction) < 0;
+    if (into === inside) return `it has an odd number of crossings and they do not alternate at ${round6([hit.distanceMm, 0, 0])[0]} mm (face ${hit.faceId}): a crossing is missing or a tangent touch was counted`;
+    inside = into;
+    if (hit.distanceMm > limitMm + RAY_AGREE_MM) return undefined;
+  }
+  return inside ? "it has an odd number of crossings and ends inside the material: a crossing is missing" : undefined;
+}
+
+/**
  * Pure: the entry of one axis into the target from its ray hits. The side with hits is the drill direction (hits on
  * both sides: the reference lies between target faces; none: a miss). The entry is the first hit of the axis ray: a
  * planar face normal to the axis facing the source, and every rim ray must meet that face at the same distance first.
  */
-export function planEntry(target: Body, axis: SourceAxis, index: number, radii: number[], probed: AxisRayResults, reachMm = Number.POSITIVE_INFINITY): PlannedHole {
+export function planEntry(target: Body, axis: SourceAxis, index: number, radii: number[], probed: AxisRayResults, reachMm = Number.POSITIVE_INFINITY, headReachMm = Number.POSITIVE_INFINITY): PlannedHole {
   if (!target.boundsMm) throw new Error(`Target body ${target.id} has no bounds`);
   const d = unit(axis.direction, "axis");
   const label = describeAxis(index, axis);
   const faceById = new Map(target.faces.map((face) => [face.id, face]));
   const edgeById = new Map(target.edges.map((edge) => [edge.id, edge]));
-  const hitsPlus = probed.plus.map((ray) => entering(ray, d));
-  const hitsMinus = probed.minus.map((ray) => entering(ray, scale(d, -1)));
+  // The ray layout of axisRays: the axis, one ring per radius, then one clearance ring per radius. Only the axis and
+  // the radius rings (the first innerCount rays) find the side, the entry, the rim and the wall, exactly as before the
+  // clearance rings existed; the clearance rings serve the two guards after the entry.
+  const perRing = (probed.plus.length - 1) / (2 * radii.length);
+  if (!Number.isInteger(perRing) || perRing < 1 || probed.minus.length !== probed.plus.length) throw new Error(`planEntry needs 1 + 2 x ${radii.length} x n rays on each side (the layout of axisRays), got ${probed.plus.length} and ${probed.minus.length}`);
+  const innerCount = 1 + radii.length * perRing;
+  const hitsPlus = probed.plus.slice(0, innerCount).map((ray) => entering(ray, d));
+  const hitsMinus = probed.minus.slice(0, innerCount).map((ray) => entering(ray, scale(d, -1)));
   const anyPlus = hitsPlus.some((hits) => hits.length > 0);
   const anyMinus = hitsMinus.some((hits) => hits.length > 0);
   // Coaxial inward cylinders and cones of the target (bores, countersinks, a recess wall) and where they lie on the axis.
@@ -747,13 +811,32 @@ export function planEntry(target: Body, axis: SourceAxis, index: number, radii: 
   if (anyPlus && anyMinus && pick === undefined) {
     throw new AxisRefusal("between", `${label}: the reference point lies between target faces (the target is on both sides of it along the axis${axis.endsMm ? ", past both ends of the source hole" : ""}); give axesMm with a point outside the target on the entry side`);
   }
+  // Where a ray is, in words, for the two guards below.
+  const rayName = (k: number) => {
+    if (k === 0) return "the axis ray";
+    const ring = Math.floor((k - 1) / perRing);
+    const radius = radii[ring % radii.length]! + (ring >= radii.length ? CLEARANCE_RING_MM : 0);
+    return `the ray at radius ${round6([radius, 0, 0])[0]} mm, ${round6([(360 * ((k - 1) % perRing)) / perRing, 0, 0])[0]} degrees${ring >= radii.length ? ` (${CLEARANCE_RING_MM} mm outside the ${ring % radii.length === 0 ? "bore" : "head"})` : ""}`;
+  };
+  const unproven = (rays: ProbeRayResult[], direction: Vector3, limitOf: (k: number) => number): string | undefined => {
+    for (const [k, ray] of rays.entries()) {
+      const reason = unprovenRay(ray, direction, limitOf(k));
+      if (reason) return `${label}: the entry could not be proven: ${rayName(k)} is not complete: ${reason}; the cut is refused before the edit`;
+    }
+    return undefined;
+  };
   if (!anyPlus && !anyMinus) {
     existing(d, axis.pointMm, undefined);
+    // No crossing on any ray is a miss only when every ray is complete.
+    const incomplete = unproven(probed.plus, d, () => Number.POSITIVE_INFINITY) ?? unproven(probed.minus, scale(d, -1), () => Number.POSITIVE_INFINITY);
+    if (incomplete) throw new AxisRefusal("unproven", incomplete);
     throw new AxisRefusal("miss", `${label} misses the target body ${target.id} (no face of it lies on the axis)`);
   }
   const sign = pick ?? (anyPlus ? 1 : -1);
   const direction = clean(scale(d, sign));
-  const rays = sign > 0 ? probed.plus : probed.minus;
+  const allRays = sign > 0 ? probed.plus : probed.minus;
+  const otherRays = sign > 0 ? probed.minus : probed.plus;
+  const rays = allRays.slice(0, innerCount);
   const hits = sign > 0 ? hitsPlus : hitsMinus;
   const origin = rays[0]!.originMm;
   const firsts = hits.map((list) => list[0]);
@@ -780,8 +863,8 @@ export function planEntry(target: Body, axis: SourceAxis, index: number, radii: 
   if (exact && exact.boundaryDistanceMm < rimRadius + 1e-3) throw new AxisRefusal("rim", `${label}: the hole rim (radius ${rimRadius} mm) does not fit inside the entry face ${entryFace!.id} (${exact.boundaryDistanceMm.toFixed(4)} mm to its edge)`);
   // Every rim ray meets the entry plane first, on a planar face normal to the axis.
   for (const [k, hit] of rimFirsts.entries()) {
-    const radius = radii[Math.floor(k / RIM_RAYS)]!;
-    const angle = (360 * (k % RIM_RAYS)) / RIM_RAYS;
+    const radius = radii[Math.floor(k / perRing)]!;
+    const angle = (360 * (k % perRing)) / perRing;
     const at = `the rim ray at radius ${radius} mm, ${angle} degrees`;
     if (!hit) throw new AxisRefusal("rim", `${label}: the rim runs over an edge of the entry face ${entryFace!.id}: ${at} finds no material`);
     if (hit.distanceMm < first.distanceMm - RAY_AGREE_MM) {
@@ -791,9 +874,32 @@ export function planEntry(target: Body, axis: SourceAxis, index: number, radii: 
       throw new AxisRefusal("rim", `${label}: the rim runs over an edge of the entry face ${entryFace!.id}: ${at} first meets face ${hit.faceId} (${faceById.get(hit.faceId)?.surfaceType ?? "face"}) ${round6([hit.distanceMm - first.distanceMm, 0, 0])[0]} mm past the entry plane`);
     }
   }
+  // Guard: every ray must be complete where it decides something. On the drill side: as far as the cut reaches (the
+  // whole ray for a through bore, the depth plus MIN_FEATURE_MM for a blind hole or a head). On the other side: up to
+  // the entry distance, so that no target material nearer than the entry is missed there.
+  // planTransfer refuses it after its other checks, so a breakout or a depth error keeps its own message.
+  const reachOf = (k: number) => (k === 0 || Math.floor((k - 1) / perRing) % radii.length === 0 ? reachMm : headReachMm);
+  const limitOf = (k: number) => first.distanceMm + reachOf(k) + MIN_FEATURE_MM;
+  const incomplete = unproven(allRays, direction, limitOf) ?? unproven(otherRays, scale(direction, -1), () => first.distanceMm);
+  // Guard: the clearance ring. Each ray CLEARANCE_RING_MM outside the bore (or head) radius must meet the same
+  // crossings, at the same distances, as the ray at the same angle on that radius, as far as the cut reaches. A
+  // difference is a wall, a void or a step within CLEARANCE_RING_MM of the cut surface. planTransfer refuses it last.
+  let thinWall: string | undefined;
+  const allHits = allRays.map((ray) => entering(ray, direction));
+  for (let k = innerCount; k < allRays.length; k += 1) {
+    const limit = limitOf(k) + RAY_AGREE_MM;
+    const outer = allHits[k]!.filter((hit) => hit.distanceMm <= limit);
+    const inner = allHits[k - radii.length * perRing]!.filter((hit) => hit.distanceMm <= limit);
+    const at = Array.from({ length: Math.max(outer.length, inner.length) }, (_, i) => i).find((i) => !outer[i] || !inner[i] || Math.abs(outer[i]!.distanceMm - inner[i]!.distanceMm) > RAY_AGREE_MM);
+    if (at === undefined) continue;
+    const say = (hit: ProbeRayResult["intersections"][number] | undefined) => (hit ? `face ${hit.faceId} (${faceById.get(hit.faceId)?.surfaceType ?? "face"}) ${round6([hit.distanceMm - first.distanceMm, 0, 0])[0]} mm from the entry plane` : "no further face");
+    const what = Math.floor((k - innerCount) / perRing) === 0 ? "bore" : "head";
+    thinWall = `${label}: the hole leaves a wall thinner than ${CLEARANCE_RING_MM} mm beside the ${what === "bore" ? "bore" : "bore's head"}: ${rayName(k)} meets ${say(outer[at])} where the ray on the ${what} radius meets ${say(inner[at])}, so a wall, a void or a step lies within ${CLEARANCE_RING_MM} mm of the cut surface; the cut is refused before the edit`;
+    break;
+  }
   // The local wall: from the entry to the next crossing, the least over the rays. Bore rays: the axis and the first
-  // RIM_RAYS; head rays: the rest.
-  const boreCount = 1 + RIM_RAYS;
+  // perRing; head rays: the rest.
+  const boreCount = 1 + perRing;
   const wallOf = (list: ProbeRayResult["intersections"]) => (list.length >= 2 ? list[1]!.distanceMm - list[0]!.distanceMm : undefined);
   const resolved = (from: number, to: number) => rays.slice(from, to).every((ray, k) => !ray.unresolvedCrossings && hits[from + k]!.length % 2 === 0);
   const least = (from: number, to: number) => {
@@ -828,6 +934,8 @@ export function planEntry(target: Body, axis: SourceAxis, index: number, radii: 
     ...(headWallMm !== undefined ? { headWallMm } : {}),
     agree: disagreement === undefined,
     ...(disagreement ? { disagreement } : {}),
+    ...(incomplete ? { unproven: incomplete } : {}),
+    ...(thinWall ? { thinWall } : {}),
   };
 }
 
@@ -903,6 +1011,8 @@ export async function planTransfer(operations: Pick<TransferOperations, "probeSu
   const { source, target, axes } = transferAxes(state, input);
   const radii = probeRadii(input.hole);
   const reach = Math.max(...radii);
+  // How deep the head goes: the counterbore depth, or the countersink's cone (90 degrees: as deep as it is wider).
+  const headReach = input.hole.counterbore ? input.hole.counterbore.depthMm : input.hole.countersunk ? (input.hole.countersunk.headDiameterMm - input.hole.diameterMm) / 2 : Number.POSITIVE_INFINITY;
   // An axis whose bore cannot meet the target's bounds (a conservative box) misses it; no ray is cast for it.
   const inBounds = axes.map((axis) => {
     const span = target.boundsMm ? lineBoxSpan(axis.pointMm, unit(axis.direction, "axis"), { min: target.boundsMm.min.map((value) => value - reach) as Vector3, max: target.boundsMm.max.map((value) => value + reach) as Vector3 }) : undefined;
@@ -931,7 +1041,7 @@ export async function planTransfer(operations: Pick<TransferOperations, "probeSu
       cursor += rays.plus.length;
       const minus = results.slice(cursor, cursor + rays.minus.length);
       cursor += rays.minus.length;
-      holes.push(planEntry(target, axis, index, radii, { plus, minus }, input.hole.depthMm ?? Number.POSITIVE_INFINITY));
+      holes.push(planEntry(target, axis, index, radii, { plus, minus }, input.hole.depthMm ?? Number.POSITIVE_INFINITY, headReach));
     } catch (error) {
       if (!(error instanceof AxisRefusal) || error.code !== "miss" || input.onMiss !== "skip") throw error;
       skipped.push({ axisIndex: index, pointMm: round6(axis.pointMm), axis: round6(axis.direction), reason: error.message });
@@ -952,6 +1062,8 @@ export async function planTransfer(operations: Pick<TransferOperations, "probeSu
     if (sink !== undefined && sink >= hole.farDistanceMm - 1e-6) throw new Error(`${label}: countersink depth reaches the far side of the target`);
     if (sink !== undefined && wall !== undefined && sink > wall - MIN_FEATURE_MM) throw new Error(`${label}: the ${sink} mm deep countersink reaches the far side of the wall: ${wallText}`);
     if (input.hole.through && !hole.agree) throw new AxisRefusal("breakout", `${label}: ${hole.disagreement}; a hole must be a full cylinder along its whole length, so the cut is refused before the edit`);
+    if (hole.unproven) throw new AxisRefusal("unproven", hole.unproven);
+    if (hole.thinWall) throw new AxisRefusal("thin-wall", hole.thinWall);
   }
   return { source, target, holes, skipped, probe };
 }
@@ -997,6 +1109,62 @@ function breakoutProblem(face: Face, faceById: Map<string, Face>, edgeById: Map<
   return undefined;
 }
 
+// ---------- the blind-floor rule ----------
+//
+// After a blind cut, rays run from each floor into the material behind it: one from the floor centre and one ring on
+// the rim (FLOOR_RIM_INSET_MM inside it, so no ray starts on the floor's own edge), at angles half a step off the
+// planning rings, so they are lines the plan did not sample. The next face behind the floor must be at least
+// MIN_FEATURE_MM away on every ray; otherwise the cut is rolled back.
+
+/** The floor's rim rays start this far inside the rim (or a tenth of the radius, when that is less). */
+export const FLOOR_RIM_INSET_MM = 0.01;
+
+/** Pure: the floor rays of one blind hole and how far in front of the floor they start. */
+export function floorRays(hole: PlannedHole, radiusMm: number, depthMm: number): { rays: ProbeRay[]; leadMm: number } {
+  const direction = unit(hole.direction, "hole direction");
+  const d = unit(hole.source.direction, "axis");
+  const u = perpendicular(d);
+  const v = cross(d, u);
+  const perRing = rimRayCount([radiusMm]);
+  const leadMm = Math.min(depthMm, 0.5) / 2;
+  const start = add(hole.entryPointMm, scale(direction, depthMm - leadMm));
+  const rim = radiusMm - Math.min(FLOOR_RIM_INSET_MM, radiusMm / 10);
+  return {
+    leadMm,
+    rays: [
+      { originMm: start, direction },
+      ...Array.from({ length: perRing }, (_, k) => {
+        const angle = (2 * Math.PI * (k + 0.5)) / perRing;
+        return { originMm: add(start, add(scale(u, rim * Math.cos(angle)), scale(v, rim * Math.sin(angle)))), direction };
+      }),
+    ],
+  };
+}
+
+/** Pure: the read-back problem of one blind floor from its floor rays (undefined when at least MIN_FEATURE_MM stays behind it on every ray). */
+export function floorProblem(label: string, body: Body, hole: PlannedHole, leadMm: number, results: ProbeRayResult[]): string | undefined {
+  const direction = unit(hole.direction, "hole direction");
+  const faceById = new Map(body.faces.map((face) => [face.id, face]));
+  let thinnest: { membrane: number; faceId: string; ray: number } | undefined;
+  for (const [k, ray] of results.entries()) {
+    const where = k === 0 ? "the ray from the floor centre" : `floor rim ray ${k} of ${results.length - 1}`;
+    const flagged = unprovenRay(ray, direction, leadMm + MIN_FEATURE_MM);
+    if (flagged) return `${label}: the wall behind the blind floor could not be proven: ${where} is not complete: ${flagged}`;
+    const [floor, next] = ray.intersections;
+    if (!floor || Math.abs(floor.distanceMm - leadMm) > RAY_AGREE_MM || !normalToAxis(faceById.get(floor.faceId), direction) || dot(floor.normal, direction) >= 0) {
+      return `${label}: the wall behind the blind floor could not be proven: ${where} does not meet the flat floor ${round6([leadMm, 0, 0])[0]} mm ahead (it meets ${floor ? `face ${floor.faceId} at ${round6([floor.distanceMm, 0, 0])[0]} mm` : "nothing"})`;
+    }
+    if (!next) return `${label}: the wall behind the blind floor could not be proven: ${where} finds no face behind the floor`;
+    const membrane = next.distanceMm - floor.distanceMm;
+    if (!thinnest || membrane < thinnest.membrane) thinnest = { membrane, faceId: next.faceId, ray: k };
+  }
+  if (thinnest && thinnest.membrane < MIN_FEATURE_MM - RAY_AGREE_MM) {
+    const face = faceById.get(thinnest.faceId);
+    return `${label}: the blind hole leaves a membrane thinner than ${MIN_FEATURE_MM} mm under its floor: face ${thinnest.faceId} (${face?.surfaceType ?? "face"}) lies ${round6([thinnest.membrane, 0, 0])[0]} mm behind the floor (${thinnest.ray === 0 ? "on the axis" : `on floor rim ray ${thinnest.ray}`})`;
+  }
+  return undefined;
+}
+
 /** Separate bores of one radius on one axis: cylinder faces merged where their axial extents meet. */
 function countBores(faces: Face[], edgeById: Map<string, Edge>, direction: Vector3): number {
   const spans = faces.map((face) => {
@@ -1021,6 +1189,7 @@ export async function transferHoles(operations: TransferOperations, input: Trans
   const groups = new Map<string, PlannedHole[]>();
   for (const hole of plan.holes) groups.set(groupKey(hole), [...(groups.get(groupKey(hole)) ?? []), hole]);
 
+  let floorProbe: TransferHolesResult["floorProbe"];
   const done = await runGuarded(operations, "transfer_holes", initial, async () => {
     let target = input.targetId;
     let revision = initial.revision;
@@ -1117,6 +1286,32 @@ export async function transferHoles(operations: TransferOperations, input: Trans
         const best = ours[0]!;
         holes.push({ axisIndex: hole.index, holeFaceId: best.cylinder.faceId, axisOriginMm: round6(best.cylinder.originMm), axisDirection: round6(best.cylinder.direction), coaxialOffsetMm: best.offset, bores: countBores(boreFaces, edgeById, unit(hole.direction)) });
       }
+      // The blind-floor rule: rays from every cut floor into the material behind it (see floorRays).
+      if (spec.depthMm !== undefined && problems.length === 0) {
+        const cast = plan.holes.map((hole) => floorRays(hole, spec.diameterMm / 2, spec.depthMm!));
+        const flat = cast.flatMap((entry) => entry.rays);
+        const started = performance.now();
+        const results: ProbeRayResult[] = [];
+        let calls = 0;
+        try {
+          for (let from = 0; from < flat.length; from += PROBE_BATCH) {
+            const evidence = await operations.probeSurface({ id: body.id, rays: flat.slice(from, from + PROBE_BATCH) }, final.revision);
+            results.push(...evidence.rays);
+            calls += 1;
+          }
+          floorProbe = { rays: flat.length, calls, ms: Math.round((performance.now() - started) * 10) / 10 };
+          let cursor = 0;
+          for (const [i, hole] of plan.holes.entries()) {
+            const own = results.slice(cursor, cursor + cast[i]!.rays.length);
+            cursor += cast[i]!.rays.length;
+            const problem = own.length === cast[i]!.rays.length ? floorProblem(`axis ${hole.index}`, body, hole, cast[i]!.leadMm, own) : `axis ${hole.index}: the floor probe returned ${own.length} of ${cast[i]!.rays.length} rays`;
+            if (problem) problems.push(problem);
+          }
+        } catch (error) {
+          if (mutationOutcomeIsUncertain(error)) throw error;
+          problems.push(`the wall behind the blind floors could not be proven: the floor probe failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
       problems.push(...await validityProblems(operations, body.id, final.revision));
     }
     if (problems.length > 0) throw readBackError(problems);
@@ -1141,6 +1336,7 @@ export async function transferHoles(operations: TransferOperations, input: Trans
     ...(plan.skipped.length > 0 ? { skipped: plan.skipped } : {}),
     maxCoaxialOffsetMm: Math.max(0, ...holes.map((hole) => hole.coaxialOffsetMm)),
     probe: plan.probe,
+    ...(floorProbe ? { floorProbe } : {}),
     undoSteps: final.undoDepth - initial.undoDepth,
     steps,
   };

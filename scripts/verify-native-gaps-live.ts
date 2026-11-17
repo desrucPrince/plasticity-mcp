@@ -55,6 +55,10 @@ With no arguments or --help, this command performs no connection and no mutation
 PLASTICITY_CDP_URL is mandatory: set it to the isolated Plasticity instance. The command never launches Plasticity
 (it forces PLASTICITY_AUTO_LAUNCH=0 and PLASTICITY_HUD=0) and refuses to start without the variable.
 Live mode takes a baseline, builds disposable geometry at x >= 2400 mm and checks the tool fixes:
+  G1 (final review) the intersection matrix 1-2 targets x 1-3 tools x keepTools (32,000, 8,000 and 6,000 mm3 each, IDs kept, one
+     Undo step that one undo restores); a tool that contains the target in either order and alone (32,000 and 64,000, named
+     in unchangedBy), a tool with a void inside the target (63,000), a tool that misses or only touches (refused by name,
+     document unchanged).
   G1 plasticity_boolean with several tools: one target intersected with two and three tools (4,000 and 2,000 mm3), keepTools,
      union (91,200) and difference (36,000); two targets with two and three tools (8,000 and 4,000 mm3 each, IDs kept, both
      keepTools values); one Undo step that one undo restores; a failure on the second target names target and tool, and
@@ -340,6 +344,106 @@ async function main(): Promise<void> {
         g1.failureOnSecondTarget = { refused: true, undoDepthUnchanged: true, bodiesUnchanged: true, revisionBefore: before.revision, revisionAfter: after.revision, message: refused.text.slice(refused.text.indexOf("Intersection of target"), refused.text.indexOf("Intersection of target") + 120) + " ... " + refused.text.slice(-200) };
         await undoTo(client, baseline.undoDepth);
       }
+
+      // ---- Final review B1 and B2. Targets: 40 mm cubes at x 0 and x 100 (from X). Tools across both: p keeps
+      // y 10..30 (32,000 mm3 of each target), q keeps z <= 10, r keeps y >= 15. Hand volumes per target: p 32,000;
+      // p and q 40 x 20 x 10 = 8,000; p, q and r 40 x 15 x 10 = 6,000.
+      const run = async (targetCount: number, makeTools: Array<() => Promise<number>>, keep: boolean) => {
+        const targets = [await box([X, 0, 0], [40, 40, 40]), await box([X + 100, 0, 0], [40, 40, 40])].slice(0, targetCount);
+        const tools: number[] = [];
+        for (const make of makeTools) tools.push(await make());
+        const toolVolumes: number[] = [];
+        for (const id of tools) toolVolumes.push(await volume(id));
+        const before = await status(client);
+        const reply = await call(client, "plasticity_boolean", { targetIds: targets, toolIds: tools, operation: "intersection", keepTools: keep, revision: before.revision });
+        const after = await status(client);
+        const volumes: number[] = [];
+        for (const id of targets) { requireCondition(after.bodies.some((body: { id: number }) => body.id === id), `target ${id} lost its ID`); volumes.push(await volume(id)); }
+        const added = after.bodies.filter((body: { id: number }) => !before.bodies.some((old: { id: number }) => old.id === body.id)).map((body: { id: number }) => body.id);
+        requireCondition(added.length === 0, `new body IDs appeared: ${JSON.stringify(added)}`);
+        requireCondition(after.undoDepth - before.undoDepth === 1, `${after.undoDepth - before.undoDepth} Undo steps`);
+        for (const [index, id] of tools.entries()) {
+          if (keep) requireNear(await volume(id), toolVolumes[index]!, `kept tool ${id}`, 1e-6);
+          else requireCondition(!after.bodies.some((body: { id: number }) => body.id === id), `tool ${id} was not consumed`);
+        }
+        await call(client, "plasticity_undo", { intent: "one undo restores the call", revision: after.revision });
+        const undone = await status(client);
+        requireCondition(undone.undoDepth === before.undoDepth && sameBodies(undone, before), "one undo did not restore every body");
+        await undoTo(client, baseline.undoDepth);
+        return { targets, tools, volumes, reply, before };
+      };
+      const P = () => box([X - 10, 10, -10], [160, 20, 60]);
+      const Q = () => box([X - 10, -10, -10], [160, 60, 20]);
+      const R = () => box([X - 10, 15, -10], [160, 60, 60]);
+      const BIG = () => box([X - 10, -10, -10], [160, 60, 60]); // contains both targets
+      const matrix: Record<string, unknown> = {};
+      for (const targetCount of [1, 2]) for (const [toolCount, expected] of [[1, 32000], [2, 8000], [3, 6000]] as const) for (const keep of [false, true]) {
+        const label = `${targetCount} target(s) x ${toolCount} tool(s), keepTools ${keep}`;
+        const result = await run(targetCount, [P, Q, R].slice(0, toolCount), keep).catch((error) => { throw new Error(`${label}: ${boundedError(error)}`); });
+        for (const measuredVolume of result.volumes) requireNear(measuredVolume, expected, `${label}: target volume`, 1e-6);
+        requireCondition(result.reply.unchangedBy === undefined, `${label}: unexpected unchangedBy`);
+        matrix[label] = { volumesMm3: result.volumes, expectedMm3: expected, undoSteps: 1, idsKept: true, toolsKept: keep, oneUndoRestores: true };
+      }
+      g1.finalB1Matrix = matrix;
+
+      // B2: a tool that contains the target is a no-op for it, in either order, and is named in unchangedBy.
+      const containing: Record<string, unknown> = {};
+      for (const targetCount of [1, 2]) for (const keep of [false, true]) for (const [name, makers, bigIndex, expected] of [["[BIG, A]", [BIG, P], 0, 32000], ["[A, BIG]", [P, BIG], 1, 32000], ["[BIG]", [BIG], 0, 64000]] as const) {
+        const label = `${targetCount} target(s) x ${name}, keepTools ${keep}`;
+        const result = await run(targetCount, [...makers], keep).catch((error) => { throw new Error(`${label}: ${boundedError(error)}`); });
+        for (const measuredVolume of result.volumes) requireNear(measuredVolume, expected, `${label}: target volume`, 1e-6);
+        const big = result.tools[bigIndex]!;
+        requireCondition(JSON.stringify(result.reply.unchangedBy) === JSON.stringify([big]), `${label}: unchangedBy ${JSON.stringify(result.reply.unchangedBy)}, expected [${big}]`);
+        requireCondition(JSON.stringify(result.reply.unchangedPairs) === JSON.stringify(result.targets.map((targetId) => ({ targetId, toolId: big }))), `${label}: unchangedPairs ${JSON.stringify(result.reply.unchangedPairs)}`);
+        if (name === "[BIG]") {
+          // The target is at its earlier version: nothing rebuilt it.
+          const versionsBefore = result.targets.map((id) => result.before.bodies.find((body: { id: number }) => body.id === id).versionId);
+          const versionsAfter = result.targets.map((id) => result.reply.bodies?.find((body: { id: number }) => body.id === id)?.versionId);
+          if (versionsAfter.every((version) => version !== undefined)) requireCondition(JSON.stringify(versionsAfter) === JSON.stringify(versionsBefore), `${label}: the target version changed`);
+        }
+        containing[label] = { volumesMm3: result.volumes, expectedMm3: expected, unchangedBy: result.reply.unchangedBy, toolsKept: keep, undoSteps: 1, oneUndoRestores: true };
+      }
+      g1.finalB2Containing = containing;
+
+      // B2: the kernel decides first. A tool with a void that lies inside the target answers the clash test like a
+      // containing tool, and the intersection still removes the void: 64,000 - 1,000 = 63,000 mm3.
+      {
+        const target = await box([X, 0, 0], [40, 40, 40]);
+        const shell = await box([X - 10, -10, -10], [60, 60, 60]);
+        const core = await box([X + 15, 15, 15], [10, 10, 10]);
+        await boolean([shell], [core], "difference");
+        requireNear(await volume(shell), 215000, "the voided tool", 1e-6);
+        const before = await status(client);
+        const reply = await call(client, "plasticity_boolean", { targetIds: [target], toolIds: [shell], operation: "intersection", keepTools: true, revision: before.revision });
+        const measuredVolume = await volume(target);
+        requireNear(measuredVolume, 63000, "target AND a tool with a void inside the target", 1e-6);
+        requireCondition(reply.unchangedBy === undefined, "the voided tool was reported as leaving the target unchanged");
+        g1.finalB2VoidedTool = { volumeMm3: measuredVolume, expectedMm3: 63000 };
+        await undoTo(client, baseline.undoDepth);
+      }
+
+      // B2: a tool that misses the target, and one that only touches it, fail by name with the document unchanged.
+      const refusals: Record<string, unknown> = {};
+      for (const [name, origin, size, pattern] of [
+        ["miss", [X + 500, 0, 0], [5, 5, 5], /failed: the intersection is empty: Plasticity refused it \(Operation has no effect\) and the kernel clash test finds no contact between the two bodies/],
+        ["touch", [X + 40, 0, 0], [5, 40, 40], /failed: the intersection has no volume: Plasticity refused it \(Operation has no effect\) and the kernel clash test finds the two bodies touching only on their surfaces/],
+      ] as const) for (const withCut of [false, true]) {
+        const label = `${name}${withCut ? " after a cutting tool" : ""}`;
+        const target = await box([X, 0, 0], [40, 40, 40]);
+        const cutter = withCut ? await P() : undefined;
+        const tool = await box([...origin], [...size]);
+        const before = await status(client);
+        const refused = await callRaw(client, "plasticity_boolean", { targetIds: [target], toolIds: [...(cutter ? [cutter] : []), tool], operation: "intersection", revision: before.revision });
+        const after = await status(client);
+        requireCondition(refused.isError && refused.text.includes(`Intersection of target ${target} with tool ${tool} failed`) && pattern.test(refused.text), `${label}: ${refused.text.slice(0, 400)}`);
+        requireCondition(/Plasticity rolled the command back: the document reads back as before this call/.test(refused.text) && refused.text.includes(`the current revision is ${after.revision}. The document is unchanged.`), `${label}: the message does not say the document is unchanged at the current revision: ${refused.text.slice(-300)}`);
+        requireCondition(!/evalmachine|\n\s+at /.test(refused.text), `${label}: the message carries a stack: ${refused.text.slice(0, 400)}`);
+        requireCondition(after.undoDepth === before.undoDepth && sameBodies(after, before), `${label}: the failed call changed the document`);
+        requireNear(await volume(target), 64000, `${label}: target after the failed call`, 1e-6);
+        refusals[label] = { refused: true, undoDepthUnchanged: true, bodiesUnchanged: true, message: refused.text.slice(0, 600) };
+        await undoTo(client, baseline.undoDepth);
+      }
+      g1.finalB2Refusals = refusals;
     }
     checks.g1 = g1;
 

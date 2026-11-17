@@ -6,7 +6,9 @@ import type { RuntimeState } from "./runtime.ts";
 import {
   ANCHOR_POINTS, AxisRefusal, axisRays, boundsAnchor, circleSweepDeg, cylinderRadiiSummary, fullTurnCylinders, GuardedRunError, lineBoxSpan, placeBody, planEntry, planPlacement, planTransfer,
   pointInPlanarFace, quarterTurnMatrix, rotateBounds, runGuarded, selectSourceAxes, transferHoles, type Vector3,
+  CLEARANCE_RING_MM, FLOOR_RIM_INSET_MM, floorProblem, floorRays, RIM_RAYS, RIM_RAYS_LARGE, rimRayCount, unprovenRay,
 } from "./mate.ts";
+import type { ProbeRayResult } from "./surfacing.ts";
 
 // ---------- a small geometric kernel: boxes, cylinder cutters, holes, quarter-turn rotations, undo ----------
 
@@ -1245,4 +1247,238 @@ test("round 2: a blind hole on the axis of a hole past its floor is cut and read
   k.addPin(plate, { origin: [30, 20, -10], dir: [0, 0, -1], radius: 1.5, from: 0, to: 4, facing: -1 });
   const cut = await transferHoles(k.operations, { sourceId: 1, targetId: plate, axesMm: [{ pointMm: [30, 20, 10], axis: [0, 0, -1] }], hole: { diameterMm: 3, depthMm: 2 }, revision: k.rev() });
   assert.deepEqual([cut.axisCount, cut.holeCount, cut.holes[0]!.holeFaceId.includes("pin")], [1, 1, false]);
+});
+
+// ---------- final review T1: the clearance ring, 16 rays above Ø10, incomplete rays, the blind-floor rule ----------
+
+const AX = (point: Vec, axis: Vec = [0, 0, -1]) => [{ pointMm: point, axis }];
+const thinWall = (pattern: RegExp) => (error: unknown) => error instanceof AxisRefusal && error.code === "thin-wall" && /axis 0 \(point \[[^\]]+\], direction \[[^\]]+\]\): the hole leaves a wall thinner than 0\.05 mm beside the bore/.test(error.message) && pattern.test(error.message) && /refused before the edit/.test(error.message);
+// A 40 x 40 x 20 block with a 10 x 10 x 6 internal void (x, y 15..25, z 7..13): the void's faces look into the void.
+const voidedBlock = () => polyBody(2, [...box6("o", [0, 0, 0], [40, 40, 20]), ...box6("v", [15, 15, 7], [25, 25, 13]).map((spec) => ({ ...spec, normal: mul(spec.normal, -1) }))]);
+// A 60 x 40 x 15 block with two pockets 10 deep (x 5..29.5 and 30.5..55, y 5..35): a 1 mm wall stands between them.
+function twinPocketBlock(): Body {
+  const ring = (x0: number, x1: number, z: number): Vec[] => [[x0, 5, z], [x1, 5, z], [x1, 35, z], [x0, 35, z]];
+  const pocket = (tag: string, x0: number, x1: number): FaceSpec[] => [
+    rect(`${tag}floor`, [0, 0, 1], ...(ring(x0, x1, 5) as [Vec, Vec, Vec, Vec])),
+    rect(`${tag}x-`, [1, 0, 0], [x0, 5, 5], [x0, 35, 5], [x0, 35, 15], [x0, 5, 15]), rect(`${tag}x+`, [-1, 0, 0], [x1, 5, 5], [x1, 5, 15], [x1, 35, 15], [x1, 35, 5]),
+    rect(`${tag}y-`, [0, 1, 0], [x0, 5, 5], [x0, 5, 15], [x1, 5, 15], [x1, 5, 5]), rect(`${tag}y+`, [0, -1, 0], [x0, 35, 5], [x1, 35, 5], [x1, 35, 15], [x0, 35, 15]),
+  ];
+  return polyBody(2, [
+    { id: "top", normal: [0, 0, 1], points: [[0, 0, 15], [60, 0, 15], [60, 40, 15], [0, 40, 15]], holes: [ring(5, 29.5, 15), ring(30.5, 55, 15)] },
+    ...pocket("a", 5, 29.5), ...pocket("b", 30.5, 55), ...box6("o", [0, 0, 0], [60, 40, 15], ["oz+"]),
+  ]);
+}
+const transferOn = (body: Body, axes: ReturnType<typeof AX>, hole: Parameters<typeof transferHoles>[1]["hole"], extra: Partial<Parameters<typeof transferHoles>[1]> = {}) => {
+  const ops = polyOps(sourceStub(), body);
+  return { ops, run: transferHoles(ops.operations, { sourceId: 1, targetId: 2, axesMm: axes, hole, revision: "r1", ...extra }) };
+};
+
+test("T1 guard 1: a second ring 0.05 mm outside the bore: a bore 0.002 mm beside a pocket wall is refused before the edit; 0.06 mm away it is cut", async () => {
+  // The review's input: Ø3 through the pocket floor, its rim 0.002 mm from the pocket wall at x 10.
+  for (const gap of [0.002, 0.04]) {
+    const { ops, run } = transferOn(polyBody(2, pocketSpecs()), AX([11.5 + gap, 20, 50]), T3);
+    await assert.rejects(run, thinWall(/the ray at radius 1\.55 mm, \d+ degrees \(0\.05 mm outside the bore\) meets face top \(Plane\) -10 mm from the entry plane where the ray on the bore radius meets face floor \(Plane\) 0 mm from the entry plane/), `gap ${gap}`);
+    assert.deepEqual(ops.calls, [], "no native call");
+  }
+  const { ops, run } = transferOn(polyBody(2, pocketSpecs()), AX([11.56, 20, 50]), T3);
+  await assert.rejects(run, /reached the cut/);
+  assert.ok(near6(cutStart(ops.calls)[0], [11.56, 20, 5.5]));
+});
+
+test("T1 guard 1: a bore 0.002 mm beside an internal void is refused; 1 mm beside it is cut", async () => {
+  const beside = transferOn(voidedBlock(), AX([12.998, 20, 60]), { diameterMm: 4, through: true });
+  await assert.rejects(beside.run, thinWall(/the ray at radius 2\.05 mm, \d+ degrees \(0\.05 mm outside the bore\) meets face vz\+ \(Plane\) 7 mm from the entry plane where the ray on the bore radius meets face oz- \(Plane\) 20 mm from the entry plane/));
+  assert.deepEqual(beside.ops.calls, []);
+  await assert.rejects(transferOn(voidedBlock(), AX([12, 20, 60]), { diameterMm: 4, through: true }).run, /reached the cut/);
+});
+
+test("T1 guard 1: a Ø0.99 hole up a 1 mm wall (0.005 mm left on each side) is refused; Ø0.8 (0.1 mm left) is cut", async () => {
+  const up: Vec = [0, 0, 1];
+  const thin = transferOn(twinPocketBlock(), AX([30, 20, -30], up), { diameterMm: 0.99, through: true });
+  await assert.rejects(thin.run, thinWall(/the ray at radius 0\.545 mm, \d+ degrees \(0\.05 mm outside the bore\) meets face [ab]floor \(Plane\) 5 mm from the entry plane where the ray on the bore radius meets face top \(Plane\) 15 mm from the entry plane/));
+  assert.deepEqual(thin.ops.calls, []);
+  await assert.rejects(transferOn(twinPocketBlock(), AX([30, 20, -30], up), { diameterMm: 0.8, through: true }).run, /reached the cut/);
+});
+
+test("T1 guard 1: the ring is compared only as far as the cut reaches: a step past a blind hole's floor does not refuse it; a head has its own ring", async () => {
+  // The stepped body: under x > 12 the flange is 5 mm; the stem (x < 12) goes down 15. Ø5 at x 14.52: the bore rays stay
+  // 0.02 mm clear of the stem wall, the clearance ring crosses it.
+  const at = AX([14.52, 20, 30]);
+  await assert.rejects(transferOn(steppedBody(), at, { diameterMm: 5, through: true }).run, thinWall(/meets face foot \(Plane\) 15 mm from the entry plane where the ray on the bore radius meets face under \(Plane\) 5 mm from the entry plane/));
+  // Blind 2 mm: the difference lies 5 mm down, past the floor and the 0.05 mm behind it.
+  await assert.rejects(transferOn(steppedBody(), at, { diameterMm: 5, depthMm: 2 }).run, /reached the cut/);
+  // A counterbore's head has its own clearance ring, compared down to the counterbore depth: Ø8 x 1 with its rim 0.03 mm
+  // from the pocket wall is refused; the same Ø3 bore without the head is cut.
+  const head = transferOn(polyBody(2, pocketSpecs()), AX([14.03, 20, 50]), { diameterMm: 3, through: true, counterbore: { diameterMm: 8, depthMm: 1 } });
+  await assert.rejects(head.run, (error: unknown) => error instanceof AxisRefusal && error.code === "thin-wall" && /the hole leaves a wall thinner than 0\.05 mm beside the bore's head: the ray at radius 4\.05 mm, \d+ degrees \(0\.05 mm outside the head\) meets face top/.test(error.message));
+  assert.deepEqual(head.ops.calls, []);
+  await assert.rejects(transferOn(polyBody(2, pocketSpecs()), AX([14.03, 20, 50]), T3).run, /reached the cut/);
+});
+
+test("T1 guard 2: 16 rays per ring above Ø10 (the bore, its countersink head or counterbore), 8 up to Ø10; the clearance ring repeats the angles 0.05 mm out", async () => {
+  assert.deepEqual([RIM_RAYS, RIM_RAYS_LARGE, CLEARANCE_RING_MM], [8, 16, 0.05]);
+  assert.deepEqual([rimRayCount([5]), rimRayCount([5.005]), rimRayCount([6]), rimRayCount([2, 6]), rimRayCount([2, 5])], [8, 16, 16, 16, 8]);
+  const axis = { pointMm: [0, 0, 10] as Vec, direction: [0, 0, -1] as Vec, faceIds: [] };
+  for (const [radii, perRing] of [[[5], 8], [[6], 16], [[2, 6], 16]] as Array<[number[], number]>) {
+    const rays = axisRays(axis, radii);
+    assert.equal(rays.plus.length, 1 + 2 * radii.length * perRing, `radii ${radii}`);
+    assert.equal(rays.minus.length, rays.plus.length);
+    const offset = (k: number) => Math.hypot(rays.plus[k]!.originMm[0], rays.plus[k]!.originMm[1]);
+    const angle = (k: number) => Math.atan2(rays.plus[k]!.originMm[1], rays.plus[k]!.originMm[0]);
+    for (const [ring, radius] of radii.entries()) for (let k = 0; k < perRing; k += 1) {
+      const inner = 1 + ring * perRing + k, outer = inner + radii.length * perRing;
+      assert.ok(Math.abs(offset(inner) - radius) < 1e-12 && Math.abs(offset(outer) - radius - 0.05) < 1e-12, `ring ${ring} ray ${k}`);
+      assert.ok(Math.abs(Math.sin(angle(inner) - angle(outer))) < 1e-12 && Math.cos(angle(inner) - angle(outer)) > 0, "same angle");
+    }
+  }
+  // A Ø12 hole is planned with 2 x (1 + 2 x 16) rays, a Ø10 hole with 2 x (1 + 2 x 8).
+  const plate = polyBody(2, box6("o", [0, 0, 0], [60, 60, 6]));
+  const state = stateOf(sourceStub(), plate);
+  const base = { sourceId: 1, targetId: 2, axesMm: AX([30, 30, 50]), revision: "r1" };
+  assert.equal((await planTransferOn(state, { ...base, hole: { diameterMm: 12, through: true } })).probe.rays, 66);
+  assert.equal((await planTransferOn(state, { ...base, hole: { diameterMm: 10, through: true } })).probe.rays, 34);
+  assert.equal((await planTransferOn(state, { ...base, hole: { diameterMm: 4, through: true, counterbore: { diameterMm: 12, depthMm: 2 } } })).probe.rays, 130);
+  // What the finer ring buys: a Ø0.8 cross hole 2.3 mm off the axis of a Ø12 bore lies between the 8 rays (45 degrees
+  // apart) and on a ray of the 16 (at 67.5 degrees, 2.296 mm off).
+  const cross = cylinderFaceOf("xhole", [0, 32.3, 3], [1, 0, 0], 0.4, 0, 60, true);
+  const crossed = polyBody(2, box6("o", [0, 0, 0], [60, 60, 6]), [cross.face], cross.edges);
+  const source = { pointMm: [30, 30, 50] as Vec, direction: [0, 0, -1] as Vec, faceIds: [] };
+  const withRays = (perRing: number) => { const rays = axisRays(source, [6], perRing); return planEntry(crossed, source, 0, [6], { plus: castRays(crossed, rays.plus) as never, minus: castRays(crossed, rays.minus) as never }); };
+  assert.equal(withRays(8).agree, true, "8 rays per ring do not meet the cross hole");
+  assert.equal(withRays(16).agree, false, "16 do");
+  await assert.rejects(planTransferOn(stateOf(sourceStub(), crossed), { ...base, hole: { diameterMm: 12, through: true } }), (error: unknown) => error instanceof AxisRefusal && error.code === "breakout" && /the bore crosses a curved face of the target \(face xhole Cylinder/.test(error.message));
+});
+
+// One ray of a probe answer, as plasticity_probe_surface returns it.
+const rayOf = (distances: Array<[number, number]>, flags: Partial<ProbeRayResult> = {}): ProbeRayResult => ({
+  originMm: [0, 0, 10], direction: [0, 0, -1], hits: distances.length,
+  intersections: distances.map(([distanceMm, nz], i) => ({ pointMm: [0, 0, 10 - distanceMm] as Vec, faceId: `f${i}`, normal: [0, 0, nz] as Vec, distanceMm, residualMm: 0 })), ...flags,
+});
+const PARITY = { unresolvedCrossings: 1, unresolvedReason: "odd number of crossings (3) on a closed Solid from an outside origin: at least one crossing is missing or a tangent touch was counted" };
+
+test("T1 guard 3: a ray with unresolvedCrossings or grazing is complete only where the flag cannot matter", () => {
+  const down: Vec = [0, 0, -1];
+  // No flag: complete.
+  assert.equal(unprovenRay(rayOf([[5, 1], [10, -1]]), down, Infinity), undefined);
+  // grazing: refused within the limit, ignored past it.
+  const graze = rayOf([[5, 1], [10, -1]], { grazing: [{ faceId: "wall", minDistanceMm: 0.0004, atMm: [0, 0, 3] }] });
+  assert.match(unprovenRay(graze, down, 8)!, /it passes 0\.0004 mm from face wall without a crossing \(a grazing or tangent touch 7 mm along the ray\)/);
+  assert.equal(unprovenRay(graze, down, 6.9), undefined);
+  // A crossing the probe cannot place (a display-mesh crossing no exact hit explains): refused wherever the limit is.
+  assert.match(unprovenRay(rayOf([[5, 1], [10, -1]], { unresolvedCrossings: 1 }), down, 0)!, /1 of its crossings could not be resolved \(the probe cannot say where\)/);
+  assert.match(unprovenRay(rayOf([[5, 1], [10, -1], [20, 1]], { unresolvedCrossings: 2, unresolvedReason: PARITY.unresolvedReason }), down, 0)!, /1 of its crossings could not be resolved/);
+  // The parity guard alone (an odd count): placed by the crossings. Into the material at 5, out at 10, into it again at
+  // 20 with no way out: the anomaly lies past 10, so a cut that reaches 7.05 mm is proven and a through cut is not.
+  const odd = rayOf([[5, 1], [10, -1], [20, 1]], PARITY);
+  assert.equal(unprovenRay(odd, down, 7.05), undefined);
+  assert.match(unprovenRay(odd, down, Infinity)!, /odd number of crossings and ends inside the material: a crossing is missing/);
+  // Two entries in a row (a rim counted on the way in, as live on a ray along an existing bore wall): the anomaly is at 9.48.
+  const twice = rayOf([[5, 1], [9.48, 1], [20, -1]], PARITY);
+  assert.match(unprovenRay(twice, down, 9.53)!, /they do not alternate at 9\.48 mm \(face f1\)/);
+  assert.match(unprovenRay(twice, down, 5.5)!, /do not alternate at 9\.48 mm/, "the way out between 5 and 9.48 may lie within 5.5");
+  assert.equal(unprovenRay(twice, down, 4.9), undefined, "nothing is decided past the first crossing");
+  // A ray that starts on a face and leaves the body there (one crossing, at 0) is complete.
+  assert.equal(unprovenRay(rayOf([[0, -1]], { unresolvedCrossings: 1, unresolvedReason: PARITY.unresolvedReason }), down, 0), undefined);
+  // Only the parity guard's own reason is placed this way: any other reason is refused, and so is a second reason
+  // joined to it (the probe joins reasons with "; ").
+  assert.match(unprovenRay(rayOf([[5, 1], [10, -1], [20, 1]], { unresolvedCrossings: 1, unresolvedReason: "a face could not be evaluated" }), down, 7.05)!, /its crossings could not be resolved \(a face could not be evaluated\)/);
+  assert.match(unprovenRay(rayOf([[5, 1], [10, -1], [20, 1]], { unresolvedCrossings: 1, unresolvedReason: `${PARITY.unresolvedReason}; a face could not be evaluated` }), down, 7.05)!, /its crossings could not be resolved \(odd number of crossings .*; a face could not be evaluated\)/);
+  // An exit first (the entry is missing) is refused even with the limit at the origin.
+  assert.match(unprovenRay(rayOf([[4, -1], [10, 1], [13, -1]], PARITY), down, 0)!, /do not alternate at 4 mm/);
+});
+
+// The probe of polyOps with flags added to chosen rays of the flat ray list (plus rays first, then minus, per axis).
+const flagProbe = (ops: ReturnType<typeof polyOps>, flag: (index: number, ray: ProbeRayResult) => Partial<ProbeRayResult> | undefined) => {
+  const plain = ops.operations.probeSurface;
+  ops.operations.probeSurface = (async (request: never, revision: string) => { const evidence = await plain(request, revision); return { ...evidence, rays: evidence.rays.map((ray, index) => ({ ...ray, ...(flag(index, ray) ?? {}) })) }; }) as typeof plain;
+  return ops;
+};
+const unprovenRefusal = (pattern: RegExp) => (error: unknown) => error instanceof AxisRefusal && error.code === "unproven" && /axis \d+ \(point [^)]*\): the entry could not be proven: /.test(error.message) && pattern.test(error.message) && /refused before the edit/.test(error.message);
+
+test("T1 guard 3: a flagged ray the bore can reach refuses the cut before the edit and says the entry could not be proven", async () => {
+  const pocket = () => polyBody(2, pocketSpecs());
+  const through = { sourceId: 1, targetId: 2, axesMm: AX([30, 20, 50]), hole: T3, revision: "r1" };
+  // Ø3: 17 rays down (the drill side: 0 the axis, 1-8 the bore ring, 9-16 the clearance ring), then 17 up.
+  const unresolved = flagProbe(polyOps(sourceStub(), pocket()), (index) => (index === 3 ? { unresolvedCrossings: 1 } : undefined));
+  await assert.rejects(transferHoles(unresolved.operations, through), unprovenRefusal(/the ray at radius 1\.5 mm, 90 degrees is not complete: 1 of its crossings could not be resolved/));
+  assert.deepEqual(unresolved.calls, []);
+  // On the far side of the reference point too: nothing nearer than the entry may be missed there.
+  const behind = flagProbe(polyOps(sourceStub(), pocket()), (index) => (index === 17 ? { unresolvedCrossings: 1 } : undefined));
+  await assert.rejects(transferHoles(behind.operations, through), unprovenRefusal(/the axis ray is not complete/));
+  // grazing on the clearance ring, 2 mm past the entry (the pocket floor is at z 5): the through bore reaches it.
+  const grazing = (ops: ReturnType<typeof polyOps>) => flagProbe(ops, (index) => (index === 9 ? { grazing: [{ faceId: "rib", minDistanceMm: 0.0002, atMm: [31.55, 20, 3] }] } : undefined));
+  const grazed = grazing(polyOps(sourceStub(), pocket()));
+  await assert.rejects(transferHoles(grazed.operations, through), unprovenRefusal(/the ray at radius 1\.55 mm, 0 degrees \(0\.05 mm outside the bore\) is not complete: it passes 0\.0002 mm from face rib without a crossing/));
+  assert.deepEqual(grazed.calls, []);
+  // A blind hole 1 mm deep does not reach it (1 mm + 0.05 mm): it is cut.
+  const shallow = grazing(polyOps(sourceStub(), pocket()));
+  await assert.rejects(transferHoles(shallow.operations, { ...through, hole: { diameterMm: 3, depthMm: 1 } }), /reached the cut/);
+  // An axis with no crossing at all is a miss only when its rays are complete: with a flag it is refused, not skipped.
+  const L: Vec[] = [[0, 0, 0], [40, 0, 0], [40, 20, 0], [20, 20, 0], [20, 40, 0], [0, 40, 0]];
+  const plate = () => polyBody(2, [
+    { id: "lt", normal: [0, 0, 1], points: L.map((p): Vec => [p[0], p[1], 5]) }, { id: "lb", normal: [0, 0, -1], points: L },
+    ...L.map((p, i) => { const q = L[(i + 1) % L.length]!; return rect(`ls${i}`, unitv([q[1] - p[1], p[0] - q[0], 0]), p, q, [q[0], q[1], 5], [p[0], p[1], 5]); }),
+  ]);
+  const two = { sourceId: 1, targetId: 2, axesMm: [...AX([10, 10, 30]), ...AX([30, 30, 30])], hole: T3, onMiss: "skip" as const, revision: "r1" };
+  await assert.rejects(transferHoles(polyOps(sourceStub(), plate()).operations, two), /reached the cut/, "the plain miss in the notch is skipped");
+  const flaggedMiss = flagProbe(polyOps(sourceStub(), plate()), (index) => (index === 34 + 5 ? { unresolvedCrossings: 1 } : undefined));
+  await assert.rejects(transferHoles(flaggedMiss.operations, two), unprovenRefusal(/axis 1 .*the ray at radius 1\.5 mm, 180 degrees is not complete/));
+  assert.deepEqual(flaggedMiss.calls, []);
+});
+
+test("T1 guard 4: the floor rays start in front of each blind floor, one at the centre and one ring half a step off the planning rays", () => {
+  const hole = { index: 0, source: { pointMm: [30, 20, 10] as Vec, direction: [0, 0, 1] as Vec, faceIds: [] }, entryPointMm: [30, 20, 0] as Vec, direction: [0, 0, -1] as Vec, entryFaceId: "top", entryProof: "edges" as const, farDistanceMm: 4, agree: true };
+  const { rays, leadMm } = floorRays(hole, 2, 2);
+  assert.equal(leadMm, 0.25, "half of min(depth, 0.5)");
+  assert.equal(rays.length, 9);
+  assert.deepEqual(rays[0], { originMm: [30, 20, -1.75], direction: [0, 0, -1] });
+  const plan = axisRays(hole.source, [2]).plus.slice(1, 9).map((ray) => Math.atan2(ray.originMm[1] - 20, ray.originMm[0] - 30));
+  for (const ray of rays.slice(1)) {
+    assert.ok(Math.abs(Math.hypot(ray.originMm[0] - 30, ray.originMm[1] - 20) - (2 - FLOOR_RIM_INSET_MM)) < 1e-12 && ray.originMm[2] === -1.75, "0.01 mm inside the rim, 0.25 mm in front of the floor");
+    const angle = Math.atan2(ray.originMm[1] - 20, ray.originMm[0] - 30);
+    const nearest = Math.min(...plan.map((other) => Math.abs(Math.atan2(Math.sin(angle - other), Math.cos(angle - other)))));
+    assert.ok(Math.abs(nearest - Math.PI / 8) < 1e-9, "22.5 degrees from the nearest planning ray");
+  }
+  assert.equal(floorRays(hole, 6, 2).rays.length, 17, "16 rim rays above Ø10");
+  assert.equal(floorRays(hole, 2, 0.2).leadMm, 0.1);
+});
+
+test("T1 guard 4: a blind hole that leaves a 0.02 mm membrane over a cross hole lying between the planning rays is rolled back; 0.1 mm stays", async () => {
+  // The review's input, on the plate (z -4..0): Ø4 blind 2 (floor at z -2); a Ø1 cross hole along x, 0.7 mm off the
+  // axis, its top 0.02 mm under the floor. No planning ray (y offsets 0, 1.414, 1.45, 2, 2.05) meets it.
+  const membrane = async (crossAxisZ: number) => {
+    const k = kernel();
+    const plate = await blockAndPlate(k, [[22, 12, 0]]);
+    k.addPin(plate, { origin: [10, 20.7, crossAxisZ], dir: [1, 0, 0], radius: 0.5, from: 0, to: 40, facing: -1 });
+    return { k, plate, before: k.state(), run: () => transferHoles(k.operations, { sourceId: 1, targetId: plate, axesMm: AX([30, 20, 10]), hole: { diameterMm: 4, depthMm: 2 }, revision: k.rev() }) };
+  };
+  const thin = await membrane(-2.52);
+  const plan = await planTransfer(thin.k.operations, thin.before, { sourceId: 1, targetId: thin.plate, axesMm: AX([30, 20, 10]), hole: { diameterMm: 4, depthMm: 2 }, revision: thin.k.rev() });
+  assert.deepEqual([plan.holes[0]!.nextFaceMm, plan.holes[0]!.thinWall, plan.holes[0]!.unproven], [4, undefined, undefined], "the plan sees a 4 mm wall and nothing beside the bore");
+  await assert.rejects(thin.run(), (error: unknown) => error instanceof GuardedRunError && error.restored && error.undoneSteps === 2
+    && /axis 0: the blind hole leaves a membrane thinner than 0\.05 mm under its floor: face \d+:pin0 \(Cylinder\) lies 0\.0238\d* mm behind the floor \(on floor rim ray \d\)/.test(error.message) && /the document is unchanged/.test(error.message));
+  assert.equal(thin.k.state().undoDepth, thin.before.undoDepth);
+  assert.deepEqual(thin.k.state().bodies.map((body) => body.id), thin.before.bodies.map((body) => body.id));
+  assert.deepEqual(thin.k.calls.map((call) => call.op), ["createCylinder", "boolean", "undo", "undo"]);
+  const thick = await membrane(-2.6);
+  const cut = await thick.run();
+  assert.deepEqual([cut.status, cut.holeCount, cut.floorProbe?.rays, cut.floorProbe?.calls], ["completed", 1, 9, 1]);
+  // A through hole casts no floor rays.
+  const k = kernel();
+  const plate = await blockAndPlate(k, [[22, 12, 0]]);
+  assert.equal((await transferHoles(k.operations, { sourceId: 1, targetId: plate, axesMm: AX([30, 20, 10]), hole: { diameterMm: 4, through: true }, revision: k.rev() })).floorProbe, undefined);
+});
+
+test("T1 guard 4: a floor ray that is not complete, misses the floor or finds nothing behind it does not prove the wall", () => {
+  const hole = { index: 0, source: { pointMm: [0, 0, 10] as Vec, direction: [0, 0, -1] as Vec, faceIds: [] }, entryPointMm: [0, 0, 0] as Vec, direction: [0, 0, -1] as Vec, entryFaceId: "top", entryProof: "edges" as const, farDistanceMm: 4, agree: true };
+  const body = polyBody(2, [rect("f0", [0, 0, 1], [-3, -3, -2], [3, -3, -2], [3, 3, -2], [-3, 3, -2]), rect("f1", [0, 0, -1], [-3, -3, -4], [-3, 3, -4], [3, 3, -4], [3, -3, -4])]);
+  const good = () => rayOf([[0.25, 1], [2.25, -1]]);
+  const rays = (special: ProbeRayResult) => [good(), special, ...Array.from({ length: 7 }, good)];
+  assert.equal(floorProblem("axis 0", body, hole, 0.25, rays(good())), undefined);
+  assert.match(floorProblem("axis 0", body, hole, 0.25, rays(rayOf([[0.25, 1], [0.27, -1]])))!, /axis 0: the blind hole leaves a membrane thinner than 0\.05 mm under its floor: face f1 \(Plane\) lies 0\.02 mm behind the floor \(on floor rim ray 1\)/);
+  assert.equal(floorProblem("axis 0", body, hole, 0.25, rays(rayOf([[0.25, 1], [0.3, -1]]))), undefined, "0.05 mm stays");
+  assert.match(floorProblem("axis 0", body, hole, 0.25, rays(rayOf([[0.25, 1], [2.25, -1]], { unresolvedCrossings: 1 })))!, /the wall behind the blind floor could not be proven: floor rim ray 1 of 8 is not complete: 1 of its crossings could not be resolved/);
+  assert.match(floorProblem("axis 0", body, hole, 0.25, rays(rayOf([[0.25, 1], [2.25, -1]], { grazing: [{ faceId: "x", minDistanceMm: 0.0005, atMm: [0, 0, 9.74] }] })))!, /could not be proven: floor rim ray 1 of 8 is not complete: it passes 0\.0005 mm from face x/);
+  assert.match(floorProblem("axis 0", body, hole, 0.25, rays(rayOf([[0.25, 1]])))!, /floor rim ray 1 of 8 finds no face behind the floor/);
+  assert.match(floorProblem("axis 0", body, hole, 0.25, rays(rayOf([[0.9, 1], [2.25, -1]])))!, /floor rim ray 1 of 8 does not meet the flat floor 0\.25 mm ahead \(it meets face f0 at 0\.9 mm\)/);
 });
