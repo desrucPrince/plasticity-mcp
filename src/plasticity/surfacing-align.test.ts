@@ -9,7 +9,7 @@ import { SURFACE_ALIGN_DRIVE, SURFACE_ALIGN_READBACK_SOURCE } from "./surfacing.
 // plasticity_surface_align (P6) on runPickCommand: the real generated renderer source runs against a stub editor whose
 // AlignEdgeDialog is a DOM element (a stub document), with the 26.1.3 executor that swallows execute() errors.
 
-type Scenario = "commit" | "update-throws" | "never-ready" | "hang-after-finish" | "commit-misses";
+type Scenario = "commit" | "update-throws" | "never-ready" | "computing" | "hang-after-finish" | "commit-misses";
 
 const CONTINUITY = { C1: 23150, C2: 23151, C3: 23152, G1: 23153, G2: 23154, G3: 23155, G0: 23156, Free: 23157 };
 
@@ -45,6 +45,10 @@ function fixture(scenario: Scenario = "commit", options: { cancel?: "normal" | "
     return [100 + id, { view: { constructor: { name: "Sheet" }, high: { edges: { versionIds: ids, get: (index: number) => edgeView(ids[index]!) }, faces: { versionIds: [] } } }, model: {} }];
   }));
   const selected: unknown[] = [];
+  // The user's own selection before the call: one face of the reference Sheet (body 7).
+  const userFaces = new Set<unknown>();
+  const userFace = { isFace: true, versionId: "107f1" };
+  userFaces.add(userFace);
   const undoStack: unknown[] = [];
   const seen: { selection?: string[]; perEdge?: Array<[string, number]>; updateBeforeFinish?: boolean; dialog?: FakeAlignDialog; cancelled: number } = { cancelled: 0 };
   let dom: unknown[] = [];
@@ -71,10 +75,13 @@ function fixture(scenario: Scenario = "commit", options: { cancel?: "normal" | "
         seen.dialog = dialog;
         dom = [{ notADialog: true }, dialog];
         // The command settles into Awaiting and the factory updates shortly after the dialog appears.
-        if (scenario !== "never-ready" && options.observable !== false) setTimeout(() => { this._state = { tag: "Awaiting" }; factory._state = { value: { tag: "updated" } }; }, 20);
+        // never-ready: the command reaches Awaiting (so a cancel is allowed) but its factory never finishes updating.
+        // computing: the command never reaches Awaiting (a cancel must never be sent).
+        if (scenario === "never-ready") setTimeout(() => { this._state = { tag: "Awaiting" }; }, 20);
+        else if (scenario !== "computing" && options.observable !== false) setTimeout(() => { this._state = { tag: "Awaiting" }; factory._state = { value: { tag: "updated" } }; }, 20);
         dialog.onFinish = () => {
           seen.updateBeforeFinish = updated;
-          if (scenario === "hang-after-finish") return;
+          if (scenario === "hang-after-finish") { this._state = { tag: "Committing" }; return; }
           dom = [];
           undoStack.push({ align: true });
           moving.versionId += 1;
@@ -95,7 +102,14 @@ function fixture(scenario: Scenario = "commit", options: { cancel?: "normal" | "
     history: { undoStack },
     helpers: { scene: { traverse() {} } },
     selection: {
-      selected: { edges: new Set(), add(item: unknown) { selected.push(item); }, removeAll() { selected.length = 0; } },
+      selected: {
+        faces: userFaces, edges: new Set(),
+        add(item: unknown) { if ((item as { isFace?: boolean }).isFace) userFaces.add(item); else selected.push(item); },
+        removeAll() { selected.length = 0; userFaces.clear(); },
+        // Plasticity's selection memento: ids "<kind>:<versionId>", the body version leading the versionId.
+        saveToMemento() { return { ids: new Set([...userFaces].map((face) => `2:${(face as { versionId: string }).versionId}`)) }; },
+        restoreFromMemento(memento: { ids: Set<string> }) { userFaces.clear(); for (const id of memento.ids) if (id === `2:${userFace.versionId}`) userFaces.add(userFace); },
+      },
       hits: { hits: new Map(), record() { throw new Error("no hit is recorded for Surface Align"); }, clear() {} },
     },
     async exec(command: AlignEdgeCommand) {
@@ -120,7 +134,7 @@ function fixture(scenario: Scenario = "commit", options: { cancel?: "normal" | "
     markUncertain() { uncertain = true; },
     isUncertain() { return uncertain; },
   } as unknown as PlasticityRuntime;
-  return { operations: new PlasticityOperations(runtime), calls, seen, undoStack, isUncertain: () => uncertain };
+  return { operations: new PlasticityOperations(runtime), calls, seen, undoStack, isUncertain: () => uncertain, userFaces, userFace };
 }
 
 const align = (f: ReturnType<typeof fixture>, timeouts?: PickCommandTimeouts) =>
@@ -231,4 +245,31 @@ test("a drive that outlives its budget stops before touching the factory (no con
   assert.equal(f.seen.perEdge, undefined);
   assert.equal(f.seen.dialog!.finished, 0);
   assert.match(SURFACE_ALIGN_DRIVE, /open\(\)/);
+});
+
+test("no cancel is ever sent while the command is not Awaiting: a computing command is left running and the outcome is undetermined", async () => {
+  const f = fixture("computing");
+  await assert.rejects(align(f, { dialogMs: 1000, finishMs: 40, cancelMs: 200 }), /reconcile/);
+  assert.equal(f.seen.cancelled, 0);
+  assert.equal(f.isUncertain(), true);
+  const mutate = f.calls.find((call) => call.kind === "mutate")!;
+  assert.equal((mutate.values[0] as { cancelOnlyWhenAwaiting?: boolean }).cancelOnlyWhenAwaiting, true);
+  assert.equal((mutate.values[0] as { restoreSelection?: boolean }).restoreSelection, true);
+});
+
+test("a stall after finish() is not cancelled while the commit computes (state not Awaiting)", async () => {
+  const f = fixture("hang-after-finish");
+  await assert.rejects(align(f, { dialogMs: 1000, finishMs: 150, cancelMs: 200, settleMs: 50 }), /reconcile/);
+  assert.equal(f.seen.dialog!.finished, 1);
+  assert.equal(f.seen.cancelled, 0);
+  assert.equal(f.isUncertain(), true);
+});
+
+test("the user's selection is put back after a verified align and after a refusal in update()", async () => {
+  const ok = fixture("commit");
+  await align(ok);
+  assert.deepEqual([...ok.userFaces], [ok.userFace]);
+  const refused = fixture("update-throws");
+  await assert.rejects(align(refused));
+  assert.deepEqual([...refused.userFaces], [refused.userFace]);
 });

@@ -13,6 +13,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { discoverPlasticityTargets } from "../src/cdp/discovery.ts";
 import { nativeFunction } from "../src/plasticity/native-function.ts";
 import { PlasticityOperations } from "../src/plasticity/operations.ts";
+import { SCREENSHOT_VIEW_SOURCE } from "../src/plasticity/surfacing.ts";
 import { PlasticityRuntime } from "../src/plasticity/runtime.ts";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -218,12 +219,16 @@ async function unchanged<T>(ctx: Ctx, section: string, label: string, run: () =>
 async function section(ctx: Ctx, name: Section, run: () => Promise<void>) {
   ctx.evidence[name] = { startedAt: new Date().toISOString() };
   const start = await status(ctx.client);
+  const startCamera = (await viewState(ctx)).camera;
   try { await run(); } catch (error) { check(ctx, name, "section ran to the end", false, (error as Error).message.slice(0, 1500)); }
   finally {
     try { await ctx.native.mutate(CANCEL_ACTIVE, []); } catch (error) { ctx.evidence[name].cancelError = (error as Error).message; }
     try { await call(ctx.client, "plasticity_reconcile", {}); } catch { /* not uncertain */ }
     const end = await undoTo(ctx.client, start.undoDepth);
     check(ctx, name, "section undone to its start", end.undoDepth === start.undoDepth && JSON.stringify([...idsOf(end)].sort()) === JSON.stringify([...idsOf(start)].sort()), { start: start.undoDepth, end: end.undoDepth });
+    // Localizes a camera change to the section that made it (the end-state check only says that one happened).
+    const endCamera = (await viewState(ctx)).camera;
+    check(ctx, name, "camera unchanged by the section", JSON.stringify(endCamera) === JSON.stringify(startCamera), { start: startCamera, end: endCamera });
   }
 }
 
@@ -296,6 +301,77 @@ async function p1(ctx: Ctx) {
   check(ctx, "p1", "grip pad: crown height read exactly (residual <= 1e-6 mm) and below the control-hull max", top && top.residualMm <= tolerance && top.pointMm[2] < pad.boundsMm.max[2] - 0.1, { top: top?.pointMm, residualMm: top?.residualMm, boundsMaxZ: pad.boundsMm.max[2] });
   check(ctx, "p1", "grip pad: a ray past the pad misses", padProbe.rays[2].hits === 0);
   results.pad = { centreTopMm: top?.pointMm, boundsMaxZ: pad.boundsMm.max[2], rays: padProbe.rays.map((ray: any) => axisValues(ray, 2)) };
+  // Round 3 (review D1): crossings beyond the display-mesh silhouette, and random rays with closed-form counts.
+  const beforeR3 = idsOf(await status(c));
+  await batch(c, [
+    { toolName: "plasticity_create_torus", arguments: { centerMm: [6300, 0, 0], majorRadiusMm: 20, minorRadiusMm: 5, name: "sf-torus" } },
+    { toolName: "plasticity_create_cone", arguments: { bottomCenterMm: [6200, 0, 0], bottomRadiusMm: 15, topRadiusMm: 5, heightMm: 30, name: "sf-cone" } },
+    { toolName: "plasticity_create_sphere", arguments: { centerMm: [15000, 0, 0], radiusMm: 1500, name: "sf-big" } },
+    { toolName: "plasticity_create_box", arguments: { originMm: [6500, 0, 0], sizeMm: [20, 20, 20], name: "sf-filleted-r3" } },
+    { toolName: "plasticity_find_edges", arguments: { query: { bodyIds: ["$3.added[0]"], line: true, direction: { vector: [0, 0, 1] } }, limit: 10 } },
+    { toolName: "plasticity_fillet", arguments: { id: "$3.added[0]", edgeIds: "$4.result.matches[*].id", radiusMm: 3 } },
+  ]);
+  const r3 = await added(c, beforeR3);
+  const r3id = (name: string) => r3.find((body) => body.name === name)!.id as number;
+  const reviewer = async (label: string, id: number, rays: Array<{ originMm: number[]; direction: number[] }>, axis: number, truth: number[][]) => {
+    const result = await probe(id, { rays }, label);
+    const worstErr = Math.max(...result.rays.map((ray: any, i: number) => worst(axisValues(ray, axis), truth[i]!)));
+    check(ctx, "p1", `${label}: every crossing beyond the display-mesh silhouette, within 1e-6 mm, no flags`, worstErr <= tolerance && result.rays.every((ray: any) => !ray.unresolvedCrossings && !ray.grazing), { worstErr, hits: result.rays.map((ray: any) => ray.hits) });
+  };
+  const sq = (x: number) => Math.sqrt(x);
+  await reviewer("sphere r20 at 19.96, 19.99, 19.999, 19.9999 mm", byName("sf-sphere"), [19.96, 19.99, 19.999, 19.9999].map((x) => ({ originMm: [5000 + x, 0, 100], direction: [0, 0, -1] })), 2, [19.96, 19.99, 19.999, 19.9999].map((x) => [sq(400 - x * x), -sq(400 - x * x)]));
+  await reviewer("sphere r1500 at 1498 mm (155 mm chord)", r3id("sf-big"), [{ originMm: [16498, 0, 3000], direction: [0, 0, -1] }], 2, [[sq(1500 ** 2 - 1498 ** 2), -sq(1500 ** 2 - 1498 ** 2)]]);
+  const torusX = (y: number, z: number) => { const a = sq(25 - z * z); return [20 + a, 20 - a].flatMap((rho) => (rho * rho >= y * y ? [sq(rho * rho - y * y)] : [])).flatMap((x) => [6300 + x, 6300 - x]).sort((p, q) => q - p); };
+  await reviewer("torus R20 r5 along -x at z 4.99 and at y 14.99", r3id("sf-torus"), [{ originMm: [6400, 0, 4.99], direction: [-1, 0, 0] }, { originMm: [6400, 14.99, 0], direction: [-1, 0, 0] }], 0, [torusX(0, 4.99), torusX(14.99, 0)]);
+  await reviewer("cylinder r10, oblique ray at 9.99 mm", byName("sf-cylinder"), [{ originMm: [5080, 9.99, 0.5], direction: [1, 0, 1] }], 0, [[5100 - sq(100 - 9.99 ** 2), 5100 + sq(100 - 9.99 ** 2)]]);
+  await reviewer("cone at 9.99 mm (radius 10 at z 15)", r3id("sf-cone"), [{ originMm: [6250, 9.99, 15], direction: [-1, 0, 0] }], 0, [[6200 + sq(100 - 9.99 ** 2), 6200 - sq(100 - 9.99 ** 2)]]);
+  const tangent = await probe(byName("sf-sphere"), { rays: [{ originMm: [5020, 0, 100], direction: [0, 0, -1] }] }, "tangent sphere ray");
+  check(ctx, "p1", "an exactly tangent ray is a grazing entry, not a crossing", tangent.rays[0].hits === 0 && tangent.rays[0].grazing?.length === 1, tangent.rays[0]);
+  // 4,096 random rays per body: zero unflagged odd counts; closed-form counts on the analytic bodies.
+  let seed = 20261117;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  // Torus at (6300,0,0), z axis: the exact number of real roots of its quartic for t > 0 (Sturm sequence).
+  const pmulN = (a: number[], b: number[]) => { const r = new Array(a.length + b.length - 1).fill(0); a.forEach((x, i) => b.forEach((y, j) => { r[i + j] += x * y; })); return r; };
+  const paddN = (a: number[], b: number[]) => Array.from({ length: Math.max(a.length, b.length) }, (_, i) => (a[i] ?? 0) + (b[i] ?? 0));
+  const degN = (q: number[]) => { let n = q.length - 1; while (n > 0 && Math.abs(q[n]!) < 1e-300) n -= 1; return n; };
+  const pvN = (q: number[], t: number) => q.reduceRight((acc, x) => acc * t + x, 0);
+  const remN = (a: number[], b: number[]) => { let r = [...a]; const db = degN(b); while (degN(r) >= db && degN(r) > 0) { const dr = degN(r), k = r[dr]! / b[db]!; for (let i = 0; i <= db; i += 1) r[dr - db + i]! -= k * b[i]!; r = r.slice(0, dr); } return r; };
+  const sturmCount = (q: number[], a: number, b: number) => { const seq = [q, q.slice(1).map((x, i) => x * (i + 1))]; while (degN(seq.at(-1)!) > 0) { const r = remN(seq.at(-2)!, seq.at(-1)!).map((x) => -x); if (r.every((x) => Math.abs(x) < 1e-30)) break; seq.push(r); } const changes = (t: number) => { let n = 0, prev = 0; for (const p of seq) { const v = pvN(p, t); if (v === 0) continue; if (prev && Math.sign(v) !== prev) n += 1; prev = Math.sign(v); } return n; }; return changes(a) - changes(b); };
+  const quarticCount = (o: number[], d: number[]) => {
+    const w = [o[0]! - 6300, o[1]!, o[2]!];
+    const q = [w[0]! ** 2 + w[1]! ** 2 + w[2]! ** 2, 2 * (w[0]! * d[0]! + w[1]! * d[1]! + w[2]! * d[2]!), 1], H = [w[2]!, d[2]!];
+    const G = paddN(q, [400 - 25]);
+    return sturmCount(paddN(pmulN(G, G), paddN(q, pmulN(H, H).map((x) => -x)).map((x) => -1600 * x)), 0, 1e5);
+  };
+  const counts: Record<string, (o: number[], d: number[]) => number | null> = {
+    "sf-torus": quarticCount,
+    "sf-sphere": (o, d) => { const w = [o[0]! - 5000, o[1]!, o[2]!], b = w[0]! * d[0]! + w[1]! * d[1]! + w[2]! * d[2]!, disc = b * b - (w[0]! ** 2 + w[1]! ** 2 + w[2]! ** 2 - 400); return disc > 0 ? 2 : 0; },
+    "sf-filleted-r3": (o, d) => { const tz = [(0 - o[2]!) / d[2]!, (20 - o[2]!) / d[2]!].sort((p, q) => p - q); const dist = (t: number) => Math.hypot(Math.max(0, Math.abs(o[0]! + t * d[0]! - 6510) - 7), Math.max(0, Math.abs(o[1]! + t * d[1]! - 10) - 7)); let a = Math.max(0, tz[0]!), b = tz[1]!; if (!(b > a)) return 0; for (let i = 0; i < 200; i += 1) { const m1 = a + (b - a) / 3, m2 = b - (b - a) / 3; if (dist(m1) < dist(m2)) b = m2; else a = m1; } return dist((a + b) / 2) < 3 ? 2 : 0; },
+    "grip-pad": () => null,
+  };
+  const randomStats: Record<string, unknown> = {};
+  for (const [name, expectedCount] of Object.entries(counts)) {
+    const body = ((await status(c)).bodies as any[]).find((entry) => entry.name === name)!;
+    const { min, max } = body.boundsMm;
+    const span = Math.hypot(...[0, 1, 2].map((i) => max[i] - min[i])) + 10;
+    let oddUnflagged = 0, mismatch = 0, flagged = 0, worstResidual = 0, ms = 0;
+    for (let k = 0; k < 64; k += 1) {
+      const rays = Array.from({ length: 64 }, () => { const target = [0, 1, 2].map((i) => min[i] + (max[i] - min[i]) * rnd()); let dir = [rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1]; const n = Math.hypot(...dir); dir = dir.map((x) => x / n); return { originMm: target.map((v, i) => v - dir[i]! * span), direction: dir }; });
+      const started = Date.now();
+      const result = await call(c, "plasticity_probe_surface", { id: body.id, rays, revision: (await status(c)).revision });
+      ms += Date.now() - started;
+      result.rays.forEach((ray: any, i: number) => {
+        for (const hit of ray.intersections) worstResidual = Math.max(worstResidual, hit.residualMm);
+        if (ray.unresolvedCrossings || ray.grazing) flagged += 1;
+        if (ray.hits % 2 === 1 && !ray.unresolvedCrossings) oddUnflagged += 1;
+        const want = expectedCount(rays[i]!.originMm, rays[i]!.direction);
+        if (want !== null && want !== ray.hits && !ray.grazing) mismatch += 1;
+      });
+    }
+    randomStats[name] = { rays: 4096, oddUnflagged, mismatch, flagged, worstResidualMm: worstResidual, msPer64Rays: Math.round(ms / 64) };
+    check(ctx, "p1", `${name}: 4,096 random rays, zero unflagged odd counts${name === "grip-pad" ? "" : ", every count equal to the closed-form count"}`, oddUnflagged === 0 && mismatch === 0, randomStats[name]);
+  }
+  results.random = randomStats;
   ctx.evidence.p1.results = results;
 }
 
@@ -377,12 +453,11 @@ async function p3(ctx: Ctx) {
     const found = await call(c, "plasticity_find_edges", { ...step.arguments, query: { ...step.arguments.query, bodyIds: [joined.id] }, revision: st.revision });
     rim.push(found.matches[0].id);
   }
-  // edgeContinuity, tension and quality run through the operations layer (the tool schema does not take them yet).
-  const operations = new PlasticityOperations(ctx.native);
+  // edgeContinuity, tension and quality through the tool (plasticity_xsided_patch's schema takes them).
   const height = async (args: Record<string, unknown>) => {
     const start = await status(c);
     const beforeIds = idsOf(start);
-    await operations.xsidedPatch({ edges: { bodyId: joined.id, edgeIds: rim }, ...args } as Parameters<PlasticityOperations["xsidedPatch"]>[0], start.revision);
+    await call(c, "plasticity_xsided_patch", { edges: { bodyId: joined.id, edgeIds: rim }, ...args, intent: "option measurement", revision: start.revision });
     const patch = (await added(c, beforeIds))[0];
     const probe = await call(c, "plasticity_probe_surface", { id: patch.id, gridMm: { at: [[6400, 30]] }, revision: (await status(c)).revision });
     await undoTo(c, start.undoDepth);
@@ -397,11 +472,14 @@ async function p3(ctx: Ctx) {
     g2Auto: await height({ continuity: "g2" }),
     g2High: await height({ continuity: "g2", quality: "high" }),
     g2Max: await height({ continuity: "g2", quality: "max" }),
+    g0Tension01: await height({ continuity: "g0", tension: 0.1 }),
+    g0Tension10: await height({ continuity: "g0", tension: 1 }),
   };
   ctx.evidence.p3.centreHeightsMm = h;
   check(ctx, "p3", "edgeContinuity changes the patch (one edge g1 differs from all g0 and all g1 by > 0.01 mm)", Math.abs(h.g0OneEdgeG1 - h.g0) > 0.01 && Math.abs(h.g0OneEdgeG1 - h.g1) > 0.01, h);
   check(ctx, "p3", "tension changes the patch (0.1 vs 1.0 differ by > 0.1 mm)", Math.abs(h.g1Tension01 - h.g1Tension10) > 0.1, h);
   check(ctx, "p3", "quality changes the patch (g2 high vs auto differ by > 0.01 mm)", Math.abs(h.g2High - h.g2Auto) > 0.01, h);
+  check(ctx, "p3", "tension has no effect at g0 (0.1 and 1.0 within 1e-6 mm), as the description says", Math.abs(h.g0Tension01 - h.g0Tension10) < 1e-6 && Math.abs(h.g0Tension01 - h.g0) < 1e-6, h);
 }
 
 // ---------------------------------------------------------------- P4 ----------------------------------------------------------------
@@ -449,6 +527,12 @@ async function p4(ctx: Ctx) {
   const inline = await c.callTool({ name: "plasticity_screenshot", arguments: { shader: "zebraVertical", frame, maxWidth: 512 } });
   const inlineText = JSON.parse((inline.content as any[]).find((entry) => entry.type === "text")?.text ?? "{}");
   check(ctx, "p4", "inline JPEG with a shader returns an image and the view", !inline.isError && (inline.content as any[]).some((entry) => entry.type === "image") && inlineText.view?.shader?.mode === "zebraVertical" || (!probeWindow.ok && Boolean(inline.isError)), inlineText);
+  // Review D6: a view change left by an interrupted call (applied, never restored) is undone by the next plain capture.
+  await ctx.native.readNative(SCREENSHOT_VIEW_SOURCE, ["name2shader"], [{ op: "apply", shader: "zebraVertical", frame, tolerance: 1e-9 }], 15000);
+  const leftOver = await viewState(ctx);
+  const plain = await call(c, "plasticity_screenshot", { path: join(dir, "plain-after-interrupted.png"), captureMode: modes[0] });
+  const afterPlain = await viewState(ctx);
+  check(ctx, "p4", "a plain screenshot first restores a pending shader and camera left by an interrupted call", leftOver.shader === "zebraVertical" && leftOver.pendingView && plain.restoredPendingView === true && afterPlain.shader === start.shader && !afterPlain.pendingView && JSON.stringify(afterPlain.camera) === JSON.stringify(start.camera), { leftOver: { shader: leftOver.shader, pending: leftOver.pendingView }, plain, after: { shader: afterPlain.shader, pending: afterPlain.pendingView } });
   const forced = await tryCall(c, "plasticity_screenshot", { path: join(dir, `${modes[0]}-default.png`), captureMode: modes[0], shader: "topo", frame });
   const end = await viewState(ctx);
   check(ctx, "p4", "a forced capture failure still restores the shader and the camera, and leaves nothing pending", !forced.ok && end.shader === start.shader && JSON.stringify(end.camera) === JSON.stringify(start.camera) && end.pendingView === false, { forced, end: { shader: end.shader, pendingView: end.pendingView } });
@@ -519,6 +603,21 @@ async function p6(ctx: Ctx) {
     await undoTo(c, fixtureDepth);
     return { aligned, row, moved: before[moving.bodyId] !== after[moving.bodyId], kept: before[reference.bodyId] === after[reference.bodyId] };
   };
+  // Review D8: one face of the reference Sheet selected by the user before the call stays selected afterwards.
+  const referenceFace = (await info(c, fixture.a.bodyId)).faces[0].id;
+  const selectReference = async () => await call(c, "plasticity_select_faces", { faces: [{ bodyId: fixture.a.bodyId, faceId: referenceFace }], revision: (await status(c)).revision });
+  const selectedFaces = async () => ((await call(c, "plasticity_current_selection", {})).faces ?? []).map((face: any) => `${face.bodyId}:${face.faceId ?? face.id}`);
+  await selectReference();
+  const selectedBefore = await selectedFaces();
+  const viaTool = await call(c, "plasticity_surface_align", { moving: fixture.b, reference: fixture.a, continuity: "g1", intent: "align with a user selection", revision: (await status(c)).revision });
+  const selectedAfterSuccess = await selectedFaces();
+  await undoTo(c, fixtureDepth);
+  await selectReference();
+  const refusedSel = await tryCall(c, "plasticity_surface_align", { moving: { bodyId: fixture.a.bodyId, edgeId: "no-such-edge" }, reference: fixture.b, continuity: "g1", revision: (await status(c)).revision });
+  const selectedAfterRefusal = await selectedFaces();
+  results.selection = { selectedBefore, verified: viaTool.coincidence, selectedAfterSuccess, refused: refusedSel, selectedAfterRefusal };
+  check(ctx, "p6", "a face selected before the call is still selected after a verified align and after a refusal", selectedBefore.length === 1 && JSON.stringify(selectedAfterSuccess) === JSON.stringify(selectedBefore) && !refusedSel.ok && JSON.stringify(selectedAfterRefusal) === JSON.stringify(selectedBefore), results.selection);
+  await call(c, "plasticity_clear_selection", { revision: (await status(c)).revision });
   const g0 = await trial("g0", fixture.b, fixture.a, "g0");
   check(ctx, "p6", "G0: one step, edge on the reference (<= 0.001 mm), joined edge reads G0 or better", g0.aligned.undoSteps === 1 && g0.aligned.coincidence.maxGapMm <= 1e-3 && g0.row.passes.G0, results.g0);
   const g1 = await trial("g1", fixture.b, fixture.a, "g1");
@@ -662,6 +761,19 @@ async function p7(ctx: Ctx) {
   const boxSquare = await info(c, g0box.sheetId);
   results.openBoxG0 = { undoSteps: g0box.undoSteps, faces: boxSquare.faces.length, edges: boxSquare.edges.length };
   check(ctx, "p7", "the same open box at g0 closes with one four-edged face", g0box.undoSteps === 1 && boxSquare.faces.length === 1 && boxSquare.edges.length === 4, results.openBoxG0);
+  // Review D4: a boundary with a 0.005 mm or a 1 mm corner gap is refused before any edit, naming the gap.
+  const T = 1 / 3, beforeGap = idsOf(await status(c));
+  await batch(c, [
+    { toolName: "plasticity_create_control_point_curve", arguments: { pointsMm: [[8039.995, 40, 0], [8000 + 80 * T, 40, 6], [8000 + 40 * T, 40, 6], [8000, 40, 0]] } },
+    { toolName: "plasticity_create_control_point_curve", arguments: { pointsMm: [[8039, 40, 0], [8000 + 80 * T, 40, 6], [8000 + 40 * T, 40, 6], [8000, 40, 0]] } },
+  ]);
+  const [gap005, gap1] = (await added(c, beforeGap)).map((body) => body.id).sort((x: number, y: number) => x - y);
+  const gapBefore = await viewState(ctx);
+  const open005 = await tryCall(c, "plasticity_square_surface", { boundary: [wires[0], wires[1], gap005, wires[3]].map((id: number) => ({ wireId: id })), revision: (await status(c)).revision });
+  const open1 = await tryCall(c, "plasticity_square_surface", { boundary: [wires[0], wires[1], gap1, wires[3]].map((id: number) => ({ wireId: id })), revision: (await status(c)).revision });
+  const gapAfter = await viewState(ctx);
+  results.gaps = { open005, open1 };
+  check(ctx, "p7", "open boundaries (0.005 mm and 1 mm corner gaps) are refused before any edit with the gap size", !open005.ok && /0\.005 mm apart/.test(open005.error) && !open1.ok && /1 mm apart/.test(open1.error) && /nothing was changed/.test(open1.error) && gapAfter.undoDepth === gapBefore.undoDepth && gapAfter.bodies === gapBefore.bodies, results.gaps);
   ctx.evidence.p7.results = results;
 }
 
@@ -691,6 +803,7 @@ async function main(): Promise<void> {
       PLASTICITY_MCP_STATE_DIR: join(output, "state"), PLASTICITY_CONSTRUCTION_HISTORY_ROOT: join(output, "history"),
       ...Object.fromEntries(["PATH", "HOME", "TMPDIR"].flatMap((key) => typeof process.env[key] === "string" ? [[key, process.env[key]!]] : [])),
       PLASTICITY_CDP_URL: endpoint, PLASTICITY_AUTO_LAUNCH: "0", PLASTICITY_HUD: "0", PLASTICITY_HUD_NOTIFY: "0",
+      ...(process.env.PLASTICITY_EXPERIMENTAL_TOOLS ? { PLASTICITY_EXPERIMENTAL_TOOLS: process.env.PLASTICITY_EXPERIMENTAL_TOOLS } : {}),
     },
     stderr: "pipe",
   });
