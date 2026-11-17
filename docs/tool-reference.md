@@ -2922,8 +2922,16 @@ prisms, so each height band's plan-view section is computed with the line and
 arc outline engine and summed; round or rounded wall openings, wall vent slots
 and countersinks are added in closed form after a check that their path is
 full material. On the 16 buildable cases of the live script the kernel agrees
-with the prediction to 2.5e-10 of the volume. Not predicted: the base of
-`bossStyle: "tapered"` (the clipped gusset cones), and a body with a round
+with the prediction to 2.5e-10 of the volume. The base of `bossStyle:
+"tapered"` is predicted too: the gusset cones are integrated over the height.
+With square cavity corners the kernel agrees to 1e-10 and the volume is
+enforced like every other. With rounded corners the kernel's own volume of the
+finished base differs from the exact one by an amount that grows with the wall
+height (3.6e-4 mm3 per mm on the 51.5 x 28.3 board: 7e-8 of the base with 3 mm
+parts, 9e-7 with 150 mm; 15 live cases, the origin does not matter), which can
+pass 1e-6 on a small tall case; so that base is reported (`measured`,
+`predicted` and a `note`), not enforced, and its webs, gusset cones and
+cutters are each proven on their own (below). Not predicted: a body with a round
 cutter whose path is not full material; such a volume is only measured. The
 result carries it as `readBack`. Before that, every web solid is proven one by
 one (W1): a web outline that is not a rectangle is built from a closed profile
@@ -2931,8 +2939,26 @@ whose Region is found by its bounds, and a foreign closed curve on the
 profile's plane can notch or pierce that Region without moving the bounds. So
 right after the web solids of a stage are made, one native read gives their
 volumes, and each must equal its outline area x height within 1e-6; a mismatch
-fails the stage (`webs` or `lid-webs`) with the solid, both volumes and the
-advice to move or delete the foreign curve, and the recipe is rolled back. A native failure part-way or a failed read-back undoes
+fails the stage (`webs` or `lid-webs`) with the solid and both volumes, and the
+recipe is rolled back; the message states the difference and names a foreign
+closed curve on or near the profile's plane as one known cause (so does the
+message for a web profile that extrudes the wrong way). A web outline has no
+edge shorter than 0.01 mm (`limits.minWebOutlineEdgeMm`): the kernel merges the
+ends of a shorter profile edge (0.0057 mm is merged, 0.0089 mm is kept), which
+would move the Region's area away from the plan's. Such edges arise where the
+clip rectangle cuts a web corner 0.2 mm inside the wall; the plan removes each
+(its ends become the point where the two neighbouring edges' lines meet, when
+that is within 0.02 mm, else its midpoint), and the plan, the drawn profile and
+the prediction use that one outline. Every cutter a sub-recipe builds from a
+profile (a connector opening, a slot-shaped opening, a vent slot, a
+countersink) is proven the same way before it cuts: the cutter solids' native
+volumes must equal the planned ones (profile area x cutter length; the slot's
+two end cylinders; the revolved countersink profile) within 1e-6, else the
+stage (`opening:<label>`, `vents`, `lid-screw-holes`) fails and the recipe is
+rolled back. A gusset cone is proven too, before it is clipped (pi r2 h / 3).
+A slot-shaped opening needs a straight part of at least 0.1 mm (else use a
+circle). This holds in every style; before it, a foreign closed curve on a
+slot profile's plane left a tab in the slot of a tapered case. A native failure part-way or a failed read-back undoes
 the recipe's own steps (counted by the Undo depth) and the error names the
 failed stage (`read-back` for the read-back), the confirmed step count, the
 undone count (they agree; a sub-recipe step that landed but failed its own check
@@ -3059,7 +3085,13 @@ the typical ESP32 call (the board, four Ø3 holes 2.0 mm in, a USB opening,
 at least 0.05 mm inside the measured lid lip, Ø2.05 x 6.9 pilots under every
 hole and a board that lifts straight out; builds a stack with posts 0.3 mm from two lip
 sides and probes a line of boxes through the lip corner (all inside lid
-material); builds 49 near-tangent inputs (the reviewer's three bands, four of
+material); builds 50 inputs whose web outline had an edge under 0.01 mm before
+the outline was cleaned (the reviewer's six and 44 from the fixed-seed scan;
+each must build with the web proof and both body volumes equal to the plan);
+builds four tapered cases clean and then with a foreign closed Wire on a cutter
+profile's plane (a wall vent, a slot opening, a slot-shaped floor opening, a
+lid vent), where each must fail in the cutter's stage with the Undo depth, the
+bodies and the Wire unchanged; builds 49 near-tangent inputs (the reviewer's three bands, four of
 the reviewer's own stack inputs and the other styles on a tangent position), each read back and undone, with no late
 failure allowed; undoes each case with one batched undo; and sends the
 reviewer's bad inputs (each must be refused with the Undo depth, the body count

@@ -27,6 +27,8 @@ import {
 const { boardCaseShortEdges, boardCaseTangencies } = recipeModule as unknown as { boardCaseShortEdges: (plan: BoardCasePlan) => BoardCaseFinding[]; boardCaseTangencies: (plan: BoardCasePlan) => BoardCaseFinding[] };
 // (The final-fix export, read the same way.)
 const { boardCaseVolumes } = recipeModule as unknown as { boardCaseVolumes: (plan: BoardCasePlan) => { baseMm3?: number; lidMm3?: number; baseNote?: string; lidNote?: string } };
+const { cleanLoop } = recipeModule as unknown as { cleanLoop: (loop: Array<[number, number]>) => Array<[number, number]> };
+const planRaw = (input: BoardCaseInput) => (planBoardCase as unknown as (input: BoardCaseInput, resolved: undefined, options: { rawWebOutlines: boolean }) => BoardCasePlan)(input, undefined, { rawWebOutlines: true });
 
 // W1: the fake kernel answers a volume read of a finished base or lid with the volume of a clean build, which is the
 // plan's prediction (compared with the real kernel on port 58932: equal to about 1e-10 on every case of the live
@@ -51,12 +53,45 @@ import type { RuntimeState } from "./runtime.ts";
 
 type V3 = [number, number, number];
 
+// Kernel-like profile geometry for the fakes (Fix A, Fix B). A closed profile's Region: the kernel merges vertices
+// closer than about 0.006 mm (0.0057 mm is merged, 0.0089 mm is kept, live on port 58932), then the area is the
+// polygon's. A profile revolved a full turn about an axis in its plane: Pappus (area x 2 pi x centroid radius).
+const KERNEL_MERGE_MM = 0.006;
+function kernelProfile(pointsMm: V3[]): { areaMm2: number; centroidMm: V3 } {
+  const kept: V3[] = [];
+  for (const point of pointsMm) if (kept.length === 0 || Math.hypot(point[0] - kept.at(-1)![0], point[1] - kept.at(-1)![1], point[2] - kept.at(-1)![2]) >= KERNEL_MERGE_MM) kept.push(point);
+  while (kept.length > 3 && Math.hypot(kept[0]![0] - kept.at(-1)![0], kept[0]![1] - kept.at(-1)![1], kept[0]![2] - kept.at(-1)![2]) < KERNEL_MERGE_MM) kept.pop();
+  const origin = kept[0]!;
+  let twice: V3 = [0, 0, 0];
+  const parts: Array<{ area: V3; centre: V3 }> = [];
+  for (let index = 1; index + 1 < kept.length; index += 1) {
+    const a = kept[index]!.map((value, axis) => value - origin[axis]!) as V3;
+    const b = kept[index + 1]!.map((value, axis) => value - origin[axis]!) as V3;
+    const area: V3 = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    twice = [twice[0] + area[0], twice[1] + area[1], twice[2] + area[2]];
+    parts.push({ area, centre: [origin[0] + (a[0] + b[0]) / 3, origin[1] + (a[1] + b[1]) / 3, origin[2] + (a[2] + b[2]) / 3] });
+  }
+  const size = Math.hypot(...twice);
+  const normal = twice.map((value) => value / size) as V3;
+  let centroid: V3 = [0, 0, 0];
+  for (const part of parts) { const signed = (part.area[0] * normal[0] + part.area[1] * normal[1] + part.area[2] * normal[2]) / size; centroid = [centroid[0] + signed * part.centre[0], centroid[1] + signed * part.centre[1], centroid[2] + signed * part.centre[2]]; }
+  return { areaMm2: size / 2, centroidMm: centroid };
+}
+function revolvedVolume(pointsMm: V3[], axisOriginMm: V3, axis: V3): number {
+  const { areaMm2, centroidMm } = kernelProfile(pointsMm);
+  const length = Math.hypot(...axis);
+  const offset = centroidMm.map((value, index) => value - axisOriginMm[index]!) as V3;
+  const along = (offset[0] * axis[0] + offset[1] * axis[1] + offset[2] * axis[2]) / length;
+  const radius = Math.hypot(offset[0] - along * axis[0] / length, offset[1] - along * axis[1] / length, offset[2] - along * axis[2] / length);
+  return 2 * Math.PI * radius * areaMm2;
+}
+
 // ---------------------------------------------------------------------------------------------------- fake runtime
 // Bodies, regions and an undo history; every mutation checks the revision it is given, records itself and can fail.
 // Bodies carry native-style bounds (boxes, cylinders, cones and extrusions; a union grows the target, an intersection
 // clips it, a move shifts it) so the recipe's read-back can compare them with the plan. validateBodies is a read, not a
 // recorded call.
-function fakeRuntime(options: { fail?: (operation: string, index: number) => Error | undefined; failUndo?: (index: number) => Error | undefined; keepTools?: (index: number) => boolean; noRegion?: (index: number) => boolean; sharedSketch?: boolean; invalid?: (id: number) => boolean; shortEdge?: (id: number) => boolean; skipMove?: boolean; flipProfile?: (index: number) => boolean; regionArea?: (index: number, areaMm2: number) => number; volume?: (name: string, cleanMm3: number) => number } = {}) {
+function fakeRuntime(options: { fail?: (operation: string, index: number) => Error | undefined; failUndo?: (index: number) => Error | undefined; keepTools?: (index: number) => boolean; noRegion?: (index: number) => boolean; sharedSketch?: boolean; invalid?: (id: number) => boolean; shortEdge?: (id: number) => boolean; skipMove?: boolean; flipProfile?: (index: number) => boolean; regionArea?: (index: number, areaMm2: number) => number; volume?: (name: string, cleanMm3: number) => number; revolved?: (index: number, volumeMm3: number) => number; cone?: (index: number, volumeMm3: number) => number } = {}) {
   let revision = 0;
   let nextId = 100;
   let bodies: RuntimeState["bodies"] = [solid(1, "existing", [])];
@@ -89,10 +124,14 @@ function fakeRuntime(options: { fail?: (operation: string, index: number) => Err
       return mutate("createBox", [originMm, sizeMm, name ?? null], given, () => { bodies.push({ ...withBounds(solid(nextId++, name ?? null, boxEdges(nextId)), { min: [...originMm], max: originMm.map((value, axis) => value + sizeMm[axis]!) as V3 }), volumeMm3: sizeMm[0] * sizeMm[1] * sizeMm[2] } as RuntimeState["bodies"][number]); });
     },
     async createCylinder(centerMm: V3, radiusMm: number, heightMm: number, _name: string | undefined, given: string, axis: V3) {
-      return mutate("createCylinder", [centerMm, radiusMm, heightMm, axis], given, () => { bodies.push(withBounds(solid(nextId++, null, []), axialBounds(centerMm, axis, heightMm, radiusMm))); });
+      return mutate("createCylinder", [centerMm, radiusMm, heightMm, axis], given, () => { bodies.push({ ...withBounds(solid(nextId++, null, []), axialBounds(centerMm, axis, heightMm, radiusMm)), volumeMm3: Math.PI * radiusMm * radiusMm * heightMm } as RuntimeState["bodies"][number]); });
     },
+    // Rounding the long edges of an extruded profile (a connector cutter) takes (1 - pi/4) r2 off its section per edge.
     async fillet(id: number, edgeIds: string[], radiusMm: number, given: string) {
-      return mutate("fillet", [id, edgeIds, radiusMm], given, () => {});
+      return mutate("fillet", [id, edgeIds, radiusMm], given, () => {
+        const body = bodies.find((candidate) => candidate.id === id) as (RuntimeState["bodies"][number] & { volumeMm3?: number; extrudedMm?: number }) | undefined;
+        if (body?.volumeMm3 !== undefined && body.extrudedMm !== undefined) body.volumeMm3 -= edgeIds.length * (1 - Math.PI / 4) * radiusMm * radiusMm * body.extrudedMm;
+      });
     },
     async boolean(targetIds: number[], toolIds: number[], kind: string, keepTools: boolean, given: string) {
       return mutate("boolean", [targetIds, toolIds, kind, keepTools], given, () => {
@@ -107,13 +146,14 @@ function fakeRuntime(options: { fail?: (operation: string, index: number) => Err
     async createCone(bottomCenterMm: V3, bottomRadiusMm: number, topRadiusMm: number, heightMm: number, axis: V3, radialDirection: V3, _name: string | undefined, given: string) {
       return mutate("createCone", [bottomCenterMm, bottomRadiusMm, topRadiusMm, heightMm, axis, radialDirection], given, () => {
         bodies.push({ ...solid(nextId++, null, []), type: "Wire" });
-        bodies.push(withBounds(solid(nextId++, null, []), axialBounds(bottomCenterMm, axis, heightMm, Math.max(bottomRadiusMm, topRadiusMm))));
+        const own = Math.PI * heightMm * (bottomRadiusMm * bottomRadiusMm + bottomRadiusMm * topRadiusMm + topRadiusMm * topRadiusMm) / 3;
+        bodies.push({ ...withBounds(solid(nextId++, null, []), axialBounds(bottomCenterMm, axis, heightMm, Math.max(bottomRadiusMm, topRadiusMm))), volumeMm3: options.cone ? options.cone(calls.length, own) : own } as RuntimeState["bodies"][number]);
       });
     },
     async createPolyline(pointsMm: V3[], closed: boolean, given: string) {
       return mutate("createPolyline", [pointsMm, closed], given, () => {
         const id = nextId++;
-        bodies.push({ ...solid(id, null, []), type: "Wire" });
+        bodies.push({ ...solid(id, null, []), type: "Wire", pointsMm } as unknown as RuntimeState["bodies"][number]);
         if (options.noRegion?.(calls.length)) return;
         const min = [0, 1, 2].map((axis) => Math.min(...pointsMm.map((point) => point[axis]!))) as V3;
         const max = [0, 1, 2].map((axis) => Math.max(...pointsMm.map((point) => point[axis]!))) as V3;
@@ -129,8 +169,8 @@ function fakeRuntime(options: { fail?: (operation: string, index: number) => Err
         for (const region of coplanar) region.sketchWireIds = wireIds;
         // The Region's area: the profile's own (a planar polygon), unless regionArea changes it (W1: a foreign closed
         // curve on the profile's plane notches or pierces the Region without moving its bounds).
-        const twice = pointsMm.reduce((sum, point, index) => { const next = pointsMm[(index + 1) % pointsMm.length]!; const c = cross(point, next); return [sum[0] + c[0], sum[1] + c[1], sum[2] + c[2]] as V3; }, [0, 0, 0] as V3);
-        const own = Math.hypot(...twice) / 2;
+        // (Like the kernel, vertices closer than 0.006 mm are one: Fix A.)
+        const own = kernelProfile(pointsMm).areaMm2;
         const areaMm2 = options.regionArea ? options.regionArea(calls.length, own) : own;
         regions.push({ id: `region-${id}`, entityId: id, islandVersionId: id, sketchId: id, sketchWireIds: wireIds, measurementSource: "render-mesh", displayBoundsMm: { min, max }, normal, planeKey, areaMm2 } as unknown as RuntimeState["regions"][number]);
       });
@@ -139,11 +179,15 @@ function fakeRuntime(options: { fail?: (operation: string, index: number) => Err
       return mutate("extrudeRegions", [regionIds, distanceMm], given, () => {
         const region = regions.find((candidate) => candidate.id === regionIds[0]) as unknown as { normal: V3; displayBoundsMm: { min: V3; max: V3 }; areaMm2: number };
         const far = { min: region.displayBoundsMm.min.map((value, axis) => value + region.normal[axis]! * distanceMm) as V3, max: region.displayBoundsMm.max.map((value, axis) => value + region.normal[axis]! * distanceMm) as V3 };
-        bodies.push({ ...withBounds(solid(nextId++, null, [0, 1, 2, 3].map((index) => line(`x${nextId}-${index}`, region.normal))), { min: region.displayBoundsMm.min.map((value, axis) => Math.min(value, far.min[axis]!)) as V3, max: region.displayBoundsMm.max.map((value, axis) => Math.max(value, far.max[axis]!)) as V3 }), volumeMm3: region.areaMm2 * Math.abs(distanceMm) } as RuntimeState["bodies"][number]);
+        bodies.push({ ...withBounds(solid(nextId++, null, [0, 1, 2, 3].map((index) => line(`x${nextId}-${index}`, region.normal))), { min: region.displayBoundsMm.min.map((value, axis) => Math.min(value, far.min[axis]!)) as V3, max: region.displayBoundsMm.max.map((value, axis) => Math.max(value, far.max[axis]!)) as V3 }), volumeMm3: region.areaMm2 * Math.abs(distanceMm), extrudedMm: Math.abs(distanceMm) } as RuntimeState["bodies"][number]);
       });
     },
     async revolveProfile(id: number, axisOriginMm: V3, axis: V3, angleDegrees: number, given: string) {
-      return mutate("revolveProfile", [id, axisOriginMm, axis, angleDegrees], given, () => { bodies.push(solid(nextId++, null, [])); });
+      return mutate("revolveProfile", [id, axisOriginMm, axis, angleDegrees], given, () => {
+        const wire = bodies.find((candidate) => candidate.id === id) as unknown as { pointsMm?: V3[] } | undefined;
+        const own = wire?.pointsMm ? revolvedVolume(wire.pointsMm, axisOriginMm, axis) : Number.NaN;
+        bodies.push({ ...solid(nextId++, null, []), volumeMm3: options.revolved ? options.revolved(calls.length, own) : own } as RuntimeState["bodies"][number]);
+      });
     },
     async remove(ids: number[], given: string) {
       return mutate("remove", [ids], given, () => {
@@ -1297,7 +1341,9 @@ test("read-back: a finished case reports native bounds equal to the plan, closed
     // W1: the read-back now also reports the native volumes against the plan's prediction.
     volumesMm3: { relativeTolerance: 1e-6, base: { measured: volumes.baseMm3, predicted: volumes.baseMm3 }, lid: { measured: volumes.lidMm3, predicted: volumes.lidMm3 } },
   });
-  assert.equal(fake.measurements, 2); // the web solids, then the finished base and lid
+  // Five native volume reads: the web solids, the countersink cutters, the opening's cutter, the vent slot cutters
+  // (Fix B), then the finished base and lid.
+  assert.equal(fake.measurements, 5);
   // The lid's planned bounds: outer x/y, from the lip bottom (+ exploded) to the lid top.
   assert.deepEqual(result.derived.lidMm, { min: [0, 0, 17.1 + 5], max: [35, 25, 18.6 + 2 + 5] });
 });
@@ -2480,7 +2526,8 @@ test("W1: a web profile whose Region is notched or pierced fails its stage on th
     const error = await new BoardCaseRecipe(fake.operations).create(input).then(() => undefined, (caught: unknown) => caught);
     assert.ok(error instanceof BoardCaseRecipeError, name);
     assert.equal(error.failedStage, stage, name);
-    assert.match(error.message, /the web solid \d+ \(.+\) has a volume of [0-9.]+ mm3, not the planned [0-9.]+ mm3 \(outline area [0-9.]+ mm2 x height [0-9.]+ mm\); another closed curve on the profile's plane changes its Region, so the web would be notched or pierced\. Move or delete that curve/, name);
+    // (The text states the difference as the fact and a foreign curve as one known cause: Fix A.)
+    assert.match(error.message, /the web solid \d+ \(.+\) has a volume of [0-9.]+ mm3, not the planned [0-9.]+ mm3 \(outline area [0-9.]+ mm2 x height [0-9.]+ mm\), so the web would not have its planned shape\. One known cause is a foreign closed curve on or near the profile's plane, which changes the profile's Region \(a notch or a shaft in the web\): move or delete such a curve/, name);
     // The numbers in the message are the kernel's and the plan's.
     const [actual, planned, area, height] = /volume of ([0-9.]+) mm3, not the planned ([0-9.]+) mm3 \(outline area ([0-9.]+) mm2 x height ([0-9.]+) mm/.exec(error.message)!.slice(1).map(Number) as [number, number, number, number];
     assert.ok(Math.abs(planned - area * height) < 1e-5 && Math.abs(planned - actual - (lost > 0 ? lost : -lost * area) * height) < 1e-5, `${name}: ${error.message}`);
@@ -2524,7 +2571,7 @@ test("W1: the read-back proves the whole result: the native base and lid volumes
   assert.equal((await build(ESP32, { volume: (_name, clean) => clean * (1 + 5e-7) })).result.status, "completed");
 });
 
-test("W1: the plan's predicted volumes are exact (closed forms); the tapered base is not predicted and says so", () => {
+test("W1: the plan's predicted volumes are exact (closed forms); every style is predicted", () => {
   // A pod without holes or openings: rounded shell and lid, in closed form.
   const pod = planBoardCase({ originMm: [100, 50, 0], board: { lengthMm: 40, widthMm: 30, componentHeightMm: 6 }, revision: "r0" });
   const d = pod.derived;
@@ -2558,8 +2605,8 @@ test("W1: the plan's predicted volumes are exact (closed forms); the tapered bas
   for (const bossStyle of ["floor", "hanging", "tapered", "stack"] as const) {
     const each = boardCaseVolumes(planBoardCase({ originMm: [0, 0, 0], board: { lengthMm: 60, widthMm: 30, holes: corners4(60, 30, 3.2, 4.5), componentHeightMm: 8 }, lid: { fasteners: { ...m3Pilot, bossStyle, ...(bossStyle === "floor" || bossStyle === "stack" ? {} : { allowBlockedBoard: true }) } }, revision: "r0" }));
     assert.ok(each.lidMm3! > 0 && each.lidNote === undefined, bossStyle);
-    if (bossStyle === "tapered") assert.deepEqual([each.baseMm3, each.baseNote], [undefined, "not predicted: the clipped 45 degree gusset cones of bossStyle \"tapered\" are not upright prisms (the web solids are still proven one by one)"]);
-    else assert.ok(each.baseMm3! > 0 && each.baseNote === undefined, bossStyle);
+    // (Last fixes, Fix B: the tapered base is predicted too now; it was not, with a note.)
+    assert.ok(each.baseMm3! > 0 && each.baseNote === undefined, bossStyle);
   }
   // The typical ESP32 call: the volumes the real kernel measured on port 58932 (10980.395366 and 4324.735657 with the
   // reviewer's rounded USB-C opening).
@@ -2727,7 +2774,7 @@ test("W8: corner bosses (floor, tapered, hanging) report the longest stocked scr
   const insert = (insertLengthMm: number) => deriveBoardCase({ originMm: [0, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, componentHeightMm: 8 }, lid: { fasteners: { screw: "M3", base: "heat-set-insert", insertLengthMm, bossStyle: "floor" } }, revision: "r0" }).fasteners.lid!;
   assert.deepEqual([row(insert(3)), row(insert(5.7))], [[5, 6, 3], [6, 8.7, 4]]);
   // None fits: refused, with the pilot depth for the next stocked length and the nearest lid thickness.
-  assert.throws(() => corner("floor", 2.5), /^BoardCaseValidationError: no standard screw length fits the lid bosses: it needs between 4 and 3\.5 mm \(lid 2 mm, at least 2 mm in the 2\.5 mm boss hole, 1 mm tip clearance; stocked lengths 3, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 30, 35, 40\); use lid\.fasteners\.pilotDepthMm 3 for a stocked 4 mm screw$/);
+  assert.throws(() => corner("floor", 2.5), /^BoardCaseValidationError: no standard screw length fits the lid bosses: no length can give 2 mm engagement and 1 mm tip clearance in a 2\.5 mm hole \(the hole must be at least 3 mm deep\) \(lid 2 mm, at least 2 mm in the 2\.5 mm boss hole, 1 mm tip clearance; stocked lengths 3, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 30, 35, 40\); use lid\.fasteners\.pilotDepthMm 3 for a stocked 4 mm screw$/);
   assert.deepEqual(row(corner("floor", 3)), [4, 5, 2]);
   assert.throws(() => corner("hanging", 6, 24), /no standard screw length fits the lid bosses: it needs between 26 and 29 mm \(lid 24 mm, .*; use lid\.fasteners\.pilotDepthMm 7 for a stocked 30 mm screw, or use walls\.lidMm 23 for a stocked 25 mm screw$/);
   assert.deepEqual([row(corner("hanging", 7, 24)), row(corner("hanging", 6, 23))], [[30, 31, 6], [25, 29, 2]]);
@@ -2743,5 +2790,262 @@ test("the live script's final-fix inputs plan and say what the script expects of
   for (const [label, input, expect] of list) {
     const plan = planBoardCase({ ...input, revision: "r0" } as unknown as BoardCaseInput);
     assert.equal(expect({ derived: plan.derived, warnings: plan.warnings }), undefined, label);
+  }
+});
+
+// ---------------------------------------------------------------------------------------------- last fixes, Fix A
+// The kernel merges the two ends of a profile edge shorter than about 0.006 mm; the fake kernel does too. A web
+// outline with such an edge (where the clip rectangle cuts a web corner 0.2 mm inside the wall) then has another area
+// than the plan's, and the web proof fails a clean build.
+const edgesOf = (loop: Array<[number, number]>) => loop.map((point, index) => { const next = loop[(index + 1) % loop.length]!; return Math.hypot(next[0] - point[0], next[1] - point[1]); });
+const areaOf = (loop: Array<[number, number]>) => Math.abs(loop.reduce((sum, point, index) => { const next = loop[(index + 1) % loop.length]!; return sum + point[0] * next[1] - next[0] * point[1]; }, 0)) / 2;
+const webLoops = (plan: BoardCasePlan) => [...plan.webSolids, ...(plan.lidWebSolids ?? [])].map((solid) => solid.loopMm as Array<[number, number]>);
+const usbC = (widthMm: number) => ({ wall: "x-" as const, shape: "rounded-rect" as const, widthMm: 9.5, heightMm: 3.6, cornerRadiusMm: 1, alongMm: widthMm / 2, aboveBoardMm: 0, label: "usb-c" });
+// The reviewer's six inputs (each failed in stage "webs" in an empty document).
+const FIX_A: Array<[string, BoardCaseInput]> = [
+  ["Ø3 holes 2.15 mm in, floor, screw auto", { originMm: [2000, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: corners4(51.5, 28.3, 3, 2.15), componentHeightMm: 8 }, lid: { fasteners: { screw: "auto", base: "pilot", bossStyle: "floor" } }, openings: [usbC(28.3)], revision: "r0" }],
+  ["Ø3 holes 2.15 mm in, default style, M2 pilot standoffs", { originMm: [2000, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: corners4(51.5, 28.3, 3, 2.15), componentHeightMm: 8 }, standoffs: { fastener: { screw: "M2", mode: "pilot", pilotDiameterMm: 1.6 } }, lid: { fasteners: { screw: "auto", base: "pilot" } }, openings: [usbC(28.3)], revision: "r0" }],
+  ["Ø3 holes 2.151 mm in, floor, screw auto", { originMm: [2000, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: corners4(51.5, 28.3, 3, 2.151), componentHeightMm: 8 }, lid: { fasteners: { screw: "auto", base: "pilot", bossStyle: "floor" } }, openings: [usbC(28.3)], revision: "r0" }],
+  ["Ø3.2 holes 2.31 mm in, floor, M3 pilots", { originMm: [2000, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: corners4(51.5, 28.3, 3.2, 2.31), componentHeightMm: 8 }, lid: { fasteners: { ...m3Pilot, bossStyle: "floor" } }, openings: [usbC(28.3)], revision: "r0" }],
+  ["80 x 40, Ø3 holes 2.15 mm in, floor, screw auto", { originMm: [2000, 0, 0], board: { lengthMm: 80, widthMm: 40, holes: corners4(80, 40, 3, 2.15), componentHeightMm: 8 }, lid: { fasteners: { screw: "auto", base: "pilot", bossStyle: "floor" } }, openings: [usbC(40)], revision: "r0" }],
+  ["70 x 50, Ø3 holes 2.15 mm in, floor, screw auto", { originMm: [2000, 0, 0], board: { lengthMm: 70, widthMm: 50, holes: corners4(70, 50, 3, 2.15), componentHeightMm: 8 }, lid: { fasteners: { screw: "auto", base: "pilot", bossStyle: "floor" } }, openings: [usbC(50)], revision: "r0" }],
+];
+
+test("Fix A: an outline edge under 0.01 mm is removed; the neighbouring edges keep their lines and the area stays within the stated bound", () => {
+  // A rectangle whose corner the clip cut 0.0002 mm in: the 0.00028 mm edge goes, the two neighbours meet again.
+  const cut: Array<[number, number]> = [[0, 0], [10, 0], [10, 5], [0.0002, 5], [0, 4.9998]];
+  assert.ok(Math.min(...edgesOf(cut)) < 0.0003);
+  assert.deepEqual(cleanLoop(cut), [[0, 0], [10, 0], [10, 5], [0, 5]]);
+  assert.ok(Math.abs(areaOf(cleanLoop(cut)) - areaOf(cut)) <= 0.5 * 0.0003 * BOARD_CASE_LIMITS.webOutlineMergeReachMm);
+  // A 0.004 mm jog between two parallel edges (their lines do not meet): its two ends become its midpoint.
+  const jog: Array<[number, number]> = [[0, 0], [10, 0], [10, 5], [5, 5], [5, 5.004], [0, 5.004]];
+  // (The midpoint then lies on the straight run between its neighbours and goes too.)
+  assert.deepEqual(cleanLoop(jog), [[0, 0], [10, 0], [10, 5], [0, 5.004]]);
+  assert.ok(Math.abs(areaOf(cleanLoop(jog)) - areaOf(jog)) <= 0.25 * 0.004 * 10);
+  // 0.0099 mm goes; 0.0101 mm stays; a loop without a short edge is returned as it is.
+  assert.equal(cleanLoop([[0, 0], [10, 0], [10, 5], [0.007, 5], [0, 4.993]]).length, 4);
+  assert.equal(cleanLoop([[0, 0], [10, 0], [10, 5], [0.00715, 5], [0, 4.99285]]).length, 5);
+  assert.deepEqual(cleanLoop([[0, 0], [10, 0], [10, 5], [0, 5]]), [[0, 0], [10, 0], [10, 5], [0, 5]]);
+  assert.deepEqual([BOARD_CASE_LIMITS.minWebOutlineEdgeMm, BOARD_CASE_LIMITS.webOutlineMergeReachMm, BOARD_CASE_LIMITS.volumeRelativeTolerance], [0.01, 0.02, 1e-6]);
+});
+
+const distanceToLoop = (point: [number, number], loop: Array<[number, number]>) => Math.min(...loop.map((a, index) => {
+  const b = loop[(index + 1) % loop.length]!;
+  const [vx, vy] = [b[0] - a[0], b[1] - a[1]];
+  const t = Math.max(0, Math.min(1, ((point[0] - a[0]) * vx + (point[1] - a[1]) * vy) / (vx * vx + vy * vy)));
+  return Math.hypot(point[0] - a[0] - t * vx, point[1] - a[1] - t * vy);
+}));
+
+test("Fix A: the reviewer's six inputs: the raw web outline has an edge of 0.0003 to 0.006 mm, the planned one none under 0.01 mm (the same outline within 0.02 mm and the stated area bound), and each builds on a kernel that merges such vertices", async () => {
+  // First of all each builds: on a recipe that plans the raw outline, the fake kernel's merged vertices make the web
+  // solid's volume differ from the planned one and the build fails in stage "webs" here.
+  for (const [name, input] of FIX_A) {
+    const first = await new BoardCaseRecipe(fakeRuntime().operations).create(input).then((result) => result.status, (caught: unknown) => (caught as Error).message);
+    assert.equal(first, "completed", name);
+  }
+  for (const [name, input] of FIX_A) {
+    const raw = webLoops(planRaw(input));
+    const plan = planBoardCase(input);
+    const cleaned = webLoops(plan);
+    const shortest = Math.min(...raw.flatMap(edgesOf));
+    assert.ok(shortest < 0.006, `${name}: the raw outline's shortest edge is ${shortest}`);
+    assert.ok(Math.min(...cleaned.flatMap(edgesOf)) >= 0.01, `${name}: the planned outline's shortest edge is ${Math.min(...cleaned.flatMap(edgesOf))}`);
+    assert.equal(cleaned.length, raw.length, name);
+    // The same outline apart from the removed edges: no point of it moves by 0.02 mm (the stated reach), and each
+    // loop's area stays within the stated bound per removed edge: a quarter of the edge length (under 0.01 mm) times
+    // the two neighbours' lengths (under the loop's perimeter).
+    for (const [index, loop] of cleaned.entries()) {
+      const before = raw[index]!;
+      const moved = Math.max(...loop.map((point) => distanceToLoop(point, before)), ...before.map((point) => distanceToLoop(point, loop)));
+      assert.ok(moved < 0.02, `${name}: loop ${index} moved by ${moved} mm`);
+      const perimeter = edgesOf(before).reduce((sum, edge) => sum + edge, 0);
+      assert.ok(Math.abs(areaOf(loop) - areaOf(before)) <= 0.25 * 0.01 * perimeter * (before.length - loop.length), `${name}: loop ${index} area ${areaOf(before)} -> ${areaOf(loop)}`);
+    }
+    // The kernel (and this fake) would merge the raw outline's short edge: its area is not the raw plan's.
+    const merged = raw.map((loop) => kernelProfile(loop.map((point) => [point[0], point[1], 0] as V3)).areaMm2);
+    assert.ok(raw.some((loop, index) => Math.abs(merged[index]! - areaOf(loop)) > 1e-6 * areaOf(loop)), `${name}: merging changes a raw area by more than 1e-6`);
+    // The planned outline is what the kernel keeps, and the prediction uses it: the build passes both proofs.
+    const { fake, result } = await build({ ...input, boardStandIn: true });
+    assert.equal(result.status, "completed", name);
+    assert.equal(result.undoSteps, fake.calls.length, name);
+    const volumes = boardCaseVolumes(plan);
+    assert.deepEqual([result.readBack.volumesMm3.base.predicted, result.readBack.volumesMm3.lid.predicted], [volumes.baseMm3, volumes.lidMm3], name);
+  }
+  // The first input's short edge is the reviewer's 0.0003 mm.
+  assert.ok(Math.abs(Math.min(...webLoops(planRaw(FIX_A[0]![1])).flatMap(edgesOf)) - 0.0003) < 5e-5);
+});
+
+test("Fix A: a fixed-seed scan of more than 10,000 ordinary inputs (holes 2.100 to 2.400 mm in, floor and stack) plans no web outline edge under 0.01 mm", () => {
+  let inputs = 0;
+  let planned = 0;
+  let outlines = 0;
+  let shortest = Infinity;
+  const styles: Record<string, number> = {};
+  for (const [lengthMm, widthMm] of [[51.5, 28.3], [80, 40], [70, 50], [60, 30], [35, 25.4]] as const) {
+    for (const diameterMm of [3, 3.2]) {
+      for (let step = 0; step <= 300; step += 1) {
+        const inset = r3(2.1 + step * 0.001);
+        const variants: Array<Partial<BoardCaseInput>> = [
+          { lid: { fasteners: { screw: "auto", base: "pilot", bossStyle: "floor" } } },
+          { lid: { fasteners: { screw: "auto", base: "pilot" } } },
+          { lid: { fasteners: { ...m3Pilot, bossStyle: "floor" } } },
+          { standoffs: { fastener: { screw: "M2", mode: "pilot", pilotDiameterMm: 1.6 } }, lid: { fasteners: { screw: "auto", base: "pilot" } } },
+        ];
+        for (const variant of variants) {
+          inputs += 1;
+          let plan: BoardCasePlan;
+          try { plan = planBoardCase({ originMm: [2000, 0, 0], board: { lengthMm, widthMm, holes: corners4(lengthMm, widthMm, diameterMm, inset), componentHeightMm: 8 }, openings: [usbC(widthMm)], revision: "r0", ...variant }, undefined, { fixes: false }); } catch (error) { if (error instanceof BoardCaseValidationError) continue; throw error; }
+          planned += 1;
+          styles[plan.derived.bossStyle!] = (styles[plan.derived.bossStyle!] ?? 0) + 1;
+          for (const loop of webLoops(plan)) { outlines += 1; shortest = Math.min(shortest, ...edgesOf(loop)); }
+        }
+      }
+    }
+  }
+  assert.equal(inputs, 12040);
+  assert.ok(planned > 11000 && styles.floor! > 5000 && styles.stack! > 1000, JSON.stringify({ planned, styles }));
+  assert.ok(outlines > 40000 && shortest >= 0.01, JSON.stringify({ outlines, shortest }));
+});
+
+// ---------------------------------------------------------------------------------------------- last fixes, Fix B
+test("Fix B: a cutter built from a profile (vent slot, slot opening, connector opening, countersink) whose solid is not its planned volume fails its stage before it cuts, in every style including tapered", async () => {
+  const board = { lengthMm: 51.5, widthMm: 28.3, holes: corners4(51.5, 28.3, 3.2, 5), componentHeightMm: 8 };
+  const openings: NonNullable<BoardCaseInput["openings"]> = [
+    { wall: "y+", shape: "rounded-rect", widthMm: 8, heightMm: 3, cornerRadiusMm: 1.5, alongMm: 25, aboveBoardMm: 1, label: "slot" },
+    { wall: "x-", shape: "rounded-rect", widthMm: 9.5, heightMm: 3.6, cornerRadiusMm: 1, alongMm: 14.15, aboveBoardMm: 0, label: "usb-c" },
+    { wall: "floor", shape: "rounded-rect", widthMm: 8, heightMm: 3, cornerRadiusMm: 1.5, alongMm: 25, acrossMm: 14, label: "floor slot" },
+  ];
+  const styles: Array<[string, BoardCaseInput]> = [
+    ["stack", { originMm: [2000, 0, 0], board, lid: { fasteners: { screw: "auto", base: "pilot" } }, openings, vents: { on: "x+", slots: 3, slotWidthMm: 1.5, slotLengthMm: 6, pitchMm: 3 }, revision: "r0" }],
+    ["floor", { originMm: [2000, 0, 0], board, lid: { fasteners: { ...m3Pilot, bossStyle: "floor", growAxis: "x" } }, openings, vents: { on: "lid", slots: 3, slotWidthMm: 1.5, slotLengthMm: 6, pitchMm: 3 }, revision: "r0" }],
+    ["hanging", { originMm: [2000, 0, 0], board, lid: { fasteners: { ...m3Pilot, bossStyle: "hanging", allowBlockedBoard: true } }, openings, vents: { on: "x+", slots: 3, slotWidthMm: 1.5, slotLengthMm: 6, pitchMm: 3 }, revision: "r0" }],
+    ["tapered", { originMm: [2000, 0, 0], board, lid: { fasteners: { ...m3Pilot, bossStyle: "tapered", allowBlockedBoard: true } }, openings, vents: { on: "x+", slots: 3, slotWidthMm: 1.5, slotLengthMm: 6, pitchMm: 3 }, revision: "r0" }],
+    ["tapered, lid vent", { originMm: [2000, 0, 0], board, lid: { fasteners: { ...m3Pilot, bossStyle: "tapered", allowBlockedBoard: true } }, openings, vents: { on: "lid", slots: 3, slotWidthMm: 1.5, slotLengthMm: 6, pitchMm: 3 }, revision: "r0" }],
+  ];
+  let probes = 0;
+  for (const [style, input] of styles) {
+    const clean = fakeRuntime();
+    const built = await new BoardCaseRecipe(clean.operations).create(input);
+    assert.equal(built.status, "completed", style);
+    assert.equal(built.steps.length, clean.calls.length, style);
+    // The tapered base is predicted too (its gusset cones are integrated over the height); on rounded cavity corners
+    // it is reported, not enforced, and says why.
+    if (style.startsWith("tapered")) assert.deepEqual([built.readBack.volumesMm3.base.predicted! > 0, built.readBack.volumesMm3.base.note], [true, "reported, not enforced: on rounded cavity corners the kernel's own volume of a tapered base differs from the exact prediction by up to about 1e-6 (it grows with the wall height); every web, gusset cone and cutter is proven on its own"], style);
+    else assert.equal(built.readBack.volumesMm3.base.note, undefined, style);
+    // Every profile of a cutter stage: the call that draws it (a slot's or an opening's Region is extruded) or that
+    // revolves it (a countersink cutter is the profile Wire itself, revolved).
+    const profiles = built.steps.map((step, index) => ({ step, call: index + 1, operation: clean.calls[index]!.operation })).filter(({ step, operation }) => step.stage === "lid-screw-holes" ? operation === "revolveProfile" : /^(opening:|vents$)/.test(step.stage) && operation === "createPolyline");
+    const stages = [...new Set(profiles.map(({ step }) => step.stage))];
+    assert.deepEqual(stages.sort(), ["lid-screw-holes", "opening:floor slot", "opening:slot", "opening:usb-c", "vents"], style);
+    for (const stage of stages) {
+      // The first profile of the stage, and the last one (the third vent slot, the fourth countersink).
+      for (const profile of [profiles.find(({ step }) => step.stage === stage)!, profiles.filter(({ step }) => step.stage === stage).at(-1)!]) {
+        probes += 1;
+        // A tab of 0.6 x 0.6 mm left in the slot (the reviewer's wire), or the same share of a revolved cutter.
+        const fake = fakeRuntime(profile.operation === "createPolyline" ? { regionArea: (index, area) => index === profile.call ? area - 0.36 : area } : { revolved: (index, volume) => index === profile.call ? volume * 0.99 : volume });
+        const before = fake.snapshot();
+        const error = await new BoardCaseRecipe(fake.operations).create(input).then(() => undefined, (caught: unknown) => caught);
+        assert.ok(error instanceof BoardCaseRecipeError, `${style}, ${stage}`);
+        assert.equal(error.failedStage, stage, `${style}, ${stage}`);
+        assert.match(error.message, /the cutter solid \d+ of (opening (slot|usb-c|floor slot)|the vent slots|the lid countersinks) has a volume of [0-9.]+ mm3, which is none of the planned cutter volumes \(the nearest is [0-9.]+ mm3\), so it would cut the wrong shape\. One known cause is a foreign closed curve on or near the cutter profile's plane, which changes the profile's Region: move or delete such a curve/, `${style}, ${stage}`);
+        // The cut never ran: the stage's difference is missing, and everything is undone.
+        assert.equal(fake.calls.filter((entry) => entry.operation === "boolean" && (entry.args[2] as string) === "difference").length, clean.calls.slice(0, profile.call).filter((entry) => entry.operation === "boolean" && (entry.args[2] as string) === "difference").length, `${style}, ${stage}`);
+        assert.equal(error.undoneSteps, error.completedSteps.length, `${style}, ${stage}`);
+        assert.deepEqual([fake.snapshot().undoDepth, fake.snapshot().bodies.map((body) => body.id)], [before.undoDepth, before.bodies.map((body) => body.id)], `${style}, ${stage}`);
+      }
+    }
+  }
+  assert.equal(probes, 50);
+  // Inside the tolerance (5e-7 of the area) every cutter passes.
+  assert.equal((await build(styles[3]![1], { regionArea: (_index, area) => area * (1 + 5e-7) })).result.status, "completed");
+});
+
+// ------------------------------------------------------------------------------------------ last fixes, small items
+test("small: an opening edge that refuses the default stack leads the message when the floor fallback is refused too; a hole too shallow for any screw is said as that; the wrong-way web profile names a foreign curve as one known cause", async () => {
+  // The y- opening's bottom is 0.01 mm above the floor top of the stack (7.9 mm standoffs): the stack is refused. The
+  // floor fallback is refused for other reasons (openings on an x wall and a y wall; the opening is under its floor).
+  // The message leads with the opening edge and its named value.
+  const side = (aboveBoardMm: number) => ({ wall: "y-" as const, shape: "rect" as const, widthMm: 6, heightMm: 4, alongMm: 25, aboveBoardMm, label: "side" });
+  const input: BoardCaseInput = { ...ESP32, openings: [...ESP32.openings!, side(-9.49)] };
+  assert.throws(() => planBoardCase(input), /^BoardCaseValidationError: side on wall y-: its bottom edge is 0\.01 mm above the floor top; it must sit exactly on the floor top or at least 0\.4 mm above it \(a lower step is a sliver\); use aboveBoardMm -9\.5 \(this refuses the default screw stack; the fallback to bossStyle "floor" is refused too: bossStyle "floor" widens the cavity by 11 mm along x or y, /);
+  // With the named value the default is the stack.
+  assert.equal(planBoardCase({ ...input, openings: [ESP32.openings![0]!, side(-9.5)] }).derived.bossStyle, "stack");
+  // One opening only: the floor fallback's own complaint follows the true cause.
+  assert.throws(() => planBoardCase({ ...ESP32, openings: [{ ...ESP32.openings![0]!, aboveBoardMm: -9.49 }] }), /^BoardCaseValidationError: opening 0 on wall x-: its bottom edge is 0\.01 mm above the floor top; .*; use aboveBoardMm -9\.5 \(this refuses the default screw stack; the fallback to bossStyle "floor" is refused too: opening 0 on wall x- spans z -3\.89 to -0\.49, outside the open wall band z 2 \(floor top\) to 14\.6 \(lid lip bottom\)\)$/);
+  // A stack rule that fails (not an opening edge) keeps the earlier order: the floor's refusal, then why it fell back.
+  assert.throws(() => planBoardCase({ ...ESP32, board: { ...ESP32.board, holes: corners4(51.5, 28.3, 3.2, 2) }, openings: [...ESP32.openings!, side(0)] }), /^BoardCaseValidationError: bossStyle "floor" widens the cavity .* \(the default bossStyle fell back to "floor" because a screw stack is not possible \(bossStyle "stack": the lid post over board\.holes\[0\] reaches 0\.1 mm past the lid lip outline/);
+  // A hole too shallow for 2 mm engagement and 1 mm tip clearance: no range that runs backwards.
+  const shallow = (bossStyle: "floor" | "stack", pilotDepthMm: number) => () => planBoardCase({ originMm: [0, 0, 0], board: stackBoard(), ...(bossStyle === "stack" ? { standoffs: { heightMm: pilotDepthMm + 1 } } : {}), lid: { fasteners: { ...m3Pilot, pilotDepthMm, bossStyle } }, revision: "r0" });
+  assert.throws(shallow("floor", 2), /no standard screw length fits the lid bosses: no length can give 2 mm engagement and 1 mm tip clearance in a 2 mm hole \(the hole must be at least 3 mm deep\) \(lid 2 mm, /);
+  assert.throws(shallow("stack", 2.9), /no standard screw length fits the stack: no length can give 2 mm engagement and 1 mm tip clearance in a 2\.9 mm hole \(the hole must be at least 3 mm deep\) \(lid \+ post /);
+  assert.throws(shallow("stack", 3), /no standard screw length fits the stack: it needs between 16\.1 and 16\.1 mm /);
+  // A web profile that extrudes the wrong way (a foreign curve 0.0002 to 0.001 mm off the profile plane does this live).
+  const floor: BoardCaseInput = { originMm: [0, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: corners4(51.5, 28.3, 3, 2.5), componentHeightMm: 8 }, standoffs: { fastener: { screw: "M2.5", mode: "pilot", pilotDiameterMm: 2.1 } }, lid: { fasteners: { ...m3Pilot } }, revision: "r0" };
+  const clean = fakeRuntime();
+  await new BoardCaseRecipe(clean.operations).create(floor);
+  const first = clean.calls.findIndex((entry, index) => entry.operation === "createPolyline" && clean.calls[index + 1]?.operation === "extrudeRegions") + 1;
+  const error = await new BoardCaseRecipe(fakeRuntime({ flipProfile: (index) => index === first }).operations).create(floor).then(() => undefined, (caught: unknown) => caught);
+  assert.ok(error instanceof BoardCaseRecipeError);
+  assert.match(error.message, /the web profile \d+ must extrude from z 1\.5 up to 4, but its solid spans z -1 to 1\.5\. One known cause is a foreign closed curve on or near the profile's plane \(it can move the plane the profile's Region is taken from\): move or delete such a curve/);
+});
+
+test("Fix B: the tapered base is predicted: the gusset cones are integrated over the height (the kernel's volumes, live); enforced with square corners, reported with rounded ones; each cone is proven", async () => {
+  // Square corners: the kernel agrees with the prediction to 1e-10 (base 13349.595131 mm3, live on port 58932).
+  const square: BoardCaseInput = { originMm: [2000, 0, 0], board: { lengthMm: 40, widthMm: 30, holes: corners4(40, 30, 3.2, 6), componentHeightMm: 6 }, walls: { wallMm: 2.4, outerCornerRadiusMm: 0 }, lid: { fasteners: { ...m3Pilot, bossStyle: "tapered", allowBlockedBoard: true } }, revision: "r0" };
+  assert.deepEqual(boardCaseVolumes(planBoardCase(square)), { baseMm3: 13349.595131, lidMm3: 3305.738197 });
+  // Rounded corners (the typical board with a wall vent): the kernel measured 13539.049377; the prediction is within 2e-7.
+  const vent: BoardCaseInput = { originMm: [2000, 0, 0], board: ESP32.board, lid: { fasteners: { screw: "auto", base: "pilot", bossStyle: "tapered", allowBlockedBoard: true } }, vents: { on: "x+", slots: 3, slotWidthMm: 1.5, slotLengthMm: 6, pitchMm: 3 }, revision: "r0" };
+  const predicted = boardCaseVolumes(planBoardCase(vent));
+  assert.ok(Math.abs(predicted.baseMm3! - 13539.049377) < 2e-7 * 13539.049377, String(predicted.baseMm3));
+  // Four quarter cones more than the same plan without its gussets, less what the bosses already fill: between 60 %
+  // and 100 % of the four quarter cones (radius = height = 7.035533906 mm).
+  const plan = planBoardCase(vent);
+  const { taper, ...without } = plan;
+  const cone = Math.PI * taper!.cones[0]!.radiusMm ** 2 * taper!.cones[0]!.heightMm / 3;
+  const added = predicted.baseMm3! - boardCaseVolumes(without as BoardCasePlan).baseMm3!;
+  assert.ok(added > 0.6 * cone && added < cone, JSON.stringify({ added, cone }));
+  // Rounded corners: the kernel's own number (2e-7 off here, up to about 1e-6 on a tall case) is reported next to the
+  // prediction and not enforced; the cutter, cone and web proofs carry a tapered base.
+  const reported = (await build(vent, { volume: (name, clean) => name.endsWith("-base") ? 13539.049377 : clean })).result.readBack.volumesMm3.base;
+  assert.deepEqual([reported.measured, reported.predicted, reported.note?.startsWith("reported, not enforced: ")], [13539.049377, predicted.baseMm3, true]);
+  assert.equal((await build(vent, { volume: (name, clean) => name.endsWith("-base") ? clean * (1 + 5e-6) : clean })).result.status, "completed");
+  // Square corners: enforced like every other base. 0.36 mm3 more (the reviewer's tab left in a slot) fails the read-back.
+  assert.equal((await build(square)).result.readBack.volumesMm3.base.note, undefined);
+  const error = await new BoardCaseRecipe(fakeRuntime({ volume: (name, clean) => name.endsWith("-base") ? clean + 0.36 : clean }).operations).create(square).then(() => undefined, (caught: unknown) => caught);
+  assert.ok(error instanceof BoardCaseRecipeError);
+  assert.equal(error.failedStage, "read-back");
+  assert.match(error.message, /read-back: the base volume 13349\.955131 mm3 differs from the planned 13349\.595131 mm3 by 0\.36 mm3/);
+  // Each gusset cone is proven before it is clipped: a cone that is not its planned volume fails the stage.
+  const clean = fakeRuntime();
+  await new BoardCaseRecipe(clean.operations).create(vent);
+  const lastCone = clean.calls.map((entry, index) => entry.operation === "createCone" ? index + 1 : 0).filter((index) => index > 0).at(-1)!;
+  const fake = fakeRuntime({ cone: (index, volume) => index === lastCone ? volume * 0.999 : volume });
+  const before = fake.snapshot();
+  const coneError = await new BoardCaseRecipe(fake.operations).create(vent).then(() => undefined, (caught: unknown) => caught);
+  assert.ok(coneError instanceof BoardCaseRecipeError);
+  assert.equal(coneError.failedStage, "lid-boss-tapers");
+  assert.match(coneError.message, /lid-boss-tapers: the gusset cone \d+ has a volume of [0-9.]+ mm3, not the planned [0-9.]+ mm3 \(radius 7\.035533906 mm, height 7\.035533906 mm\), so the gusset would not have its planned shape\. One known cause is a foreign closed curve on or near the cone profile's plane/);
+  assert.deepEqual([fake.snapshot().undoDepth, fake.snapshot().bodies.map((body) => body.id)], [before.undoDepth, before.bodies.map((body) => body.id)]);
+  // A slot-shaped opening whose straight part is under 0.1 mm is refused in the plan (its cutter profile would have an
+  // edge the kernel merges), with the two ways out; 0.1 mm plans.
+  const slot = (widthMm: number): BoardCaseInput => ({ originMm: [0, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, componentHeightMm: 8 }, openings: [{ wall: "y+", shape: "rounded-rect", widthMm, heightMm: 3, cornerRadiusMm: 1.5, alongMm: 25, aboveBoardMm: 1 }], revision: "r0" });
+  assert.throws(() => planBoardCase(slot(3.005)), /opening 0: a rounded-rect whose cornerRadiusMm is half its shorter side is a slot, and its straight part \(0\.005 mm, the difference of widthMm and heightMm\) must be at least 0\.1 mm; use shape "circle" with widthMm 3, or make the longer side at least 3\.1$/);
+  assert.equal(planBoardCase(slot(3.1)).openings[0]!.slot, true);
+});
+
+test("the live script's last-fix inputs: every short-edge input had a web outline edge under 0.01 mm and plans with none; the foreign-wire cases plan as tapered", async () => {
+  const { shortEdgeInputs, FOREIGN_CUTTER_WIRES } = await import("../../scripts/verify-native-board-case-live.ts") as unknown as { shortEdgeInputs: () => Array<[string, Record<string, unknown>]>; FOREIGN_CUTTER_WIRES: Array<[string, Record<string, unknown>, number[][], RegExp]> };
+  const list = shortEdgeInputs();
+  assert.equal(list.length, 50);
+  assert.ok(new Set(list.map(([, input]) => JSON.stringify(input))).size >= 46);
+  for (const [label, input] of list) {
+    const full = { ...input, revision: "r0" } as unknown as BoardCaseInput;
+    assert.ok(Math.min(...webLoops(planRaw(full)).flatMap(edgesOf)) < 0.01, `${label}: the raw outline has an edge under 0.01 mm`);
+    assert.ok(Math.min(...webLoops(planBoardCase(full)).flatMap(edgesOf)) >= 0.01, `${label}: the planned outline has none`);
+  }
+  assert.equal(FOREIGN_CUTTER_WIRES.length, 4);
+  for (const [label, input, points] of FOREIGN_CUTTER_WIRES) {
+    const plan = planBoardCase({ ...input, revision: "r0" } as unknown as BoardCaseInput);
+    assert.deepEqual([plan.derived.bossStyle, points.length, boardCaseVolumes(plan).baseMm3! > 0], ["tapered", 4, true], label);
   }
 });

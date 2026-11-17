@@ -32,6 +32,39 @@ function noteCleanVolumes(params: { name?: string; arguments?: Record<string, un
 
 type V3 = [number, number, number];
 
+// Kernel-like profile geometry for the fakes (Fix A, Fix B). A closed profile's Region: the kernel merges vertices
+// closer than about 0.006 mm (0.0057 mm is merged, 0.0089 mm is kept, live on port 58932), then the area is the
+// polygon's. A profile revolved a full turn about an axis in its plane: Pappus (area x 2 pi x centroid radius).
+const KERNEL_MERGE_MM = 0.006;
+function kernelProfile(pointsMm: V3[]): { areaMm2: number; centroidMm: V3 } {
+  const kept: V3[] = [];
+  for (const point of pointsMm) if (kept.length === 0 || Math.hypot(point[0] - kept.at(-1)![0], point[1] - kept.at(-1)![1], point[2] - kept.at(-1)![2]) >= KERNEL_MERGE_MM) kept.push(point);
+  while (kept.length > 3 && Math.hypot(kept[0]![0] - kept.at(-1)![0], kept[0]![1] - kept.at(-1)![1], kept[0]![2] - kept.at(-1)![2]) < KERNEL_MERGE_MM) kept.pop();
+  const origin = kept[0]!;
+  let twice: V3 = [0, 0, 0];
+  const parts: Array<{ area: V3; centre: V3 }> = [];
+  for (let index = 1; index + 1 < kept.length; index += 1) {
+    const a = kept[index]!.map((value, axis) => value - origin[axis]!) as V3;
+    const b = kept[index + 1]!.map((value, axis) => value - origin[axis]!) as V3;
+    const area: V3 = [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    twice = [twice[0] + area[0], twice[1] + area[1], twice[2] + area[2]];
+    parts.push({ area, centre: [origin[0] + (a[0] + b[0]) / 3, origin[1] + (a[1] + b[1]) / 3, origin[2] + (a[2] + b[2]) / 3] });
+  }
+  const size = Math.hypot(...twice);
+  const normal = twice.map((value) => value / size) as V3;
+  let centroid: V3 = [0, 0, 0];
+  for (const part of parts) { const signed = (part.area[0] * normal[0] + part.area[1] * normal[1] + part.area[2] * normal[2]) / size; centroid = [centroid[0] + signed * part.centre[0], centroid[1] + signed * part.centre[1], centroid[2] + signed * part.centre[2]]; }
+  return { areaMm2: size / 2, centroidMm: centroid };
+}
+function revolvedVolume(pointsMm: V3[], axisOriginMm: V3, axis: V3): number {
+  const { areaMm2, centroidMm } = kernelProfile(pointsMm);
+  const length = Math.hypot(...axis);
+  const offset = centroidMm.map((value, index) => value - axisOriginMm[index]!) as V3;
+  const along = (offset[0] * axis[0] + offset[1] * axis[1] + offset[2] * axis[2]) / length;
+  const radius = Math.hypot(offset[0] - along * axis[0] / length, offset[1] - along * axis[1] / length, offset[2] - along * axis[2] / length);
+  return 2 * Math.PI * radius * areaMm2;
+}
+
 // A small stateful fake: enough native operations for a board case with standoffs, lid screws and an opening. Bodies carry
 // box/cylinder bounds (a union grows the target, an intersection clips it) for the recipe's read-back; validateBodies is a
 // read and is not recorded in `calls`.
@@ -65,7 +98,7 @@ function fakeOperations() {
   const operations = {
     async state() { return state(); },
     async createBox(origin: V3, size: V3, name: string | undefined, given: string) { return mutate("createBox", given, () => { bodies.push({ ...solid(nextId++, name ?? null, vertical, { min: [...origin], max: origin.map((value, axis) => value + size[axis]!) as V3 }), volumeMm3: size[0] * size[1] * size[2] } as RuntimeState["bodies"][number]); }); },
-    async createCylinder(center: V3, radius: number, height: number, _name: string | undefined, given: string, axis: V3 = [0, 0, 1]) { return mutate("createCylinder", given, () => { bodies.push(solid(nextId++, null, [], axial(center, axis, height, radius))); }); },
+    async createCylinder(center: V3, radius: number, height: number, _name: string | undefined, given: string, axis: V3 = [0, 0, 1]) { return mutate("createCylinder", given, () => { bodies.push({ ...solid(nextId++, null, [], axial(center, axis, height, radius)), volumeMm3: Math.PI * radius * radius * height } as RuntimeState["bodies"][number]); }); },
     async fillet(_id: number, _edges: string[], _radius: number, given: string) { return mutate("fillet", given, () => {}); },
     async boolean(targets: number[], tools: number[], kind: string, _keep: boolean, given: string) {
       return mutate("boolean", given, () => {
@@ -79,7 +112,7 @@ function fakeOperations() {
       });
     },
     async createCone(center: V3, radius: number, topRadius: number, height: number, axis: V3, _radial: V3, _name: string | undefined, given: string) {
-      return mutate("createCone", given, () => { bodies.push({ ...solid(nextId++, null, []), type: "Wire" }); bodies.push(solid(nextId++, null, [], axial(center, axis, height, Math.max(radius, topRadius)))); });
+      return mutate("createCone", given, () => { bodies.push({ ...solid(nextId++, null, []), type: "Wire" }); bodies.push({ ...solid(nextId++, null, [], axial(center, axis, height, Math.max(radius, topRadius))), volumeMm3: Math.PI * height * (radius * radius + radius * topRadius + topRadius * topRadius) / 3 } as RuntimeState["bodies"][number]); });
     },
     async validateBodies(ids: number[], given: string) {
       if (given !== `r${revision}`) throw new Error("stale validate");
@@ -96,7 +129,7 @@ function fakeOperations() {
     async createPolyline(points: V3[], _closed: boolean, given: string) {
       return mutate("createPolyline", given, () => {
         const id = nextId++;
-        bodies.push({ ...solid(id, null, []), type: "Wire" });
+        bodies.push({ ...solid(id, null, []), type: "Wire", pointsMm: points } as unknown as RuntimeState["bodies"][number]);
         const min = [0, 1, 2].map((axis) => Math.min(...points.map((point) => point[axis]!))) as V3;
         const max = [0, 1, 2].map((axis) => Math.max(...points.map((point) => point[axis]!))) as V3;
         // Like Plasticity (live-verified, round 4): a closed profile's plane normal comes from the corner at its first
@@ -104,8 +137,8 @@ function fakeOperations() {
         const [last, first, second] = [points.at(-1)!, points[0]!, points[1]!];
         const up = (first[0] - last[0]) * (second[1] - first[1]) - (first[1] - last[1]) * (second[0] - first[0]) > 0;
         // The Region's area (a horizontal profile's own), for the web volume proof (W1).
-        const areaMm2 = Math.abs(points.reduce((sum, point, index) => { const next = points[(index + 1) % points.length]!; return sum + point[0] * next[1] - next[0] * point[1]; }, 0)) / 2;
-        regions.push({ id: `region-${id}`, entityId: id, islandVersionId: id, sketchId: id, sketchWireIds: [id], measurementSource: "render-mesh", displayBoundsMm: { min, max }, ...(min[2] === max[2] ? { extrudesUp: up, areaMm2 } : {}) } as RuntimeState["regions"][number]);
+        const areaMm2 = kernelProfile(points).areaMm2;
+        regions.push({ id: `region-${id}`, entityId: id, islandVersionId: id, sketchId: id, sketchWireIds: [id], measurementSource: "render-mesh", displayBoundsMm: { min, max }, areaMm2, ...(min[2] === max[2] ? { extrudesUp: up } : {}) } as RuntimeState["regions"][number]);
       });
     },
     // A horizontal profile's solid gets its bounds (the recipe checks that a web profile extruded up, round 4).
@@ -117,7 +150,12 @@ function fakeOperations() {
         bodies.push({ ...solid(nextId++, null, [], flat ? { min: [flat.min[0], flat.min[1], Math.min(flat.min[2], far)], max: [flat.max[0], flat.max[1], Math.max(flat.min[2], far)] } : null), ...(region?.areaMm2 !== undefined ? { volumeMm3: region.areaMm2 * Math.abs(distance) } : {}) } as RuntimeState["bodies"][number]);
       });
     },
-    async revolveProfile(_id: number, _origin: V3, _axis: V3, _angle: number, given: string) { return mutate("revolveProfile", given, () => { bodies.push(solid(nextId++, null, [])); }); },
+    async revolveProfile(id: number, origin: V3, axis: V3, _angle: number, given: string) {
+      return mutate("revolveProfile", given, () => {
+        const wire = bodies.find((candidate) => candidate.id === id) as unknown as { pointsMm?: V3[] } | undefined;
+        bodies.push({ ...solid(nextId++, null, []), volumeMm3: wire?.pointsMm ? revolvedVolume(wire.pointsMm, origin, axis) : Number.NaN } as RuntimeState["bodies"][number]);
+      });
+    },
     async remove(ids: number[], given: string) { return mutate("remove", given, () => { bodies = bodies.filter((body) => !ids.includes(body.id)); regions = regions.filter((region) => !region.sketchWireIds.some((id) => ids.includes(id))); }); },
     async move(_ids: number[], _delta: V3, given: string) { return mutate("move", given, () => {}); },
     async rename(id: number, name: string, given: string) { return mutate("rename", given, () => { bodies.find((body) => body.id === id)!.name = name; }); },
@@ -464,5 +502,24 @@ test("W7, W1: the reply carries top-level warnings and the read-back volumes; a 
     // The typical call has nothing to warn about: no `warning` key.
     const clean = json(await client.callTool({ name: "plasticity_batch", arguments: { detail: "lean", steps: [{ toolName: "plasticity_undo", arguments: { steps: response.undoSteps } }, { toolName: "plasticity_create_board_case", arguments: typical }] } }));
     assert.deepEqual([clean.steps[1].result.status, "warning" in clean.steps[1].result], ["completed", false]);
+  });
+});
+
+test("Fix A, Fix B: through the server a formerly short-edge input builds on a kernel that merges vertices under 0.006 mm; a tapered base is predicted and reported", async () => {
+  const usb = { wall: "x-", shape: "rect", widthMm: 9.2, heightMm: 3.4, alongMm: 14.15, aboveBoardMm: 0, label: "usb-c" };
+  await withClient(async (client, calls) => {
+    // Ø3 holes 2.15 mm in, floor bosses, screw auto: the raw web outline had a 0.0003 mm edge (the reviewer's input).
+    const response = await client.callTool({ name: "plasticity_create_board_case", arguments: { originMm: [2000, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: cornerHoles(51.5, 28.3, 3, 2.15), componentHeightMm: 8 }, lid: { fasteners: { screw: "auto", base: "pilot", bossStyle: "floor" } }, openings: [usb], revision: "r0" } });
+    assert.equal(response.isError, undefined, text(response));
+    const result = json(response);
+    assert.deepEqual([result.status, result.derived.bossStyle, result.undoSteps], ["completed", "floor", calls.length]);
+    assert.equal(result.readBack.volumesMm3.base.measured, result.readBack.volumesMm3.base.predicted);
+    assert.deepEqual([result.limits.minWebOutlineEdgeMm, result.limits.volumeRelativeTolerance], [0.01, 1e-6]);
+  });
+  await withClient(async (client) => {
+    const response = await client.callTool({ name: "plasticity_create_board_case", arguments: { originMm: [2000, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: cornerHoles(51.5, 28.3, 3, 2), componentHeightMm: 8 }, lid: { fasteners: { screw: "auto", base: "pilot", bossStyle: "tapered", allowBlockedBoard: true } }, openings: [usb], revision: "r0" } });
+    assert.equal(response.isError, undefined, text(response));
+    const base = json(response).readBack.volumesMm3.base;
+    assert.deepEqual([base.measured === base.predicted, base.predicted > 13000, /^reported, not enforced: /.test(base.note)], [true, true, true]);
   });
 });
