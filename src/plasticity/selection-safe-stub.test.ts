@@ -36,7 +36,10 @@ class SelectionMemento {
   constructor(ids: Set<string>, parents: RefCounter) { this.ids = ids; this.parentsWithSelectedChildren = parents; }
 }
 
-export interface StubCommand { agent: string; _state: string; resources: unknown[]; execute?: () => Promise<unknown>; constructor: { name: string } }
+export interface StubCommand { agent: string; _state: string; resources: unknown[]; _isFactoryChanged?: boolean; execute?: () => Promise<unknown>; constructor: { name: string } }
+/** The resources of a default gizmo as measured live: untouched (factory "none", no temps) and after a drag ("updated", one temp). */
+export const UNTOUCHED_GIZMO = () => [{ _state: { value: "none" }, temps: [] }, { _state: null }];
+export const DRAGGED_GIZMO = () => [{ _state: { value: "updated" }, temps: [{}], distance: 0.006598 }, { _state: null }];
 export interface StubOptions {
   /** Bodies of the document: version id, stable id and type. */
   bodies?: Array<{ version: number; stableId: number; type: keyof typeof BODY_CLASSES }>;
@@ -187,18 +190,28 @@ export function stubPlasticity(options: StubOptions = {}) {
   editor.commands.ServerCommand = ServerCommand;
 
   let calls = 0;
+  const sent: string[] = [];
   const client = {
-    async send(method: string, params: Record<string, unknown> = {}) {
+    // Like the CDP client: a request that is not answered within timeoutMs is given up (the renderer goes on).
+    async send(method: string, params: Record<string, unknown> = {}, timeoutMs?: number) {
       assert.equal(method, "Runtime.callFunctionOn");
       calls += 1;
+      sent.push(String(params.functionDeclaration));
       const execute = new Function(`return (${String(params.functionDeclaration)})`)() as (...values: unknown[]) => unknown;
       const args = (params.arguments as Array<{ value?: unknown }>).map((argument) => argument.value);
+      const answer = (async () => {
+        try {
+          const value = await execute.apply(editor, args);
+          return { result: { value: value === undefined ? undefined : JSON.parse(JSON.stringify(value)) } };
+        } catch (error) {
+          return { exceptionDetails: { exception: { description: error instanceof Error ? `Error: ${error.message}` : String(error) } } };
+        }
+      })();
+      if (timeoutMs === undefined) return await answer;
+      let timer: NodeJS.Timeout | undefined;
       try {
-        const value = await execute.apply(editor, args);
-        return { result: { value: value === undefined ? undefined : JSON.parse(JSON.stringify(value)) } };
-      } catch (error) {
-        return { exceptionDetails: { exception: { description: error instanceof Error ? `Error: ${error.message}` : String(error) } } };
-      }
+        return await Promise.race([answer, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`CDP request timed out: ${method}`)), timeoutMs); })]);
+      } finally { clearTimeout(timer); }
     },
     close() {},
   } as unknown as CdpClient;
@@ -223,6 +236,8 @@ export function stubPlasticity(options: StubOptions = {}) {
     select, setBody, startDefault, awaitCommand, replaceBody,
     selection: () => [...selected.ids],
     cdpCalls: () => calls,
+    /** Every function declaration that reached the renderer. */
+    sent,
     setLastCommitSelection(...ids: string[]) { lastCommitSelection = new Set(ids); },
   };
 }
@@ -250,9 +265,9 @@ export function enableStateRead(stub: ReturnType<typeof stubPlasticity>): void {
   for (const [versionId, item] of stub.editor.geo.geometryModel) cache.set(item.view, { format: 3, versionId, topology: { boundsMm: null, boundsMethod: "native-box", faces: [], edges: [], vertices: [], faceIds: [], edgeIds: [] } });
   const natives: Record<string, unknown> = { ConstructionPlaneDatabase: { Top: plane, Bottom: plane, Left: plane, Right: plane, Front: plane, Back: plane }, Vector3: class {}, Quaternion: class {}, pk_default: { a: {} } };
   const bindings = (stub.runtime as unknown as { bindings: Map<string, string> }).bindings;
-  const client = (stub.runtime as unknown as { client: { send(method: string, params: Record<string, unknown>): Promise<unknown> } }).client;
+  const client = (stub.runtime as unknown as { client: { send(method: string, params: Record<string, unknown>, timeoutMs?: number): Promise<unknown> } }).client;
   const send = client.send.bind(client);
-  client.send = async (method, params) => await send(method, { ...params, arguments: (params.arguments as Array<{ objectId?: string; value?: unknown }>).map((argument) => (argument.objectId ? { value: natives[argument.objectId] } : argument)) });
+  client.send = async (method, params, timeoutMs) => await send(method, { ...params, arguments: (params.arguments as Array<{ objectId?: string; value?: unknown }>).map((argument) => (argument.objectId ? { value: natives[argument.objectId] } : argument)) }, timeoutMs);
   for (const name of Object.keys(natives)) bindings.set(name, name);
 }
 

@@ -630,6 +630,38 @@ or membrane thinner than 0.05 mm, or that the rays cannot prove:
    | `mesh-crossing` | Adds to the count only; one crossing more than parity accounts for is refused ("the probe cannot say where"). |
    | no code, or a code not in this table | Refused. |
 
+   The ring of 8 or 16 rays only sees a wall where a ray points at it. After
+   the ray guards, the plan therefore measures the cylindrical walls of the
+   cut themselves (the bore, and the wall of a counterbore) against
+   every target face the cut does not pass through, with the kernel's exact
+   distance from a point to a trimmed face (`Eval.DistancesToPoints`; the
+   kernel binding has no face-to-face range call). The distance cannot change
+   faster than the point moves, so one read bounds a whole piece of the cut
+   surface; pieces that are not proven are halved, down to 0.005 mm. This does
+   not depend on the angle of the wall or on its shape:
+
+   | wall beside the bore or beside the wall of a counterbore | result |
+   |---|---|
+   | thinner than 0.045 mm at any point, any face shape, any angle | always refused before the edit ("the hole leaves a wall thinner than 0.05 mm beside the bore: target face ... lies ... mm from the cut surface at ..., the kernel's exact distance") |
+   | 0.045 mm to 0.05 mm | refused or cut (the proof stops at 0.005 mm pieces); refused too when a face hugs the cut at that distance over a long stretch and the proof runs out of budget |
+   | 0.05 mm or more | never refused by this rule |
+
+   The faces the cut passes through are the planar faces normal to the axis
+   that its rays cross within the cut's reach (the entry and exit faces) and
+   every face in one of those planes. Only the cylindrical walls are measured
+   this way. A countersink cone and the floors of the cut keep their own
+   guards and messages (a cone that breaks out is read back after the cut and
+   undone; the depth rules; the blind-floor rule below), so a wall that ends on
+   a floor of the cut (a blind bore, a counterbore on its shoulder) is measured
+   down to 0.05 mm above that floor. Beside a countersink cone only the ring
+   of rays looks: a wall thinner than 0.05 mm there is refused where a ray
+   points at it (measured: 0.01 mm at 0 and 45 degrees refused, at 22.5
+   degrees cut). The reply's `clearance` gives the kernel reads, native calls
+   and time of this check: nothing is read when no other face comes within
+   about 1 mm of a wall; 18 to 33 ms for one bore 0.06 mm from a wall (2,047
+   reads in 11 calls); 41 to 53 ms for 12 bores that all lie 0.06 mm from an
+   edge (6,132 reads in 9 calls), measured.
+
    On the side away
    from the drill the rays must be complete up to the entry distance, and an
    axis with no crossing at all is a miss (which `onMiss: "skip"` may pass)
@@ -961,18 +993,51 @@ Dimension and Align commands):
   edit rebuilt (its IDs change), and everything of a deleted body. A whole
   body that the edit changed stays selected (the same body ID).
 - A default command that idles for the selection (the gizmo Plasticity shows
-  for a selected face or edge) is cancelled before the command. It is not
-  started again: after the call the selection is back and no command is
-  active. Click the item again to get the gizmo.
-- The guard cancels nothing else. With a command of your own active (a dialog
-  that waits for input, a gizmo you are dragging), the edit runs as it did
-  before this guard: Plasticity interrupts your command and the call returns
-  its normal result. That interrupt sends the selection back to the one of the
-  last history step; when this leaves nothing selected, the guard puts your
-  selection back.
-- A state read (`plasticity_status` and every other read) does not touch the
-  selection or a gizmo. The refresh of the distance-measurement labels that a
-  read can trigger runs outside the guard: it runs no command.
+  for a selected face or edge) and that nobody has touched is cancelled before
+  the command. "Untouched" is measured, not assumed: the command's factory
+  still reads `none`, holds no temporary objects, and the command does not say
+  its factory changed. It is not started again: after the call the selection is
+  back and no command is active. Click the item again to get the gizmo.
+- A gizmo you have dragged is your work, and nothing cancels it (a value typed
+  into the command's dialog was not measured; it counts in the same way once
+  the factory has taken it, which the dialog does after its debounce):
+  its factory reads `updated` and it holds a preview (also after you release
+  the mouse). While it holds that preview, Plasticity itself refuses to be read
+  (`snapshot(): scratch active`), so every tool that reads the document first
+  (the edits, `plasticity_status`, the exports, section analysis) fails with
+  "Plasticity is busy: the user is editing ... Finish or cancel it in
+  Plasticity, then repeat this call. Nothing was changed".
+  `plasticity_reconcile` fails with the same first words and the name of the
+  command it left; the session stays as it was. A screenshot to a file reads
+  no document first and fails with Plasticity's shorter "Plasticity is busy".
+  An edit that reaches the guard without such a read is refused there with
+  "the user is editing" and the gizmo's name. The gizmo and its preview stay
+  as they are. Finish or cancel the gizmo, then repeat the call.
+- The guard cancels nothing else. With a command of your own active that is not
+  a default gizmo (a command you started, waiting in its dialog), the edit runs
+  as it did before this guard: Plasticity interrupts your command and the call
+  returns its normal result. That interrupt sends the selection back to the one
+  of the last history step; when this leaves nothing selected, the guard puts
+  your selection back.
+- Only an edit goes through the guard. A state read, and every call that runs
+  no Plasticity command (the exports, section analysis, save a copy, setting
+  the workplane, the refresh of the distance-measurement labels that a read can
+  trigger), does not touch the selection or a gizmo, idle or not. The server
+  decides this from the text of the native source (one list of command
+  patterns in `runtime.ts`), and a test pins by name every source that goes
+  without the guard. Opening a document runs no command either but replaces
+  the scene, so it keeps the guard.
+- The guard lasts as long as its call. If a call times out while its command is
+  still running, the guard stops watching at the timeout: a gizmo you start
+  afterwards is yours. When that command ends later, your selection is put
+  back only if nothing is selected by then; what you selected in the meantime
+  stays. `plasticity_reconcile` puts it back earlier, under the same rule.
+- `plasticity_undo` and `plasticity_redo`: when the history state a step
+  restores holds a selected face or edge, Plasticity starts the gizmo of that
+  selection (60 ms for a face, 190 ms for an edge, measured). The call waits
+  until that gizmo idles, at most 0.25 s per step, then cancels it and puts
+  your own selection back. Returning sooner would leave that gizmo behind with
+  a selection that is not yours.
 - A problem inside the guard never replaces a call's result. It is written to
   the server log as `[plasticity-mcp] selection guard: ...`.
 - The selection tools (`plasticity_select_*`, `plasticity_clear_selection`) are
@@ -996,7 +1061,11 @@ face of an untouched body selected, the entry states (a default command
 awaiting; a command of the user awaiting), a refused edit, an Undo over a
 history step that holds a face selection, and `plasticity_reconcile` (also on
 the leftover of a real timed-out call of the `--baseline-root` server). The
-speed check, nothing selected: `plasticity_move` against the server of
+`gizmo` section uses real mouse events: an untouched gizmo and a gizmo with a
+dragged preview (button held, then released) against the reads, an export, a
+section analysis, a screenshot, reconcile and the edits; then a call that was
+given up, a click after its timeout, and reconcile. It sets the camera for its
+clicks and puts it back. The speed check, nothing selected: `plasticity_move` against the server of
 `--baseline-root` (a copy of the commit before the guard, with `node_modules`),
 calls interleaved, and the five native calls of a 5-step batch with the guard
 on and off in one process; each median may rise by 5 ms. The whole batch call
@@ -1012,8 +1081,9 @@ behind: an idle default command is cancelled, and the reply says so in
 
 | Field | Meaning |
 |---|---|
-| `recovery.cancelledDefaultCommands` | Names of the idle default commands that were cancelled (for example `OffsetFaceCommand`). No edit was undone or repeated; the selection was kept. |
-| `recovery.activeCommand` | `{ name, state, default }` of a command that is still active. It was not touched: finish or cancel it in Plasticity. |
+| `recovery.cancelledDefaultCommands` | Names of the idle, untouched default commands that were cancelled (for example `OffsetFaceCommand`). No edit was undone or repeated; the selection was kept. |
+| `recovery.restoredSelection` | Number of items put back into an empty selection: the selection that a call which timed out had set aside. Absent when something else is selected (it stays) or nothing was set aside. |
+| `recovery.activeCommand` | `{ name, state, default, edited? }` of a command that is still active. It was not touched: finish or cancel it in Plasticity. `edited: true` marks a default gizmo that holds changes of the user. While such a gizmo holds a preview, Plasticity refuses the read that reconcile needs: the call then fails, and its error carries this note instead ("... the session was not reconciled. FilletShellCommand is active and holds changes the user made ...; it was not touched."). |
 | `recovery.note` | The same in words. |
 
 Without a leftover the reply has no `recovery` field.

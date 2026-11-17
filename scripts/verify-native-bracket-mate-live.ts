@@ -19,7 +19,8 @@ type Vec = [number, number, number];
 type Check = { case: string; check: string; ok: boolean; detail?: unknown };
 // 1-4: the original acceptance. d1-d11: one case per defect of the review (d45 covers defects 4 and 5).
 // r2b1, r2b2, r2t: round 2 (recessed entries, countersink and counterbore breakout, ray time).
-const CASES = ["1", "2", "3", "4", "d1", "d2", "d3", "d45", "d6", "d7", "d8", "d9", "d10", "d11", "r2b1", "r2b2", "r2t", "t1"] as const;
+// t1, t2: the final review (the clearance ring and the blind floor; the wall beside the bore at any angle).
+const CASES = ["1", "2", "3", "4", "d1", "d2", "d3", "d45", "d6", "d7", "d8", "d9", "d10", "d11", "r2b1", "r2b2", "r2t", "t1", "t2"] as const;
 const HAND_BATCH_BYTES = 2_308; // the audit's hand-written L-bracket batch (discovery/speed-2026-11, part b)
 const X0 = 2000; // every case builds at x >= 2000 mm, away from the document's own bodies
 
@@ -57,7 +58,9 @@ Cases: 1 audit L-bracket in one call; 2 U bracket with a slotted pair and Z brac
 mate chain (direct calls, then one lean batch); 4 live rejections; d1-d11 the review's failing inputs, one case per
 defect (d45 is defects 4 and 5); r2b1, r2b2, r2t round 2 (entries, heads, 12-axis timing); t1 the final review's thin
 walls: a membrane over a cross hole between the rays, a bore 0.002 mm beside a pocket wall and a void, Ø0.99 up a 1 mm
-wall, and 16 rays per ring above Ø10. Builds at x >= ${X0} mm in an isolated instance, restores the Undo depth and body list
+wall, and 16 rays per ring above Ø10; t2 the wall beside the bore at any angle: Ø4 beside a Ø6 hole with a 0.002, 0.01
+and 0.04 mm wall at six angles, a counterbore wall 0.01 mm from that hole, a pocket turned 22.5 degrees, the 1 mm and
+0.06 mm controls, and what the exact clearance check costs. Builds at x >= ${X0} mm in an isolated instance, restores the Undo depth and body list
 after every case, and writes evidence.json to the new output directory.`;
 
 // ---------- small geometry helpers ----------
@@ -695,6 +698,79 @@ async function caseT1(live: Live): Promise<void> {
   live.evidence.t1 = { rays, floorProbe: blind.result.floorProbe };
 }
 
+// ---------- final review T2: the wall beside the bore at any angle (the exact clearance check) ----------
+
+async function caseT2(live: Live): Promise<void> {
+  const source = await make(live, "t2", "plasticity_create_box", { originMm: [2600, 300, 0], sizeMm: [5, 5, 5], name: "t2-source" });
+  const down: Vec = [0, 0, -1];
+  const transfer = (targetId: number, pointMm: Vec, hole: Record<string, unknown>) => ({ sourceId: source, targetId, axesMm: [{ pointMm, axis: down }], hole });
+  // Either guard may speak first (a ray of the ring where the wall lies on one, the kernel's distance where it lies between
+  // two); both refuse before the edit, so the document has no Undo step to take back.
+  const thin = /axis 0 \(point [^)]*\): the hole leaves a wall thinner than 0\.05 mm beside the bore: (the ray at radius [\d.]+ mm, [\d.]+ degrees|target face \S+ \((Cylinder|Plane)\) lies 0\.0\d+ mm from the cut surface)/;
+  const unit = (degrees: number): [number, number] => [Math.cos((degrees * Math.PI) / 180), Math.sin((degrees * Math.PI) / 180)];
+  const said: Record<string, string> = {};
+
+  // 1: a Ø4 through hole beside a Ø6 hole; the wall between them is 0.002, 0.01 and 0.04 mm, and the line of centres
+  // lies at 0, 10, 22.5, 45, 67.5 and 90 degrees to the ring's first ray (18 inputs).
+  const block = await make(live, "t2", "plasticity_create_box", { originMm: [2600, 0, 0], sizeMm: [40, 40, 20], name: "t2-holed" });
+  const rod = await make(live, "t2", "plasticity_create_cylinder", { centerMm: [2620, 20, -1], radiusMm: 3, heightMm: 22 });
+  const holed = await difference(live, "t2", block, rod, "t2-holed");
+  for (const gap of [0.002, 0.01, 0.04]) for (const degrees of [0, 10, 22.5, 45, 67.5, 90]) {
+    const [x, y] = unit(degrees);
+    const distance = 3 + 2 + gap;
+    const message = await live.refusedUnchanged("t2", `Ø4 through, a ${gap} mm wall to a Ø6 hole, line of centres at ${degrees} degrees`, "plasticity_transfer_holes", transfer(holed, [2620 + distance * x, 20 + distance * y, 60], { diameterMm: 4, through: true }), thin);
+    said[`hole ${gap} mm at ${degrees} deg`] = /the ray at radius/.test(message) ? "ray" : "kernel distance";
+  }
+  live.check("t2", "no Ø4 bore left on the holed block", (await cylindersOf(live, holed, 2)).length === 0);
+  for (const wall of [1, 0.06]) { const [x, y] = unit(22.5);
+    await cutAndMeasure(live, "t2", `control: Ø4 through, a ${wall} mm wall to the Ø6 hole at 22.5 degrees`, source, holed, [{ pointMm: [2620 + (5 + wall) * x, 20 + (5 + wall) * y, 60], axis: down }], undefined, { diameterMm: 4, through: true }, 2); }
+
+  // 1b: the wall of a counterbore (Ø6 x 2 on a Ø3 through hole) 0.01 mm from the Ø6 hole, on a ray of the head's ring
+  // and between two of them. The head's own ring saw it only at 0 and 45 degrees.
+  const headThin = /axis 0 \(point [^)]*\): the hole leaves a wall thinner than 0\.05 mm beside the bore's head: (the ray at radius [\d.]+ mm, [\d.]+ degrees|target face \S+ \(Cylinder\) lies 0\.0\d+ mm from the cut surface)/;
+  const counterbored = { diameterMm: 3, through: true, counterbore: { diameterMm: 6, depthMm: 2 } };
+  for (const degrees of [0, 22.5, 45]) {
+    const [x, y] = unit(degrees);
+    const message = await live.refusedUnchanged("t2", `counterbore Ø6 x 2, its wall 0.01 mm from the Ø6 hole, line of centres at ${degrees} degrees`, "plasticity_transfer_holes", transfer(holed, [2620 + 6.01 * x, 20 + 6.01 * y, 60], counterbored), headThin);
+    said[`counterbore 0.01 mm at ${degrees} deg`] = /the ray at radius/.test(message) ? "ray" : "kernel distance";
+  }
+  live.check("t2", "no Ø3 bore left on the holed block", (await cylindersOf(live, holed, 1.5)).length === 0);
+  for (const wall of [1, 0.06]) { const [x, y] = unit(22.5);
+    await cutAndMeasure(live, "t2", `control: counterbore Ø6 x 2, its wall ${wall} mm from the Ø6 hole at 22.5 degrees`, source, holed, [{ pointMm: [2620 + (6 + wall) * x, 20 + (6 + wall) * y, 60], axis: down }], undefined, counterbored, 1.5); }
+
+  // 2: the pocketed block of T1, turned 22.5 degrees about z; the rim of a Ø3 through hole 0.002, 0.01 and 0.04 mm from
+  // the pocket wall (3 inputs). The wall now lies between two rays of the ring.
+  const pocketBlock = await make(live, "t2", "plasticity_create_box", { originMm: [2700, 0, 0], sizeMm: [60, 40, 15], name: "t2-pocketed" });
+  const pocketTool = await make(live, "t2", "plasticity_create_box", { originMm: [2710, 8, 5], sizeMm: [40, 24, 20] });
+  const pocketed = await difference(live, "t2", pocketBlock, pocketTool, "t2-pocketed");
+  await live.mutate("t2", "plasticity_rotate", { ids: [pocketed], pivotMm: [2710, 20, 0], axis: [0, 0, 1], degrees: 22.5 });
+  const [nx, ny] = unit(22.5);
+  for (const gap of [0.002, 0.01, 0.04]) {
+    const message = await live.refusedUnchanged("t2", `pocket turned 22.5 degrees: Ø3 through, rim ${gap} mm from the pocket wall`, "plasticity_transfer_holes", transfer(pocketed, [2710 + nx * (1.5 + gap), 20 + ny * (1.5 + gap), 60], { diameterMm: 3, through: true }), thin);
+    said[`pocket ${gap} mm`] = /the ray at radius/.test(message) ? "ray" : "kernel distance";
+  }
+  live.check("t2", "no Ø3 bore left on the turned pocketed block", (await cylindersOf(live, pocketed, 1.5)).length === 0);
+  for (const wall of [1, 0.06]) await cutAndMeasure(live, "t2", `control: pocket turned 22.5 degrees, rim ${wall} mm from the wall`, source, pocketed, [{ pointMm: [2710 + nx * (1.5 + wall), 20 + ny * (1.5 + wall), 60], axis: down }], undefined, { diameterMm: 3, through: true }, 1.5);
+
+  // 3: what the check costs. One axis beside a wall (the costly case: the search has to prove 0.06 mm) and 12 axes in a
+  // plate (the common case: nothing near, one read per axis).
+  const near = await live.mutate("t2", "plasticity_transfer_holes", transfer(holed, [2620 + 5.06 * unit(22.5)[0], 20 + 5.06 * unit(22.5)[1], 60], { diameterMm: 4, through: true }));
+  await live.undoTo((await live.status()).undoDepth - (near.result.undoSteps ?? 1));
+  const plate = await make(live, "t2", "plasticity_create_box", { originMm: [2800, 0, 0], sizeMm: [60, 40, 6], name: "t2-plate" });
+  const twelve = await live.mutate("t2", "plasticity_transfer_holes", { sourceId: source, targetId: plate, axesMm: Array.from({ length: 12 }, (_, index) => ({ pointMm: [2806 + 9 * (index % 6), 10 + 20 * Math.floor(index / 6), 60], axis: down })), hole: { diameterMm: 3.2, through: true } });
+  const clearance = twelve.result.clearance;
+  await live.undoTo((await live.status()).undoDepth - twelve.result.undoSteps);
+  // The worst 12: every rim 0.06 mm from the plate's edge face, so every axis pays for the full search.
+  const edged = await live.mutate("t2", "plasticity_transfer_holes", { sourceId: source, targetId: plate, axesMm: Array.from({ length: 12 }, (_, index) => ({ pointMm: [2805 + 4.5 * index, 1.56, 60], axis: down })), hole: { diameterMm: 3, through: true } });
+  live.evidence.t2 = { firstToRefuse: said, nearWall: { clearance: near.result.clearance, clientMs: near.ms }, twelveAxes: { clearance, probe: twelve.result.probe, clientMs: twelve.ms, serverMs: twelve.result.timing?.totalMs },
+    twelveAxesNearAnEdge: { clearance: edged.result.clearance, probe: edged.result.probe, clientMs: edged.ms, serverMs: edged.result.timing?.totalMs } };
+  live.check("t2", `12-axis transfer, every rim 0.06 mm from the plate edge: the clearance check read ${edged.result.clearance?.points} point(s) in ${edged.result.clearance?.calls} call(s), ${edged.result.clearance?.ms} ms (${Math.round(((edged.result.clearance?.ms ?? 0) / 12) * 100) / 100} ms per axis); ${edged.ms} ms round trip; 12 holes`,
+    edged.result.axisCount === 12 && edged.result.holeCount === 12 && typeof edged.result.clearance?.ms === "number" && edged.result.clearance.ms < 500 && edged.ms < 1500, { clearance: edged.result.clearance, ms: edged.ms });
+  live.check("t2", `a 0.06 mm wall: the clearance check read ${near.result.clearance?.points} point(s) in ${near.result.clearance?.calls} call(s), ${near.result.clearance?.ms} ms`, typeof near.result.clearance?.ms === "number" && near.result.clearance.ms < 250, near.result.clearance);
+  live.check("t2", `12-axis transfer: the clearance check read ${clearance?.points} point(s) in ${clearance?.calls} call(s), ${clearance?.ms} ms (${Math.round(((clearance?.ms ?? 0) / 12) * 100) / 100} ms per axis); ${twelve.ms} ms round trip; 12 holes`,
+    twelve.result.axisCount === 12 && twelve.result.holeCount === 12 && typeof clearance?.ms === "number" && clearance.ms < 250 && twelve.ms < 1500, { clearance, ms: twelve.ms });
+}
+
 async function main(): Promise<void> {
   const options = parseBracketMateArgs(process.argv.slice(2));
   if (options.help) { console.log(HELP); return; }
@@ -722,7 +798,7 @@ async function main(): Promise<void> {
         if (name === "2") await case2(live);
         if (name === "3") await case3(live);
         if (name === "4") await case4(live);
-        const review: Record<string, (live: Live) => Promise<void>> = { d1: caseD1, d2: caseD2, d3: caseD3, d45: caseD45, d6: caseD6, d7: caseD7, d8: caseD8, d9: caseD9, d10: caseD10, d11: caseD11, r2b1: caseR2B1, r2b2: caseR2B2, r2t: caseR2T, t1: caseT1 };
+        const review: Record<string, (live: Live) => Promise<void>> = { d1: caseD1, d2: caseD2, d3: caseD3, d45: caseD45, d6: caseD6, d7: caseD7, d8: caseD8, d9: caseD9, d10: caseD10, d11: caseD11, r2b1: caseR2B1, r2b2: caseR2B2, r2t: caseR2T, t1: caseT1, t2: caseT2 };
         if (review[name]) await review[name]!(live);
       } catch (error) {
         live.check(name, "case ran to the end", false, error instanceof Error ? error.message.slice(0, 2000) : String(error));

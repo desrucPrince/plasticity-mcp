@@ -8,7 +8,11 @@
 // 4. A refused edit, a history step whose state holds a face selection, and plasticity_reconcile clearing an idle
 //    default command that was left behind: one made by the script, and (with --baseline-root) the one that the
 //    server before the guard really leaves when its call times out.
-// 5. Speed with nothing selected. plasticity_move: this tree's server against the server of the tree before the
+// 5. A gizmo the user is using, made with real mouse events: an untouched gizmo is left by every call that runs no
+//    command and cancelled by an edit; a gizmo with a dragged preview (button held, then released) is left by every
+//    call, and edits are refused with "the user is editing". A call that was given up: a click after the timeout keeps
+//    its gizmo and its selection when the source settles; plasticity_reconcile puts a set-aside selection back.
+// 6. Speed with nothing selected. plasticity_move: this tree's server against the server of the tree before the
 //    guard (--baseline-root), calls interleaved, the median may rise by 5 ms. The 5-step batch: its five native calls
 //    with the guard on and off in one process (judged, 5 ms), and the whole call through both servers (reported: its
 //    median is not stable to 5 ms on a renderer whose garbage collections take seconds).
@@ -38,7 +42,7 @@ const MULTI_STEP_LIMIT_MS = 5_000;
 const SPEED_LIMIT_MS = 5;
 
 interface Options { help: boolean; target?: string; output?: string; allowDisposableMutations: boolean; baselineRoot?: string; skipSpeed: boolean; sections: string[] }
-const SECTIONS = ["matrix", "repeat", "entry", "recovery", "speed"] as const;
+const SECTIONS = ["matrix", "repeat", "entry", "recovery", "gizmo", "speed"] as const;
 
 export function parseSelectionArgs(argv: string[]): Options {
   const options: Options = { help: argv.length === 0, allowDisposableMutations: false, skipSpeed: false, sections: [...SECTIONS] };
@@ -73,7 +77,9 @@ const HELP = `Usage:
 
 Sections: matrix (13 tools x 8 selection states), repeat (20 edits with a face of an untouched body selected), entry (a
 default command awaiting at entry; a command of the user awaiting at entry), recovery (a failing edit, an Undo over a
-history step that holds a face selection, plasticity_reconcile), speed (plasticity_move and a 5-step batch with nothing
+history step that holds a face selection, plasticity_reconcile), gizmo (real clicks and a real drag: an untouched and a
+dragged default gizmo against reads, exports, a section analysis, a screenshot, reconcile and edits; a call that was
+given up, a click after it, reconcile; the camera is set for the clicks and put back), speed (plasticity_move and a 5-step batch with nothing
 selected; plasticity_move interleaved against the server of --baseline-root and the batch's five native calls with
 the guard on and off: each median may rise by at most ${SPEED_LIMIT_MS} ms; the whole batch through both servers is reported).
 
@@ -165,6 +171,8 @@ class Live {
   readonly native: PlasticityRuntime;
   readonly checks: Check[] = [];
   readonly evidence: Record<string, unknown> = {};
+  /** The ids of the bodies the document had before the script built anything. */
+  documentBodies: ReadonlySet<number> = new Set();
   constructor(client: Client, native: PlasticityRuntime) { this.client = client; this.native = native; }
   async call(name: string, args: Record<string, unknown> = {}): Promise<any> { return await callTool(this.client, name, args); }
   async status(): Promise<any> { return await this.call("plasticity_status", {}); }
@@ -338,7 +346,8 @@ const TOOLS: ToolCase[] = [
       { toolName: "plasticity_delete", arguments: { ids: ["$0.added[0]"], intent: "matrix" } },
     ] }, async verify(l, result) {
       if (result.undoSteps !== 5) return `the batch reports ${result.undoSteps} Undo steps, not 5`;
-      if ((await l.status()).bodies.some((body: { boundsMm?: { min: Vec } }) => body.boundsMm && body.boundsMm.min[0] >= X0 + 400)) return "the batch's own box is still there";
+      // The document's own bodies (there before the script) may lie there too; they are not the batch's box.
+      if ((await l.status()).bodies.some((body: { id: number; boundsMm?: { min: Vec } }) => !l.documentBodies.has(body.id) && body.boundsMm && body.boundsMm.min[0] >= X0 + 400)) return "the batch's own box is still there";
       return await expectBounds(l, touched, [T0[0], 3, 0], [T0[0] + 20, 13, 5]);
     } };
   } },
@@ -634,6 +643,250 @@ async function recovery(live: Live, baseline: Client | undefined): Promise<void>
   }
 }
 
+// ---------- a gizmo the user is using; a call that was given up ----------
+// The gizmo is made as a person makes it: real mouse events (Input.dispatchMouseEvent) on the viewport select an edge or
+// a face of a box, Plasticity starts the default command of that selection, and a press-and-drag on its handle gives the
+// factory a preview. The camera is set for the click and put back afterwards.
+interface Gizmo { serial: number; name: string; agent: string | null; state: string | null; factory: string | null; temps: number | null; distanceMm: number | null; changed: boolean | null }
+const GIZMO_SOURCE = `function () {
+  const tag = value => value === null || value === undefined ? null : typeof value === 'string' ? value : (value.tag ?? value.constructor?.name ?? null);
+  const command = this.executor.active?.command;
+  if (!command) return null;
+  const book = (globalThis.__selectionLive ??= { marks: new WeakMap(), next: 0 });
+  if (!book.marks.has(command)) book.marks.set(command, ++book.next);
+  const factory = Array.from(command.resources ?? []).find(resource => resource && typeof resource === 'object' && '_state' in resource && 'temps' in resource) ?? null;
+  const state = factory?._state;
+  const temps = factory?.temps?.length ?? factory?.temps?.size ?? null;
+  return {
+    serial: book.marks.get(command), name: command.constructor?.name ?? 'unknown', agent: command.agent ?? null, state: tag(command._state),
+    factory: factory ? tag(state !== null && typeof state === 'object' && 'value' in state ? state.value : state) : null, temps,
+    distanceMm: typeof factory?.distance === 'number' ? Math.round(factory.distance * 1e6) / 1e3 : null, changed: command._isFactoryChanged ?? null,
+  };
+}`;
+const CAMERA_SOURCE = `function () { const viewport = Array.from(this.viewports)[0]; const controls = viewport.orbitControls; return { target: controls.target.toArray(), q: controls.quaternion.toArray(), radius: controls.radius, zoom: controls.zoom }; }`;
+// Sets the first viewport's camera (a saved one with q, or a new one that looks at target from the direction eye) and
+// returns where the given points (mm) lie in the window, in CSS pixels.
+const SET_CAMERA_SOURCE = `async function (args) {
+  const viewport = Array.from(this.viewports)[0], camera = viewport.camera, controls = viewport.orbitControls, Vector = camera.position.constructor;
+  const target = new Vector(...args.target);
+  let q;
+  if (args.q) q = camera.quaternion.clone().fromArray(args.q);
+  else { camera.position.copy(target).addScaledVector(new Vector(...args.eye).normalize(), args.radius); camera.up.set(0, 0, 1); camera.lookAt(target); q = camera.quaternion.clone(); }
+  controls.target.copy(target); controls.targetEnd.copy(target); controls.targetVelocity.set(0, 0, 0); controls.deltaTarget.set(0, 0, 0);
+  controls.quaternion.copy(q); controls.quaternionEnd.copy(q);
+  for (const key of ['focalOffset', 'focalOffsetEnd', 'focalOffsetVelocity', '_focalOffset', '_inverseFocalOffset']) controls[key]?.set?.(0, 0, 0);
+  controls.radius = controls.radiusEnd = args.radius; controls.zoom = controls.zoomEnd = args.zoom;
+  controls.setNeedsUpdate?.(); controls.update?.(); viewport.setNeedsRender();
+  await new Promise(resolve => setTimeout(resolve, 700));
+  camera.updateMatrixWorld();
+  const rect = viewport.renderer.domElement.getBoundingClientRect();
+  return (args.points ?? []).map(point => { const projected = new Vector(point[0] / 1000, point[1] / 1000, point[2] / 1000).project(camera); return [rect.left + (projected.x + 1) / 2 * rect.width, rect.top + (1 - projected.y) / 2 * rect.height]; });
+}`;
+// What Escape does for a person: every active command is cancelled; then the selection is emptied.
+const NATIVE_ESCAPE_SOURCE = `async function () {
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  for (let round = 0; round < 5 && this.executor.active; round += 1) { this.executor.cancelActiveCommand(); const deadline = Date.now() + 1000; while (this.executor.active && Date.now() < deadline) await sleep(5); }
+  this.selection.selected.removeAll(); this.selection.hits?.clear?.();
+  return this.executor.active?.command?.constructor?.name ?? null;
+}`;
+// A source that a call gives up on: it waits until the script lets it go. With command: true it then runs a command
+// (so mutate() sends it with the guard); without, it is a source that runs none (mutate() sends it as it is).
+const hungSource = (command: boolean) => `async function () {
+  await new Promise(resolve => { globalThis.__selectionLiveRelease = resolve; });
+  ${command ? "const command = new this.commands.GroupSelectedCommand(this); command.remember = false; command.execute = async function () {}; await this.exec(command);" : ""}
+  return 1;
+}`;
+const RELEASE_SOURCE = `function () { const release = globalThis.__selectionLiveRelease; delete globalThis.__selectionLiveRelease; if (release) release(); return !!release; }`;
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const gizmoText = (gizmo: Gizmo | null) => gizmo ? `${gizmo.name} #${gizmo.serial} (${gizmo.agent}, ${gizmo.state}; factory ${gizmo.factory}, ${gizmo.temps} temp(s), ${gizmo.distanceMm} mm)` : "no command";
+
+async function gizmo(live: Live, output: string): Promise<void> {
+  const baseDepth = (await live.status()).undoDepth;
+  const sectionsAtStart = (await live.call("plasticity_list_section_analyses", {})).sectionAnalyses?.length ?? 0;
+  if (sectionsAtStart > 0) throw new Error("A section analysis is active in the instance; the gizmo section would replace it. Nothing was created.");
+  const camera = await live.native.read<{ target: number[]; q: number[]; radius: number; zoom: number }>(CAMERA_SOURCE);
+  const mouse = (type: string, x: number, y: number, buttons: number) => live.native.cdp("Input.dispatchMouseEvent", { type, x, y, button: type === "mouseMoved" ? (buttons ? "left" : "none") : "left", buttons, clickCount: type === "mouseMoved" ? 0 : 1 });
+  const read = async () => await live.native.read<Gizmo | null>(GIZMO_SOURCE);
+  const same = (a: Gizmo | null, b: Gizmo | null) => JSON.stringify(a) === JSON.stringify(b);
+  // One tool call that may be refused: the error text or the parsed reply.
+  const attempt = async (name: string, args: Record<string, unknown>): Promise<{ error?: string; result?: any; ms: number }> => {
+    const started = performance.now();
+    const response = await live.client.callTool({ name, arguments: args });
+    const ms = Math.round(performance.now() - started);
+    const text = toolText(response);
+    if ((response as { isError?: boolean }).isError) return { error: text, ms };
+    try { return { result: JSON.parse(text), ms }; } catch { return { result: text, ms }; }
+  };
+  const raw = async (source: string, timeoutMs?: number): Promise<{ error?: string; value?: unknown }> => {
+    try { return { value: await live.native.mutate(source, [], [], timeoutMs) }; } catch (error) { return { error: error instanceof Error ? error.message : String(error) }; }
+  };
+  const QUIET = "async function () { return 1; }"; // what plasticity_save_copy, the exports and the section analyses send: no command
+  const COMMAND = "async function () { const command = new this.commands.GroupSelectedCommand(this); command.remember = false; command.execute = async function () {}; await this.exec(command); return 1; }";
+  const editing = /Plasticity is busy: the user is editing/;
+  let pressed: [number, number] | undefined;
+  try {
+    const user = await live.box([X0 + 100, 0, 0], [20, 20, 20]); // the body the person works on
+    const moved = await live.box(T0, [20, 20, 20]); // the body the tools edit
+    const faceId = String((await live.faces(user))[0].id);
+    const [point] = await live.native.read<Array<[number, number]>>(SET_CAMERA_SOURCE, [{ target: [(X0 + 110) / 1000, 0.01, 0.01], eye: [1, -1, 0.8], radius: 0.2, zoom: 90, points: [[X0 + 110, 10, 20]] }], 15_000);
+    const [x, y] = point!;
+    const click = async () => { for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) { await mouse(type, x, y, type === "mousePressed" ? 1 : 0); await pause(type === "mouseMoved" ? 150 : 60); } };
+    // Waits for a state of the gizmo with a bound (a renderer garbage collection can take seconds), then lets it settle.
+    const until = async (test: (now: Gizmo | null) => boolean, limitMs = 6_000) => { for (const deadline = Date.now() + limitMs; Date.now() < deadline && !test(await read());) await pause(50); await pause(200); };
+    // The first click gives the viewport the pointer, the second selects; Plasticity then starts the default command.
+    const clickBox = async () => { await click(); await pause(600); await click(); await pause(500); await until((now) => now?.agent === "automatic" && now.state === "Awaiting"); };
+    const drag = async () => {
+      await mouse("mouseMoved", x, y, 0); await pause(150);
+      await mouse("mousePressed", x, y, 1); pressed = [x, y]; await pause(100);
+      for (let step = 1; step <= 8; step += 1) { await mouse("mouseMoved", x + 6 * step, y - 6 * step, 1); pressed = [x + 6 * step, y - 6 * step]; await pause(40); }
+      await until((now) => !!now && (now.factory !== "none" || (now.temps ?? 0) > 0));
+      await pause(300);
+    };
+    const release = async () => { if (pressed) { await mouse("mouseReleased", pressed[0], pressed[1], 0); pressed = undefined; await pause(400); } };
+
+    // ----- 1. A gizmo nobody has changed: tools that run no command leave it; an edit cancels it and puts the selection back.
+    await clickBox();
+    const idle = await read();
+    const idleView = await live.view();
+    live.check("gizmo", `set-up: a real click selects ${idleView.selection.join(" ")} and Plasticity starts ${gizmoText(idle)}`, idle?.agent === "automatic" && idle.state === "Awaiting" && idle.factory === "none" && idle.temps === 0 && idleView.selection.length === 1, { idle, idleView });
+    const quietCalls: Record<string, unknown> = {};
+    for (const [label, call] of [
+      ["plasticity_status", () => attempt("plasticity_status", {})],
+      ["plasticity_export_step", async () => attempt("plasticity_export_step", { ids: [moved], path: join(output, "gizmo-idle.step"), revision: (await live.status()).revision })],
+      ["plasticity_create_section_analysis", async () => attempt("plasticity_create_section_analysis", { originMm: [T0[0] + 10, 10, 10], normal: [0, 0, 1], intent: "gizmo: section", revision: (await live.status()).revision })],
+      ["plasticity_delete_section_analysis", async () => attempt("plasticity_delete_section_analysis", { id: (await live.call("plasticity_list_section_analyses", {})).sectionAnalyses?.[0]?.id, intent: "gizmo: section", revision: (await live.status()).revision })],
+      ["plasticity_screenshot", () => attempt("plasticity_screenshot", { path: join(output, "gizmo-idle.png"), captureMode: "viewport" })],
+      ["a source without a command (as plasticity_save_copy sends)", async () => { const reply = await raw(QUIET); return { ...(reply.error ? { error: reply.error } : { result: reply.value }), ms: 0 }; }],
+    ] as Array<[string, () => Promise<{ error?: string; result?: any; ms: number }>]>) {
+      const reply = await call();
+      const after = await read();
+      quietCalls[label] = { error: reply.error?.slice(0, 300), ms: reply.ms, after };
+      live.check("gizmo", `untouched gizmo: ${label} returns${reply.error ? ` AN ERROR (${reply.error.slice(0, 160)})` : ""} and leaves ${gizmoText(after)}`, reply.error === undefined && same(after, idle) && JSON.stringify((await live.view()).selection) === JSON.stringify(idleView.selection), { reply: reply.error ?? "ok", after });
+    }
+    const idleEdit = await live.edit("plasticity_move", { ids: [moved], deltaMm: [0, 0, 1], intent: "gizmo: an edit with an untouched gizmo" });
+    const afterIdleEdit = await live.view();
+    live.check("gizmo", `untouched gizmo: an edit cancels it, runs (${Math.round(idleEdit.ms)} ms) and puts the selection back`, afterIdleEdit.active === null && JSON.stringify(afterIdleEdit.selection) === JSON.stringify(idleView.selection) && (await expectBounds(live, moved, [T0[0], 0, 1], [T0[0] + 20, 20, 21])) === undefined, afterIdleEdit);
+    live.evidence.gizmoIdle = { gizmo: idle, calls: quietCalls, editMs: Math.round(idleEdit.ms) };
+
+    // ----- 2. The person drags the gizmo's handle: the factory holds a preview. Nothing cancels it.
+    await live.native.read(NATIVE_ESCAPE_SOURCE, [], 15_000);
+    await clickBox();
+    const before = await live.status(); // the last state Plasticity lets anybody read until the preview is gone
+    const beforeView = await live.view();
+    await drag();
+    const dragged = await read();
+    live.check("gizmo", `set-up: a real press and drag on the handle, button held: ${gizmoText(dragged)}`, dragged?.agent === "automatic" && dragged.state === "Awaiting" && (dragged.factory !== "none" || (dragged.temps ?? 0) > 0), dragged);
+    const unchanged = async () => { const now = await read(); const view = await live.view(); return { ok: same(now, dragged) && view.undoDepth === beforeView.undoDepth && JSON.stringify(view.selection) === JSON.stringify(beforeView.selection), now, view }; };
+    const refused: Record<string, unknown> = {};
+    const toolCalls = (phase: string): Array<[string, () => Promise<{ error?: string; result?: any; ms: number }>, RegExp | null]> => [
+      ["plasticity_status", () => attempt("plasticity_status", {}), editing],
+      ["plasticity_reconcile", () => attempt("plasticity_reconcile", {}), /Plasticity is busy: the user is editing, so the document cannot be read and the session was not reconciled\. \S+ is active and holds changes the user made \(the preview of its gizmo\); it was not touched\./],
+      ["plasticity_export_step", () => attempt("plasticity_export_step", { ids: [moved], path: join(output, `gizmo-${phase}.step`), revision: before.revision }), editing],
+      ["plasticity_create_section_analysis", () => attempt("plasticity_create_section_analysis", { originMm: [T0[0] + 10, 10, 10], normal: [0, 0, 1], intent: "gizmo: section", revision: before.revision }), editing],
+      // A screenshot to a file reads no state first; its own source refuses a busy executor in Plasticity's older words.
+      ["plasticity_screenshot", () => attempt("plasticity_screenshot", { path: join(output, `gizmo-${phase}.png`), captureMode: "viewport" }), /Plasticity is busy/],
+      ["a source without a command (as plasticity_save_copy sends)", async () => { const reply = await raw(QUIET); return { ...(reply.error ? { error: reply.error } : { result: reply.value }), ms: 0 }; }, null],
+      ["plasticity_move (an edit)", () => attempt("plasticity_move", { ids: [moved], deltaMm: [0, 0, 1], intent: "gizmo: an edit while the user is editing", revision: before.revision }), editing],
+      ["plasticity_undo (an edit)", () => attempt("plasticity_undo", { steps: 1, intent: "gizmo: an edit while the user is editing", revision: before.revision }), editing],
+      ["plasticity_batch of two moves", () => attempt("plasticity_batch", { steps: [1, 2].map(() => ({ toolName: "plasticity_move", arguments: { ids: [moved], deltaMm: [0, 0, 1], intent: "gizmo: an edit while the user is editing" } })) }), editing],
+      ["a command source sent straight to the guard", async () => { const reply = await raw(COMMAND); return { ...(reply.error ? { error: reply.error } : { result: reply.value }), ms: 0 }; }, /Plasticity is busy: the user is editing with the \S+ gizmo \(it holds a preview with changes that are not committed\)\. Finish or cancel that gizmo in Plasticity, then repeat this call\. Nothing was changed/],
+    ];
+    for (const phase of ["held", "released"]) {
+      if (phase === "released") {
+        await release();
+        const afterRelease = await read();
+        live.check("gizmo", `the button is released: the preview stays (${gizmoText(afterRelease)})`, same(afterRelease, dragged), afterRelease);
+      }
+      for (const [label, call, expected] of toolCalls(phase)) {
+        const reply = await call();
+        const state = await unchanged();
+        refused[`${phase}: ${label}`] = { error: reply.error?.slice(0, 400), ms: reply.ms, gizmo: state.now };
+        live.check("gizmo", `preview ${phase}: ${label} ${expected ? `is refused (${(reply.error ?? "NOT REFUSED").slice(0, 110)}...)` : "returns"}; the gizmo, its preview, the selection and the Undo depth are as they were`,
+          (expected ? reply.error !== undefined && expected.test(reply.error) : reply.error === undefined) && state.ok, { error: reply.error?.slice(0, 400), state });
+      }
+    }
+    // The person cancels the gizmo (Escape): the document can be read again, nothing of the refused calls happened, edits run.
+    await live.native.read(NATIVE_ESCAPE_SOURCE, [], 15_000);
+    const afterCancel = await live.status();
+    live.check("gizmo", "after the person cancels the gizmo the document reads as before the drag: no refused call changed anything", afterCancel.undoDepth === before.undoDepth && afterCancel.revision === before.revision && (await expectBounds(live, moved, [T0[0], 0, 1], [T0[0] + 20, 20, 21])) === undefined, { before: before.revision, after: afterCancel.revision });
+    const afterCancelEdit = await live.edit("plasticity_move", { ids: [moved], deltaMm: [0, 0, 1], intent: "gizmo: the edit after the user's cancel" });
+    live.check("gizmo", `the same edit then runs (${Math.round(afterCancelEdit.ms)} ms)`, (await expectBounds(live, moved, [T0[0], 0, 2], [T0[0] + 20, 20, 22])) === undefined && (await live.view()).active === null);
+    live.evidence.gizmoEdited = { gizmo: dragged, calls: refused };
+
+    // ----- 3. A call that was given up (its CDP request timed out, the source is still pending in the window).
+    // 3a. The person selects something after the timeout and keeps the gizmo; the selection is still theirs when the source settles.
+    await live.native.read(NATIVE_ESCAPE_SOURCE, [], 15_000);
+    await selectFaces(live, [[user, faceId]]);
+    const saved = (await live.view()).selection;
+    const givenUp = await raw(hungSource(true), 700);
+    const afterTimeout = await live.view();
+    live.check("gizmo", `set-up: a guarded call is given up after 700 ms (${givenUp.error?.slice(0, 60)}); the guard had set the selection (${saved.join(" ")}) aside`, /timed out/i.test(givenUp.error ?? "") && live.native.isUncertain() && afterTimeout.selection.length === 0 && afterTimeout.active === null, { givenUp, afterTimeout });
+    await clickBox(); // about 0.7 s after the timeout
+    const clicked = await read();
+    const clickedView = await live.view();
+    await pause(1_000);
+    const later = await read();
+    live.check("gizmo", `a real click after the timeout keeps its gizmo: ${gizmoText(clicked)}, and 1 s later ${gizmoText(later)}`, clicked?.agent === "automatic" && same(clicked, later) && clickedView.selection.length === 1 && JSON.stringify(clickedView.selection) !== JSON.stringify(saved), { clicked, later, clickedView });
+    // An edit of the server while that source is still pending: it runs in its normal time, cancels the untouched
+    // gizmo as any edit does, and puts the person's selection back.
+    const pendingEdit = await live.edit("plasticity_move", { ids: [moved], deltaMm: [0, 0, 1], intent: "gizmo: an edit while a given-up source is pending" });
+    const afterPendingEdit = await live.view();
+    live.check("gizmo", `an edit while the given-up source is still pending returns (${Math.round(pendingEdit.ms)} ms); the person's selection is back and no command is active`, pendingEdit.ms <= SINGLE_EDIT_LIMIT_MS && afterPendingEdit.active === null && JSON.stringify(afterPendingEdit.selection) === JSON.stringify(clickedView.selection) && (await expectBounds(live, moved, [T0[0], 0, 3], [T0[0] + 20, 20, 23])) === undefined, afterPendingEdit);
+    await live.native.read(RELEASE_SOURCE);
+    await pause(700);
+    const settled = await live.view();
+    live.check("gizmo", `the source settles: the selection made after the timeout is still there (${settled.selection.join(" ")}), not the one the guard had saved`, JSON.stringify(settled.selection) === JSON.stringify(clickedView.selection), settled);
+    await live.native.read(NATIVE_ESCAPE_SOURCE, [], 15_000);
+    await clickBox();
+    const afterSettle = await read();
+    await pause(1_000);
+    live.check("gizmo", `a real click after the source settled keeps its gizmo (${gizmoText(afterSettle)})`, afterSettle?.agent === "automatic" && afterSettle.state === "Awaiting" && same(afterSettle, await read()), afterSettle);
+    const repair = await live.native.reconcile();
+    live.check("gizmo", "reconcile afterwards has no selection to put back", repair.recovery?.restoredSelection === undefined && !live.native.isUncertain(), repair.recovery);
+
+    // 3b. Nobody selects anything: reconcile puts the saved selection back, and the late source does not put it back twice.
+    await live.native.read(NATIVE_ESCAPE_SOURCE, [], 15_000);
+    await selectFaces(live, [[user, faceId]]);
+    const givenUpAgain = await raw(hungSource(true), 700);
+    const emptied = await live.view();
+    const restored = await live.native.reconcile();
+    const afterRestore = await live.view();
+    live.check("gizmo", `a call is given up and nobody selects anything: reconcile puts the selection back and says so (${restored.recovery?.note})`, /timed out/i.test(givenUpAgain.error ?? "") && emptied.selection.length === 0 && restored.recovery?.restoredSelection === 1 && JSON.stringify(afterRestore.selection) === JSON.stringify(saved) && afterRestore.active === null, { emptied, recovery: restored.recovery, afterRestore });
+    await live.native.read(RELEASE_SOURCE);
+    await pause(700);
+    const settledAgain = await live.view();
+    live.check("gizmo", "the source settles: the selection is the one reconcile put back", JSON.stringify(settledAgain.selection) === JSON.stringify(saved), settledAgain);
+
+    // 3c. The same with a source that runs no command (the reviewer's): it is not guarded, so nothing is set aside at all.
+    await live.native.read(NATIVE_ESCAPE_SOURCE, [], 15_000);
+    if (live.native.isUncertain()) await live.native.reconcile();
+    await selectFaces(live, [[user, faceId]]);
+    const quietGivenUp = await raw(hungSource(false), 700);
+    const quietView = await live.view();
+    live.check("gizmo", "a given-up source that runs no command: the selection was never set aside", /timed out/i.test(quietGivenUp.error ?? "") && JSON.stringify(quietView.selection) === JSON.stringify(saved), { quietGivenUp, quietView });
+    await clickBox();
+    const quietClicked = await read();
+    await pause(1_000);
+    live.check("gizmo", `a real click after that timeout keeps its gizmo (${gizmoText(quietClicked)})`, quietClicked?.agent === "automatic" && same(quietClicked, await read()), quietClicked);
+    const quietSelection = (await live.view()).selection;
+    await live.native.read(RELEASE_SOURCE);
+    await pause(500);
+    live.check("gizmo", "that source settles: the gizmo and the selection are as the person left them", same(quietClicked, await read()) && JSON.stringify((await live.view()).selection) === JSON.stringify(quietSelection));
+    live.evidence.givenUp = { saved, clicked, clickedSelection: clickedView.selection, settled: settled.selection, reconcile: restored.recovery };
+    console.log(`gizmo: untouched ${idle?.name}: 6 calls without a command left it, an edit cancelled it and put the selection back; dragged (${dragged?.factory}, ${dragged?.temps} temp, ${dragged?.distanceMm} mm): 18 tool calls and 2 raw sources left it and its preview, edits were refused; given-up call: the later click kept its gizmo and its selection; reconcile: ${restored.recovery?.note}`);
+  } finally {
+    await live.native.read(RELEASE_SOURCE).catch(() => undefined);
+    if (pressed) await mouse("mouseReleased", pressed[0], pressed[1], 0).catch(() => undefined);
+    await pause(300);
+    await live.native.read(NATIVE_ESCAPE_SOURCE, [], 15_000).catch(() => undefined);
+    await live.native.read("function () { delete globalThis.__selectionLive; return true; }").catch(() => undefined);
+    await live.native.read(SET_CAMERA_SOURCE, [{ target: camera.target, q: camera.q, radius: camera.radius, zoom: camera.zoom }], 15_000).catch(() => undefined);
+    if (live.native.isUncertain()) await live.native.reconcile().catch(() => undefined);
+    await attempt("plasticity_delete_section_analysis", { all: true, intent: "gizmo: restore", revision: (await live.status()).revision }).catch(() => undefined);
+    await live.undoTo(baseDepth);
+  }
+}
+
 // ---------- speed, nothing selected: this tree against the tree before the guard ----------
 /**
  * The native time of the batch's five calls with the selection guard on and off, interleaved, in this process: this
@@ -776,6 +1029,7 @@ async function main(): Promise<void> {
     const startView = await live.view();
     const startBodies = start.bodies.map((body: { id: number }) => body.id).sort((a: number, b: number) => a - b);
     if (startView.active || startView.selection.length > 0) throw new Error(`The instance is not idle: ${startView.active ? `${startView.active.name} is active` : `${startView.selection.length} item(s) are selected`}; nothing was created`);
+    live.documentBodies = new Set(startBodies);
     live.evidence.start = { undoDepth: start.undoDepth, bodies: startBodies, revision: start.revision };
     try {
       // Speed first: the other sections add some 1,500 edits to the renderer's history, and with them garbage collections.
@@ -784,6 +1038,7 @@ async function main(): Promise<void> {
       if (options.sections.includes("repeat")) await repeat(live);
       if (options.sections.includes("entry")) await entry(live);
       if (options.sections.includes("recovery")) await recovery(live, baseline);
+      if (options.sections.includes("gizmo")) await gizmo(live, output);
     } finally {
       await native.read(NATIVE_CLEAR_SOURCE, [], 15_000).catch(() => undefined);
       await live.undoTo(start.undoDepth).catch((error) => { live.check("restore", "the Undo depth of the start is restored", false, String(error)); });

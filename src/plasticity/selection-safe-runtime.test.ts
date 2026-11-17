@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { COMMAND_SOURCE, enableStateRead, stubPlasticity, within, type StubCommand } from "./selection-safe-stub.test.ts";
+import { COMMAND_SOURCE, DRAGGED_GIZMO, enableStateRead, stubPlasticity, UNTOUCHED_GIZMO, within, type StubCommand } from "./selection-safe-stub.test.ts";
 
 // The selection guard of PlasticityRuntime.mutate (runtime.ts, SELECTION_GUARD_SOURCE) against a stub of Plasticity's
 // executor and selection. Every test here fails on the code before the guard: there mutate() sends the source as it is.
 
-type Guarded = { selectionGuardReport(): { mode: string; passThrough?: string; cancelledAtEntry: string[]; cancelledWhileRunning: string[]; cancelledAtExit: string[]; saved: number; restored: number; dropped: number; restoredBy?: string; problems: string[] } | undefined };
+type Guarded = { selectionGuardReport(): { mode: string; passThrough?: string; late?: boolean; cancelledAtEntry: string[]; cancelledWhileRunning: string[]; cancelledAtExit: string[]; saved: number; restored: number; dropped: number; restoredBy?: string; problems: string[] } | undefined };
 const reportOf = (stub: ReturnType<typeof stubPlasticity>) => (stub.runtime as unknown as Guarded).selectionGuardReport?.();
 
 test("a command returns although the selected face of an untouched body would chain a default command", async () => {
@@ -87,16 +87,15 @@ test("a default command that idles in Awaiting at entry is cancelled; a command 
   assert.deepEqual(reportOf(idle)!.cancelledAtEntry, ["OffsetFaceCommand"]);
 
   // 2. The same gizmo while its factory computes (the user drags it): the command reads Awaiting, and is not cancelled.
+  // It is the user's work, so the edit is refused before its source runs (see the tests on a gizmo the user is editing).
   const computing = stubPlasticity();
   computing.select("2:1f1");
   computing.startDefault("OffsetFaceCommand", "Awaiting", [{ _state: { value: "updating" } }]);
-  assert.deepEqual(await within(computing.runtime.mutate(COMMAND_SOURCE, [], [{}])), { ok: true, echo: null });
+  await assert.rejects(within(computing.runtime.mutate(COMMAND_SOURCE, [], [{}])), /Plasticity is busy: the user is editing with the OffsetFaceCommand gizmo/);
   assert.deepEqual(computing.cancelCalls, [], "the guard sent no cancel");
-  assert.equal(reportOf(computing)!.mode, "pass-through");
-  assert.match(reportOf(computing)!.passThrough!, /OffsetFaceCommand is active \(state Awaiting\)/);
-  assert.deepEqual(computing.executed, [{ name: "ServerCommand", selectionAtStart: [], activeAtStart: "OffsetFaceCommand" }], "the source ran as it does without the guard: Plasticity's exec() interrupted the gizmo");
-  assert.equal(computing.executor.active, undefined);
-  assert.deepEqual(computing.selection(), ["2:1f1"], "the interrupt emptied the selection; it is put back");
+  assert.deepEqual(computing.executed, [], "the source did not run, so Plasticity's exec() did not interrupt the gizmo either");
+  assert.equal(computing.executor.active?.command.constructor.name, "OffsetFaceCommand");
+  assert.deepEqual(computing.selection(), ["2:1f1"]);
 
   // 3. A command of the user (agent user) that awaits its dialog: not a default command, not cancelled.
   const user = stubPlasticity();
@@ -140,7 +139,8 @@ test("a command of the source that is still active when the source returns: the 
   const stub = stubPlasticity();
   stub.select("2:1f1", "4:2");
   // A pick command that was left to finish (its outcome is undetermined): the source returns with it active.
-  const source = `function () {
+  const source = `async function () {
+    await this.exec(new this.commands.ServerCommand());
     this.executor.active = { command: { agent: 'user', _state: 'None', resources: [], constructor: { name: 'AlignEdgeCommand' } } };
     return 'left running';
   }`;
@@ -260,4 +260,187 @@ test("reconcile clears a default command a timed-out call left Awaiting, says so
   assert.match(left.recovery!.note, /BooleanCommand is still active \(state Awaiting\) and was not touched/);
   assert.deepEqual(busy.cancelCalls, []);
   assert.equal(busy.executor.active?.command.constructor.name, "BooleanCommand");
+});
+
+// ---- A default gizmo the user is editing (D1): nothing cancels it.
+
+test("a default gizmo the user has dragged is not cancelled at entry: the edit is refused before it runs, and says why", async () => {
+  // Three signs of the user's work, each alone: the factory left "none" with a preview, the command's own flag, a temp.
+  const signs: Array<[string, (command: StubCommand) => void]> = [
+    ["factory updated, one temp", (command) => { command.resources = DRAGGED_GIZMO(); }],
+    ["the command flags its factory as changed", (command) => { command._isFactoryChanged = true; }],
+    ["a temporary object in a factory that still reads none", (command) => { command.resources = [{ _state: { value: "none" }, temps: new Set([1]) }]; }],
+  ];
+  for (const [label, touch] of signs) {
+    const stub = stubPlasticity();
+    stub.select("0:1e2");
+    const gizmo = stub.startDefault("FilletShellCommand", "Awaiting", UNTOUCHED_GIZMO());
+    touch(gizmo);
+    const before = stub.signals.selectionChanged;
+    await assert.rejects(within(stub.runtime.mutate(COMMAND_SOURCE, [], [{}])), (error: Error) => {
+      assert.match(error.message, /^Plasticity command failed: Error: Plasticity is busy: the user is editing with the FilletShellCommand gizmo \(it holds a preview with changes that are not committed\)\. Finish or cancel that gizmo in Plasticity, then repeat this call\. Nothing was changed, and the gizmo and its preview were left as they are\.$/, label);
+      return true;
+    }, label);
+    assert.deepEqual(stub.cancelCalls, [], label);
+    assert.deepEqual(stub.executed, [], `${label}: the source never ran`);
+    assert.equal(stub.executor.active?.command, gizmo, `${label}: the gizmo is still the active command`);
+    assert.equal(gizmo._state, "Awaiting", label);
+    assert.deepEqual(stub.selection(), ["0:1e2"], label);
+    assert.equal(stub.signals.selectionChanged, before, `${label}: the selection was not emptied and put back`);
+    assert.equal(stub.runtime.isUncertain(), false, `${label}: a refusal is a certain error`);
+  }
+  // The same gizmo untouched is the idle one: cancelled, and the edit runs.
+  const idle = stubPlasticity();
+  idle.select("0:1e2");
+  idle.startDefault("FilletShellCommand", "Awaiting", UNTOUCHED_GIZMO());
+  assert.deepEqual(await within(idle.runtime.mutate(COMMAND_SOURCE, [], [{}])), { ok: true, echo: null });
+  assert.deepEqual(idle.cancelCalls, [{ name: "FilletShellCommand", agent: "automatic", state: "Awaiting" }]);
+});
+
+test("a read, a source that runs no command (an export, a saved copy) and reconcile leave a gizmo alone, dragged or not", async () => {
+  for (const resources of [DRAGGED_GIZMO, UNTOUCHED_GIZMO]) {
+    const stub = stubPlasticity();
+    enableStateRead(stub);
+    stub.select("0:1e2");
+    const gizmo = stub.startDefault("FilletShellCommand", "Awaiting", resources());
+    const before = stub.signals.selectionChanged;
+    // A read.
+    assert.equal(await stub.runtime.read("function () { return this.marker; }"), "editor");
+    // A mutate() source without a command, as plasticity_save_copy, the exports and the section analyses send: it
+    // reaches the renderer as it is, without the guard around it.
+    const quiet = "async function (args) { return { saved: args.path }; }";
+    assert.deepEqual(await stub.runtime.mutate(quiet, [], [{ path: "/tmp/copy.plasticity" }]), { saved: "/tmp/copy.plasticity" });
+    assert.equal(stub.sent.at(-1), quiet);
+    assert.deepEqual(stub.cancelCalls, []);
+    assert.equal(stub.executor.active?.command, gizmo);
+    assert.deepEqual(stub.selection(), ["0:1e2"]);
+    assert.equal(stub.signals.selectionChanged, before);
+  }
+  // reconcile: an untouched gizmo left behind is cancelled (the recovery); a dragged one is reported and left.
+  const dragged = stubPlasticity();
+  enableStateRead(dragged);
+  dragged.select("0:1e2");
+  const gizmo = dragged.startDefault("FilletShellCommand", "Awaiting", DRAGGED_GIZMO());
+  const reply = await dragged.runtime.reconcile() as { recovery?: { cancelledDefaultCommands?: string[]; activeCommand?: unknown; note: string } };
+  assert.deepEqual(dragged.cancelCalls, []);
+  assert.equal(dragged.executor.active?.command, gizmo);
+  assert.equal(reply.recovery?.cancelledDefaultCommands, undefined);
+  assert.deepEqual(reply.recovery?.activeCommand, { name: "FilletShellCommand", state: "Awaiting", default: true, edited: true });
+  assert.match(reply.recovery!.note, /FilletShellCommand is active and holds changes the user made \(the preview of its gizmo\); it was not touched\./);
+  // What the live window does while that preview is held: Plasticity refuses the snapshot the state read takes. A
+  // read says what that means; reconcile names the command it left, and the session stays as it was.
+  Object.assign(dragged.editor, { measurements: { snapshot: () => { throw new Error("snapshot(): scratch active"); } } });
+  Reflect.set(dragged.runtime, "uncertain", true);
+  await assert.rejects(dragged.runtime.getState(), /^Error: Plasticity is busy: the user is editing in Plasticity \(a gizmo or a command holds a preview with changes that are not committed\), so the document cannot be read right now\. Finish or cancel it in Plasticity, then repeat this call\. Nothing was changed/);
+  await assert.rejects(dragged.runtime.reconcile(), /^Error: Plasticity is busy: the user is editing, so the document cannot be read and the session was not reconciled\. FilletShellCommand is active and holds changes the user made \(the preview of its gizmo\); it was not touched\.[\s\S]*Repeat plasticity_reconcile after the user has finished or cancelled it/);
+  assert.deepEqual(dragged.cancelCalls, []);
+  assert.equal(dragged.executor.active?.command, gizmo);
+  assert.equal(dragged.runtime.isUncertain(), true);
+});
+
+test("the watcher does not cancel a gizmo the user is dragging while a source is pending", async () => {
+  const stub = stubPlasticity();
+  // The source waits; meanwhile the user starts a gizmo and drags it.
+  const source = `async function () { await this.exec(new this.commands.ServerCommand()); await new Promise(resolve => { this.__release = resolve; }); return 'done'; }`;
+  const pending = stub.runtime.mutate(source, [], []);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  stub.select("0:1e2");
+  const gizmo = stub.startDefault("FilletShellCommand", "Awaiting", DRAGGED_GIZMO());
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  assert.deepEqual(stub.cancelCalls, [], "five checks of the watcher went by");
+  assert.equal(stub.executor.active?.command, gizmo);
+  (stub.editor as unknown as { __release(): void }).__release();
+  assert.equal(await within(pending), "done");
+  assert.deepEqual(stub.cancelCalls, []);
+});
+
+// ---- A source that outlives its call (D2).
+
+const HANGING = `async function () { await this.exec(new this.commands.ServerCommand()); await new Promise(resolve => { this.__release = resolve; }); return 'late'; }`;
+const release = (stub: ReturnType<typeof stubPlasticity>) => (stub.editor as unknown as { __release(): void }).__release();
+
+test("the watcher stops with the call: after a return, and at the budget of a call that was given up", async () => {
+  // After a normal return a gizmo is nobody's business.
+  const returned = stubPlasticity();
+  await within(returned.runtime.mutate(COMMAND_SOURCE, [], [{}]));
+  returned.select("0:1e2");
+  returned.startDefault("FilletShellCommand", "Awaiting", UNTOUCHED_GIZMO());
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.deepEqual(returned.cancelCalls, []);
+
+  // A source that does not settle within its call's timeout (120 ms here): the call is given up, the source goes on.
+  const stub = stubPlasticity();
+  stub.select("2:1f1");
+  await assert.rejects(stub.runtime.mutate(HANGING, [], [], 120), /CDP request timed out/);
+  assert.equal(stub.runtime.isUncertain(), true);
+  // The user now clicks an edge: Plasticity starts its idle gizmo. The abandoned guard must not cancel it.
+  stub.select("0:2e5");
+  const gizmo = stub.startDefault("FilletShellCommand", "Awaiting", UNTOUCHED_GIZMO());
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  assert.deepEqual(stub.cancelCalls, [], "no watcher runs past the budget");
+  assert.equal(stub.executor.active?.command, gizmo);
+  // The source settles at last: the selection the user made in the meantime stays; the stale one is not put back.
+  release(stub);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.deepEqual(stub.selection(), ["0:2e5"]);
+  assert.equal(stub.executor.active?.command, gizmo);
+  assert.deepEqual(stub.cancelCalls, []);
+});
+
+test("a source that settles late puts the saved selection back only into the empty selection the guard left", async () => {
+  const stub = stubPlasticity();
+  stub.select("2:1f1", "4:2");
+  await assert.rejects(stub.runtime.mutate(HANGING, [], [], 80), /CDP request timed out/);
+  assert.deepEqual(stub.selection(), [], "set aside while the source is pending");
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  release(stub);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.deepEqual(stub.selection(), ["2:1f1", "4:2"], "nobody selected anything in the meantime: it comes back");
+
+  // The user selects something else after the call was given up (no gizmo, a plain selection): it stays when the
+  // source settles, and the stale selection is not put back over it.
+  const newer = stubPlasticity();
+  newer.select("2:1f1", "4:2");
+  await assert.rejects(newer.runtime.mutate(HANGING, [], [], 80), /CDP request timed out/);
+  newer.select("0:2e5");
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  release(newer);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.deepEqual(newer.selection(), ["0:2e5"], "the newer selection of the user wins");
+  assert.deepEqual(newer.cancelCalls, []);
+});
+
+test("reconcile puts an abandoned guard's selection back into an empty selection, says so, and leaves a newer selection alone", async () => {
+  type Reply = { recovery?: { restoredSelection?: number; cancelledDefaultCommands?: string[]; note: string } };
+  // 1. Nothing selected since: reconcile puts the saved selection back.
+  const empty = stubPlasticity();
+  enableStateRead(empty);
+  empty.select("2:1f1", "4:2");
+  await assert.rejects(empty.runtime.mutate(HANGING, [], [], 80), /CDP request timed out/);
+  assert.deepEqual(empty.selection(), []);
+  const repaired = await within(empty.runtime.reconcile()) as Reply;
+  assert.equal(repaired.recovery?.restoredSelection, 2);
+  assert.match(repaired.recovery!.note, /Put back the selection \(2 items\) that a call which timed out had set aside\./);
+  assert.deepEqual(empty.selection(), ["2:1f1", "4:2"]);
+  assert.equal(empty.runtime.isUncertain(), false);
+  // The user deselects; the source settles afterwards: the selection that reconcile already handed back does not return.
+  empty.select();
+  release(empty);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.deepEqual(empty.selection(), []);
+  assert.equal("recovery" in await empty.runtime.reconcile(), false, "nothing is left to repair");
+
+  // 2. The user selected something else: reconcile leaves it and says the saved selection was not put back.
+  const newer = stubPlasticity();
+  enableStateRead(newer);
+  newer.select("2:1f1");
+  await assert.rejects(newer.runtime.mutate(HANGING, [], [], 80), /CDP request timed out/);
+  newer.select("0:2e5");
+  const left = await within(newer.runtime.reconcile()) as Reply;
+  assert.equal(left.recovery?.restoredSelection, undefined);
+  assert.match(left.recovery!.note, /A call that timed out had set aside a selection of 1 item; it was not put back, because something else is selected now\./);
+  assert.deepEqual(newer.selection(), ["0:2e5"]);
+  release(newer);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.deepEqual(newer.selection(), ["0:2e5"]);
 });
