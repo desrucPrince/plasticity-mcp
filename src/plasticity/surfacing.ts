@@ -9,8 +9,13 @@ export type Vector3 = [number, number, number];
 export const PROBE_SURFACE_MAX_RAYS = 64;
 /** A Newton hit is accepted when the kernel's closest face point lies within this distance of the ray point. */
 export const PROBE_SURFACE_ACCEPT_RESIDUAL_MM = 1e-6;
-/** Two hits closer than this along the ray, on any faces, are one crossing (a ray through an edge or vertex). */
+/** Two hits on one face closer than this along the ray are one hit. */
 export const PROBE_SURFACE_MERGE_MM = 1e-6;
+/** Hits on different faces closer than this along the ray are one crossing (a ray through an edge or vertex, where the two
+ * faces' own intersection points can differ by the kernel's edge tolerance: 1e-4 mm seen live on a filleted B-spline seam). */
+export const PROBE_SURFACE_EDGE_MERGE_MM = 1e-3;
+/** A face that the ray passes closer than this without an accepted hit is reported in grazing. */
+export const PROBE_SURFACE_GRAZE_MM = 1e-3;
 /** Rays from gridMm start this far outside the body's conservative bounds. */
 export const PROBE_SURFACE_GRID_CLEARANCE_MM = 1;
 
@@ -36,6 +41,8 @@ export interface ProbeRayResult {
   hits: number;
   intersections: ProbeIntersection[];
   unresolvedCrossings?: number;
+  unresolvedReason?: string;
+  grazing?: Array<{ faceId: string; minDistanceMm: number; atMm: Vector3 }>;
 }
 
 export interface ProbeSurfaceEvidence {
@@ -58,7 +65,10 @@ export interface NativeProbeHit {
   vCurvature: number | null;
   residual: number;
 }
-export interface NativeProbeRay { hits: NativeProbeHit[]; unresolved: number }
+export interface NativeProbeGraze { faceId: string; t: number; minDistance: number; point: Vector3 }
+export interface NativeProbeRay { hits: NativeProbeHit[]; unresolved: number; grazing?: NativeProbeGraze[] }
+/** A ray from outside a closed Solid must cross it an even number of times; parity is checked only then. */
+export interface ProbeRayContext { closedSolid: boolean; originOutside: boolean }
 export interface NativeProbeResult { undoBefore: number; undoAfter: number; bodyCountBefore: number; bodyCountAfter: number; rays: NativeProbeRay[] }
 
 const AXES = { x: 0, y: 1, z: 2 } as const;
@@ -108,13 +118,14 @@ const roundTo = (value: number, digits: number) => {
 const roundVector = (value: readonly number[], digits: number) => value.map((entry) => roundTo(entry, digits)) as Vector3;
 
 /** Native metres to the reply's millimetres; merge crossings that coincide on several faces. */
-export function projectProbeRay(ray: ProbeRay & { atMm?: [number, number] }, native: NativeProbeRay): ProbeRayResult {
+export function projectProbeRay(ray: ProbeRay & { atMm?: [number, number] }, native: NativeProbeRay, context: ProbeRayContext = { closedSolid: false, originOutside: false }): ProbeRayResult {
   const sorted = [...native.hits].sort((a, b) => a.t - b.t);
   const intersections: ProbeIntersection[] = [];
   for (const hit of sorted) {
     const distanceMm = hit.t * 1000;
     const previous = intersections.at(-1);
-    if (previous && Math.abs(previous.distanceMm - distanceMm) <= PROBE_SURFACE_MERGE_MM) {
+    const gap = previous ? Math.abs(previous.distanceMm - distanceMm) : Infinity;
+    if (previous && (gap <= PROBE_SURFACE_MERGE_MM || (gap <= PROBE_SURFACE_EDGE_MERGE_MM && previous.faceId !== hit.faceId && !(previous.otherFaceIds ?? []).includes(hit.faceId)))) {
       if (previous.faceId !== hit.faceId && !(previous.otherFaceIds ?? []).includes(hit.faceId)) previous.otherFaceIds = [...(previous.otherFaceIds ?? []), hit.faceId];
       continue;
     }
@@ -128,13 +139,23 @@ export function projectProbeRay(ray: ProbeRay & { atMm?: [number, number] }, nat
       residualMm: roundTo(hit.residual * 1000, 12),
     });
   }
+  const grazing = (native.grazing ?? []).map((entry) => ({ faceId: entry.faceId, minDistanceMm: roundTo(entry.minDistance * 1000, 9), atMm: roundVector(entry.point.map((value) => value * 1000), 6) }));
+  const reasons: string[] = [];
+  let unresolved = native.unresolved;
+  if (context.closedSolid && context.originOutside && intersections.length % 2 === 1) {
+    unresolved += 1;
+    reasons.push(`odd number of crossings (${intersections.length}) on a closed Solid from an outside origin: at least one crossing is missing or a tangent touch was counted`);
+  }
   return {
     originMm: ray.originMm,
     direction: roundVector(ray.direction, 12),
     ...(ray.atMm ? { atMm: ray.atMm } : {}),
     hits: intersections.length,
     intersections,
-    ...(native.unresolved > 0 ? { unresolvedCrossings: native.unresolved } : {}),
+    ...(unresolved > 0 ? { unresolvedCrossings: unresolved } : {}),
+    // Display-mesh misses are explained in the tool description; the parity guard says why here.
+    ...(reasons.length > 0 ? { unresolvedReason: reasons.join("; ") } : {}),
+    ...(grazing.length > 0 ? { grazing } : {}),
   };
 }
 
@@ -176,28 +197,179 @@ export const PROBE_SURFACE_SOURCE = nativeFunction`function (pk_default, args) {
     entry.kernel = face;
     return face;
   };
-  const reaches = (entry, o, d) => {
-    let low = -args.seedBehindM, high = Infinity;
+  // The part of the ray inside the face's padded box, as [tEnter, tExit] in metres, or null.
+  const segment = (entry, o, d) => {
+    let low = -args.seedBehindM, high = args.farM;
     for (let axis = 0; axis < 3; axis += 1) {
-      if (Math.abs(d[axis]) < 1e-15) { if (o[axis] < entry.min[axis] || o[axis] > entry.max[axis]) return false; continue; }
+      if (Math.abs(d[axis]) < 1e-15) { if (o[axis] < entry.min[axis] || o[axis] > entry.max[axis]) return null; continue; }
       let t1 = (entry.min[axis] - o[axis]) / d[axis], t2 = (entry.max[axis] - o[axis]) / d[axis];
       if (t1 > t2) [t1, t2] = [t2, t1];
       low = Math.max(low, t1); high = Math.min(high, t2);
-      if (low > high) return false;
+      if (low > high) return null;
     }
-    return true;
+    return [low, high];
   };
   const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const norm = a => Math.hypot(a[0], a[1], a[2]);
   const K = p => new kernel.Vector(p[0], p[1], p[2]);
   const read = v => [Number(v.x), Number(v.y), Number(v.z)];
+  const mm = p => [p[0] * 1000, p[1] * 1000, p[2] * 1000];
+  // ---- polynomials in t (millimetres along the ray), coefficients in ascending order ----
+  const padd = (a, b) => Array.from({ length: Math.max(a.length, b.length) }, (_, i) => (a[i] ?? 0) + (b[i] ?? 0));
+  const pmul = (a, b) => { const r = new Array(a.length + b.length - 1).fill(0); a.forEach((x, i) => b.forEach((y, j) => { r[i + j] += x * y; })); return r; };
+  const pscale = (a, s) => a.map(x => x * s);
+  const pval = (c, t) => { let v = 0; for (let i = c.length - 1; i >= 0; i -= 1) v = v * t + c[i]; return v; };
+  const pder = c => c.slice(1).map((x, i) => x * (i + 1));
+  const ptrim = c => { const big = Math.max(...c.map(Math.abs)); const r = [...c]; while (r.length > 1 && Math.abs(r[r.length - 1]) <= 1e-14 * big) r.pop(); return r; };
+  // Every real root in [lo, hi]: the derivative's roots split the interval into monotone pieces, each bisected to the last
+  // bit. Interior critical points with no root on both sides are near-tangencies (closest approaches) for the grazing test.
+  const solve = (coefficients, lo, hi) => {
+    const c = ptrim(coefficients), n = c.length - 1;
+    if (n <= 0) return { roots: [], critical: [], touches: [] };
+    if (n === 1) { const t = -c[0] / c[1]; return { roots: t >= lo && t <= hi ? [t] : [], critical: [], touches: [] }; }
+    const critical = solve(pder(c), lo, hi).roots.sort((a, b) => a - b);
+    const knots = [lo, ...critical, hi], roots = [];
+    for (let k = 0; k + 1 < knots.length; k += 1) {
+      let a = knots[k], b = knots[k + 1], fa = pval(c, a), fb = pval(c, b);
+      if (fa === 0) { if (!roots.length || Math.abs(roots[roots.length - 1] - a) > 1e-12) roots.push(a); continue; }
+      if (fa * fb > 0) continue;
+      for (let it = 0; it < 200 && b - a > 1e-13 * Math.max(1, Math.abs(a)); it += 1) { const m = (a + b) / 2, fm = pval(c, m); if (fa * fm <= 0) { b = m; } else { a = m; fa = fm; } }
+      roots.push((a + b) / 2);
+    }
+    // A root on a critical point where the sign does not change is a double root: a tangent touch, not a crossing.
+    const touches = [], simple = [];
+    for (const r of roots) {
+      const onCritical = critical.some(x => Math.abs(x - r) <= 1e-9 * Math.max(1, Math.abs(r)));
+      const delta = 1e-7 * Math.max(1, Math.abs(r));
+      if (onCritical && pval(c, r - delta) * pval(c, r + delta) > 0) touches.push(r); else simple.push(r);
+    }
+    return { roots: simple, critical, touches };
+  };
+  // ---- analytic surface models from the kernel's own surface data, verified on kernel surface points ----
+  const modelOf = entry => {
+    if (entry.model !== undefined) return entry.model;
+    entry.model = null;
+    try {
+      const fs = kernelFace(entry).GetSurface(), S = fs.surface, kind = S.constructor.name;
+      const grid = [];
+      for (const fu of [0.17, 0.5, 0.83]) for (const fv of [0.17, 0.5, 0.83]) grid.push([fs.uMin + fu * (fs.uMax - fs.uMin), fs.vMin + fv * (fs.vMax - fs.vMin)]);
+      const pts = grid.map(([u, v]) => mm(read(S.GetPoint(u, v))));
+      let model = null;
+      if (kind === 'Plane') { const b = S.GetInfo(); model = { kind, L: mm(read(b.Location)), A: read(b.Axis) }; }
+      else if (kind === 'Sphere') { const i = S.GetInfo(); model = { kind, L: mm(read(i.basis.Location)), r: i.radius * 1000 }; }
+      else if (kind === 'Cylinder') { const i = S.GetInfo(); model = { kind, L: mm(read(i.basis.Location)), A: read(i.basis.Axis), r: i.radius * 1000 }; }
+      else if (kind === 'Cone') { const i = S.GetInfo(); model = { kind, L: mm(read(i.basis.Location)), A: read(i.basis.Axis), r: i.radius * 1000, tan: Math.tan(i.semiAngle) }; }
+      else if (kind === 'Torus') {
+        // No GetInfo on 26.1.3: the minor radius is the principal curvature that is the same everywhere, the spine circle
+        // runs through p - r n, and three spine points give its centre, axis and the major radius.
+        const curv = grid.map(([u, v]) => S.EvalCurvature(u, v));
+        const minorOf = key => { const ks = curv.map(k => Math.abs(Number(k[key]))); return ks.every(k => k > 0 && Math.abs(k - ks[0]) <= 1e-9 * ks[0]) ? 1000 / ks[0] : null; };
+        const r = minorOf('curvature1') ?? minorOf('curvature2');
+        if (r !== null) for (const sign of [1, -1]) for (const pick of [[1, 4, 7], [3, 4, 5]]) {
+          const spine = pick.map(i => sub(pts[i], mul(read(curv[i].normal), sign * r)));
+          const ab = sub(spine[1], spine[0]), ac = sub(spine[2], spine[0]), n = cross(ab, ac), nn = dot(n, n);
+          if (!(nn > 1e-12)) continue;
+          const C = add(spine[0], mul(add(mul(cross(n, ab), dot(ac, ac)), mul(cross(ac, n), dot(ab, ab))), 1 / (2 * nn)));
+          const candidate = { kind, L: C, A: mul(n, 1 / Math.sqrt(nn)), R: norm(sub(spine[0], C)), r };
+          if (residualOf(candidate, pts) <= args.modelToleranceMm) { model = candidate; break; }
+        }
+        if (model) { entry.model = model; return model; }
+      }
+      if (model && residualOf(model, pts) <= args.modelToleranceMm) entry.model = model;
+    } catch (error) { entry.model = null; }
+    return entry.model;
+  };
+  const residualOf = (model, pts) => Math.max(...pts.map(p => {
+    const w = sub(p, model.L);
+    if (model.kind === 'Plane') return Math.abs(dot(w, model.A));
+    if (model.kind === 'Sphere') return Math.abs(norm(w) - model.r);
+    const h = dot(w, model.A), rho = Math.sqrt(Math.max(0, dot(w, w) - h * h));
+    if (model.kind === 'Cylinder') return Math.abs(rho - model.r);
+    if (model.kind === 'Cone') return Math.abs(rho - Math.abs(model.r + h * model.tan)) / Math.sqrt(1 + model.tan * model.tan);
+    return Math.abs(Math.hypot(rho - model.R, h) - model.r);
+  }));
+  const polyOf = (model, o, d) => {
+    const w = sub(o, model.L), q = [dot(w, w), 2 * dot(w, d), 1];
+    if (model.kind === 'Plane') return [dot(w, model.A), dot(d, model.A)];
+    if (model.kind === 'Sphere') return padd(q, [-model.r * model.r]);
+    const H = [dot(w, model.A), dot(d, model.A)];
+    if (model.kind === 'Cylinder') return padd(padd(q, pscale(pmul(H, H), -1)), [-model.r * model.r]);
+    if (model.kind === 'Cone') { const g = [model.r + model.tan * H[0], model.tan * H[1]]; return padd(padd(q, pscale(pmul(H, H), -1)), pscale(pmul(g, g), -1)); }
+    const G = padd(q, [model.R * model.R - model.r * model.r]);
+    return padd(pmul(G, G), pscale(padd(q, pscale(pmul(H, H), -1)), -4 * model.R * model.R));
+  };
+  // ---- kernel refinement on the trimmed face ----
+  const refine = (entry, o, d, t0) => {
+    const face = kernelFace(entry);
+    const at = t => [o[0] + t * d[0], o[1] + t * d[1], o[2] + t * d[2]];
+    let t = t0, residual = Infinity, basis = null, settled = false;
+    try {
+      for (let step = 0; step < args.maxSteps; step += 1) {
+        const p = at(t), near = face.FindPointNear(K(p)), r = sub(read(near.exact), p);
+        residual = norm(r);
+        basis = face.EvalBasis(near.u, near.v);
+        if (residual <= args.convergedM) { settled = true; break; }
+        const n = read(basis.normal), den = dot(n, d);
+        if (Math.abs(den) < 1e-9) break;
+        const dt = dot(n, r) / den;
+        t += dt;
+        if (Math.abs(dt) < 1e-15) { settled = true; break; }
+      }
+      if (!settled || t < -args.acceptResidualM) return null;
+      // A hit at the origin is reported at t = 0, with the residual of that reported point.
+      if (t < 0 || residual > args.convergedM) {
+        t = Math.max(t, 0);
+        const near = face.FindPointNear(K(at(t)));
+        residual = norm(sub(read(near.exact), at(t)));
+        basis = face.EvalBasis(near.u, near.v);
+      }
+      if (!(residual <= args.acceptResidualM)) return null;
+      return { t, point: at(t), faceId: entry.id, normal: read(basis.normal),
+        uCurvature: Number.isFinite(Number(basis.uCurvature)) ? Number(basis.uCurvature) : null,
+        vCurvature: Number.isFinite(Number(basis.vCurvature)) ? Number(basis.vCurvature) : null, residual };
+    } catch (error) { return null; }
+  };
+  // The kernel distance from the ray point at t to the trimmed face.
+  const faceDistance = (entry, o, d, t) => { try { const p = [o[0] + t * d[0], o[1] + t * d[1], o[2] + t * d[2]]; return norm(sub(read(kernelFace(entry).FindPointNear(K(p)).exact), p)); } catch (error) { return Infinity; } };
+  const signedDistance = (entry, o, d, t) => {
+    const p = [o[0] + t * d[0], o[1] + t * d[1], o[2] + t * d[2]], face = kernelFace(entry), near = face.FindPointNear(K(p));
+    const r = sub(p, read(near.exact)), n = read(face.EvalBasis(near.u, near.v).normal);
+    return { value: Math.sign(dot(r, n) || 1) * norm(r) };
+  };
   const rays = args.rays.map(ray => {
     const o = ray.origin, d = ray.direction;
-    const at = t => [o[0] + t * d[0], o[1] + t * d[1], o[2] + t * d[2]];
-    const seeds = [];
-    faces.forEach((entry, faceIndex) => {
-      if (!reaches(entry, o, d)) return;
+    const hits = [], grazing = [], failed = [];
+    const graze = (entry, t, distance) => { if (!grazing.some(g => g.faceId === entry.id && Math.abs(g.t - t) <= args.grazeSpanM)) grazing.push({ faceId: entry.id, t, minDistance: distance, point: [o[0] + t * d[0], o[1] + t * d[1], o[2] + t * d[2]] }); };
+    // A point where the ray runs along the surface (|n.d| below touchCos) is a tangent touch: reported in grazing, not as a crossing.
+    const accept = (entry, hit) => {
+      if (!hit) return hit;
+      if (Math.abs(dot(hit.normal, d)) < args.touchCos) { graze(entry, hit.t, hit.residual); return null; }
+      if (!hits.some(h => h.faceId === entry.id && Math.abs(h.t - hit.t) <= args.mergeM)) hits.push(hit);
+      return hit;
+    };
+    faces.forEach(entry => {
+      const span = segment(entry, o, d);
+      if (!span) return;
+      const model = modelOf(entry);
+      if (model) {
+        // Closed form: every root of the ray against the untrimmed analytic surface, then the trimmed-face test.
+        const om = mm(o), lo = Math.max(span[0], -args.seedBehindM) * 1000, hi = span[1] * 1000;
+        const { roots, critical, touches } = solve(polyOf(model, om, d), lo, hi);
+        const accepted = roots.map(t => accept(entry, refine(entry, o, d, t / 1000)));
+        for (const t of touches) { const distance = faceDistance(entry, o, d, t / 1000); if (distance < args.grazeM) graze(entry, t / 1000, distance); }
+        for (const c of critical) {
+          const left = roots.findLastIndex(t => t < c), right = roots.findIndex(t => t > c);
+          if (left >= 0 && right >= 0 && accepted[left] && accepted[right]) continue; // a crossing pair around the closest approach
+          const distance = faceDistance(entry, o, d, c / 1000);
+          if (distance < args.grazeM && !hits.some(h => h.faceId === entry.id && Math.abs(h.t - c / 1000) <= args.grazeSpanM)) graze(entry, c / 1000, distance);
+        }
+        return;
+      }
+      // Spline (or unverified) face: mesh seeds, plus the ray's signed distance to the face sampled across the face's box.
       for (let j = entry.start; j < entry.start + entry.count; j += 3) {
         const a = vertex(indices ? indices[j] : j), b = vertex(indices ? indices[j + 1] : j + 1), c = vertex(indices ? indices[j + 2] : j + 2);
         const e1 = sub(b, a), e2 = sub(c, a), p = cross(d, e2), det = dot(e1, p);
@@ -208,50 +380,30 @@ export const PROBE_SURFACE_SOURCE = nativeFunction`function (pk_default, args) {
         if (v < -args.margin || u + v > 1 + args.margin) continue;
         const t = dot(e2, q) / det;
         if (t < -args.seedBehindM) continue;
-        seeds.push({ faceIndex, t, strict: u >= 0 && v >= 0 && u + v <= 1 && t >= 0 });
+        if (!accept(entry, refine(entry, o, d, t)) && u >= 0 && v >= 0 && u + v <= 1 && t >= 0) failed.push(t);
       }
-      try {
-        const hit = kernelFace(entry).GetSurface().surface.Raycast(K(o), K(d));
-        if (hit?.exact) {
-          const point = read(hit.exact), t = dot(sub(point, o), d);
-          if (Math.hypot(...sub(point, at(t))) <= args.acceptResidualM && t >= -args.seedBehindM) seeds.push({ faceIndex, t, strict: false });
-        }
-      } catch (error) { /* the surface raycast is only a seed; the mesh seeds stand alone */ }
+      const lo = Math.max(span[0], 0), hi = span[1];
+      const count = Math.min(args.splineMaxSamples, Math.max(args.splineMinSamples, Math.ceil((hi - lo) / args.splineStepM)));
+      const ts = Array.from({ length: count + 1 }, (_, i) => lo + (hi - lo) * i / count);
+      let sd;
+      try { sd = ts.map(t => signedDistance(entry, o, d, t).value); } catch (error) { failed.push(lo); return; }
+      for (let i = 0; i + 1 < ts.length; i += 1) {
+        if (sd[i] === 0 || sd[i] * sd[i + 1] < 0) accept(entry, refine(entry, o, d, sd[i] === 0 ? ts[i] : ts[i] + (ts[i + 1] - ts[i]) * sd[i] / (sd[i] - sd[i + 1])));
+      }
+      for (let i = 1; i + 1 < ts.length; i += 1) {
+        const m = Math.abs(sd[i]);
+        if (!(m <= Math.abs(sd[i - 1]) && m <= Math.abs(sd[i + 1]) && sd[i - 1] * sd[i] > 0 && sd[i] * sd[i + 1] > 0)) continue;
+        // A local closest approach between samples: narrow it, then look for a crossing pair or a tangency there.
+        let a = ts[i - 1], b = ts[i + 1];
+        for (let it = 0; it < 30; it += 1) { const x1 = a + (b - a) * 0.382, x2 = a + (b - a) * 0.618; if (Math.abs(signedDistance(entry, o, d, x1).value) < Math.abs(signedDistance(entry, o, d, x2).value)) b = x2; else a = x1; }
+        const tm = (a + b) / 2, dm = signedDistance(entry, o, d, tm).value;
+        if (dm * sd[i] < 0) { accept(entry, refine(entry, o, d, ts[i - 1] + (tm - ts[i - 1]) / 2)); accept(entry, refine(entry, o, d, tm + (ts[i + 1] - tm) / 2)); continue; }
+        if (Math.abs(dm) < args.grazeM && !hits.some(h => h.faceId === entry.id && Math.abs(h.t - tm) <= args.grazeSpanM)) graze(entry, tm, Math.abs(dm));
+      }
     });
-    const hits = [], failed = [];
-    for (const seed of seeds) {
-      const entry = faces[seed.faceIndex];
-      let t = seed.t, residual = Infinity, basis = null, settled = false;
-      try {
-        entry.face = kernelFace(entry);
-        for (let step = 0; step < args.maxSteps; step += 1) {
-          const p = at(t);
-          const near = entry.face.FindPointNear(K(p));
-          const r = sub(read(near.exact), p);
-          residual = Math.hypot(...r);
-          basis = entry.face.EvalBasis(near.u, near.v);
-          if (residual <= args.convergedM) { settled = true; break; }
-          const n = read(basis.normal), den = dot(n, d);
-          if (Math.abs(den) < 1e-9) break;
-          const dt = dot(n, r) / den;
-          t += dt;
-          if (Math.abs(dt) < 1e-15) {
-            const near2 = entry.face.FindPointNear(K(at(t)));
-            residual = Math.hypot(...sub(read(near2.exact), at(t)));
-            basis = entry.face.EvalBasis(near2.u, near2.v);
-            settled = true; break;
-          }
-        }
-      } catch (error) { settled = false; }
-      if (!settled || !(residual <= args.acceptResidualM) || t < -args.acceptResidualM) { if (seed.strict) failed.push(seed.t); continue; }
-      if (hits.some(hit => hit.faceId === entry.id && Math.abs(hit.t - t) <= args.mergeM)) continue;
-      hits.push({ t: Math.max(t, 0), point: at(Math.max(t, 0)), faceId: entry.id, normal: read(basis.normal),
-        uCurvature: Number.isFinite(Number(basis.uCurvature)) ? Number(basis.uCurvature) : null,
-        vCurvature: Number.isFinite(Number(basis.vCurvature)) ? Number(basis.vCurvature) : null, residual });
-    }
     // A strict mesh crossing that no exact hit explains (within the mesh's own chord tolerance) is reported, not hidden.
     const unresolved = failed.filter(t => !hits.some(hit => Math.abs(hit.t - t) <= args.coverM)).length;
-    return { hits, unresolved };
+    return { hits, unresolved, grazing };
   });
   const undoAfter = this.history.undoStack.length, bodyCountAfter = countBodies();
   if (undoAfter !== undoBefore || bodyCountAfter !== bodyCountBefore) throw new Error('The surface probe changed the document; reconcile before continuing');
@@ -262,11 +414,22 @@ export async function probeSurface(runtime: PlasticityRuntime, state: RuntimeSta
   const body = state.bodies.find((candidate) => candidate.id === request.id);
   if (!body || (body.type !== "Solid" && body.type !== "Sheet")) throw new Error(`Unknown current Solid or Sheet body ID: ${request.id}`);
   const rays = resolveProbeRays(request, body);
+  const box = body.boundsMm;
+  // The conservative box contains the body, so an origin outside it is outside the body.
+  const outside = (origin: Vector3) => box !== null && [0, 1, 2].some((i) => origin[i]! < box.min[i]! - 1e-6 || origin[i]! > box.max[i]! + 1e-6);
   const native = await runtime.readNative<NativeProbeResult>(PROBE_SURFACE_SOURCE, ["pk_default"], [{
     bodyId: body.id,
     rays: rays.map((ray) => ({ origin: ray.originMm.map((value) => value / 1000), direction: ray.direction })),
     margin: 0.05,
     boxMarginM: 5e-4,
+    farM: 1e6,
+    modelToleranceMm: 1e-5,
+    grazeM: PROBE_SURFACE_GRAZE_MM / 1000,
+    grazeSpanM: 1e-4,
+    touchCos: 1e-6,
+    splineStepM: 1e-3,
+    splineMinSamples: 8,
+    splineMaxSamples: 48,
     seedBehindM: 1e-4,
     maxSteps: 60,
     convergedM: 1e-13,
@@ -282,8 +445,8 @@ export async function probeSurface(runtime: PlasticityRuntime, state: RuntimeSta
     revision: state.revision,
     source: "native-brep-ray-newton",
     acceptResidualMm: PROBE_SURFACE_ACCEPT_RESIDUAL_MM,
-    rays: rays.map((ray, index) => projectProbeRay(ray, native.rays[index]!)),
-    note: "Each point is solved on the exact kernel face (closest-point Newton steps along the ray); residualMm is the kernel distance from the point to that face. normal is the face normal (outward on a Solid). Curvatures are the kernel's normal curvatures along the face's u and v directions, signed by the surface parametrisation; compare magnitudes. Hits are seeded from the display mesh and the kernel surface raycast, so a ray that only grazes a face tangentially can be missed; unresolvedCrossings counts mesh crossings no exact hit explains.",
+    rays: rays.map((ray, index) => projectProbeRay(ray, native.rays[index]!, { closedSolid: body.type === "Solid", originOutside: outside(ray.originMm) })),
+    note: "Each point is solved on the exact kernel face; residualMm is the kernel distance from the reported point to that face (at most 0.000001 mm). Plane, cylinder, cone, sphere and torus faces get every crossing in closed form from the kernel's surface data (each surface model is checked on kernel surface points first); B-spline faces are searched by sampling the ray's signed distance to the face (every 1 mm, 8 to 48 samples across the face's box; a closest approach between samples is narrowed to find a crossing pair or a tangency), plus display-mesh seeds. Hits on two faces within 0.001 mm along the ray are one crossing (an edge). A ray is complete when it carries neither unresolvedCrossings nor grazing. unresolvedCrossings flags crossings that may be missing: display-mesh crossings no exact hit explains, or an odd number of crossings on a closed Solid from an outside origin (unresolvedReason says which). grazing lists faces the ray passes within 0.001 mm of without an accepted hit (a tangent touch is reported there, never counted as a crossing). normal is the face normal (outward on a Solid). Curvatures are the kernel's normal curvatures along the face's u and v directions, signed by the surface parametrisation; compare magnitudes.",
   };
 }
 
@@ -435,6 +598,11 @@ export const XNURBS_ERROR_ADVICE: Readonly<Record<number, string>> = {
   30: "the requested continuity is incompatible at a corner or with the neighbouring faces (for example g1 or g2 against walls perpendicular to the patch). Lower the continuity (or set it per edge), or blend the rim first.",
 };
 
+// Codes decoded later, from the independent review's reproductions (round 3), kept apart from the first table.
+export const XNURBS_LATER_ERROR_ADVICE: Readonly<Record<number, string>> = {
+  31: "the boundary does not close: its items do not meet end to end. Reproduced with a 1 mm corner gap, a curve far from the others and edges that do not form one loop. Pass items that meet end to end, in order around the patch.",
+};
+
 /** The XNurbs error code in a native failure message, or undefined. */
 export function xnurbsErrorCode(error: unknown): number | undefined {
   const text = error instanceof Error ? error.message : String(error);
@@ -446,8 +614,12 @@ export function xnurbsErrorCode(error: unknown): number | undefined {
 export function explainXNurbsError(error: unknown): unknown {
   const code = xnurbsErrorCode(error);
   if (code === undefined || !(error instanceof Error)) return error;
-  const advice = XNURBS_ERROR_ADVICE[code] ?? "this code is undecoded on Plasticity 26.1.3. Check the boundary edges form one loop and try a lower continuity.";
-  const explained = new Error(`${error.message.replace(/\.?\s*$/, "")}. XNurbs error ${code}: ${advice}`);
+  const advice = XNURBS_ERROR_ADVICE[code] ?? XNURBS_LATER_ERROR_ADVICE[code] ?? "this code is undecoded on Plasticity 26.1.3. Check the boundary edges form one loop and try a lower continuity.";
+  // The advice goes right after the line that carries the raw code, before any stack text that follows it.
+  const lines = error.message.split("\n");
+  const at = Math.max(0, lines.findIndex((line) => /XNurbs operation failed with error/.test(line)));
+  lines[at] = `${lines[at]!.replace(/\.?\s*$/, "")}. XNurbs error ${code}: ${advice}`;
+  const explained = new Error(lines.join("\n").replace(/\s+$/, ""));
   (explained as Error & { xnurbsCode?: number }).xnurbsCode = code;
   return explained;
 }
@@ -623,7 +795,14 @@ export function validateScreenshotView(options: ScreenshotViewOptions, state: Ru
  */
 export async function withScreenshotView<T extends object>(runtime: PlasticityRuntime, options: ScreenshotViewOptions, capture: () => Promise<T>): Promise<T & { view: { shader?: { mode: string; previous: string | null; restored: string | null }; frame?: { bodyIds: number[]; cameraRestored: true; cameraDeviation: number } } }> {
   const args = { op: "apply", ...(options.shader ? { shader: options.shader } : {}), ...(options.frame ? { frame: { bodyIds: options.frame.bodyIds } } : {}) };
-  const applied = await runtime.readNative<ScreenshotViewApplied>(SCREENSHOT_VIEW_SOURCE, ["name2shader"], [{ ...args, tolerance: CAMERA_RESTORE_TOLERANCE }], 15_000);
+  let applied: ScreenshotViewApplied;
+  try {
+    applied = await runtime.readNative<ScreenshotViewApplied>(SCREENSHOT_VIEW_SOURCE, ["name2shader"], [{ ...args, tolerance: CAMERA_RESTORE_TOLERANCE }], 15_000);
+  } catch (error) {
+    // The apply may have changed the view before it failed or timed out: undo whatever is pending, then report the failure.
+    await runtime.readNative(SCREENSHOT_VIEW_SOURCE, ["name2shader"], [{ op: "restore", tolerance: CAMERA_RESTORE_TOLERANCE }], 15_000).catch(() => undefined);
+    throw error;
+  }
   let captured: T | undefined;
   let failure: unknown;
   try {
@@ -746,3 +925,60 @@ export const SURFACE_ALIGN_READBACK_SOURCE = nativeFunction`function (args) {
   } catch (error) { angle = null; }
   return { referenceFound: true, movingEdgeId, maxGapM: Math.max(best.gap, back), maxNormalAngleDeg: angle, samples: args.samples };
 }`;
+
+// ---------------------------------------------------------------- P7: Square boundary closure ----------------------------------------------------------------
+// The four boundary items must meet end to end around the patch. XNurbs refuses a 1 mm corner gap with error 31 but builds a
+// patch over a 0.005 mm gap (independent review), so the ends are checked in the kernel before anything changes.
+export const SQUARE_CLOSURE_MM = 1e-3;
+
+/** Each boundary item's two free ends (metres): an edge's ends, or a Wire's unmatched segment ends. Read-only. */
+export const SQUARE_ENDS_SOURCE = nativeFunction`function (args) {
+  const itemOf = id => { for (const [versionId, item] of nativeApi.geo.geometryModel) if (nativeApi.db.lookupStableId(versionId) === id) return item; throw new Error('Unknown body ID: ' + id); };
+  const read = v => [Number(v.x), Number(v.y), Number(v.z)];
+  const ends = edges => {
+    const points = [];
+    for (const edge of edges) points.push(read(edge.GetPoint(0)), read(edge.GetPoint(1)));
+    const same = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) <= 1e-9;
+    return points.filter(p => points.filter(q => same(p, q)).length % 2 === 1);
+  };
+  return args.boundary.map(entry => {
+    const item = itemOf(entry.wireId ?? entry.bodyId);
+    if (entry.wireId !== undefined) return ends(item.model.GetEdges().GetEdges());
+    const index = item.view.high.edges.versionIds.indexOf(entry.edgeId);
+    if (index < 0) throw new Error('Stale or unknown edge: ' + entry.bodyId + ':' + entry.edgeId);
+    const entity = Number(item.view.high.edges.get(index).entityId);
+    const edge = item.model.GetEdges().GetEdges().find(candidate => Number(candidate.Id()) === entity);
+    if (!edge) throw new Error('Kernel edge not found: ' + entry.bodyId + ':' + entry.edgeId);
+    return ends([edge]);
+  });
+}`;
+
+/**
+ * Whether four boundary items close: every item has exactly two free ends, and each item's two ends meet the previous and
+ * the next item (in order, around the loop) within SQUARE_CLOSURE_MM. Returns the problem in words, or null. Pure; mm in.
+ */
+export function squareClosureProblem(endsMm: Vector3[][]): string | null {
+  const dist = (a: Vector3, b: Vector3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  for (const [index, ends] of endsMm.entries()) {
+    if (ends.length !== 2) return `boundary item ${index + 1} has ${ends.length} free ends (a closed or branching curve); each side needs two`;
+  }
+  const count = endsMm.length;
+  // Orient each item: its end that is nearest the next item's ends is its "to" end; its other end must meet the previous one.
+  for (let index = 0; index < count; index += 1) {
+    const current = endsMm[index]!, next = endsMm[(index + 1) % count]!;
+    const pairs = current.flatMap((a, i) => next.map((b, j) => ({ i, j, gap: dist(a, b) })));
+    const best = pairs.reduce((x, y) => (y.gap < x.gap ? y : x));
+    if (best.gap > SQUARE_CLOSURE_MM) return `boundary items ${index + 1} and ${(index + 1) % count + 1} are ${Number(best.gap.toPrecision(3))} mm apart at their nearest ends (needs <= ${SQUARE_CLOSURE_MM} mm)`;
+    const previous = endsMm[(index + count - 1) % count]!;
+    const other = current[1 - best.i]!;
+    const back = Math.min(...previous.map((p) => dist(other, p)));
+    if (back > SQUARE_CLOSURE_MM) return `boundary item ${index + 1} does not run from item ${(index + count - 1) % count + 1} to item ${(index + 1) % count + 1}: its other end is ${Number(back.toPrecision(3))} mm from item ${(index + count - 1) % count + 1} (give the items in order around the patch)`;
+  }
+  return null;
+}
+
+/** Plasticity's relative G2 deviation for two curvatures across an edge: |k1 - k2| / (|k1| + |k2|) (0 when both are 0). */
+export function relativeCurvatureDeviation(k1: number, k2: number): number {
+  const sum = Math.abs(k1) + Math.abs(k2);
+  return sum === 0 ? 0 : Math.abs(k1 - k2) / sum;
+}

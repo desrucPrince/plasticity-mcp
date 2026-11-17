@@ -1190,7 +1190,9 @@ curvature deviation, the location of each maximum, and a hierarchical
 G0/G1/G2 result against explicit tolerances. Plasticity samples 100 positions;
 the result comes from native B-Rep surfaces rather than the display mesh, but it
 is not an exact continuous maximum and does not change the document.
-Relative G2 is |k1 - k2| / max(|k1|, |k2|) of the curvatures across the edge,
+Relative G2 is Plasticity's |k1 - k2| / (|k1| + |k2|) of the curvatures across
+the edge (the live values fit this, not division by the larger one: R5 against
+R10 reads 0.3333, R5 against R20 0.6),
 so it reads 1.0 whenever one side is flat (a plane meeting a fillet), however
 small the other curvature. Each edge result now also carries `interior`
 (`g0Mm`, `g1Deg`, `g2Rel`: the maxima over samples 5..94, leaving out the five
@@ -1200,7 +1202,8 @@ end samples, else `interior`), and `absoluteCurvature` (`side1PerMm`,
 `side2PerMm`: the kernel's normal curvature across the edge on each adjacent
 face at the worst G2 sample, from `Face.EvalBasis`, given only when one face
 parameter direction runs along the edge and the other across it within one
-degree). The per-sample values come from the native view's spike arrays
+degree; magnitudes, so they do not show whether the two faces curve the same
+way). The per-sample values come from the native view's spike arrays
 (100 samples; each value is its spike vector's length, Float32, and their
 maxima equal the reported maxima). Every earlier field is unchanged: live on
 26.1.3 the old and new code returned byte-identical existing fields on 48
@@ -1217,12 +1220,33 @@ along the ray: `pointMm`, `faceId` (`otherFaceIds` when the ray crosses an edge
 shared by several faces), `normal` (outward on a Solid), `distanceMm`, the
 kernel's `uCurvaturePerMm`/`vCurvaturePerMm` (signed by the surface
 parametrisation; compare magnitudes) and `residualMm`. `hits: 0` is a miss.
-Each point is solved on the exact kernel face: closest-point Newton steps along
-the ray (`Face.FindPointNear` for the trimmed face, `Face.EvalBasis` for its
-normal) until the kernel residual is at most 0.000001 mm. The display mesh and
-the kernel surface's own raycast only seed the search, so a ray that grazes a
-face tangentially can be missed; `unresolvedCrossings` counts mesh crossings no
-exact hit explains. Points are rounded to 1e-9 mm. Live on 26.1.3
+How crossings are found (round 3): for Plane, Cylinder, Cone, Sphere and Torus
+faces every root of the ray against the untrimmed surface comes from a
+polynomial of degree 1, 2 or 4 built from the kernel's own surface data
+(`GetInfo`; a torus, which has no `GetInfo` on 26.1.3, from its constant
+principal curvature and three spine points), after the model is checked on nine
+kernel surface points; each root is then kept only if the kernel puts it on the
+trimmed face (`Face.FindPointNear` residual at most 0.000001 mm, refined by
+Newton steps when needed). B-spline faces (and any face whose model fails the
+check) are searched by sampling the ray's signed distance to the face every 1 mm
+(8 to 48 samples across the face's box), narrowing each closest approach between
+samples to a crossing pair or a tangency, plus display-mesh seeds. Hits on two
+faces within 0.001 mm along the ray are one crossing (an edge). A ray is
+complete when it carries neither flag: `unresolvedCrossings` (with
+`unresolvedReason` for the parity guard) says crossings may be missing - a
+display-mesh crossing no exact hit explains, or an odd number of crossings on a
+closed Solid from an origin outside its box; `grazing` lists faces the ray passes
+within 0.001 mm of without a crossing there, and a tangent touch (where the ray
+runs along the surface, |n.d| below 1e-6) is reported there instead of being
+counted. A hit at the ray origin is reported at distance 0 with the residual of
+that point. Points are rounded to 1e-9 mm. Live on 26.1.3, against the
+independent review's cases (sphere r20 at 19.96-19.9999 mm off axis, r1500 at
+1498 mm, torus at z 4.99 and y 14.99, an oblique ray 9.99 mm from a cylinder
+axis, a cone at 9.99 mm), every crossing comes back; 4,096 random rays on a
+torus, a sphere and a filleted box match the closed-form count on every ray, and
+on those three and the grip pad no ray returns an odd count without a flag.
+Speed: about 25 ms per 64 rays on the analytic bodies, about 40 ms on a 67-face
+body, about 190 ms for 64 random oblique rays across the B-spline grip pad. Live on 26.1.3
 (`accept:native-surfacing`): a sphere, a cylinder and a 30 degree plane agree
 with analytic heights within 5e-10 mm; a cubic Bezier extruded sheet agrees
 with its control-polygon formula (z = 3a s(1-s)) within 1e-15 mm; a ray through
@@ -1250,6 +1274,14 @@ kernel box equals the exact extent within 0.001 mm, or when `boundsMethod` is
 `native-extrema`), and `boundsNote` with the reason when it is false; it leaves
 both out when the support read fails.
 
+Experimental: `plasticity_surface_align` exists only when the environment
+variable `PLASTICITY_EXPERIMENTAL_TOOLS` (a comma-separated list, read when the
+server starts) contains `surface_align`; otherwise it is absent from the tool
+list, the catalog and `plasticity_call`. It never cancels the command while
+Plasticity is computing (a cancel mid-compute killed the test renderer): a
+stalled computation is left to finish and the call returns undetermined
+(reconcile). Your selection is put back afterwards, on success and on failure
+(items of the rebuilt Sheet are left out, because they no longer exist).
 `plasticity_surface_align` moves the boundary edge of one Sheet (`moving`) onto
 the boundary edge of another Sheet (`reference`) with `g0`, `g1` or `g2`
 continuity, as Plasticity's Align (Edge Align) does: the moving Sheet is
@@ -1283,7 +1315,10 @@ face, four edges) from exactly four boundary items, in order around the patch:
 `edgeContinuity` (`g0` or `g1` per boundary edge) matches the neighbouring
 face; `g2` is not offered because it never measured as G2. It sets
 `SquareFactory.boundaries` directly inside `SquareEdgeCommand` (the command's
-own dialog route starts with an empty factory). Failures keep the raw XNurbs
+own dialog route starts with an empty factory). Before any edit the kernel ends
+of the four items must meet end to end, in order around the patch, within 0.001
+mm; otherwise the call is refused with the gap (XNurbs itself refused a 1 mm
+corner gap with error 31 but built a patch over a 0.005 mm gap). Failures keep the raw XNurbs
 code with its meaning (30 when g1 meets perpendicular walls, as on an open
 box). Live on 26.1.3: four Bezier curves give a Sheet whose edges read back
 at the curves' own heights by probe rays (3.75, -3, 4.5, 2.25 mm within
@@ -1634,10 +1669,8 @@ open Wires or Sheet edges bound the patch or the patch must match the
 neighbouring surface, and instead of `plasticity_create_constrained_surface`
 when the boundary is exact geometry rather than points and normals. Source Wires
 and Sheet or Solid stay. Without guides it runs `PatchCommand`; with guides it runs
-`XNurbsCommand`, both on `XSidedFactory`. Three more inputs are built and
-measured at the operations layer (`PlasticityOperations.xsidedPatch`) but not
-yet in the tool schema, because an existing test pins the schema's property
-list: `edgeContinuity` (`[{ edgeId, continuity }]`, g0/g1/g2 per boundary edge
+`XNurbsCommand`, both on `XSidedFactory`. Three more inputs are in the tool
+schema and are forwarded only when given: `edgeContinuity` (`[{ edgeId, continuity }]`, g0/g1/g2 per boundary edge
 over the global `continuity`, `setContinuityForEdge`), `tension` (0.1-1.0,
 default 0.5, the factory's `blending`) and `quality` (`auto`, `high`, `max`:
 `enforceTolerance` = `EnforceToleranceType` Automatic, High, Max). Typing in
@@ -1645,7 +1678,11 @@ the live dialog's Tension input changed only `blending`, and its Quality buttons
 only `enforceTolerance` (values 5, 1, 2). All three changed the patch
 measurably on 26.1.3 (the benchmark's three-sheet hole, centre height: g0
 28.000, g1 30.166, g1 on one of three edges 29.951, g1 with tension 0.1 29.901
-and 1.0 31.010, g2 auto 30.639, high 30.678, max 30.668 mm). `weight`, the
+and 1.0 31.010, g2 auto 30.639, high 30.678, max 30.668 mm). Tension had no
+measurable effect at g0 on the same hole (28.000 at 0.1 and 1.0, within 5e-9
+mm) nor on a four-Wire `curveIds` patch (2.7656 mm, within 3e-8 mm); the
+independent review saw it lower another `curveIds` patch at 1.0, so treat it as
+a g1/g2 control. `weight`, the
 other 0.5 default, changed nothing (1e-9 mm). Degree, spans, control type, stretch and the C1-C3, G3 and Free types are not
 exposed. A failure keeps the raw XNurbs code and adds its meaning: `3` no
 usable boundary input; `30` the continuity is incompatible at a corner or with

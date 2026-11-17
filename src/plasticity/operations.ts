@@ -5,7 +5,7 @@ import { copyFile, mkdir, mkdtemp, open, readFile, realpath, rm, rmdir, stat, wr
 import { dirname, extname, join, resolve } from "node:path";
 
 import { NATIVE_VIEWPORT_CAPTURE } from "./viewport-capture.ts";
-import { boundsExactness, exactBounds, explainXNurbsError, probeSurface, SURFACE_ALIGN_CONTINUITY, SURFACE_ALIGN_COINCIDENCE_MM, SURFACE_ALIGN_DRIVE, SURFACE_ALIGN_FALLBACK_WAIT_MS, SURFACE_ALIGN_READBACK_SOURCE, SURFACE_ALIGN_READY_MS, SURFACE_ALIGN_TIMEOUTS, type AlignReadBackNative, type SurfaceAlignContinuity, readSupportBounds, supportBounds, validateScreenshotView, withScreenshotView, type ExactBoundsEvidence, type ProbeSurfaceEvidence, type ProbeSurfaceRequest, type ScreenshotViewOptions } from "./surfacing.ts";
+import { boundsExactness, CAMERA_RESTORE_TOLERANCE, exactBounds, explainXNurbsError, probeSurface, SCREENSHOT_VIEW_SOURCE, type ScreenshotViewRestored, SQUARE_ENDS_SOURCE, squareClosureProblem, SURFACE_ALIGN_CONTINUITY, SURFACE_ALIGN_COINCIDENCE_MM, SURFACE_ALIGN_DRIVE, SURFACE_ALIGN_FALLBACK_WAIT_MS, SURFACE_ALIGN_READBACK_SOURCE, SURFACE_ALIGN_READY_MS, SURFACE_ALIGN_TIMEOUTS, type AlignReadBackNative, type SurfaceAlignContinuity, readSupportBounds, supportBounds, validateScreenshotView, withScreenshotView, type ExactBoundsEvidence, type ProbeSurfaceEvidence, type ProbeSurfaceRequest, type ScreenshotViewOptions } from "./surfacing.ts";
 import { nativeFunction } from "./native-function.ts";
 import { classifyPickOutcome, type PickCancelResult, type PickOutcome, type PickOutcomeFacts } from "./pick-command-outcome.ts";
 import { LONG_NATIVE_IMPORT_TIMEOUT_MS, NATIVE_STATE_READ_TIMEOUT_MS, PlasticityRuntime, type RevisionProbe, type RuntimeState } from "./runtime.ts";
@@ -757,6 +757,10 @@ export interface PickCommandSpec {
   extraBindings?: string[];
   /** The dialog is a DOM element, not a scene object (Surface Align's AlignEdgeDialog): also search the document for it. */
   domDialog?: boolean;
+  /** Never cancel the command while its state is not Awaiting (it is computing); leave it running and report undetermined. */
+  cancelOnlyWhenAwaiting?: boolean;
+  /** Put the user's selection back after the command, on success and on failure. */
+  restoreSelection?: boolean;
 }
 
 export interface PickReadBack {
@@ -927,8 +931,20 @@ function pickCommandSource(drive: string, extraBindings: string[] = []): string 
     let driveOpen = false, lateFinish = false, finishThrew = false, cancelStart = null;
     const ourActive = () => command !== null && executor.active?.command === command;
     // Cancels OUR command only, then waits until it has settled and is no longer active. Never throws.
+    // cancelOnlyWhenAwaiting (Surface Align): a command that is computing is never cancelled (a cancel mid-compute killed
+    // the renderer); the helper waits up to cancelMs for it to reach Awaiting or settle, and otherwise leaves it running.
+    const stateTag = value => value === null || value === undefined ? null : typeof value === 'string' ? value : (value.tag ?? value.constructor?.name ?? null);
     const cancel = async () => {
       if (cancelStart === null) cancelStart = Date.now();
+      if (args.cancelOnlyWhenAwaiting && ourActive()) {
+        const waitUntil = Date.now() + args.timeouts.cancelMs;
+        while (ourActive() && !settled && stateTag(command?._state) !== 'Awaiting' && Date.now() < waitUntil) await sleep(10);
+        if (ourActive() && !settled && stateTag(command?._state) !== 'Awaiting') {
+          result.cancelError = 'not cancelled: the command was still computing (state ' + String(stateTag(command?._state)) + '); it was left to finish';
+          result.cancel = 'failed';
+          return false;
+        }
+      }
       try {
         if (ourActive()) executor.cancelActiveCommand();
       } catch (error) {
@@ -947,6 +963,14 @@ function pickCommandSource(drive: string, extraBindings: string[] = []): string 
     const cancelAfterFinish = async phase => {
       result.phase = phase;
       result.outcome = (await cancel()) ? 'cancelled' : 'cancel-failed';
+    };
+    // restoreSelection: the user's selection is saved as Plasticity's own selection memento and put back at the end. Ids
+    // are "<kind>:<versionId>"; an id whose body version is no longer in the document (the rebuilt Sheet) is left out.
+    const savedSelection = args.restoreSelection && typeof selection.selected.saveToMemento === 'function' ? selection.selected.saveToMemento() : null;
+    const currentId = id => {
+      const versionId = String(id).split(':')[1] ?? '';
+      const body = Number((/^[0-9]+/.exec(versionId) ?? [])[0]);
+      return Number.isInteger(body) && nativeApi.geo.geometryModel.has(body);
     };
     try {
       clear();
@@ -1043,6 +1067,20 @@ function pickCommandSource(drive: string, extraBindings: string[] = []): string 
     } finally {
       driveOpen = false;
       try { clear(); focusedInput()?.blur?.(); } catch (error) { result.cleanupError = message(error); }
+      if (savedSelection && !ourActive()) {
+        try {
+          const ids = [...(savedSelection.ids ?? [])];
+          const kept = ids.filter(currentId);
+          let memento = savedSelection;
+          if (kept.length !== ids.length) {
+            memento = Object.create(Object.getPrototypeOf(savedSelection));
+            Object.assign(memento, savedSelection, { ids: savedSelection.ids instanceof Map ? new Map([...savedSelection.ids].filter(([id]) => currentId(id))) : new Set(kept) });
+          }
+          selection.selected.restoreFromMemento(memento);
+          result.selectionRestored = kept.length;
+          if (kept.length !== ids.length) result.selectionDropped = ids.length - kept.length;
+        } catch (error) { result.selectionRestoreError = message(error); }
+      }
     }
     try {
       result.undoDeltaAtReturn = undoDelta();
@@ -2379,8 +2417,9 @@ export class PlasticityOperations {
               if (!u || !w || !(tl > 0)) return null;
               const cosU = Math.abs(u[0] * t[0] + u[1] * t[1] + u[2] * t[2]) / tl, cosV = Math.abs(w[0] * t[0] + w[1] * t[1] + w[2] * t[2]) / tl;
               const along = Math.cos(Math.PI / 180), perpendicular = Math.sin(Math.PI / 180);
-              if (cosU >= along && cosV <= perpendicular) return Number(basis.vCurvature) / 1000;
-              if (cosV >= along && cosU <= perpendicular) return Number(basis.uCurvature) / 1000;
+              // Magnitudes: the kernel's sign follows each surface's parametrisation, so signs are not comparable across faces.
+              if (cosU >= along && cosV <= perpendicular) return Math.abs(Number(basis.vCurvature)) / 1000;
+              if (cosV >= along && cosU <= perpendicular) return Math.abs(Number(basis.uCurvature)) / 1000;
               return null;
             };
             const side1 = across(measurement.referenceFace?.topologyId), side2 = across(measurement.targetFace?.topologyId);
@@ -8808,6 +8847,8 @@ export class PlasticityOperations {
       settleMs: timeouts.settleMs ?? PICK_COMMAND_SETTLE_MS,
       label: spec.label,
       ...(spec.domDialog ? { domDialog: true } : {}),
+      ...(spec.cancelOnlyWhenAwaiting ? { cancelOnlyWhenAwaiting: true } : {}),
+      ...(spec.restoreSelection ? { restoreSelection: true } : {}),
     }], pickCommandCdpTimeoutMs(timeouts));
     if (!native || typeof native !== "object" || typeof native.outcome !== "string") {
       this.runtime.markUncertain();
@@ -9017,6 +9058,10 @@ export class PlasticityOperations {
       const bad = edgeContinuity.filter((entry) => entry.continuity !== "g0" && entry.continuity !== "g1");
       if (bad.length > 0) throw new Error("Square edge continuity must be g0 or g1 (g2 never measured as G2 on 26.1.3)");
     }
+    // Closure before any edit: XNurbs builds over a 0.005 mm corner gap, and refuses 1 mm with error 31.
+    const endsM = await this.runtime.read<Vector3[][]>(SQUARE_ENDS_SOURCE, [{ boundary: boundary.map((item) => ("wireId" in item ? { wireId: item.wireId } : { bodyId: item.bodyId, edgeId: item.edgeId })) }]);
+    const problem = squareClosureProblem(endsM.map((ends) => ends.map((point) => point.map((value) => value * 1000) as Vector3)));
+    if (problem) throw new Error(`Square boundary is open: ${problem}; nothing was changed`);
     const beforeIds = new Set(state.bodies.map((body) => body.id));
     try {
       await this.runtime.mutate(nativeFunction`async function (Factory, Command, ContinuityType, args) {
@@ -9103,6 +9148,8 @@ export class PlasticityOperations {
       driveArgs: { movingEdgeId: moving.edgeId, referenceEdgeId: reference.edgeId, continuityName: SURFACE_ALIGN_CONTINUITY[continuity], readyMs: SURFACE_ALIGN_READY_MS, fallbackWaitMs: SURFACE_ALIGN_FALLBACK_WAIT_MS },
       extraBindings: ["ContinuityType"],
       domDialog: true,
+      cancelOnlyWhenAwaiting: true,
+      restoreSelection: true,
       rejectedMessage: "Plasticity could not align these edges (no effect)",
       label: "Surface Align",
       timeouts,
@@ -12132,6 +12179,11 @@ export class PlasticityOperations {
     }
     await writeFile(output, data, { flag: "wx" });
     return { path: output, bytes: data.length, ...(viewport ? { captureMode: "viewport" as const, freshFrame: true, rendererHidden: viewport.rendererHidden, width: viewport.width, height: viewport.height } : {}) };
+  }
+
+  // Undo a shader/camera change an interrupted screenshot call left on the renderer (nothing happens when none is pending).
+  async restorePendingScreenshotView() {
+    return await this.runtime.readNative<ScreenshotViewRestored>(SCREENSHOT_VIEW_SOURCE, ["name2shader"], [{ op: "restore", tolerance: CAMERA_RESTORE_TOLERANCE }], 15_000);
   }
 
   // plasticity_screenshot's shader and frame options: set the analysis shader and/or aim the camera, capture, and always

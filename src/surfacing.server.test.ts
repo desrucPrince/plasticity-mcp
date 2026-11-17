@@ -184,7 +184,11 @@ test("the continuity description explains relative G2, interior and worstAt", as
   });
 });
 
-test("plasticity_surface_align and plasticity_square_surface are registered in the surfacing block, strict, and forward only given options", async () => {
+test("plasticity_surface_align and plasticity_square_surface are registered in the surfacing block, strict, and forward only given options", async (t) => {
+  // surface_align is experimental: registered only when PLASTICITY_EXPERIMENTAL_TOOLS names it.
+  const previous = process.env.PLASTICITY_EXPERIMENTAL_TOOLS;
+  process.env.PLASTICITY_EXPERIMENTAL_TOOLS = "something_else, surface_align";
+  t.after(() => { if (previous === undefined) delete process.env.PLASTICITY_EXPERIMENTAL_TOOLS; else process.env.PLASTICITY_EXPERIMENTAL_TOOLS = previous; });
   const received: Record<string, unknown[]> = {};
   await withSurfacingClient({
     async state() { return emptyState(); },
@@ -195,6 +199,8 @@ test("plasticity_surface_align and plasticity_square_surface are registered in t
     const names = tools.map((entry) => entry.name);
     const at = names.indexOf("plasticity_exact_bounds");
     assert.equal(names[at + 1], "plasticity_surface_align");
+    const exactFound = parseToolJson(await client.callTool({ name: "plasticity_call", arguments: { toolName: "catalog", query: "plasticity_surface_align" } }));
+    assert.equal(exactFound.tools[0].name, "plasticity_surface_align");
     assert.equal(names[at + 2], "plasticity_square_surface");
     for (const name of ["plasticity_surface_align", "plasticity_square_surface"]) assert.equal((tools.find((entry) => entry.name === name)!.inputSchema as { additionalProperties?: unknown }).additionalProperties, false);
     const bad = await client.callTool({ name: "plasticity_surface_align", arguments: { moving: { bodyId: 8, edgeId: "a" }, reference: { bodyId: 8, edgeId: "b" }, continuity: "g1", revision: "r1" } });
@@ -213,5 +219,43 @@ test("plasticity_surface_align and plasticity_square_surface are registered in t
     const routed = await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_square_surface", arguments: { boundary: [{ wireId: 1 }, { wireId: 2 }, { wireId: 3 }, { wireId: 4 }], edgeContinuity: [{ edgeId: "x", continuity: "g1" }], revision: "r1" } } });
     assert.equal(routed.isError, undefined);
     assert.deepEqual(received.square, [{ boundary: [{ wireId: 1 }, { wireId: 2 }, { wireId: 3 }, { wireId: 4 }], edgeContinuity: [{ edgeId: "x", continuity: "g1" }] }, "r1"]);
+  });
+});
+
+test("without PLASTICITY_EXPERIMENTAL_TOOLS=surface_align the align tool is absent from tools/list, the catalog and plasticity_call", async (t) => {
+  const previous = process.env.PLASTICITY_EXPERIMENTAL_TOOLS;
+  t.after(() => { if (previous === undefined) delete process.env.PLASTICITY_EXPERIMENTAL_TOOLS; else process.env.PLASTICITY_EXPERIMENTAL_TOOLS = previous; });
+  for (const value of [undefined, "", "surface_aligned", "square"]) {
+    if (value === undefined) delete process.env.PLASTICITY_EXPERIMENTAL_TOOLS; else process.env.PLASTICITY_EXPERIMENTAL_TOOLS = value;
+    let called = 0;
+    await withSurfacingClient({ async state() { return emptyState(); }, async surfaceAlign() { called += 1; return { state: emptyState() }; } }, async (client) => {
+      assert.ok(!(await client.listTools()).tools.some((entry) => entry.name === "plasticity_surface_align"), String(value));
+      const catalog = parseToolJson(await client.callTool({ name: "plasticity_call", arguments: { toolName: "catalog", query: "align", limit: 50 } }));
+      assert.ok(!catalog.tools.some((entry: { name: string }) => entry.name === "plasticity_surface_align"));
+      const exact = parseToolJson(await client.callTool({ name: "plasticity_call", arguments: { toolName: "catalog", query: "plasticity_surface_align" } }));
+      assert.ok(!exact.tools.some((entry: { name: string }) => entry.name === "plasticity_surface_align"));
+      const routed = await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_surface_align", arguments: { moving: { bodyId: 8, edgeId: "a" }, reference: { bodyId: 7, edgeId: "b" }, continuity: "g1", revision: "r1" } } });
+      assert.equal(routed.isError, true);
+      assert.equal(called, 0);
+    });
+  }
+  const { experimentalToolEnabled } = await import("./server.ts");
+  assert.equal(experimentalToolEnabled("surface_align", { PLASTICITY_EXPERIMENTAL_TOOLS: " surface_align ,x" }), true);
+  assert.equal(experimentalToolEnabled("surface_align", {}), false);
+});
+
+test("a plain screenshot first restores a pending view left by an interrupted call and says so", async () => {
+  let restores = 0, pending = true;
+  await withSurfacingClient({
+    async restorePendingScreenshotView() { restores += 1; const restored = pending; pending = false; return { restored }; },
+    async screenshot(path: string) { return { path, bytes: 10 }; },
+    async screenshotImage() { return { data: "/9j/AA==", mimeType: "image/jpeg", width: 10, height: 8, bytes: 4 }; },
+  }, async (client) => {
+    const first = parseToolJson(await client.callTool({ name: "plasticity_screenshot", arguments: { path: "/tmp/a.png" } }));
+    assert.deepEqual(first, { path: "/tmp/a.png", bytes: 10, restoredPendingView: true });
+    const second = parseToolJson(await client.callTool({ name: "plasticity_screenshot", arguments: { path: "/tmp/b.png" } }));
+    assert.deepEqual(second, { path: "/tmp/b.png", bytes: 10 });
+    await client.callTool({ name: "plasticity_screenshot", arguments: {} });
+    assert.equal(restores, 3);
   });
 });

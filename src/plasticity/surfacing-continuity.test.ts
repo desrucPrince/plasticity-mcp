@@ -114,3 +114,9 @@ test("absoluteCurvature is left out when no face parameter direction runs across
   assert.equal("worstAt" in oddResult, false);
   assert.equal(oddResult.achievedContinuity, "G2");
 });
+
+test("absoluteCurvature reports magnitudes: a face whose kernel curvature is negative reads positive", async () => {
+  const operations = fixture(spikes(() => 0, () => 0, (i) => (i === 0 ? 0.9 : 0.02)), { g0: 0, g1: 0, g2: 0.9 }, [{ u: [1, 0, 0], v: [0, 1, 0], ku: 0, kv: -100 }, { u: [1, 0, 0], v: [0, 0, 1], ku: 0, kv: 200 }]);
+  const result = ((await operations.analyzeSurfaceContinuity([{ bodyId: 7, edgeId: "17e1" }], "r1")).analyses as unknown[])[0] as Record<string, unknown>;
+  assert.deepEqual(result.absoluteCurvature, { side1PerMm: 0.1, side2PerMm: 0.2 });
+});

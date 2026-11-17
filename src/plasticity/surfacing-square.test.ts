@@ -7,7 +7,7 @@ import type { PlasticityRuntime, RuntimeState } from "./runtime.ts";
 // plasticity_square_surface (P7): SquareFactory driven directly inside SquareEdgeCommand, against a stub editor.
 const CONTINUITY = { G0: 23156, G1: 23153, G2: 23154 };
 
-function fixture(options: { commitError?: string; addBodies?: number; addSteps?: number } = {}) {
+function fixture(options: { commitError?: string; addBodies?: number; addSteps?: number; ends?: number[][][] } = {}) {
   const body = (id: number, type: string, edgeIds: string[] = []) => ({ id, versionId: 100 + id, type, name: null, boundsMm: null, faceIds: [], edgeIds, faces: [], edges: edgeIds.map((edgeId) => ({ id: edgeId, faceIds: ["f"] })) });
   let state = {
     targetId: "w", title: "t", documentToken: "doc", revision: "r1", dbVersion: 1, undoDepth: 2, redoDepth: 0, regions: [],
@@ -47,6 +47,8 @@ function fixture(options: { commitError?: string; addBodies?: number; addSteps?:
       return await native.call(editor, ...bindings.map((name) => ({ SquareFactory, SquareEdgeCommand, ContinuityType: CONTINUITY } as Record<string, unknown>)[name]), ...values);
     },
     isUncertain() { return false; },
+    // The kernel ends of the four boundary items (metres): a closed 40 x 40 loop unless the test opens it.
+    async read() { return options.ends ?? [[[0, 0, 0], [0.04, 0, 0]], [[0.04, 0, 0], [0.04, 0.04, 0]], [[0.04, 0.04, 0], [0, 0.04, 0]], [[0, 0.04, 0], [0, 0, 0]]]; },
   } as unknown as PlasticityRuntime;
   return { operations: new PlasticityOperations(runtime), created, calls };
 }
