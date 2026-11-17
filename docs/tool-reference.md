@@ -2597,7 +2597,19 @@ Openings: on a wall, `widthMm` runs along the wall and `heightMm` is vertical;
 (y for x walls, x for y walls) and `aboveBoardMm` is the opening bottom above the
 board top surface. On the lid and the floor, `widthMm` is along x, `heightMm`
 along y, `alongMm` is the x centre and `acrossMm` the y centre from the board's
-min corner. A circle takes `widthMm` as its diameter. Vents: on the lid the
+min corner. A circle takes `widthMm` as its diameter. A wall opening (and a
+wall vent slot) lies on the flat part of its wall: each side edge sits exactly
+on the start of the inner corner arc (inner radius from the cavity corner) and
+of the outer one (outer radius - wall), or keeps 0.4 mm from it on the flat
+side; its bottom edge sits exactly on the floor top or at least 0.4 mm above
+it (anything nearer leaves a sliver, or cuts the rounded outer corner); its top
+edge ends at the lid lip bottom at the latest, a lip depth (0.5 mm or more)
+under the wall top. The refusal names the nearest `alongMm` or `aboveBoardMm`
+(for vents `vents.centerAlongMm` or `vents.centerAcrossMm`) that plans: the
+value is planned before it is named, and when the computed nearest one is
+refused for another reason the next one in 0.05 mm steps (up to 2 mm) that
+plans is named; if none plans, the computed one is named with the reason it
+is refused. Vents: on the lid the
 slots are spaced along x by `pitchMm` and run along y; on a wall they are spaced
 along the wall and run vertically. `centerAlongMm` defaults to the board centre;
 `centerAcrossMm` is the y centre on the lid (default board centre) and the
@@ -2678,7 +2690,10 @@ f = floor, t = lid, d = lip depth, Ro = outer corner radius):
     no `standoffs.outerDiameterMm` the diameter is chosen per hole: the largest
     one up to board hole + 3 (in 0.1 mm steps) that keeps the post inside the
     lip, but never below the smallest allowed (the screw's close-fit clearance
-    + 1.6 mm, that is 0.8 mm of wall: Ø4.8 for M3, Ø4.3 for M2.5, Ø3.8 for M2;
+    + 1.6 mm: Ø4.8 for M3, Ø4.3 for M2.5, Ø3.8 for M2. The wall around the post's
+    screw hole is then 0.8 mm only with `clearanceFit: "close"`: the hole that
+    is cut has the chosen fit, so the wall is 0.7 mm with the default `medium`
+    and 0.6 mm with `free`;
     the other standoff minimums apply too). If a web rule then refuses the plan
     (a pair or edge finding of the two guards below, a lid web that would cross
     a screw hole, two posts in the gap band), the default steps down 0.1 mm at
@@ -2729,7 +2744,14 @@ f = floor, t = lid, d = lip depth, Ro = outer corner radius):
     y); when both axes carry one, the call is refused unless
     `lid.fasteners.growAxis` names the axis (an explicit `growAxis` always
     wins). `derived.cavityGrowthMm` is `[x, y]`, `derived.growAxis` the axis and
-    `derived.growAxisReason` why. The other axis keeps boardClearance exactly
+    `derived.growAxisReason` why. When openings sit on an x wall and a y wall and
+    no `growAxis` is given, the call is refused and the message says which of
+    the two values plans (both, one of them with the other's refusal, or
+    neither). Every wall opening in `derived.openings` carries `recessMm`, the
+    distance from the board edge to the inner face of its wall (the board
+    clearance, plus half the growth on the grown axis: 6 mm with the defaults),
+    and above 1 mm a `recessNote`: a connector at the board edge sits that far
+    behind the opening. The other axis keeps boardClearance exactly
     and the board is centred. Standoffs stay under the board holes, and
     openings stay referenced to the board.
   - `tapered`: the boss hangs from the walls on a 45 degree gusset. The
@@ -2804,6 +2826,33 @@ f = floor, t = lid, d = lip depth, Ro = outer corner radius):
   notch (the plan keeps the lip piece at least 1 mm long and the neck between
   two notches 0.8 mm wide, but does not widen a notch for the tip).
 
+Warnings. The reply carries a top-level `warnings` array (empty when there is
+nothing to say; not inside `derived`), and, when there is at least one, the
+same text in one `warning` string, which a lean `plasticity_batch` step shows
+without `return` (a lean step lists the other keys only as omitted). They are
+for what a caller must not miss: (1) no screw fastens the
+board: a board with holes whose standoffs are plain support posts (floor,
+tapered or hanging bosses without `standoffs.fastener`, also when the default
+style fell back to `floor`, or no `lid.fasteners` at all), or a board without
+holes, which rests on the floor; (2) a wall opening recessed more than 1 mm
+behind the board edge. Each entry names the input that caused it (for a
+fallback: the stack rule that failed, with its fix; a `growAxis` given without
+a style: whether a stack was possible without it) and the change that gives a
+fastened stack. With `screw: "auto"`, a conflicting optional key
+(`countersunk: true` under M2.5, a `pilotDiameterMm` not smaller than the
+chosen thread, a `standoffs.heightMm` too low for any stocked screw) still
+falls back to floor bosses with M3, and the warning says so.
+
+Corner-boss screws. With floor, tapered or hanging bosses
+`derived.fasteners.lid` reports `screwLengthMm` (the longest stocked length
+that passes the lid plate, keeps at least 2 mm in the boss hole and stays 1 mm
+short of its bottom), `screwLengthMaxMm` (lid + hole depth, the length that
+bottoms) and `engagementMm`: 6, 8 and 4 mm with a 2 mm lid and 6 mm pilots.
+When no stocked length fits, the call is refused with the pilot depth for the
+next stocked length and the nearest `walls.lidMm` (inserts: the lid thickness
+only); each named value is planned first, and one that does not plan carries
+the reason. The stack reports its screw in `derived.stack`.
+
 Fixed construction constants (returned as `constants`, not engineering values):
 1 mm headroom, 0.5 mm boss-to-wall overlap, 1 mm closed floor under a boss hole,
 0.5 mm cutter overshoot and lip-to-plate joint. The limits below are returned as
@@ -2858,14 +2907,32 @@ limit; nothing is edited. The sub-recipes repeat their own input checks when
 they run. Round 3 let ordinary hole positions pass the plan and fail after
 edits (a feature tangent to a wall or a lip, a sliver beside a strip web); the
 two guards below now run in the plan. They are checked by a fixed-seed sweep of
-3,200 passing plans and by 50 near-tangent inputs built live, which is evidence,
+3,200 passing plans and by 49 near-tangent inputs built live, which is evidence,
 not proof: an input that passes the plan and still fails natively is rolled
 back as described here. Then the build runs, and after it a
 native read-back must prove the result: the base's native bounds equal
 `derived.outerMm`, the lid's `derived.lidMm` and the stand-in's
 `derived.boardMm` (within 0.001 mm), every body is closed and natively valid
-(Plasticity's B-Rep Check), and no edge is shorter than 0.05 mm. The result
-carries it as `readBack`. A native failure part-way or a failed read-back undoes
+(Plasticity's B-Rep Check), no edge is shorter than 0.05 mm, and the native
+volumes of the base and the lid equal the volumes the plan predicts, within
+1e-6 of the volume (`readBack.volumesMm3`: `measured`, `predicted`, and a
+`note` in place of `predicted` when a volume cannot be predicted exactly). The
+prediction is exact: the build is a sequence of joins and cuts of upright
+prisms, so each height band's plan-view section is computed with the line and
+arc outline engine and summed; round or rounded wall openings, wall vent slots
+and countersinks are added in closed form after a check that their path is
+full material. On the 16 buildable cases of the live script the kernel agrees
+with the prediction to 2.5e-10 of the volume. Not predicted: the base of
+`bossStyle: "tapered"` (the clipped gusset cones), and a body with a round
+cutter whose path is not full material; such a volume is only measured. The
+result carries it as `readBack`. Before that, every web solid is proven one by
+one (W1): a web outline that is not a rectangle is built from a closed profile
+whose Region is found by its bounds, and a foreign closed curve on the
+profile's plane can notch or pierce that Region without moving the bounds. So
+right after the web solids of a stage are made, one native read gives their
+volumes, and each must equal its outline area x height within 1e-6; a mismatch
+fails the stage (`webs` or `lid-webs`) with the solid, both volumes and the
+advice to move or delete the foreign curve, and the recipe is rolled back. A native failure part-way or a failed read-back undoes
 the recipe's own steps (counted by the Undo depth) and the error names the
 failed stage (`read-back` for the read-back), the confirmed step count, the
 undone count (they agree; a sub-recipe step that landed but failed its own check
@@ -2973,7 +3040,17 @@ the stack case and two floor cases diagonally by 0.9 and 1.1 x `cornerGapMm` /
 sqrt 2 (free, then interfering); builds two rect openings on each of three
 walls (webs 0.4, 1 and 10 mm), the 51.5 x 28.3 board with holes 2 mm from the
 edges in floor style, the benchmark in stack style and an insert case with
-default diameters; builds the three default inputs that used to leave the board
+default diameters; checks on every built case that the read-back's volumes equal
+an independent native read and the plan's prediction; builds the final-fix
+inputs (the corner radius equal to wall + lid clearance, the single-point web
+input with each of its two fixes, wall openings exactly on and 0.4 mm past an
+arc start and the floor top, a recessed opening with its note and warnings, the
+typical call with each conflicting optional key, a floor case with its screw
+length); builds the typical call in the clean document (volumes 10,980.395366
+and 4,324.735657 mm3, as before the volume proof) and then with each of the
+reviewer's two foreign closed Wires on the web profile plane, where it must
+fail in stage `webs` with the Undo depth, the bodies and the Wire unchanged;
+builds the three default inputs that used to leave the board
 on nothing (each must show a standoff cylinder under every board hole, no hole
 in a support post, the board at gap 0 on the standoffs, no interference, and the
 board lifting straight out); builds the first of them with `screw: "auto"` and
@@ -2982,7 +3059,7 @@ the typical ESP32 call (the board, four Ø3 holes 2.0 mm in, a USB opening,
 at least 0.05 mm inside the measured lid lip, Ø2.05 x 6.9 pilots under every
 hole and a board that lifts straight out; builds a stack with posts 0.3 mm from two lip
 sides and probes a line of boxes through the lip corner (all inside lid
-material); builds 50 near-tangent inputs (the reviewer's three bands, five of
+material); builds 49 near-tangent inputs (the reviewer's three bands, four of
 the reviewer's own stack inputs and the other styles on a tangent position), each read back and undone, with no late
 failure allowed; undoes each case with one batched undo; and sends the
 reviewer's bad inputs (each must be refused with the Undo depth, the body count

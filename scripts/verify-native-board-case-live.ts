@@ -12,7 +12,7 @@
 // Follow-up: "d2-holes-3-auto" and "esp32" (screw auto, no pilot keys) must build as stacks with the default post
 // diameter inside the lid lip, a standoff under every hole, coaxial posts, a board that lifts out and no interference.
 // Round 4: the reviewer's three D2 inputs (a standoff under every hole, measured; the board rests on them); "lip-corner"
-// (D3: a line of probe boxes through the lip corner, all inside lid material); and "tangents" (D1: 50 near-tangent
+// (D3: a line of probe boxes through the lip corner, all inside lid material); and "tangents" (D1: 49 near-tangent
 // inputs, the reviewer's own among them, each built, read back and undone; a late failure fails the run). The script refuses to run without
 // PLASTICITY_CDP_URL on 127.0.0.1 and restores the baseline in finally; its last line states the Undo depth and the body
 // count it leaves.
@@ -34,7 +34,7 @@ type Bounds = { min: V3; max: V3 };
 type Face = { id: string; bodyId: number; surfaceType: string; planar: boolean; normal: V3; radiusMm: number | null; axisOriginMm: V3 | null; axisDirection: V3 | null; boundsMm: Bounds; centerMm: V3; coneSemiAngleRad?: number };
 type Edge = { id: string; bodyId: number; curveType: string; circle: boolean; boundsMm: Bounds; centerMm: V3; circleGeometry?: { centerMm: V3; radiusMm: number; normal: V3 } };
 
-export const BOARD_CASES = ["benchmark", "benchmark-tapered", "benchmark-hanging", "audit", "pod", "lip-notch", "openings", "corner-holes", "stack", "inserts", "d2-holes-3", "d2-holes-3.2", "d2-inserts", "d2-holes-3-auto", "esp32", "lip-corner", "tangents", "rejects"] as const;
+export const BOARD_CASES = ["benchmark", "benchmark-tapered", "benchmark-hanging", "audit", "pod", "lip-notch", "openings", "corner-holes", "stack", "inserts", "d2-holes-3", "d2-holes-3.2", "d2-inserts", "d2-holes-3-auto", "esp32", "lip-corner", "tangents", "final-fixes", "foreign-wires", "rejects"] as const;
 type CaseName = typeof BOARD_CASES[number];
 
 interface Options { help: boolean; target?: string; output?: string; allowDisposableMutations: boolean; cases: CaseName[] }
@@ -74,7 +74,10 @@ batched undo of the measured undoSteps, probes every R4 web, shifts the board di
 builds two-opening walls, the corner-hole board (floor and stack) and an insert case, the three default inputs that
 used to leave the board on nothing (a support post under every hole), the first of them with screw auto and the typical
 ESP32 call (both stacks by default: Ø4.5 posts inside the lid lip, default pilots), a stack whose posts sit 0.3 mm from two lip sides
-(probed through the lip corner), 50 near-tangent inputs (each built, read back and undone), and sends the reviewer's bad
+(probed through the lip corner), 49 near-tangent inputs (each built, read back and undone), the final-fix inputs (W2 to
+W8: each built, with the warnings, the recess and the screw length it must report), the typical call with the reviewer's
+two foreign closed Wires on the web profile plane (each must fail in stage "webs" and leave the Wire untouched; W1), and
+sends the reviewer's bad
 inputs (each refused with nothing changed). The document's Undo depth and body count are restored. Run only against an
 isolated instance (npm run start:plasticity-isolated).`;
 
@@ -216,17 +219,58 @@ export function tangentSample(): Array<[string, Record<string, unknown>]> {
   for (const inset of [3.39, 3.4, 3.41, 3.43]) sample.push([`g: lid post and one lip face, holes ${inset} mm in`, { originMm: origin, board: { lengthMm: 51.5, widthMm: 28.3, holes: [{ xMm: inset, yMm: 14.15, diameterMm: 3 }, { xMm: 51.5 - inset, yMm: 14.15, diameterMm: 3 }], componentHeightMm: 8 }, standoffs: { heightMm: 8, outerDiameterMm: 5 }, lid: { fasteners: { screw: "M2.5", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 7, countersunk: false } } }]);
   // The reviewer's own stack inputs, unchanged (6 mm standoffs, 6 mm pilots): round 3 picked the stack and failed late
   // (b2in, 4.0 mm in, and b5 with two openings: Boolean error) or in the read-back (lip403: a 0.03 mm edge). They are
-  // stacks again: an 18 mm screw is a stocked length (follow-up F1). defStack is the reviewer's "true default" input;
-  // its 2 mm pilots hold no screw, so it takes floor bosses with a support post under every hole.
+  // stacks again: an 18 mm screw is a stocked length (follow-up F1). (The reviewer's "true default" input, defStack,
+  // is in the rejects since W8: its 2 mm pilots hold no screw.)
   for (const [name, inset] of [["b2in", 4], ["lip403", 4.03], ["lip406", 4.06]] as const) sample.push([`reviewer's ${name}: 60 x 30, holes ${inset} mm in, standoffs.heightMm 6, Ø2.5 x 6 pilots`, { originMm: origin, board: { lengthMm: 60, widthMm: 30, holes: cornerHoles(60, 30, 3.2, inset), componentHeightMm: 8 }, standoffs: { heightMm: 6 }, lid: { fasteners: m3 }, boardStandIn: true }]);
   sample.push(["reviewer's b5: 60 x 30, holes 4 mm in, standoffs.heightMm 6, Ø2.5 x 6 pilots, openings on x- and y+", { originMm: origin, board: { lengthMm: 60, widthMm: 30, holes: cornerHoles(60, 30, 3.2, 4), componentHeightMm: 8 }, standoffs: { heightMm: 6 }, lid: { fasteners: m3 }, openings: [{ wall: "x-", shape: "rounded-rect", widthMm: 9.5, heightMm: 3.6, cornerRadiusMm: 1, alongMm: 15, aboveBoardMm: 0, label: "usb-c" }, { wall: "y+", shape: "rect", widthMm: 12, heightMm: 5, alongMm: 30, aboveBoardMm: 0.5, label: "side" }], boardStandIn: true }]);
-  sample.push(["reviewer's defStack: 60 x 30, holes 5 mm in, no standoffs key, Ø2.5 x 2 pilots", { originMm: origin, board: { lengthMm: 60, widthMm: 30, holes: cornerHoles(60, 30, 3.2, 5), componentHeightMm: 8 }, lid: { fasteners: { ...m3, pilotDepthMm: 2 } }, boardStandIn: true }]);
   return sample;
 }
 
 // The reviewer's bad inputs (60 x 40 board, 8 mm parts unless stated); every one must be refused before any edit.
 const reviewBoard = (extra: Record<string, unknown> = {}) => ({ lengthMm: 60, widthMm: 40, componentHeightMm: 8, ...extra });
 const reviewLid = (extra: Record<string, unknown> = {}) => ({ fasteners: { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 6, ...extra } });
+// Final fixes: the reviewer's inputs for W2 to W5 and W7 (the typical call is the 51.5 x 28.3 board with four Ø3 holes
+// 2.0 mm in, a USB-C opening on x-, screw auto and base pilot).
+const W_USB = { wall: "x-", shape: "rounded-rect", widthMm: 9.5, heightMm: 3.6, cornerRadiusMm: 1, alongMm: 14.15, aboveBoardMm: 0, label: "usb-c" };
+const W4_INPUT = { board: { lengthMm: 20, widthMm: 15, holes: [{ xMm: 2.5, yMm: 4.5, diameterMm: 3 }, { xMm: 17.5, yMm: 4.5, diameterMm: 3 }, { xMm: 2.5, yMm: 10.5, diameterMm: 3 }, { xMm: 17.5, yMm: 10.5, diameterMm: 3 }], componentHeightMm: 8 }, lid: { fasteners: { screw: "M2.5", base: "pilot", pilotDiameterMm: 2.05, pilotDepthMm: 6, headDiameterMm: 4.7, bossStyle: "floor" } } };
+const wBare = (opening: Record<string, unknown>) => ({ board: { lengthMm: 51.5, widthMm: 28.3, componentHeightMm: 8 }, openings: [{ wall: "y-", shape: "rect", widthMm: 6, heightMm: 4, label: "o", ...opening }] });
+export const TYPICAL_CALL = { originMm: [2000, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: cornerHoles(51.5, 28.3, 3, 2), componentHeightMm: 8 }, lid: { fasteners: { screw: "auto", base: "pilot" } }, openings: [W_USB], boardStandIn: true };
+// The volumes of the typical call in a clean document, as the kernel measured them before the final fixes (the base
+// is the reviewer's 10,980.395 mm3).
+export const TYPICAL_VOLUMES_MM3 = { base: 10980.395366, lid: 4324.735657 };
+// The reviewer's two foreign closed Wires on the web profile plane (z 1.5): A crosses a web outline (a notch and a
+// 0.727 mm air gap beside standoff 0), C lies inside it (a 0.4 x 0.4 mm shaft). Both gave "completed" before W1.
+const square = (x0: number, y0: number, x1: number, y1: number, z: number) => [[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]];
+export const FOREIGN_WIRES: Array<[string, number[][]]> = [
+  ["A: a square crossing the web outline beside standoff 0", square(2002.55, 6.15, 2003.75, 7.35, 1.5)],
+  ["C: a square inside the web outline", square(2002.2, 6.2, 2002.6, 6.6, 1.5)],
+];
+// Inputs that must build (each is built, read back and undone like a near-tangent input), with what the reply must say.
+export function finalFixBuilds(): Array<[string, Record<string, unknown>, (result: any) => string | undefined]> {
+  const origin = [3500, 0, 0];
+  const bare = { lengthMm: 51.5, widthMm: 28.3, componentHeightMm: 8 };
+  const typical = (fasteners: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) => ({ ...TYPICAL_CALL, originMm: origin, lid: { fasteners: { screw: "auto", base: "pilot", ...fasteners } }, ...extra });
+  const unfastened = (cause: RegExp) => (result: any) => result.derived.bossStyle === "floor" && result.derived.fasteners.lid.screw === "M3" && result.derived.fasteners.standoffs.mode === "support" && result.warnings.length === 1 && /^the board is not fastened by screws: /.test(result.warnings[0]) && cause.test(result.warnings[0]) ? undefined : JSON.stringify([result.derived.bossStyle, result.warnings]);
+  return [
+    ["W3: walls.outerCornerRadiusMm 2.2 (wall 2 + lid clearance 0.2): the lid lip corner is square", { originMm: origin, board: bare, walls: { outerCornerRadiusMm: 2.2 } }, (result) => result.derived.innerCornerRadiusMm === 0.2 ? undefined : `inner radius ${result.derived.innerCornerRadiusMm}`],
+    ["W3: radius 2.6 with wall 2.4", { originMm: origin, board: bare, walls: { wallMm: 2.4, outerCornerRadiusMm: 2.6 } }, (result) => result.derived.innerCornerRadiusMm === 0.2 ? undefined : `inner radius ${result.derived.innerCornerRadiusMm}`],
+    ["W3: radius 3.2 with wall 3", { originMm: origin, board: bare, walls: { wallMm: 3, outerCornerRadiusMm: 3.2 } }, (result) => result.derived.innerCornerRadiusMm === 0.2 ? undefined : `inner radius ${result.derived.innerCornerRadiusMm}`],
+    ["W4: the refused input with standoffs.outerDiameterMm 5", { originMm: origin, ...W4_INPUT, standoffs: { outerDiameterMm: 5 } }, () => undefined],
+    ["W4: the refused input with the named change (holes 0.35 mm toward the centre along x)", { originMm: origin, ...W4_INPUT, board: { ...W4_INPUT.board, holes: W4_INPUT.board.holes.map((hole) => ({ ...hole, xMm: hole.xMm < 10 ? 2.85 : 17.15 })) } }, () => undefined],
+    ["W5: the opening edge exactly on the outer corner arc start (alongMm 3.5, the named value)", { originMm: origin, ...wBare({ alongMm: 3.5, aboveBoardMm: 0.5 }) }, () => undefined],
+    ["W5: the opening edge 0.4 mm past the arc start (alongMm 3.9)", { originMm: origin, ...wBare({ alongMm: 3.9, aboveBoardMm: 0.5 }) }, () => undefined],
+    ["W5: the opening bottom exactly on the floor top (aboveBoardMm -1.6, the named value)", { originMm: origin, ...wBare({ alongMm: 20, aboveBoardMm: -1.6 }) }, () => undefined],
+    ["W5: the opening bottom 0.4 mm above the floor top (aboveBoardMm -1.2)", { originMm: origin, ...wBare({ alongMm: 20, aboveBoardMm: -1.2 }) }, () => undefined],
+    ["W2: floor bosses, openings on x- and y+, growAxis x: the USB opening is recessed 6 mm, noted and warned", { originMm: origin, board: { lengthMm: 51.5, widthMm: 28.3, holes: cornerHoles(51.5, 28.3, 3.2, 2), componentHeightMm: 8 }, lid: { fasteners: { screw: "auto", base: "pilot", growAxis: "x" } }, openings: [W_USB, { wall: "y+", shape: "rect", widthMm: 6, heightMm: 3, alongMm: 25, aboveBoardMm: 0.5, label: "btn" }], boardStandIn: true },
+      (result) => result.derived.openings[0].recessMm === 6 && /stands 6 mm from the board edge/.test(result.derived.openings[0].recessNote ?? "") && result.derived.openings[1].recessMm === 0.5 && result.derived.openings[1].recessNote === undefined && result.warnings.length === 2 && /^usb-c on wall x- is recessed: /.test(result.warnings[1]) ? undefined : JSON.stringify([result.derived.openings, result.warnings])],
+    ["W7: the typical call: a fastened stack, no warnings", typical(), (result) => result.derived.bossStyle === "stack" && result.warnings.length === 0 ? undefined : JSON.stringify([result.derived.bossStyle, result.warnings])],
+    ["W7: the typical call with countersunk: true: floor bosses, the board unfastened, warned", typical({ countersunk: true }), unfastened(/countersunk head diameter for M2\.5 is not sourced .* set countersunk: false/)],
+    ["W7: the typical call with pilotDiameterMm 2.5", typical({ pilotDiameterMm: 2.5 }), unfastened(/pilotDiameterMm 2\.5 is not smaller than the M2\.5 thread .* leave pilotDiameterMm out/)],
+    ["W7: the typical call with standoffs.heightMm 3", typical({}, { standoffs: { heightMm: 3 } }), unfastened(/exceeds the standoff height 3; raise standoffs\.heightMm to 7\.9 or leave it out/)],
+    ["W8: floor bosses report the screw (lid 2 + pilot 6: a 6 mm screw, bottoming at 8)", { originMm: origin, board: { lengthMm: 51.5, widthMm: 28.3, holes: cornerHoles(51.5, 28.3, 3.2, 4.5), componentHeightMm: 8 }, lid: { fasteners: { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 6, bossStyle: "floor" } }, boardStandIn: true }, (result) => result.derived.fasteners.lid.screwLengthMm === 6 && result.derived.fasteners.lid.screwLengthMaxMm === 8 && result.derived.fasteners.lid.engagementMm === 4 ? undefined : JSON.stringify(result.derived.fasteners.lid)],
+  ];
+}
+
 export const REVIEW_REJECTS: Array<[string, Record<string, unknown>, RegExp]> = [
   ["2a corner wall: wall 0.8, clearance 0.2", { board: reviewBoard(), walls: { wallMm: 0.8 }, fit: { boardClearanceMm: 0.2 } }, /the corner wall is -0\.028 mm/],
   ["2b corner wall: wall 0.8", { board: reviewBoard(), walls: { wallMm: 0.8 } }, /the corner wall is 0\.096 mm/],
@@ -261,6 +305,17 @@ export const REVIEW_REJECTS: Array<[string, Record<string, unknown>, RegExp]> = 
   // (Follow-up F1: with 6 mm pilots an 18 mm screw now fits, so this reject uses 3 mm pilots.)
   ["D9: a stack with no stocked screw length (3 mm pilots)", { board: reviewBoard({ holes: cornerHoles(60, 40, 3.2, 4.5) }), lid: reviewLid({ bossStyle: "stack", pilotDepthMm: 3 }) }, /no standard screw length fits the stack: it needs between 16\.1 and 16\.1 mm .*stocked lengths 3, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 30, 35, 40\); use lid\.fasteners\.pilotDepthMm 4\.9 for a stocked 18 mm screw .*, or use board\.componentHeightMm 7\.9 for a stocked 16 mm screw/],
   ["D2: an underside clearance on a board without holes", { board: reviewBoard({ undersideClearanceMm: 3 }) }, /board\.undersideClearanceMm needs standoffs: a board without holes has none and rests on the floor/],
+  // (Final fixes, W8: the reviewer's "true default" input, 2 mm pilots, was a floor case in the near-tangent sample; a
+  // 2 mm pilot holds no screw in a stack or in a corner boss, so it is refused.)
+  ["W8: the reviewer's defStack (2 mm pilots hold no screw: no stack, and no corner-boss screw)", { board: { lengthMm: 60, widthMm: 30, holes: cornerHoles(60, 30, 3.2, 5), componentHeightMm: 8 }, lid: reviewLid({ pilotDepthMm: 2 }), boardStandIn: true }, /no standard screw length fits the lid bosses: it needs between 4 and 3 mm \(lid 2 mm, at least 2 mm in the 2 mm boss hole, 1 mm tip clearance; .*use lid\.fasteners\.pilotDepthMm 3 for a stocked 4 mm screw.*the default bossStyle fell back to "floor" because a screw stack is not possible/],
+  // Final fixes W2, W4, W5 (the reviewer's inputs).
+  ["W2: floor fallback with openings on x- and y+ (Ø3.2 holes 2.0 mm in): both growAxis values plan", { board: { lengthMm: 51.5, widthMm: 28.3, holes: cornerHoles(51.5, 28.3, 3.2, 2), componentHeightMm: 8 }, lid: { fasteners: { screw: "auto", base: "pilot" } }, openings: [W_USB, { wall: "y+", shape: "rect", widthMm: 6, heightMm: 3, alongMm: 25, aboveBoardMm: 0.5, label: "btn" }] }, /openings sit on both x walls \(x-\) and y walls \(y\+\), so pass lid\.fasteners\.growAxis "x" or "y" to choose which walls move \(both plan\) \(the default bossStyle fell back to "floor" because a screw stack is not possible/],
+  ["W2: the same with the y+ opening near a corner: only growAxis x plans", { board: { lengthMm: 51.5, widthMm: 28.3, holes: cornerHoles(51.5, 28.3, 3.2, 2), componentHeightMm: 8 }, lid: reviewLid({ bossStyle: "floor" }), openings: [W_USB, { wall: "y+", shape: "rect", widthMm: 6, heightMm: 3, alongMm: 6, aboveBoardMm: 0.5, label: "btn" }] }, /so pass lid\.fasteners\.growAxis "x" \(it plans; "y" does not: btn on wall y\+ collides with lid boss 2\)/],
+  ["W4: webs that touch at a single point, with the nearest change", W4_INPUT, /the webs that close the narrow gaps touch at a single point, which cannot be built as one solid; move board\.holes\[0\] 0\.35 mm toward the board centre along x \(to xMm 2\.85\), and board\.holes\[1\], board\.holes\[2\], board\.holes\[3\] the same way: that plans clean/],
+  ["W5: an opening flush with the board corner (it would cut the rounded outer corner)", wBare({ alongMm: 3, aboveBoardMm: 0.5 }), /its edge is 0\.5 mm from the cavity corner, where the corner arcs start at 0\.5 and 1 mm; an edge must sit exactly on an arc start or keep 0\.4 mm from it .*; use alongMm 3\.5/],
+  ["W5: alongMm 3.01 (a 0.01 mm strip beside the corner fillet)", wBare({ alongMm: 3.01, aboveBoardMm: 0.5 }), /its edge is 0\.51 mm from the cavity corner, .*; use alongMm 3\.5/],
+  ["W5: aboveBoardMm -1.59 (a 0.01 mm step above the floor)", wBare({ alongMm: 20, aboveBoardMm: -1.59 }), /its bottom edge is 0\.01 mm above the floor top; it must sit exactly on the floor top or at least 0\.4 mm above it .*; use aboveBoardMm -1\.6/],
+  ["W8: corner bosses with a 2.5 mm pilot (no stocked screw)", { board: reviewBoard(), lid: reviewLid({ bossStyle: "floor", pilotDepthMm: 2.5 }) }, /no standard screw length fits the lid bosses: it needs between 4 and 3\.5 mm .*; use lid\.fasteners\.pilotDepthMm 3 for a stocked 4 mm screw/],
   ["D2: screw auto with board holes under the M2 close fit", { board: reviewBoard({ holes: cornerHoles(60, 40, 2, 4.5) }), lid: { fasteners: { screw: "auto", base: "pilot", pilotDiameterMm: 1.6, pilotDepthMm: 6.9, bossStyle: "stack", countersunk: false } } }, /lid\.fasteners\.screw "auto": no screw passes the smallest board hole \(Ø2\)/],
   ["D1: a strip side 0.0005 mm off a face of its own web (holes 1.999 mm in): refused with the nearest clean hole position", { board: { lengthMm: 35.7, widthMm: 37, holes: cornerHoles(35.7, 37, 2.2, 1.999), componentHeightMm: 6 }, walls: { wallMm: 2.4 }, standoffs: { fastener: { screw: "M2", mode: "pilot", pilotDiameterMm: 1.6 } }, lid: { fasteners: { screw: "M2", base: "pilot", pilotDiameterMm: 1.6, pilotDepthMm: 7, bossStyle: "floor", headDiameterMm: 3.8 } } }, /would have an edge under 0\.001 mm .* move board\.holes\[0\] 0\.05 mm toward the board centre along x \(to xMm 2\.049\), and board\.holes\[2\] the same way: that plans clean/],
 ];
@@ -648,6 +703,19 @@ async function stackDefaults(client: Client, result: any, minimalCall: boolean):
   return checks;
 }
 
+// W1: the native volumes of the finished base and lid (plasticity_measure_solid_properties, independent of the recipe's
+// own read) against result.readBack.volumesMm3: measured equal, and equal to the predicted volume where there is one.
+async function independentVolumes(client: Client, result: any, revision: string): Promise<{ ok: boolean; base: number; lid: number; predicted: boolean; unpredicted?: string; note?: string; actual: unknown }> {
+  const read = await call(client, "plasticity_measure_solid_properties", { ids: [result.bodies.baseId, result.bodies.lidId], revision });
+  const [base, lid] = [read.bodies.find((body: any) => body.id === result.bodies.baseId)?.volumeMm3 as number, read.bodies.find((body: any) => body.id === result.bodies.lidId)?.volumeMm3 as number];
+  const reported = result.readBack?.volumesMm3;
+  const close = (a: number, b: number) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= 1e-6 * Math.abs(b);
+  const each = (measured: number, entry: any) => !!entry && close(entry.measured, measured) && (entry.predicted === undefined ? typeof entry.note === "string" : close(measured, entry.predicted));
+  const ok = !!reported && each(base, reported.base) && each(lid, reported.lid);
+  const unpredicted = reported?.base?.predicted === undefined ? "base" : reported?.lid?.predicted === undefined ? "lid" : undefined;
+  return { ok, base, lid, predicted: unpredicted === undefined, ...(unpredicted ? { unpredicted, note: String(reported?.[unpredicted]?.note).slice(0, 80) } : {}), actual: { base: { native: base, readBack: reported?.base }, lid: { native: lid, readBack: reported?.lid } } };
+}
+
 async function liftBoard(client: Client, result: any): Promise<Check[]> {
   const derived = result.derived;
   const { baseId, boardId } = result.bodies as { baseId: number; boardId: number };
@@ -840,6 +908,71 @@ async function main(): Promise<void> {
         console.log(JSON.stringify({ case: name, inputs: sample.length, built: builds.length, lateFailures, refusedInPlan, minEdgeMm, undoSteps: builds.map((build) => build.undoSteps), passed: checks.filter((check) => check.ok).length, total: checks.length, failedChecks: checks.filter((check) => !check.ok) }));
         continue;
       }
+      if (name === "final-fixes") {
+        // W2 to W8: every input builds, reads back (volumes included), says what it must and is undone.
+        const checks: Check[] = [];
+        const list = finalFixBuilds();
+        for (const [label, input, expect] of list) {
+          const status = await call(client, "plasticity_status", {});
+          const response = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...input, name: "fix", revision: status.revision } }, undefined, LONG);
+          const reply = toolText(response);
+          const after = await call(client, "plasticity_status", {});
+          if ("isError" in response && response.isError) {
+            checks.push({ field: "final-fixes", check: `builds: ${label}`, ok: false, expected: "completed", actual: { reply: reply.slice(0, 500), undoDepth: after.undoDepth } });
+            if (after.undoDepth > status.undoDepth) await call(client, "plasticity_undo", { steps: after.undoDepth - status.undoDepth, intent: "Board-case acceptance: clear a failed final-fix case", revision: after.revision });
+            continue;
+          }
+          const result = JSON.parse(reply);
+          const volumes = await independentVolumes(client, result, after.revision);
+          const said = expect(result);
+          const sound = result.status === "completed" && result.undoSteps === after.undoDepth - status.undoDepth && result.readBack.bodies.every((body: any) => body.closed && body.nativeValid) && result.readBack.minEdgeMm >= 0.05 && Array.isArray(result.warnings);
+          const undo = await client.callTool({ name: "plasticity_batch", arguments: { steps: [{ toolName: "plasticity_undo", arguments: { steps: result.undoSteps } }], detail: "lean" } }, undefined, LONG);
+          const restored = await call(client, "plasticity_status", {});
+          const undone = !("isError" in undo && undo.isError) && restored.undoDepth === baseline.undoDepth && sameBodies(restored, baseline);
+          checks.push({ field: "final-fixes", check: `builds, reads back (closed, valid, volumes = the plan), says what it must and is undone: ${label}`, ok: sound && undone && volumes.ok && said === undefined, actual: { bossStyle: result.derived.bossStyle ?? null, undoSteps: result.undoSteps, minEdgeMm: result.readBack.minEdgeMm, volumes: volumes.actual, warnings: result.warnings.length, ...(said ? { said } : {}) } });
+        }
+        cases[name] = { inputs: list.length, checks };
+        console.log(JSON.stringify({ case: name, inputs: list.length, passed: checks.filter((check) => check.ok).length, total: checks.length, failedChecks: checks.filter((check) => !check.ok) }));
+        continue;
+      }
+      if (name === "foreign-wires") {
+        // W1: the typical call in the clean document builds with the same volumes as before the fix. Then, with each
+        // of the reviewer's closed Wires on the web profile plane, it must fail in stage "webs" and leave the document
+        // as it was before the call: the Undo depth, the bodies, and the foreign Wire with its id and bounds.
+        const checks: Check[] = [];
+        const start = await call(client, "plasticity_status", {});
+        const cleanResponse = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...TYPICAL_CALL, name: "typ", revision: start.revision } }, undefined, LONG);
+        const cleanAfter = await call(client, "plasticity_status", {});
+        if ("isError" in cleanResponse && cleanResponse.isError) {
+          checks.push({ field: "foreign-wires", check: "the typical call builds in the clean document", ok: false, actual: toolText(cleanResponse).slice(0, 600) });
+        } else {
+          const result = JSON.parse(toolText(cleanResponse));
+          const volumes = await independentVolumes(client, result, cleanAfter.revision);
+          const same = Math.abs(volumes.base - TYPICAL_VOLUMES_MM3.base) <= 1e-6 * TYPICAL_VOLUMES_MM3.base && Math.abs(volumes.lid - TYPICAL_VOLUMES_MM3.lid) <= 1e-6 * TYPICAL_VOLUMES_MM3.lid;
+          checks.push({ field: "foreign-wires", check: `the typical call builds in the clean document with the volumes it had before the fix (base ${TYPICAL_VOLUMES_MM3.base}, lid ${TYPICAL_VOLUMES_MM3.lid} mm3), equal to the plan's prediction, as a stack without warnings`, ok: volumes.ok && same && result.derived.bossStyle === "stack" && result.warnings.length === 0, expected: TYPICAL_VOLUMES_MM3, actual: volumes.actual });
+        }
+        if (cleanAfter.undoDepth > start.undoDepth) await call(client, "plasticity_undo", { steps: cleanAfter.undoDepth - start.undoDepth, intent: "Board-case acceptance: undo the clean typical build", revision: cleanAfter.revision });
+        for (const [label, points] of FOREIGN_WIRES) {
+          const before = await call(client, "plasticity_status", {});
+          await call(client, "plasticity_create_polyline", { pointsMm: points, closed: true, intent: "Board-case acceptance: a foreign closed Wire on the web profile plane", revision: before.revision });
+          const withWire = await call(client, "plasticity_status", {});
+          const wire = withWire.bodies.find((body: any) => !before.bodies.some((old: any) => old.id === body.id));
+          const response = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...TYPICAL_CALL, name: "typ", revision: withWire.revision } }, undefined, LONG);
+          const reply = toolText(response);
+          const later = await call(client, "plasticity_status", {});
+          const wireNow = later.bodies.find((body: any) => body.id === wire?.id);
+          const failed = "isError" in response && response.isError === true && /failed in stage "webs"/.test(reply) && /has a volume of [0-9.]+ mm3, not the planned [0-9.]+ mm3/.test(reply);
+          const untouched = later.undoDepth === withWire.undoDepth && sameBodies(later, withWire) && !!wire && wire.type === "Wire" && JSON.stringify(wireNow?.boundsMm) === JSON.stringify(wire.boundsMm) && wireNow?.type === "Wire";
+          checks.push({ field: "foreign-wires", check: `W1: with the foreign Wire the call fails in stage "webs" on the web solid's volume; the Undo depth and the bodies are as before the call and the Wire is still there, untouched: ${label}`, ok: failed && untouched, expected: { stage: "webs", undoDepth: withWire.undoDepth, bodies: withWire.bodies.length }, actual: { reply: reply.replace(/\s+/g, " ").slice(0, 420), undoDepth: later.undoDepth, bodies: later.bodies.length, wire: wireNow ? { id: wireNow.id, type: wireNow.type, boundsMm: wireNow.boundsMm } : null } });
+          // Remove the foreign Wire again (and anything a wrong success left).
+          if (later.undoDepth > before.undoDepth) await call(client, "plasticity_undo", { steps: later.undoDepth - before.undoDepth, intent: "Board-case acceptance: remove the foreign Wire", revision: later.revision });
+          const cleared = await call(client, "plasticity_status", {});
+          checks.push({ field: "foreign-wires", check: `the document is back at the baseline after the Wire is undone: ${label}`, ok: cleared.undoDepth === baseline.undoDepth && sameBodies(cleared, baseline), actual: { undoDepth: cleared.undoDepth, bodies: cleared.bodies.length } });
+        }
+        cases[name] = { checks };
+        console.log(JSON.stringify({ case: name, wires: FOREIGN_WIRES.length, passed: checks.filter((check) => check.ok).length, total: checks.length, failedChecks: checks.filter((check) => !check.ok) }));
+        continue;
+      }
       if (name === "rejects") {
         const checks: Check[] = [];
         for (const [label, input, pattern] of REVIEW_REJECTS) {
@@ -873,6 +1006,11 @@ async function main(): Promise<void> {
       if (result.bodies.boardId !== undefined && (name === "pod" || name === "stack" || name === "benchmark" || name === "d2-holes-3")) checks.push(...await shiftCorner(client, result));
       if (name === "lip-corner") checks.push(...await probeLipCorner(client, result));
       if (name === "d2-holes-3-auto" || name === "esp32") checks.push(...await stackDefaults(client, result, name === "esp32"));
+      // W1: the reply's volumes against an independent native read and the plan's prediction.
+      {
+        const volumes = await independentVolumes(client, result, (await call(client, "plasticity_status", {})).revision);
+        checks.push({ field: "readBack.volumesMm3", check: `W1: the base and lid volumes in the read-back equal an independent native read${volumes.predicted ? " and the plan's prediction (1e-6 relative)" : ` (the ${volumes.unpredicted} volume is not predicted: ${volumes.note})`}`, ok: volumes.ok, actual: volumes.actual });
+      }
       const measuredDepth = after.undoDepth - before.undoDepth;
       checks.push({ field: "undoSteps", check: "undoSteps equals the measured Undo depth change", ok: result.undoSteps === measuredDepth, expected: measuredDepth, actual: result.undoSteps });
       const expectedIds = [result.bodies.baseId, result.bodies.lidId, ...(result.bodies.boardId !== undefined ? [result.bodies.boardId] : [])].sort((a: number, b: number) => a - b);

@@ -131,7 +131,16 @@ export const BOARD_CASE_LIMITS = {
   // The read-back refuses an edge shorter than this.
   minEdgeMm: 0.05,
   // The read-back compares bounds within this tolerance.
+  // A wall opening whose wall stands further than this from the board edge is reported (derived.openings[i].recessNote
+  // and a warning): a connector at the board edge does not reach it.
+  reportRecessOverMm: 1,
+  // W5: an edge of a wall opening or wall vent slot keeps this far from the start of a corner arc and from the floor
+  // top, or sits exactly on it.
+  minOpeningEdgeMarginMm: 0.4,
   readBackToleranceMm: 1e-3,
+  // A native volume (a web solid, the finished base, the finished lid) may differ from its planned volume by this
+  // fraction (W1). The kernel agrees with the plan to about 1e-10 on the live cases.
+  volumeRelativeTolerance: 1e-6,
   // Flat opening ceilings wider than this are listed in printability.openingCeilings.
   reportBridgeOverMm: 6,
 } as const;
@@ -216,6 +225,11 @@ export interface BoardCaseOpeningDerived {
   label: string;
   wall: CaseOpeningFace;
   shape: CaseOpeningShape;
+  // Wall openings (W2): the distance from the board edge to the inner face of this wall (fit.boardClearanceMm, plus
+  // half the cavity growth when bossStyle "floor" grows the cavity along this wall's axis). Above 1 mm, recessNote
+  // says why: a connector at the board edge then sits that far behind the opening.
+  recessMm?: number;
+  recessNote?: string;
   // Centre of the opening on the outer surface it is cut from (lid top, floor bottom or the outer wall face).
   centerMm: Vector3;
   // [width, height]: along the wall and vertical for a wall; along x and along y for the lid and the floor.
@@ -341,6 +355,12 @@ export interface BoardCaseDerived {
       base: "pilot" | "heat-set-insert";
       bossDiameterMm: number;
       bossLengthMm: number;
+      // Corner bosses (floor, tapered, hanging; W8): the longest stocked screw (lid plate + boss hole) with at least
+      // 2 mm in the boss hole and 1 mm tip clearance, the length that bottoms, and the engagement of the chosen one.
+      // (bossStyle "stack" reports these in derived.stack.)
+      screwLengthMm?: number;
+      screwLengthMaxMm?: number;
+      engagementMm?: number;
       baseHole: { diameterMm: number; depthMm: number; source: string; confidence?: PresetConfidence | "low"; insert?: string; minWallMm?: number };
       // With screw "auto" only: every value the caller left out and the plan filled in, each with its rule.
       defaults?: string[];
@@ -393,6 +413,9 @@ export interface BoardCaseWebSolid {
 export interface BoardCasePlan {
   name: string;
   derived: BoardCaseDerived;
+  // W7: a board that no screw holds, an opening recessed more than 1 mm; each with its cause and the change (also the
+  // reply's top-level `warnings`).
+  warnings: string[];
   base: { boxOriginMm: Vector3; boxSizeMm: Vector3; outerRadiusMm: number; cavityOriginMm: Vector3; cavitySizeMm: Vector3; innerRadiusMm: number };
   standoffGroups: CylinderPattern[];
   webs: BoardCaseWeb[];
@@ -431,7 +454,12 @@ export class BoardCaseValidationError extends Error {
   }
 }
 
+// The web union has a pinch point (see unionLoops); the plan adds the nearest change that plans (W4).
+class WebPinchError extends BoardCaseValidationError {}
+
 const EPS = 1e-9;
+// A length within EPS of 0 is 0 (a difference of two decimal inputs is rarely exact in floating point).
+const snapZero = (value: number): number => Math.abs(value) < EPS ? 0 : value;
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Pure plan: defaults, derived dimensions, validation. Throws BoardCaseValidationError (or an unsourced-preset error)
@@ -463,7 +491,18 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
     let reason: string;
     if (count < 2) reason = `default: the board has ${count} hole${count === 1 ? "" : "s"}, fewer than the 2 a screw stack needs, so the bosses stand on the floor`;
     else if (input.standoffs?.fastener) reason = "default: standoffs.fastener is given (the standoffs take their own screws), so the bosses stand on the floor";
-    else {
+    else if (given.growAxis !== undefined) {
+      // W7: growAxis is a floor key, so the caller chose floor bosses. The reason still says whether a stack was possible.
+      const { growAxis: _floorOnly, ...withoutGrowAxis } = given;
+      let stackToo = "a screw stack is possible without it: leave growAxis out";
+      try {
+        planBoardCase({ ...input, lid: { ...input.lid, fasteners: { ...withoutGrowAxis, bossStyle: "stack" } } }, { styleReason: "probe" }, { ...options, fixes: false });
+      } catch (error) {
+        if (!(error instanceof BoardCaseValidationError) && !(error instanceof UnsourcedFastenerValueError)) throw error;
+        stackToo = `a screw stack is not possible either (${error.message})`;
+      }
+      reason = `default: lid.fasteners.growAxis is given, which applies to bossStyle "floor" only, so the bosses stand on the floor; ${stackToo}`;
+    } else {
       try {
         return planBoardCase(withStyle("stack"), { styleReason: `default: the lid screws go through the ${count} board holes into the standoffs (stack)` }, options);
       } catch (error) {
@@ -522,6 +561,31 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
     }
   }
   const fail = (message: string): never => { throw new BoardCaseValidationError(message); };
+  // Why a changed input would be refused (undefined: it plans). For the changes a refusal names: they are planned
+  // before they are named, once, never inside another such search (options.fixes false).
+  const trialRefusal = (trial: BoardCaseInput): string | undefined => {
+    try {
+      planBoardCase(trial, { styleReason: resolved?.styleReason ?? "lid.fasteners.bossStyle", ...(resolved?.screwReason ? { screwReason: resolved.screwReason } : {}), ...(resolved?.auto ? { auto: true } : {}), postSearch: true }, { fixes: false });
+      return undefined;
+    } catch (error) {
+      if (!(error instanceof BoardCaseValidationError) && !(error instanceof UnsourcedFastenerValueError)) throw error;
+      return error.message;
+    }
+  };
+  // The change a refusal names for one value: the computed nearest one if it plans, else the nearest in 0.05 mm steps
+  // (up to 2 mm either way) that does; if none does, the computed one with the reason it is refused.
+  const namedChange = (make: (delta: number) => { text: string; trial: BoardCaseInput }, first: number): string => {
+    if (options.fixes === false) return make(first).text;
+    const why = trialRefusal(make(first).trial);
+    if (why === undefined) return make(first).text;
+    for (let step = 1; step <= 40; step += 1) {
+      for (const sign of first >= 0 ? [1, -1] : [-1, 1]) {
+        const candidate = make(r9(first + sign * step * 0.05));
+        if (trialRefusal(candidate.trial) === undefined) return candidate.text;
+      }
+    }
+    return `${make(first).text} (that alone does not plan: ${why.length > 200 ? `${why.slice(0, 200)}...` : why})`;
+  };
   const positive = (label: string, value: number | undefined): number => {
     if (value === undefined || !Number.isFinite(value) || value <= 0) fail(`${label} must be a positive number of millimetres (got ${String(value)})`);
     return value!;
@@ -588,6 +652,8 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
   // Stack rules are gathered and refused together, each with the input change that passes it (D2).
   const stackProblems: string[] = [];
   let stackWebRule = false;
+  // W8: refused after the other lid rules (a countersink off the lid edge is the nearer cause of a thick lid's failure).
+  let cornerScrewProblem: string | undefined;
   const bossStyle: BossStyle = lidFasteners?.bossStyle ?? DEFAULT_BOSS_STYLE;
   const stack = !!lidFasteners && bossStyle === "stack";
   // screw "auto" chose the screw, so the caller cannot know its pilot: the values left out are filled in, each with its
@@ -684,7 +750,20 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
       growAxis = "x";
       growAxisReason = `the y walls carry openings (${yOpen.join(", ")})`;
     } else {
-      fail(`bossStyle "floor" widens the cavity by ${r9(need)} mm along x or y, which moves that axis's two end walls ${r9(need / 2)} mm away from the board; openings sit on both x walls (${xOpen.join(", ")}) and y walls (${yOpen.join(", ")}), so pass lid.fasteners.growAxis "x" or "y" to choose which walls move`);
+      // W2: say which of the two values plans (each is planned once; not inside another search).
+      const refusal = (axis: "x" | "y"): string | undefined => {
+        const why = trialRefusal({ ...input, lid: { ...input.lid, fasteners: { ...input.lid!.fasteners!, growAxis: axis } } });
+        return why !== undefined && why.length > 220 ? `${why.slice(0, 220)}...` : why;
+      };
+      let advice = "pass lid.fasteners.growAxis \"x\" or \"y\" to choose which walls move";
+      if (options.fixes !== false) {
+        const [x, y] = [refusal("x"), refusal("y")];
+        advice = x === undefined && y === undefined ? `${advice} (both plan)`
+          : x === undefined ? `pass lid.fasteners.growAxis "x" (it plans; "y" does not: ${y})`
+            : y === undefined ? `pass lid.fasteners.growAxis "y" (it plans; "x" does not: ${x})`
+              : `neither lid.fasteners.growAxis "x" (${x}) nor "y" (${y}) plans; use a bossStyle that does not widen the cavity ("stack", or "tapered" / "hanging" with allowBlockedBoard) or move an opening`;
+      }
+      fail(`bossStyle "floor" widens the cavity by ${r9(need)} mm along x or y, which moves that axis's two end walls ${r9(need / 2)} mm away from the board; openings sit on both x walls (${xOpen.join(", ")}) and y walls (${yOpen.join(", ")}), so ${advice}`);
     }
     growth = growAxis === "x" ? [need, 0] : [0, need];
   }
@@ -705,7 +784,8 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
     const largest = (Math.SQRT2 * bc - LIMITS.minCornerGapMm) / (Math.SQRT2 - 1);
     if (Math.SQRT2 * bc - Ri * (Math.SQRT2 - 1) < LIMITS.minCornerGapMm - EPS) fail(`walls.innerCornerRadiusMm ${Ri} leaves a ${r3(Math.SQRT2 * bc - Ri * (Math.SQRT2 - 1))} mm diagonal gap between the board corner and the arc, below ${LIMITS.minCornerGapMm} mm; with fit.boardClearanceMm ${bc} it may be at most ${floor3(Math.max(0, largest))}`);
   } else {
-    Ri = Math.min(Math.max(0, Ro - w), bc);
+    // (W3: a radius within 1e-9 of 0 is 0: 2.2 - 2 is 0.2000000000000002 in floating point.)
+    Ri = Math.min(Math.max(0, snapZero(Ro - w)), bc);
   }
   if (RiInput !== undefined && Ri > Math.min(L + 2 * bc + growth[0], W + 2 * bc + growth[1]) / 2 - LIMITS.minFilletRadiusMm + EPS) fail(`walls.innerCornerRadiusMm ${Ri} must be less than half the cavity size minus ${LIMITS.minFilletRadiusMm} mm (${r9(Math.min(L + 2 * bc + growth[0], W + 2 * bc + growth[1]) / 2 - LIMITS.minFilletRadiusMm)})`);
   if (Ri > 0 && Ri < LIMITS.minFilletRadiusMm - EPS) fail(`the inner corner radius would be ${r9(Ri)} mm (${RiInput !== undefined ? "walls.innerCornerRadiusMm" : "min(walls.outerCornerRadiusMm - walls.wallMm, fit.boardClearanceMm)"}); it must be 0 or at least ${LIMITS.minFilletRadiusMm} mm (a smaller fillet fails natively)`);
@@ -797,8 +877,9 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
     const insertMinimum = extra.minWallMm !== undefined ? holeDiameterMm + 2 * extra.minWallMm : 0;
     // Stack (F2): the lid post over each hole has the standoff's diameter and must stay tangentBandMm inside the lid lip
     // outline. So the default there is the largest diameter up to the usual one that does (in 0.1 mm steps), but never
-    // below the screw's close-fit clearance + 1.6 mm (0.8 mm of wall) or any other minimum of a standoff. An explicit
-    // standoffs.outerDiameterMm is never changed.
+    // below the screw's close-fit clearance + 1.6 mm or any other minimum of a standoff. (W6: the wall around the lid
+    // post's hole is then 0.8 mm only with clearanceFit "close"; the hole actually cut has the chosen fit, so the wall
+    // is 0.7 mm with the default "medium" and 0.6 mm with "free".) An explicit standoffs.outerDiameterMm is never changed.
     let outerDiameterReason: string | undefined;
     const outerDiameters = holes.map((hole) => standoffInput.outerDiameterMm ?? r9(Math.max(hole.diameterMm + 3, insertMinimum)));
     if (stack && standoffInput.outerDiameterMm !== undefined) outerDiameterReason = "standoffs.outerDiameterMm";
@@ -923,6 +1004,31 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
     } else {
       headCircleDiameter = lidFasteners.headDiameterMm !== undefined ? positive("lid.fasteners.headDiameterMm", lidFasteners.headDiameterMm) : lidHole.diameterMm;
     }
+    // W8: corner bosses (floor, tapered, hanging): the screw passes the lid plate, then the boss hole. The longest
+    // stocked length with minEngagementMm in the hole and minTipClearanceMm short of its bottom; none: refused, with
+    // the nearest pilot depth and lid thickness that fit one. (The stack reports its own in derived.stack.)
+    let cornerScrew: { screwLengthMm: number; screwLengthMaxMm: number; engagementMm: number } | undefined;
+    if (corner) {
+      const choice = chooseStockScrewLength(tl, baseHole.depthMm, { minEngagementMm: LIMITS.minEngagementMm, minTipClearanceMm: LIMITS.minTipClearanceMm });
+      if (!choice) {
+        const fixes: string[] = [];
+        const next = shortestStockScrewLength(tl, LIMITS.minEngagementMm);
+        const tried = (text: string, trial: BoardCaseInput): string => { const why = options.fixes === false ? undefined : trialRefusal(trial); return why === undefined ? text : `${text} (that alone does not plan: ${why.length > 160 ? `${why.slice(0, 160)}...` : why})`; };
+        if (lidFasteners.base === "pilot" && next !== undefined) fixes.push(tried(`use lid.fasteners.pilotDepthMm ${r9(next - tl + LIMITS.minTipClearanceMm)} for a stocked ${next} mm screw`, { ...input, lid: { ...input.lid, fasteners: { ...input.lid!.fasteners!, pilotDepthMm: r9(next - tl + LIMITS.minTipClearanceMm) } } }));
+        let nearest: { delta: number; length: number } | undefined;
+        for (const length of STOCK_SCREW_LENGTHS_MM) {
+          const low = length - baseHole.depthMm + LIMITS.minTipClearanceMm;
+          const high = length - LIMITS.minEngagementMm;
+          if (low > high + EPS) continue;
+          const delta = tl > high ? high - tl : tl < low ? low - tl : 0;
+          if (tl + delta > EPS && (!nearest || Math.abs(delta) < Math.abs(nearest.delta) - EPS)) nearest = { delta, length };
+        }
+        if (nearest) fixes.push(`${fixes.length > 0 ? "or " : ""}${tried(`use walls.lidMm ${r9(tl + nearest.delta)} for a stocked ${nearest.length} mm screw`, { ...input, walls: { ...input.walls, lidMm: r9(tl + nearest.delta) } })}`);
+        if (fixes.length === 0) fixes.push(`use a boss hole at least ${LIMITS.minEngagementMm + LIMITS.minTipClearanceMm} mm deep`);
+        cornerScrewProblem = (`no standard screw length fits the lid bosses: it needs between ${r9(tl + LIMITS.minEngagementMm)} and ${r9(tl + baseHole.depthMm - LIMITS.minTipClearanceMm)} mm (lid ${tl} mm, at least ${LIMITS.minEngagementMm} mm in the ${baseHole.depthMm} mm boss hole, ${LIMITS.minTipClearanceMm} mm tip clearance; stocked lengths ${STOCK_SCREW_LENGTHS_MM.join(", ")}); ${fixes.join(", ")}`);
+      }
+      if (choice) cornerScrew = { screwLengthMm: choice.lengthMm, screwLengthMaxMm: choice.maxLengthMm, engagementMm: choice.engagementMm };
+    }
     lidFastener = {
       screw: lidFasteners.screw,
       screwReason: resolved?.screwReason ?? "lid.fasteners.screw",
@@ -930,6 +1036,7 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
       base: lidFasteners.base,
       bossDiameterMm: bossD,
       bossLengthMm: postLength,
+      ...(cornerScrew ?? {}),
       baseHole,
       lidHole: { diameterMm: lidHole.diameterMm, fit, source: lidHole.source, confidence: lidHole.confidence },
       ...(countersink ? { countersink } : {}),
@@ -988,8 +1095,8 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
   // --- lip ring ------------------------------------------------------------------------------------------------------
   const lipInset = lc + lw;
   if (2 * lipInset >= Math.min(cavityL, cavityW) - EPS) fail(`lid lip (clearance ${lc} + wall ${lw} per side) does not fit the ${r9(cavityL)} x ${r9(cavityW)} cavity`);
-  const lipRadius = Math.max(0, Ri - lc);
-  const lipInnerRadius = Math.max(0, Ri - lipInset);
+  const lipRadius = Math.max(0, snapZero(Ri - lc));
+  const lipInnerRadius = Math.max(0, snapZero(Ri - lipInset));
   for (const [label, radius] of [["lid lip corner radius (inner radius - fit.lidClearanceMm)", lipRadius], ["lid lip inner corner radius (inner radius - lid clearance - lip wall)", lipInnerRadius]] as const) {
     if (radius > 0 && radius < LIMITS.minFilletRadiusMm - EPS) fail(`the ${label} would be ${r9(radius)} mm; it must be 0 or at least ${LIMITS.minFilletRadiusMm} mm (a smaller fillet fails natively): change fit.lidClearanceMm or lid.lipWallMm`);
   }
@@ -1224,7 +1331,15 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
   }
   // The webs of one height range, joined in plan view: one solid per outline loop (a box when the loop is a rectangle).
   // No web reaches further than webWallOverlapMm into a wall.
-  const webSolids = planWebSolids(webParts, OV, growRect(cavRect, LIMITS.webWallOverlapMm));
+  // W4: webs that meet in a single point cannot be one solid; the refusal names the nearest change that plans.
+  const withPinchFix = <T>(build: () => T): T => {
+    try { return build(); } catch (error) {
+      if (!(error instanceof WebPinchError) || options.fixes === false) throw error;
+      const fix = nearestCleanChange(input, holes.map((_, index) => index), (trial) => { planBoardCase(trial, { styleReason: resolved?.styleReason ?? "lid.fasteners.bossStyle", ...(resolved?.screwReason ? { screwReason: resolved.screwReason } : {}), ...(resolved?.auto ? { auto: true } : {}), postSearch: true }, { fixes: false }); });
+      throw new BoardCaseValidationError(`${error.message}; ${fix}`);
+    }
+  };
+  const webSolids = withPinchFix(() => planWebSolids(webParts, OV, growRect(cavRect, LIMITS.webWallOverlapMm)));
 
   // --- S: screw stack (lid posts over the board holes) -----------------------------------------------------------------
   let lidPosts: CylinderPattern[] | undefined;
@@ -1360,7 +1475,7 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
   }
 
   // The lid webs, joined in plan view like the base webs.
-  const lidWebSolids = lidWebParts.length > 0 ? planWebSolids(lidWebParts, OV) : [];
+  const lidWebSolids = lidWebParts.length > 0 ? withPinchFix(() => planWebSolids(lidWebParts, OV)) : [];
 
   // Lid lip notches: the piece of lip a round notch leaves between itself and the corner; under minLipPieceMm the notch
   // becomes a box from the corner past the whole boss circle (boss + lid clearance), so no sliver remains.
@@ -1432,7 +1547,8 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
   };
   type Feature = { label: string; face: CaseOpeningFace; plan: Rect; inPlane: Rect; z?: Vector2 };
   const features: Feature[] = [];
-  const checkWallFeature = (label: string, wall: CaseWall, along: Vector2, z: Vector2) => {
+  const recessed: Array<{ label: string; wall: CaseWall; recess: number; grown: number }> = [];
+  const checkWallFeature = (label: string, wall: CaseWall, along: Vector2, z: Vector2, fix?: { along: (delta: number) => { text: string; trial: BoardCaseInput }; z: (delta: number) => { text: string; trial: BoardCaseInput } }) => {
     const frame = wallFrame(wall);
     if (along[0] < frame.span[0] - EPS || along[1] > frame.span[1] + EPS) {
       fail(`${label} on wall ${wall} runs from ${r9(along[0])} to ${r9(along[1])} along it, outside the flat wall span ${r9(frame.span[0])} to ${r9(frame.span[1])}`);
@@ -1466,6 +1582,25 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
       const widened: Vector2 = [along[0] - LIMITS.minWebMm, along[1] + LIMITS.minWebMm];
       const keepOut: Rect = frame.alongIndex === 1 ? { min: [depth[0], widened[0]], max: [depth[1], widened[1]] } : { min: [widened[0], depth[0]], max: [widened[1], depth[1]] };
       for (const post of stackPosts) if (circleHitsRect(post.axis, post.radius, keepOut)) stackProblems.push(`${label} on wall ${wall}: ${post.label} stands in its keep-out (the opening's along range + ${LIMITS.minWebMm} mm, from the wall to ${LIMITS.stackKeepOutPastBoardEdgeMm} mm inside the board edge); move the opening along the wall or use bossStyle "floor"`);
+    }
+    // W5: no sliver beside a corner arc or above the floor. Each side edge sits exactly on the start of the inner corner
+    // arc (cavity + inner radius) and of the outer one (outer face + outer radius), or keeps minOpeningEdgeMarginMm
+    // from it on the flat side; the bottom edge sits exactly on the floor top or keeps that margin above it. (The top
+    // edge ends at the lid lip bottom at the latest, a lip depth of 0.5 mm or more under the wall top.)
+    {
+      const margin = LIMITS.minOpeningEdgeMarginMm;
+      const cavityAlong: Vector2 = frame.alongIndex === 0 ? [cavMin[0], cavMax[0]] : [cavMin[1], cavMax[1]];
+      const starts = [...new Set([Ri, Math.max(0, snapZero(Ro - w))])];
+      // Distance of an edge from the nearer cavity end, measured inward; allowed: exactly a start, or margin past it.
+      const allowed = (inward: number) => starts.every((start) => Math.abs(inward - start) <= EPS || inward >= start + margin - EPS);
+      const nearest = (inward: number): number => [...starts, ...starts.map((start) => start + margin)].filter(allowed).sort((a, b) => Math.abs(a - inward) - Math.abs(b - inward))[0]!;
+      const low = along[0] - cavityAlong[0];
+      const high = cavityAlong[1] - along[1];
+      const where = (inward: number) => `${r9(inward)} mm from the cavity corner, where the corner arcs start at ${starts.map((start) => r9(start)).join(" and ")} mm`;
+      if (!allowed(low)) fail(`${label} on wall ${wall}: its edge is ${where(low)}; an edge must sit exactly on an arc start or keep ${margin} mm from it (a narrower strip of wall is a sliver)${fix ? `; ${namedChange(fix.along, r9(nearest(low) - low))}` : ""}`);
+      if (!allowed(high)) fail(`${label} on wall ${wall}: its edge is ${where(high)}; an edge must sit exactly on an arc start or keep ${margin} mm from it (a narrower strip of wall is a sliver)${fix ? `; ${namedChange(fix.along, r9(high - nearest(high)))}` : ""}`);
+      const above = z[0] - floorTopZ;
+      if (above > EPS && above < margin - EPS) fail(`${label} on wall ${wall}: its bottom edge is ${r9(above)} mm above the floor top; it must sit exactly on the floor top or at least ${margin} mm above it (a lower step is a sliver)${fix ? `; ${namedChange(fix.z, r9(above < margin / 2 ? -above : margin - above))}` : ""}`);
     }
     features.push({ label, face: wall, plan, inPlane: { min: [along[0], z[0]], max: [along[1], z[1]] }, z });
   };
@@ -1547,11 +1682,21 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
       const frame = wallFrame(opening.wall);
       const alongCenter = frame.boardAlongMin + opening.alongMm;
       const zBottom = boardTopZ + opening.aboveBoardMm!;
-      checkWallFeature(label, opening.wall, [alongCenter - width / 2, alongCenter + width / 2], [zBottom, zBottom + height]);
+      checkWallFeature(label, opening.wall, [alongCenter - width / 2, alongCenter + width / 2], [zBottom, zBottom + height], {
+        along: (delta) => ({ text: `use alongMm ${r9(opening.alongMm + delta)}`, trial: { ...input, openings: input.openings!.map((other, at) => at === index ? { ...other, alongMm: r9(opening.alongMm + delta) } : other) } }),
+        z: (delta) => ({ text: `use aboveBoardMm ${r9(opening.aboveBoardMm! + delta)}`, trial: { ...input, openings: input.openings!.map((other, at) => at === index ? { ...other, aboveBoardMm: r9(opening.aboveBoardMm! + delta) } : other) } }),
+      });
       const entry: Vector3 = frame.alongIndex === 1 ? [frame.outerFace, alongCenter, zBottom + height / 2] : [alongCenter, frame.outerFace, zBottom + height / 2];
       const rounded = entry.map(r9) as Vector3;
       openings.push({ label, target: "base", shape: opening.shape, entryCenterMm: rounded, axis: frame.axis, widthDirection: frame.widthDirection, widthMm: width, heightMm: height, cornerRadiusMm: corner, throughDepthMm: w, face: opening.wall, ...(slot ? { slot } : {}) });
-      openingsDerived.push({ label, wall: opening.wall, shape: opening.shape, centerMm: rounded, sizeMm: [width, height], ...(corner > 0 ? { cornerRadiusMm: corner } : {}) });
+      const boardEdge = opening.wall === "x-" ? boardMin[0] : opening.wall === "x+" ? boardMin[0] + L : opening.wall === "y-" ? boardMin[1] : boardMin[1] + W;
+      const recess = r9(Math.abs(boardEdge - frame.innerFace));
+      const grown = growth[frame.normalIndex]! / 2;
+      const recessNote = recess > LIMITS.reportRecessOverMm + EPS
+        ? `the inner face of wall ${opening.wall} stands ${recess} mm from the board edge (fit.boardClearanceMm ${bc}${grown > 0 ? ` + ${r9(grown)} mm: bossStyle "floor" widens the cavity along ${frame.normalIndex === 0 ? "x" : "y"}` : ""}), so a connector at the board edge sits that far behind this opening`
+        : undefined;
+      openingsDerived.push({ label, wall: opening.wall, shape: opening.shape, recessMm: recess, ...(recessNote ? { recessNote } : {}), centerMm: rounded, sizeMm: [width, height], ...(corner > 0 ? { cornerRadiusMm: corner } : {}) });
+      if (recessNote) recessed.push({ label, wall: opening.wall, recess, grown });
       // A flat ceiling (rect, or the straight part of a rounded-rect) is a bridge when the base prints floor-down.
       const flat = opening.shape === "circle" ? 0 : width - 2 * corner;
       if (flat > LIMITS.reportBridgeOverMm + EPS) openingCeilings.push({ label, wall: opening.wall, widthMm: r9(flat), zMm: r9(zBottom + height) });
@@ -1591,7 +1736,10 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
       if (!Number.isFinite(alongCenter) || !Number.isFinite(zCenter)) fail("vents centre must be finite");
       offsets.forEach((offset, index) => {
         const along = alongCenter + offset;
-        checkWallFeature(`vent slot ${index}`, vent.on as CaseWall, [along - sw / 2, along + sw / 2], [zCenter - sl / 2, zCenter + sl / 2]);
+        checkWallFeature(`vent slot ${index}`, vent.on as CaseWall, [along - sw / 2, along + sw / 2], [zCenter - sl / 2, zCenter + sl / 2], {
+          along: (delta) => ({ text: `use vents.centerAlongMm ${r9(alongCenter - frame.boardAlongMin + delta)}`, trial: { ...input, vents: { ...vent, centerAlongMm: r9(alongCenter - frame.boardAlongMin + delta) } } }),
+          z: (delta) => ({ text: `use vents.centerAcrossMm ${r9(zCenter - boardTopZ + delta)}`, trial: { ...input, vents: { ...vent, centerAcrossMm: r9(zCenter - boardTopZ + delta) } } }),
+        });
         centers.push((frame.alongIndex === 1 ? [frame.outerFace, along, zCenter] : [along, frame.outerFace, zCenter]).map(r9) as Vector3);
       });
       vents = { target: "base", entryCentersMm: centers, axis: frame.axis, slotDirection: [0, 0, 1], widthMm: sw, overallLengthMm: sl, throughDepthMm: w };
@@ -1634,6 +1782,7 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
 
   // --- assembly: can the board drop into the finished base? (plan view) ----------------------------------------------
   // It can when no corner boss and no gusset overlaps the board outline grown by dropInClearanceMm.
+  if (cornerScrewProblem) fail(cornerScrewProblem);
   const dropIn = LIMITS.dropInClearanceMm;
   const grownBoard: Rect = { min: [boardMin[0] - dropIn, boardMin[1] - dropIn], max: [boardMin[0] + L + dropIn, boardMin[1] + W + dropIn] };
   const blockers = posts.filter((post) => circleHitsRect(post.axis, post.radius, grownBoard)).map((post) => post.label);
@@ -1655,6 +1804,25 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
   // D2: what the board rests on.
   if (holes.length === 0) assembly.note += ". The board has no holes, so there are no standoffs: it rests on the floor top";
   else if (standoffFastener?.mode === "support") assembly.note += ". With no standoffs.fastener the standoffs are plain support posts: the board rests on them, unscrewed";
+  // W7: what a caller must not miss, also at the top level of the reply: a board that no screw holds, and an opening
+  // whose wall stands away from the board edge. Each names its cause and the change that gives a fastened stack.
+  const warnings: string[] = [];
+  {
+    const styleReason = resolved?.styleReason ?? "lid.fasteners.bossStyle";
+    if (holes.length === 0) {
+      warnings.push("the board is not fastened: board.holes is empty, so the case has no standoffs and the board rests loose on the floor. Change: give board.holes (2 or more, with lid.fasteners { screw: \"auto\", base: \"pilot\" }, for a screw stack through the board)");
+    } else if (!stack && standoffFastener?.mode === "support") {
+      const [cause, change] = !lidFasteners
+        ? ["lid.fasteners is not given", "give lid.fasteners { screw: \"auto\", base: \"pilot\" } for a screw stack through the board holes, or standoffs.fastener to screw the board to its standoffs"]
+        : styleReason === "lid.fasteners.bossStyle"
+          ? [`lid.fasteners.bossStyle "${bossStyle}" is given`, "leave bossStyle out or use \"stack\" (the lid screws then hold the board), or give standoffs.fastener to screw the board to its standoffs"]
+          : [styleReason, "make the change named there for a screw stack, or give standoffs.fastener to screw the board to its standoffs"];
+      warnings.push(`the board is not fastened by screws: it rests on plain support posts, and ${lidFasteners ? `the lid screws go into ${bossStyle} corner bosses` : "the lid has no screws"}. Cause: ${cause}. Change: ${change}`);
+    }
+    for (const entry of recessed) {
+      warnings.push(`${entry.label} on wall ${entry.wall} is recessed: the wall's inner face stands ${entry.recess} mm from the board edge, so a connector at the board edge does not reach the opening. Cause: ${entry.grown > 0 ? `bossStyle "floor" widens the cavity along ${entry.wall.startsWith("x") ? "x" : "y"} (${growAxisReason ?? "lid.fasteners.growAxis"})` : `fit.boardClearanceMm ${bc}`}. Change: ${entry.grown > 0 ? `a screw stack does not widen the cavity (${styleReason === "lid.fasteners.bossStyle" ? "leave bossStyle out or use \"stack\"" : "derived.bossStyleReason names what prevents it"}), or choose lid.fasteners.growAxis "${entry.wall.startsWith("x") ? "y" : "x"}" so that this wall does not move` : "a smaller fit.boardClearanceMm"}`);
+    }
+  }
   // D5: the real diagonal play: how far the board can slide toward each cavity corner (along the diagonal) before it
   // touches a wall, the rounded corner, a floor-standing boss or a web at board height; the smallest of the four.
   const boardZ: Vector2 = [boardBottomZ, boardTopZ];
@@ -1716,6 +1884,7 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
   const bounds = (min: Vector3, max: Vector3): Bounds => ({ min: min.map(r9) as Vector3, max: max.map(r9) as Vector3 });
   const lidHoles = lidHoleSpec;
   const body: Omit<BoardCasePlan, "name" | "derived"> = {
+    warnings,
     base: {
       boxOriginMm: [ox, oy, oz],
       boxSizeMm: [r9(outerL), r9(outerW), r9(wallTopZ - oz)],
@@ -2149,7 +2318,7 @@ export function maxBossOverhangDeg(geometry: BossUndersideGeometry): number {
 // Native composition
 // ---------------------------------------------------------------------------------------------------------------------
 
-export type BoardCaseOperations = RecipeOperations & Pick<PlasticityOperations, "undo" | "remove" | "move" | "rename" | "createCone" | "validateBodies"> & {
+export type BoardCaseOperations = RecipeOperations & Pick<PlasticityOperations, "undo" | "remove" | "move" | "rename" | "createCone" | "validateBodies" | "measureSolidProperties"> & {
   revolveProfile: NonNullable<RecipeOperations["revolveProfile"]>;
 };
 
@@ -2174,6 +2343,13 @@ export interface BoardCaseResult {
   afterRevision: string;
   bodies: { baseId: number; lidId: number; boardId?: number };
   derived: BoardCaseDerived;
+  // What the caller must not miss (W7): the board is not fastened by screws, or an opening is recessed more than 1 mm
+  // behind the board edge. Each entry names the input that caused it and the change that gives a fastened stack.
+  // Empty when there is nothing to warn about.
+  warnings: string[];
+  // The same warnings in one string, present only when there is one: a lean plasticity_batch step shows a recipe's
+  // `warning` (and only lists the other keys as omitted).
+  warning?: string;
   resultBodyIds: number[];
   // Measured: the Undo depth after the call minus the Undo depth before it (equals derived.plannedUndoSteps).
   undoSteps: number;
@@ -2192,6 +2368,9 @@ export interface BoardCaseReadBack {
   bodies: Array<{ id: number; closed: boolean; nativeValid: boolean }>;
   // Shortest edge over the bodies (at least limits.minEdgeMm).
   minEdgeMm: number;
+  // Native volumes of the base and the lid against the volumes the plan predicts (within relativeTolerance); `note`
+  // says why a body's volume is not predicted (it is then only measured).
+  volumesMm3: { relativeTolerance: number; base: { measured: number; predicted?: number; note?: string }; lid: { measured: number; predicted?: number; note?: string } };
 }
 
 export class BoardCaseRecipeError extends Error {
@@ -2298,13 +2477,18 @@ export class BoardCaseRecipe {
       }
     };
     const solidKept = (id: number) => (_before: RuntimeState, after: RuntimeState) => { requireSolid(after, id, stage); return [id]; };
-    // Web solids: a box, or a closed profile (its Region found by its bounds) extruded up.
+    // Web solids: a box, or a closed profile (its Region found by its bounds) extruded up. Every solid is then proven
+    // against its plan by its native volume (W1): a Region is picked by its bounds, and a foreign closed curve on the
+    // profile's plane can notch or pierce it without moving them.
     const webBodies = async (solids: BoardCaseWebSolid[], word: string): Promise<number[]> => {
       const ids: number[] = [];
+      const planned: Array<{ id: number; label: string; volumeMm3: number; how: string }> = [];
       for (const solid of solids) {
         if (solid.box) {
           const box = solid.box;
-          ids.push(await create(`create-${word}-box`, (revision) => ops.createBox(box.originMm, box.sizeMm, undefined, revision)));
+          const boxId = await create(`create-${word}-box`, (revision) => ops.createBox(box.originMm, box.sizeMm, undefined, revision));
+          ids.push(boxId);
+          planned.push({ id: boxId, label: solid.label, volumeMm3: box.sizeMm[0] * box.sizeMm[1] * box.sizeMm[2], how: `${r9(box.sizeMm[0])} x ${r9(box.sizeMm[1])} x ${r9(box.sizeMm[2])} mm` });
           continue;
         }
         const points = solid.loopMm.map((point) => [point[0], point[1], solid.bottomZMm] as Vector3);
@@ -2321,6 +2505,18 @@ export class BoardCaseRecipe {
           throw new Error(`${stage}: the web profile ${profileId} must extrude from z ${solid.bottomZMm} up to ${r9(solid.bottomZMm + solid.heightMm)}, but its solid ${bounds ? `spans z ${r9(bounds.min[2])} to ${r9(bounds.max[2])}` : "has no readable bounds"}`);
         }
         ids.push(webId);
+        const area = loopAreaMm2(solid.loopMm);
+        planned.push({ id: webId, label: solid.label, volumeMm3: area * solid.heightMm, how: `outline area ${r6(area)} mm2 x height ${r9(solid.heightMm)} mm` });
+      }
+      // One native read for all of them, before they are joined.
+      if (planned.length > 0) {
+        const measured = await ops.measureSolidProperties(planned.map((entry) => entry.id), current.revision);
+        for (const entry of planned) {
+          const actual = measured.bodies.find((body) => body.id === entry.id)?.volumeMm3;
+          if (actual === undefined || !Number.isFinite(actual) || Math.abs(actual - entry.volumeMm3) > BOARD_CASE_LIMITS.volumeRelativeTolerance * entry.volumeMm3) {
+            throw new Error(`${stage}: the web solid ${entry.id} (${entry.label}) has a volume of ${actual === undefined ? "unknown" : r6(actual)} mm3, not the planned ${r6(entry.volumeMm3)} mm3 (${entry.how}); another closed curve on the profile's plane changes its Region, so the web would be notched or pierced. Move or delete that curve`);
+          }
+        }
       }
       return ids;
     };
@@ -2506,6 +2702,8 @@ export class BoardCaseRecipe {
         afterRevision: current.revision,
         bodies: { baseId, lidId, ...(boardId !== undefined ? { boardId } : {}) },
         derived: plan.derived,
+        warnings: plan.warnings,
+        ...(plan.warnings.length > 0 ? { warning: plan.warnings.map((entry, index) => plan.warnings.length > 1 ? `(${index + 1}) ${entry}` : entry).join(" ") } : {}),
         resultBodyIds: expected,
         undoSteps: current.undoDepth - initial.undoDepth,
         steps,
@@ -2547,6 +2745,16 @@ export class BoardCaseRecipe {
         if (edge.lengthMm < BOARD_CASE_LIMITS.minEdgeMm) problems.push(`body ${id} has a ${r9(edge.lengthMm)} mm edge (${edge.id}), shorter than ${BOARD_CASE_LIMITS.minEdgeMm} mm`);
       }
     }
+    // Whole-result proof (W1): the native volumes of the base and the lid equal the volumes the plan predicts.
+    const predicted = boardCaseVolumes(plan);
+    const properties = await this.operations.measureSolidProperties([baseId, lidId], state.revision);
+    const volumeOf = (id: number, label: string, expected: number | undefined, note: string | undefined): BoardCaseReadBack["volumesMm3"]["base"] => {
+      const measured = properties.bodies.find((body) => body.id === id)?.volumeMm3;
+      if (measured === undefined || !Number.isFinite(measured)) { problems.push(`the ${label} volume could not be read`); return { measured: Number.NaN, ...(note ? { note } : {}) }; }
+      if (expected !== undefined && Math.abs(measured - expected) > BOARD_CASE_LIMITS.volumeRelativeTolerance * expected) problems.push(`the ${label} volume ${r6(measured)} mm3 differs from the planned ${r6(expected)} mm3 by ${r6(measured - expected)} mm3 (material is missing or extra somewhere in the body)`);
+      return { measured: r6(measured), ...(expected !== undefined ? { predicted: expected } : {}), ...(note ? { note } : {}) };
+    };
+    const volumesMm3 = { relativeTolerance: BOARD_CASE_LIMITS.volumeRelativeTolerance, base: volumeOf(baseId, "base", predicted.baseMm3, predicted.baseNote), lid: volumeOf(lidId, "lid", predicted.lidMm3, predicted.lidNote) };
     if (problems.length > 0) throw new Error(`read-back: ${problems.slice(0, 6).join("; ")}${problems.length > 6 ? `; and ${problems.length - 6} more` : ""}`);
     return {
       toleranceMm: tolerance,
@@ -2555,6 +2763,7 @@ export class BoardCaseRecipe {
       ...(boardBoundsMm ? { boardBoundsMm } : {}),
       bodies,
       minEdgeMm: r9(minEdgeMm),
+      volumesMm3,
     };
   }
 
@@ -3013,7 +3222,7 @@ function unionLoops(polygons: Vector2[][], clip?: Rect): Vector2[][] {
       const end = pieces[current]!.p1;
       if (Math.hypot(end[0] - pieces[start]!.p0[0], end[1] - pieces[start]!.p0[1]) < 2 * VERTEX_TOL) break;
       const next = pieces.map((_, index) => index).filter((index) => !used[index] && Math.hypot(pieces[index]!.p0[0] - end[0], pieces[index]!.p0[1] - end[1]) < 2 * VERTEX_TOL);
-      if (next.length !== 1) throw new BoardCaseValidationError("the webs that close the narrow gaps touch at a single point, which cannot be built as one solid");
+      if (next.length !== 1) throw new WebPinchError("the webs that close the narrow gaps touch at a single point, which cannot be built as one solid");
       current = next[0]!;
     }
     // Drop the vertices that lie on a straight run.
@@ -3073,4 +3282,193 @@ function roundedRectCurves(rect: Rect, radius: number, materialInside: boolean):
     for (const [c, a0] of centres) curves.push({ kind: "arc", c, r: rho, a0, a1: a0 + Math.PI / 2, solid: materialInside });
   }
   return curves;
+}
+
+// ---------------------------------------------------------------------------------------------- predicted volumes (W1)
+// The volume of the finished base and lid, from the plan alone, for the read-back's whole-result proof. The build is a
+// sequence of joins and cuts of upright prisms (rounded boxes, cylinders, web outlines), so at every height the body's
+// plan-view section is the same sequence applied to their outlines; its area comes from the exact line and arc outline
+// engine above, and the volume is the sum over the height bands. Cutters that are not upright prisms (a round or
+// rounded opening or vent slot through a wall, a countersink cone) are added in closed form after a check that only
+// full material lies in their path (the same sweep with the cutter's bounding prism must remove exactly that prism).
+// Not predicted: the base of bossStyle "tapered" (the clipped gusset cones) and a cutter whose path is not full material.
+interface VolumePrism { shape: PlanShape; z0: number; z1: number }
+interface VolumeStep { op: "union" | "difference"; solid: VolumePrism; minus?: VolumePrism[] }
+interface VolumeExtra { label: string; bound: VolumePrism; boundMm3: number; cutMm3: number }
+
+export interface BoardCaseVolumePrediction {
+  // Predicted volume in mm3; absent when the plan cannot predict it exactly (`note` says why).
+  baseMm3?: number;
+  lidMm3?: number;
+  baseNote?: string;
+  lidNote?: string;
+}
+
+const rectPrism = (min: Vector2, max: Vector2, radius: number, z0: number, z1: number): VolumePrism => {
+  const rect: Rect = { min, max };
+  return { shape: { label: "", kind: "wall", z: [z0, z1], holes: [], curves: roundedRectCurves(rect, radius, true), sdf: (p) => -roundedRectInsideDistance(p, rect, radius), box: [min[0], min[1], max[0], max[1]] }, z0, z1 };
+};
+const boxPrism = (origin: Vector3, size: Vector3, radius = 0): VolumePrism => rectPrism([origin[0], origin[1]], [origin[0] + size[0], origin[1] + size[1]], radius, origin[2], origin[2] + size[2]);
+const cylinderPrism = (center: Vector2 | Vector3, radius: number, z0: number, z1: number): VolumePrism => ({ shape: circlePlanShape("", [center[0], center[1]], radius, [z0, z1], []), z0, z1 });
+
+// The volume of a sequence of prism joins and cuts (a cut's `minus` prisms are taken out of the solid before it is joined).
+function prismSequenceVolume(steps: VolumeStep[]): number {
+  const prisms = steps.flatMap((step) => [step.solid, ...(step.minus ?? [])]);
+  const shapes = prisms.map((prism) => prism.shape);
+  const indexOf = new Map(prisms.map((prism, index) => [prism, index] as const));
+  const levels = [...new Set(prisms.flatMap((prism) => [r9(prism.z0), r9(prism.z1)]))].sort((left, right) => left - right);
+  const has = (prism: VolumePrism, point: Vector2): boolean => {
+    const box = prism.shape.box;
+    if (box && (point[0] < box[0] || point[0] > box[2] || point[1] < box[1] || point[1] > box[3])) return false;
+    return prism.shape.sdf(point) < 0;
+  };
+  let volume = 0;
+  for (let level = 0; level + 1 < levels.length; level += 1) {
+    const height = levels[level + 1]! - levels[level]!;
+    const z = (levels[level]! + levels[level + 1]!) / 2;
+    const on = (prism: VolumePrism) => prism.z0 < z && z < prism.z1;
+    const active = steps.filter((step) => on(step.solid));
+    if (active.length === 0) continue;
+    const inside = (point: Vector2): boolean => {
+      let solid = false;
+      for (const step of active) {
+        if ((step.op === "union") === solid) continue;
+        if (!has(step.solid, point)) continue;
+        if (step.minus?.some((prism) => on(prism) && has(prism, point))) continue;
+        solid = step.op === "union";
+      }
+      return solid;
+    };
+    const use = active.flatMap((step) => [step.solid, ...(step.minus ?? []).filter(on)]).map((prism) => indexOf.get(prism)!);
+    let area = 0;
+    for (const piece of regionBoundary(shapes, use, inside)) {
+      // The region lies on one side of the piece; the area is the boundary integral of x times the outward normal's x.
+      const outward = inside([piece.mid[0] - piece.normal[0] * OUTLINE_STEP, piece.mid[1] - piece.normal[1] * OUTLINE_STEP]) ? 1 : -1;
+      const curve = piece.curve;
+      area += outward * (curve.kind === "seg"
+        ? piece.normal[0] * piece.length * (piece.p0[0] + piece.p1[0]) / 2
+        : (curve.solid ? 1 : -1) * curve.r * (curve.c[0] * (Math.sin(piece.t1) - Math.sin(piece.t0)) + curve.r * ((piece.t1 - piece.t0) / 2 + (Math.sin(2 * piece.t1) - Math.sin(2 * piece.t0)) / 4)));
+    }
+    volume += area * height;
+  }
+  return volume;
+}
+
+export function boardCaseVolumes(plan: BoardCasePlan): BoardCaseVolumePrediction {
+  const known = planVolumes.get(plan);
+  if (known) return known;
+  const OV = BOARD_CASE_CONSTANTS.overshootMm;
+  const union = (solid: VolumePrism, minus?: VolumePrism[]): VolumeStep => ({ op: "union", solid, ...(minus ? { minus } : {}) });
+  const cut = (solid: VolumePrism): VolumeStep => ({ op: "difference", solid });
+  const webPrism = (solid: BoardCaseWebSolid): VolumePrism => solid.box
+    ? boxPrism(solid.box.originMm, solid.box.sizeMm)
+    : { shape: polygonPlanShape("", solid.loopMm, [solid.bottomZMm, solid.bottomZMm + solid.heightMm], []), z0: solid.bottomZMm, z1: solid.bottomZMm + solid.heightMm };
+  // A screw boss pattern: every boss joined, then every hole cut from the boss tops (see createScrewBossPattern).
+  const bosses = (steps: VolumeStep[], group: CylinderPattern, up: boolean): void => {
+    for (const c of group.centersMm) steps.push(union(up ? cylinderPrism(c, group.outerDiameterMm / 2, c[2] - group.baseOverlapMm, c[2] + group.heightMm) : cylinderPrism(c, group.outerDiameterMm / 2, c[2] - group.heightMm, c[2] + group.baseOverlapMm)));
+    if (group.holeDiameterMm > 0) for (const c of group.centersMm) steps.push(cut(up ? cylinderPrism(c, group.holeDiameterMm / 2, c[2] + group.heightMm - group.holeDepthMm, c[2] + group.heightMm + OV) : cylinderPrism(c, group.holeDiameterMm / 2, c[2] - group.heightMm - OV, c[2] - group.heightMm + group.holeDepthMm)));
+  };
+  // A cutter along z from its entry point (through hole, slot, connector opening on the lid or the floor).
+  const zRange = (entry: Vector3, axisZ: number, depth: number): Vector2 => axisZ > 0 ? [entry[2] - OV, entry[2] + depth + OV] : [entry[2] - depth - OV, entry[2] + OV];
+  const flatShape = (center: Vector3, width: number, height: number, radius: number, z: Vector2): VolumePrism => rectPrism([center[0] - width / 2, center[1] - height / 2], [center[0] + width / 2, center[1] + height / 2], radius, z[0], z[1]);
+  // A cutter through a wall: its bounding prism (the profile's box, from the overshoot outside to the overshoot inside).
+  const wallBound = (entry: Vector3, axis: Vector3, across: number, vertical: number, depth: number): VolumePrism => {
+    const alongX = Math.abs(axis[0]) > 0.5;
+    const a = alongX ? entry[0] : entry[1];
+    const sign = (alongX ? axis[0] : axis[1]) > 0 ? 1 : -1;
+    const reach: Vector2 = sign > 0 ? [a - OV, a + depth + OV] : [a - depth - OV, a + OV];
+    const side: Vector2 = alongX ? [entry[1] - across / 2, entry[1] + across / 2] : [entry[0] - across / 2, entry[0] + across / 2];
+    return alongX ? rectPrism([reach[0], side[0]], [reach[1], side[1]], 0, entry[2] - vertical / 2, entry[2] + vertical / 2) : rectPrism([side[0], reach[0]], [side[1], reach[1]], 0, entry[2] - vertical / 2, entry[2] + vertical / 2);
+  };
+  const roundedArea = (width: number, height: number, radius: number) => width * height - (4 - Math.PI) * radius * radius;
+  const body = (target: "base" | "lid"): { steps: VolumeStep[]; extras: VolumeExtra[] } => {
+    const steps: VolumeStep[] = [];
+    const extras: VolumeExtra[] = [];
+    if (target === "base") {
+      steps.push(union(boxPrism(plan.base.boxOriginMm, plan.base.boxSizeMm, plan.base.outerRadiusMm)), cut(boxPrism(plan.base.cavityOriginMm, plan.base.cavitySizeMm, plan.base.innerRadiusMm)));
+      for (const solid of plan.webSolids) steps.push(union(webPrism(solid)));
+      for (const group of plan.standoffGroups) bosses(steps, group, true);
+      if (plan.standoffFloorHoles) for (const c of plan.standoffFloorHoles.entryCentersMm) steps.push(cut(cylinderPrism(c, plan.standoffFloorHoles.diameterMm / 2, ...zRange(c, 1, plan.standoffFloorHoles.depthMm))));
+      if (plan.posts) bosses(steps, plan.posts, true);
+    } else {
+      const lid = plan.lid;
+      steps.push(union(boxPrism(lid.plateOriginMm, lid.plateSizeMm, lid.plateRadiusMm)));
+      steps.push(union(boxPrism(lid.lipOriginMm, lid.lipSizeMm, lid.lipRadiusMm), [boxPrism(lid.lipInnerOriginMm, lid.lipInnerSizeMm, lid.lipInnerRadiusMm), ...lid.notches.map((notch) => notch.kind === "cylinder" ? cylinderPrism(notch.centerMm, notch.radiusMm, notch.centerMm[2], notch.centerMm[2] + notch.heightMm) : boxPrism(notch.originMm, notch.sizeMm))]));
+      for (const solid of plan.lidWebSolids ?? []) steps.push(union(webPrism(solid)));
+      for (const group of plan.lidPosts ?? []) bosses(steps, group, false);
+      if (lid.holes) {
+        const holes = lid.holes;
+        for (const c of holes.entryCentersMm) steps.push(cut(cylinderPrism(c, holes.diameterMm / 2, ...zRange(c, -1, holes.depthMm))));
+        if (holes.countersink) {
+          const major = holes.countersink.majorDiameterMm / 2;
+          const through = holes.diameterMm / 2;
+          const depth = (major - through) / Math.tan((holes.countersink.includedAngleDeg * Math.PI) / 360);
+          for (const [index, c] of holes.entryCentersMm.entries()) extras.push({ label: `the countersink of lid hole ${index}`, bound: cylinderPrism(c, major, c[2] - depth, c[2] + OV), boundMm3: Math.PI * (major * major - through * through) * depth, cutMm3: Math.PI * depth * ((major * major + major * through + through * through) / 3 - through * through) });
+        }
+      }
+    }
+    for (const opening of plan.openings) {
+      if (opening.target !== target) continue;
+      const radius = opening.shape === "circle" ? opening.widthMm / 2 : opening.slot ? Math.min(opening.widthMm, opening.heightMm) / 2 : opening.cornerRadiusMm;
+      const [across, vertical] = opening.shape === "circle" ? [opening.widthMm, opening.widthMm] : [opening.widthMm, opening.heightMm];
+      if (Math.abs(opening.axis[2]) > 0.5) {
+        const z = zRange(opening.entryCenterMm, opening.axis[2], opening.throughDepthMm);
+        steps.push(cut(opening.shape === "circle" ? cylinderPrism(opening.entryCenterMm, radius, z[0], z[1]) : flatShape(opening.entryCenterMm, across, vertical, radius, z)));
+      } else if (radius <= 0) {
+        steps.push(cut(wallBound(opening.entryCenterMm, opening.axis, across, vertical, opening.throughDepthMm)));
+      } else {
+        extras.push({ label: opening.label, bound: wallBound(opening.entryCenterMm, opening.axis, across, vertical, opening.throughDepthMm), boundMm3: across * vertical * opening.throughDepthMm, cutMm3: roundedArea(across, vertical, radius) * opening.throughDepthMm });
+      }
+    }
+    if (plan.vents && plan.vents.target === target) {
+      const vents = plan.vents;
+      for (const [index, c] of vents.entryCentersMm.entries()) {
+        if (Math.abs(vents.axis[2]) > 0.5) {
+          const z = zRange(c, vents.axis[2], vents.throughDepthMm);
+          // Lid slots run along y (slotDirection), width along x.
+          steps.push(cut(flatShape(c, vents.widthMm, vents.overallLengthMm, vents.widthMm / 2, z)));
+        } else {
+          extras.push({ label: `vent slot ${index}`, bound: wallBound(c, vents.axis, vents.widthMm, vents.overallLengthMm, vents.throughDepthMm), boundMm3: vents.widthMm * vents.overallLengthMm * vents.throughDepthMm, cutMm3: roundedArea(vents.widthMm, vents.overallLengthMm, vents.widthMm / 2) * vents.throughDepthMm });
+        }
+      }
+    }
+    return { steps, extras };
+  };
+  const predict = (target: "base" | "lid"): { mm3?: number; note?: string } => {
+    if (target === "base" && plan.taper) return { note: "not predicted: the clipped 45 degree gusset cones of bossStyle \"tapered\" are not upright prisms (the web solids are still proven one by one)" };
+    const { steps, extras } = body(target);
+    const plain = prismSequenceVolume(steps);
+    if (extras.length === 0) return { mm3: r6(plain) };
+    // Each such cutter must pass through full material only: with their bounding prisms cut too, exactly those prisms go.
+    const bounded = prismSequenceVolume([...steps, ...extras.map((extra) => cut(extra.bound))]);
+    const expected = extras.reduce((sum, extra) => sum + extra.boundMm3, 0);
+    if (Math.abs(plain - bounded - expected) > 1e-6 * Math.max(1, expected)) return { note: `not predicted: the path of a cutter that is not an upright prism (${extras.map((extra) => extra.label).join(", ")}) is not full material everywhere (their bounding prisms would remove ${r6(plain - bounded)} mm3, not ${r6(expected)})` };
+    return { mm3: r6(plain - extras.reduce((sum, extra) => sum + extra.cutMm3, 0)) };
+  };
+  // A failure of the outline engine itself is not a wrong build: that volume is then not predicted, and says so.
+  const safely = (target: "base" | "lid"): { mm3?: number; note?: string } => {
+    try { return predict(target); } catch (error) { return { note: `not predicted: the outline engine could not compute the ${target}'s sections (${error instanceof Error ? error.message.slice(0, 160) : String(error)})` }; }
+  };
+  const base = safely("base");
+  const lid = safely("lid");
+  const result: BoardCaseVolumePrediction = { ...(base.mm3 !== undefined ? { baseMm3: base.mm3 } : {}), ...(lid.mm3 !== undefined ? { lidMm3: lid.mm3 } : {}), ...(base.note ? { baseNote: base.note } : {}), ...(lid.note ? { lidNote: lid.note } : {}) };
+  planVolumes.set(plan, result);
+  return result;
+}
+
+const planVolumes = new WeakMap<BoardCasePlan, BoardCaseVolumePrediction>();
+
+function r6(value: number): number {
+  return Math.round(value * 1e6) / 1e6 + 0;
+}
+
+// The area of a plan-view loop (shoelace).
+function loopAreaMm2(loop: Vector2[]): number {
+  let twice = 0;
+  for (let index = 0; index < loop.length; index += 1) {
+    const a = loop[index]!;
+    const b = loop[(index + 1) % loop.length]!;
+    twice += a[0] * b[1] - b[0] * a[1];
+  }
+  return Math.abs(twice) / 2;
 }

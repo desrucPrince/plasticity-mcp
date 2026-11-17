@@ -8,6 +8,27 @@ import { createCompactServer, createServer, type SessionLike } from "./server.ts
 import type { PlasticityOperations } from "./plasticity/operations.ts";
 import type { RuntimeState } from "./plasticity/runtime.ts";
 import { exposeDirectTool } from "./tool-catalog.ts";
+import * as recipeModule from "./plasticity/case-recipe.ts";
+
+// W1: the fake kernel answers a volume read of a finished base or lid with the volume of a clean build, which is the
+// plan's prediction (compared with the real kernel on port 58932). withClient notes it for every board case a test
+// sends; the functions are read through the module namespace so that an older recipe still loads this file.
+const { planBoardCase, boardCaseVolumes } = recipeModule as unknown as { planBoardCase: (input: unknown) => { name: string }; boardCaseVolumes?: (plan: unknown) => { baseMm3?: number; lidMm3?: number } };
+const cleanVolumes = new Map<string, number>();
+function noteCleanVolumes(params: { name?: string; arguments?: Record<string, unknown> }): void {
+  const args = params.arguments ?? {};
+  const inputs = params.name === "plasticity_create_board_case" ? [args]
+    : params.name === "plasticity_call" && args.toolName === "plasticity_create_board_case" ? [args.arguments]
+      : params.name === "plasticity_batch" ? ((args.steps as Array<{ toolName?: string; arguments?: unknown }> | undefined) ?? []).filter((step) => step.toolName === "plasticity_create_board_case").map((step) => step.arguments) : [];
+  for (const input of inputs) {
+    try {
+      const plan = planBoardCase({ revision: "r0", ...(input as object) });
+      const volumes = boardCaseVolumes!(plan);
+      cleanVolumes.set(`${plan.name}-base`, volumes.baseMm3 ?? 1000);
+      cleanVolumes.set(`${plan.name}-lid`, volumes.lidMm3 ?? 1000);
+    } catch { /* a refused plan builds nothing */ }
+  }
+}
 
 type V3 = [number, number, number];
 
@@ -43,7 +64,7 @@ function fakeOperations() {
   const vertical: V3[] = [[0, 0, 1], [0, 0, 1], [0, 0, 1], [0, 0, 1], [1, 0, 0], [0, 1, 0]];
   const operations = {
     async state() { return state(); },
-    async createBox(origin: V3, size: V3, name: string | undefined, given: string) { return mutate("createBox", given, () => { bodies.push(solid(nextId++, name ?? null, vertical, { min: [...origin], max: origin.map((value, axis) => value + size[axis]!) as V3 })); }); },
+    async createBox(origin: V3, size: V3, name: string | undefined, given: string) { return mutate("createBox", given, () => { bodies.push({ ...solid(nextId++, name ?? null, vertical, { min: [...origin], max: origin.map((value, axis) => value + size[axis]!) as V3 }), volumeMm3: size[0] * size[1] * size[2] } as RuntimeState["bodies"][number]); }); },
     async createCylinder(center: V3, radius: number, height: number, _name: string | undefined, given: string, axis: V3 = [0, 0, 1]) { return mutate("createCylinder", given, () => { bodies.push(solid(nextId++, null, [], axial(center, axis, height, radius))); }); },
     async fillet(_id: number, _edges: string[], _radius: number, given: string) { return mutate("fillet", given, () => {}); },
     async boolean(targets: number[], tools: number[], kind: string, _keep: boolean, given: string) {
@@ -64,6 +85,14 @@ function fakeOperations() {
       if (given !== `r${revision}`) throw new Error("stale validate");
       return { documentToken: "doc-1", revision: given, measurementSource: "native-brep", bodies: ids.map((id) => ({ id, closed: true, nativeValid: true, printableSolid: true, nativeCheckCodes: [] })) };
     },
+    // A read, like validateBodies: a finished base or lid has the clean build's volume, any other solid its own.
+    async measureSolidProperties(ids: number[], given: string) {
+      if (given !== `r${revision}`) throw new Error("stale volume read");
+      return { documentToken: "doc-1", revision: given, source: "native-brep-mass-properties", bodies: ids.map((id) => {
+        const body = bodies.find((candidate) => candidate.id === id) as (RuntimeState["bodies"][number] & { volumeMm3?: number }) | undefined;
+        return { id, versionId: id, name: body?.name ?? null, volumeMm3: (body?.name ? cleanVolumes.get(body.name) : undefined) ?? body?.volumeMm3 ?? Number.NaN, surfaceAreaMm2: 0, volumeCentroidMm: [0, 0, 0], nativeCheckCodes: [] };
+      }) };
+    },
     async createPolyline(points: V3[], _closed: boolean, given: string) {
       return mutate("createPolyline", given, () => {
         const id = nextId++;
@@ -74,16 +103,18 @@ function fakeOperations() {
         // point (last point, first point, second point). Kept for horizontal profiles (the web profiles): up or down.
         const [last, first, second] = [points.at(-1)!, points[0]!, points[1]!];
         const up = (first[0] - last[0]) * (second[1] - first[1]) - (first[1] - last[1]) * (second[0] - first[0]) > 0;
-        regions.push({ id: `region-${id}`, entityId: id, islandVersionId: id, sketchId: id, sketchWireIds: [id], measurementSource: "render-mesh", displayBoundsMm: { min, max }, ...(min[2] === max[2] ? { extrudesUp: up } : {}) } as RuntimeState["regions"][number]);
+        // The Region's area (a horizontal profile's own), for the web volume proof (W1).
+        const areaMm2 = Math.abs(points.reduce((sum, point, index) => { const next = points[(index + 1) % points.length]!; return sum + point[0] * next[1] - next[0] * point[1]; }, 0)) / 2;
+        regions.push({ id: `region-${id}`, entityId: id, islandVersionId: id, sketchId: id, sketchWireIds: [id], measurementSource: "render-mesh", displayBoundsMm: { min, max }, ...(min[2] === max[2] ? { extrudesUp: up, areaMm2 } : {}) } as RuntimeState["regions"][number]);
       });
     },
     // A horizontal profile's solid gets its bounds (the recipe checks that a web profile extruded up, round 4).
     async extrudeRegions(ids: string[], distance: number, given: string) {
       return mutate("extrudeRegions", given, () => {
-        const region = regions.find((candidate) => candidate.id === ids[0]) as (RuntimeState["regions"][number] & { extrudesUp?: boolean }) | undefined;
+        const region = regions.find((candidate) => candidate.id === ids[0]) as (RuntimeState["regions"][number] & { extrudesUp?: boolean; areaMm2?: number }) | undefined;
         const flat = region && region.extrudesUp !== undefined ? region.displayBoundsMm : undefined;
         const far = flat ? flat.min[2] + (region!.extrudesUp ? distance : -distance) : 0;
-        bodies.push(solid(nextId++, null, [], flat ? { min: [flat.min[0], flat.min[1], Math.min(flat.min[2], far)], max: [flat.max[0], flat.max[1], Math.max(flat.min[2], far)] } : null));
+        bodies.push({ ...solid(nextId++, null, [], flat ? { min: [flat.min[0], flat.min[1], Math.min(flat.min[2], far)], max: [flat.max[0], flat.max[1], Math.max(flat.min[2], far)] } : null), ...(region?.areaMm2 !== undefined ? { volumeMm3: region.areaMm2 * Math.abs(distance) } : {}) } as RuntimeState["bodies"][number]);
       });
     },
     async revolveProfile(_id: number, _origin: V3, _axis: V3, _angle: number, given: string) { return mutate("revolveProfile", given, () => { bodies.push(solid(nextId++, null, [])); }); },
@@ -111,6 +142,8 @@ async function withClient<T>(run: (client: Client, calls: string[]) => Promise<T
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
   await client.connect(clientTransport);
+  const callTool = client.callTool.bind(client);
+  client.callTool = ((params: Parameters<typeof callTool>[0], ...rest: unknown[]) => { noteCleanVolumes(params as { name?: string; arguments?: Record<string, unknown> }); return (callTool as (...all: unknown[]) => unknown)(params, ...rest); }) as typeof client.callTool;
   try {
     return await run(client, fake.calls);
   } finally {
@@ -385,4 +418,51 @@ test("F3: the typical ESP32 call (screw auto, base pilot, no pilot keys) passes 
     assert.match(presets.screwLengths.note, /the commonly stocked series, not a cited standard/);
     assert.deepEqual([presets.tapDrills.confidence, presets.tapDrills.rows], ["low", [{ screw: "M2.5", nominalDiameterMm: 2.5, pitchMm: 0.45, diameterMm: 2.05 }]]);
   }, true);
+});
+
+test("W7, W1: the reply carries top-level warnings and the read-back volumes; a lean batch step can return them", async () => {
+  const typical = { originMm: [2000, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: cornerHoles(51.5, 28.3, 3, 2), componentHeightMm: 8 }, lid: { fasteners: { screw: "auto", base: "pilot" } }, openings: [{ wall: "x-", shape: "rect", widthMm: 9.2, heightMm: 3.4, alongMm: 14.15, aboveBoardMm: 0, label: "usb-c" }] };
+  await withClient(async (client) => {
+    // The typical call: a fastened stack, no warnings; the read-back reports both volumes against the plan's prediction.
+    const cleanResponse = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...typical, revision: "r0" } });
+    assert.equal(cleanResponse.isError, undefined, text(cleanResponse));
+    const clean = json(cleanResponse);
+    assert.deepEqual([clean.status, clean.derived.bossStyle, clean.warnings], ["completed", "stack", []]);
+    const predicted = boardCaseVolumes!(planBoardCase({ ...typical, revision: "r0" }));
+    assert.deepEqual(clean.readBack.volumesMm3, { relativeTolerance: 1e-6, base: { measured: predicted.baseMm3, predicted: predicted.baseMm3 }, lid: { measured: predicted.lidMm3, predicted: predicted.lidMm3 } });
+    // (The lid of this call is the one the kernel measured live: 4324.735657 mm3.)
+    assert.equal(predicted.lidMm3, 4324.735657);
+    assert.equal(clean.derived.openings[0].recessMm, 0.5);
+  });
+  await withClient(async (client) => {
+    // A conflicting optional key: floor bosses with M3 and an unfastened board, said at the top level of the reply.
+    const result = json(await client.callTool({ name: "plasticity_create_board_case", arguments: { ...typical, lid: { fasteners: { screw: "auto", base: "pilot", countersunk: true } }, revision: "r0" } }));
+    assert.deepEqual([result.status, result.derived.bossStyle, result.derived.fasteners.lid.screw, result.derived.fasteners.standoffs.mode, result.warnings.length], ["completed", "floor", "M3", "support", 1]);
+    assert.match(result.warnings[0], /^the board is not fastened by screws: it rests on plain support posts, and the lid screws go into floor corner bosses\. Cause: default: a screw stack is not possible \(The countersunk head diameter for M2\.5 is not sourced .* set countersunk: false\), so the bosses stand on the floor\. Change: /);
+    // The floor bosses grow the cavity along y (the x- wall carries the opening), so the opening is not recessed.
+    assert.deepEqual([result.derived.growAxis, result.derived.openings[0].recessMm, result.derived.openings[0].recessNote], ["y", 0.5, undefined]);
+    // W8: the corner-boss screw.
+    assert.deepEqual([result.derived.fasteners.lid.screwLengthMm, result.derived.fasteners.lid.screwLengthMaxMm, result.derived.fasteners.lid.engagementMm], [6, 8, 4]);
+  });
+  await withClient(async (client) => {
+    const response = json(await client.callTool({ name: "plasticity_batch", arguments: { detail: "lean", steps: [{ toolName: "plasticity_create_board_case", arguments: { ...typical, lid: { fasteners: { screw: "auto", base: "pilot", pilotDiameterMm: 2.5, growAxis: "x" } } }, return: ["warnings", "derived.bossStyle", "derived.openings", "readBack.volumesMm3.base.predicted"] }] } }));
+    const first = response.steps[0].result;
+    assert.equal(first["derived.bossStyle"], "floor");
+    assert.equal(first.warnings.length, 2);
+    assert.match(first.warnings[0], /pilotDiameterMm 2\.5 is not smaller than the M2\.5 thread .* leave pilotDiameterMm out \(default Ø2\.05\) or name the screw/);
+    // growAxis x moves the x walls: the USB opening is recessed 6 mm, in derived and in the second warning.
+    assert.match(first.warnings[1], /^usb-c on wall x- is recessed: the wall's inner face stands 6 mm from the board edge/);
+    assert.deepEqual([first["derived.openings"][0].recessMm, typeof first["derived.openings"][0].recessNote], [6, "string"]);
+    assert.ok(first["readBack.volumesMm3.base.predicted"] > 0);
+  });
+  await withClient(async (client) => {
+    // A lean batch step without `return` keeps a recipe's status and its `warning` string: the warnings are in it.
+    const response = json(await client.callTool({ name: "plasticity_batch", arguments: { detail: "lean", steps: [{ toolName: "plasticity_create_board_case", arguments: { ...typical, lid: { fasteners: { screw: "auto", base: "pilot", countersunk: true } } } }] } }));
+    const lean = response.steps[0].result;
+    assert.equal(lean.status, "completed");
+    assert.match(lean.warning, /^the board is not fastened by screws: it rests on plain support posts, .* set countersunk: false\), so the bosses stand on the floor\. Change: /);
+    // The typical call has nothing to warn about: no `warning` key.
+    const clean = json(await client.callTool({ name: "plasticity_batch", arguments: { detail: "lean", steps: [{ toolName: "plasticity_undo", arguments: { steps: response.undoSteps } }, { toolName: "plasticity_create_board_case", arguments: typical }] } }));
+    assert.deepEqual([clean.steps[1].result.status, "warning" in clean.steps[1].result], ["completed", false]);
+  });
 });
