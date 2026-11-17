@@ -28,11 +28,13 @@ type Rect = { min: Vector2; max: Vector2 };
 export type CaseWall = "x-" | "x+" | "y-" | "y+";
 export type CaseOpeningFace = CaseWall | "lid" | "floor";
 export type CaseOpeningShape = "rect" | "rounded-rect" | "circle";
+// "stack": no corner bosses; each lid screw runs lid -> lid post -> board hole -> standoff (the standoff takes the lid
+// fastener's base). The default when the board has at least 2 holes that pass the stack rules.
 // How the four lid-screw bosses are carried: standing on the floor in a wider cavity ("floor", the default: the board
 // drops in past them), hung from the walls with a 45 degree gusset under each ("tapered") or hung from the walls with a
 // flat underside ("hanging"). The two hung styles overhang the board corners in plan view.
-export type BossStyle = "tapered" | "hanging" | "floor";
-export const BOSS_STYLES: readonly BossStyle[] = ["tapered", "hanging", "floor"];
+export type BossStyle = "tapered" | "hanging" | "floor" | "stack";
+export const BOSS_STYLES: readonly BossStyle[] = ["tapered", "hanging", "floor", "stack"];
 export const DEFAULT_BOSS_STYLE: BossStyle = "floor";
 // Self-supporting angle of the taper under a hanging boss, measured from vertical.
 export const BOSS_TAPER_ANGLE_DEG = 45;
@@ -71,8 +73,28 @@ export const BOARD_CASE_LIMITS = {
   // The real corner wall (diagonal) must be at least the larger of these two.
   minCornerWallMm: 0.8,
   minCornerWallFractionOfWall: 0.75,
-  // The board's square corner keeps this much to the rounded cavity corner.
-  cornerFitMarginMm: 0.05,
+  // An explicit walls.innerCornerRadiusMm keeps at least this diagonal gap between the board corner and the arc.
+  minCornerGapMm: 0.2,
+  // Upper caps on the shell and the fit (mm).
+  maxShellMm: 50,
+  maxBoardClearanceMm: 50,
+  // Lower limits that avoid degenerate native geometry.
+  minBoardThicknessMm: 0.2,
+  minOuterRadiusMm: 0.2,
+  minFilletRadiusMm: 0.05,
+  minOpeningSideMm: 0.5,
+  minSlotWidthMm: 0.4,
+  minSlotStraightMm: 0.5,
+  minCornerRadiusMarginMm: 0.05,
+  minLipDepthMm: 0.5,
+  minLipNeckMm: 0.8,
+  // R4: a gap narrower than this between a boss or standoff and a wall, or two of them, is closed by a web.
+  minGapMm: 0.8,
+  webWallOverlapMm: 0.2,
+  // S: a stack post ends this far above the board top; the keep-out in front of a wall opening runs this far past the
+  // board edge.
+  stackPostGapMm: 0.2,
+  stackKeepOutPastBoardEdgeMm: 3,
   // Every boss and gusset stays this far inside the outer profile.
   bossInsideOuterMm: 0.8,
   // The lid-screw head (countersink) circle stays this far inside the lid outline.
@@ -93,7 +115,7 @@ export const BOARD_CASE_LIMITS = {
   reportBridgeOverMm: 6,
 } as const;
 
-export const BOARD_CASE_PRINTABILITY_SCOPE = "maxBossOverhangDeg (with lid screws only): the lid-screw boss undersides only (gusset or flat underside), base printed floor-down. lidMaxOverhangDeg: every lid face, lid printed top face down (the countersink cones are its only faces that are neither vertical nor horizontal). openingCeilings: the flat ceiling of every rect or rounded-rect wall opening wider than 6 mm (a bridge when the base prints floor-down). Not covered: the round crowns of circle wall openings, rounded opening corners and wall vent slot ends, and strength or material.";
+export const BOARD_CASE_PRINTABILITY_SCOPE = "maxBossOverhangDeg (with corner bosses only): the lid-screw boss undersides only (gusset or flat underside), base printed floor-down. lidPostOverhangDeg (stack only): the lid posts, upright when the lid prints top face down. lidMaxOverhangDeg: every lid face, lid printed top face down (the countersink cones are its only faces that are neither vertical nor horizontal). openingCeilings: the flat ceiling of every rect or rounded-rect wall opening wider than 6 mm (a bridge when the base prints floor-down). Not covered: the round crowns of circle wall openings, rounded opening corners and wall vent slot ends, and strength or material.";
 
 export interface BoardCaseInput {
   originMm: Vector3;
@@ -106,11 +128,12 @@ export interface BoardCaseInput {
     undersideClearanceMm?: number | undefined;
   };
   fit?: { boardClearanceMm?: number | undefined; lidClearanceMm?: number | undefined } | undefined;
-  walls?: { wallMm?: number | undefined; floorMm?: number | undefined; lidMm?: number | undefined; outerCornerRadiusMm?: number | undefined } | undefined;
+  walls?: { wallMm?: number | undefined; floorMm?: number | undefined; lidMm?: number | undefined; outerCornerRadiusMm?: number | undefined; innerCornerRadiusMm?: number | undefined } | undefined;
   standoffs?: {
     heightMm?: number | undefined;
     outerDiameterMm?: number | undefined;
-    fastener: {
+    // Required except with bossStyle "stack", where the standoffs take the lid fastener's base and this is refused.
+    fastener?: undefined | {
       screw: ScrewSize;
       mode: "pilot" | "heat-set-insert" | "through";
       pilotDiameterMm?: number | undefined;
@@ -179,10 +202,25 @@ export interface BoardCaseOpeningDerived {
 
 export interface BoardCaseOpeningCeiling { label: string; wall: CaseWall; widthMm: number; zMm: number }
 
+// A web closing a narrow gap (R4): an axis-aligned box (to a wall or a corner) or a strip between two axes (a polyline
+// profile extruded up). probeMm is a point inside the closed gap, at mid-height of the web.
+export interface BoardCaseWeb {
+  label: string;
+  kind: "wall" | "corner" | "between";
+  // The standoffs or bosses the web joins.
+  features: string[];
+  gapMm: number;
+  box?: { originMm: Vector3; sizeMm: Vector3 };
+  strip?: { cornersMm: Vector2[]; bottomZMm: number; heightMm: number };
+  probeMm: Vector3;
+}
+
 export interface BoardCaseDerived {
   outerMm: Bounds;
   cavityMm: Bounds;
   innerCornerRadiusMm: number;
+  // Diagonal gap from the board's corner to the inner corner arc: sqrt 2 x boardClearance - Ri x (sqrt 2 - 1).
+  cornerGapMm: number;
   // The real corner wall along the corner diagonal: wallMm x sqrt 2 - (outer radius - inner radius) x (sqrt 2 - 1).
   cornerWallMm: number;
   floorTopZMm: number;
@@ -198,8 +236,22 @@ export interface BoardCaseDerived {
   standoffTopZMm?: number;
   lidBossAxesMm: Vector2[];
   lidBossBottomZMm?: number;
-  // Present with lid fasteners.
+  // Present with lid fasteners, with why (the input, or the default rule).
   bossStyle?: BossStyle;
+  bossStyleReason?: string;
+  // bossStyle "stack": the lid posts over the board holes and the screw length the stack needs.
+  stack?: {
+    postAxesMm: Vector2[];
+    postOuterDiametersMm: number[];
+    postBottomZMm: number;
+    postLengthMm: number;
+    holeDiameterMm: number;
+    // lid plate + post + 0.2 mm gap + board + engagement in the standoff (pilot depth or insert length).
+    screwLengthMm: number;
+    engagementMm: number;
+    // R4 on the lid: webs joining a post to the lid lip where they stand 0 to 0.8 mm apart.
+    lidWebs: Array<{ label: string; gapMm: number }>;
+  };
   // Plan view: can the board be lowered straight into the finished base?
   assembly: { boardDropIn: boolean; note: string };
   // Free space between each board edge and the cavity wall. boardClearance on every side, plus half the cavity growth
@@ -218,6 +270,8 @@ export interface BoardCaseDerived {
     scope: string;
     lidPrintOrientation: "top face down";
     lidMaxOverhangDeg: number;
+    // bossStyle "stack": the lid posts stand upright when the lid prints top face down.
+    lidPostOverhangDeg?: number;
     openingCeilings: BoardCaseOpeningCeiling[];
   };
   lipOuterMm: Bounds;
@@ -226,6 +280,8 @@ export interface BoardCaseDerived {
   vents?: { on: "lid" | CaseWall; centersMm: Vector3[]; slotDirection: Vector3; slotWidthMm: number; slotLengthMm: number };
   // The Undo steps the build will take (the composition below, step for step).
   plannedUndoSteps: number;
+  // R4: the webs that close gaps narrower than limits.minGapMm (empty when there are none).
+  webs: BoardCaseWeb[];
   fasteners: {
     standoffs?: {
       screw: ScrewSize;
@@ -266,6 +322,12 @@ interface OpeningCut {
   heightMm: number;
   cornerRadiusMm: number;
   throughDepthMm: number;
+  // A rounded-rect with radius = half the shorter side, built with the slotted hole recipe.
+  slot?: boolean;
+  // Delete this opening's profile Wire right after its cut: a later profile cut on the same face would otherwise see two
+  // Regions for its profile (Plasticity keeps coplanar Wires in one sketch).
+  dropProfile?: boolean;
+  face?: CaseOpeningFace;
 }
 
 // A lid lip notch around a corner boss: a cylinder (radius boss + lid clearance), or, when the lip piece left between that
@@ -279,8 +341,12 @@ export interface BoardCasePlan {
   derived: BoardCaseDerived;
   base: { boxOriginMm: Vector3; boxSizeMm: Vector3; outerRadiusMm: number; cavityOriginMm: Vector3; cavitySizeMm: Vector3; innerRadiusMm: number };
   standoffGroups: CylinderPattern[];
+  webs: BoardCaseWeb[];
   standoffFloorHoles?: { entryCentersMm: Vector3[]; diameterMm: number; depthMm: number };
   posts?: CylinderPattern;
+  // bossStyle "stack": lid posts hanging from the plate (screw boss patterns on the lid, axis -z), and lid webs.
+  lidPosts?: CylinderPattern[];
+  lidWebs?: Array<{ label: string; gapMm: number; originMm: Vector3; sizeMm: Vector3 }>;
   // bossStyle "tapered": one clipped cone per corner (apex on the wall corner), joined to the base before the bosses.
   taper?: { cones: Array<{ topCenterMm: Vector3; radiusMm: number; heightMm: number }>; clipOriginMm: Vector3; clipSizeMm: Vector3 };
   lid: {
@@ -319,7 +385,30 @@ export function deriveBoardCase(input: BoardCaseInput): BoardCaseDerived {
   return planBoardCase(input).derived;
 }
 
-export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
+export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: string }): BoardCasePlan {
+  // Default boss style: "stack" when the board has at least 2 holes and a stack plan passes every rule, else "floor".
+  const given = input.lid?.fasteners;
+  if (given && given.bossStyle === undefined && !resolved) {
+    const withStyle = (bossStyle: BossStyle): BoardCaseInput => ({ ...input, lid: { ...input.lid, fasteners: { ...given, bossStyle } } });
+    const count = input.board?.holes?.length ?? 0;
+    let reason: string;
+    if (count < 2) reason = `default: the board has ${count} hole${count === 1 ? "" : "s"}, fewer than the 2 a screw stack needs, so the bosses stand on the floor`;
+    else if (input.standoffs?.fastener) reason = "default: standoffs.fastener is given (the standoffs take their own screws), so the bosses stand on the floor";
+    else {
+      try {
+        return planBoardCase(withStyle("stack"), { styleReason: `default: the lid screws go through the ${count} board holes into the standoffs (stack)` });
+      } catch (error) {
+        if (!(error instanceof BoardCaseValidationError)) throw error;
+        reason = `default: a screw stack is not possible (${error.message}), so the bosses stand on the floor`;
+      }
+    }
+    try {
+      return planBoardCase(withStyle("floor"), { styleReason: reason });
+    } catch (error) {
+      if (error instanceof BoardCaseValidationError && reason.startsWith("default: a screw stack is not possible")) throw new BoardCaseValidationError(`${error.message} (the default bossStyle fell back to "floor" because ${reason.slice("default: ".length)})`);
+      throw error;
+    }
+  }
   const fail = (message: string): never => { throw new BoardCaseValidationError(message); };
   const positive = (label: string, value: number | undefined): number => {
     if (value === undefined || !Number.isFinite(value) || value <= 0) fail(`${label} must be a positive number of millimetres (got ${String(value)})`);
@@ -358,6 +447,11 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
   for (const [label, value] of [["board.thicknessMm", T], ["board.componentHeightMm", Hc], ["board.undersideClearanceMm", U], ["lid.lipDepthMm", d], ["exploded", exploded]] as const) atMost(label, value, LIMITS.maxHeightMm, "height");
   if (lw < LIMITS.minLipWallMm - EPS) fail(`lid.lipWallMm ${lw} is below the ${LIMITS.minLipWallMm} mm minimum lip wall`);
   if (f < LIMITS.minFloorMm - EPS) fail(`walls.floorMm ${f} is below the ${LIMITS.minFloorMm} mm minimum floor`);
+  for (const [label, value] of [["walls.wallMm", w], ["walls.floorMm", f], ["walls.lidMm", tl]] as const) atMost(label, value, LIMITS.maxShellMm, "shell");
+  atMost("fit.boardClearanceMm", bc, LIMITS.maxBoardClearanceMm, "board clearance");
+  if (T < LIMITS.minBoardThicknessMm - EPS) fail(`board.thicknessMm ${T} is below the ${LIMITS.minBoardThicknessMm} mm minimum board thickness`);
+  if (Ro > 0 && Ro < LIMITS.minOuterRadiusMm - EPS) fail(`walls.outerCornerRadiusMm ${Ro} must be 0 (square) or at least ${LIMITS.minOuterRadiusMm} mm`);
+  if (d < LIMITS.minLipDepthMm - EPS) fail(`lid.lipDepthMm ${d} is below the ${LIMITS.minLipDepthMm} mm minimum lip depth`);
   if (input.originMm.some((value) => Math.abs(value) > LIMITS.maxOriginMm)) fail(`originMm must stay within ${LIMITS.maxOriginMm} mm of the document origin (got ${input.originMm.join(", ")})`);
 
   const holes = input.board.holes ?? [];
@@ -378,17 +472,23 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
   // --- lid-screw boss style (decided first: "floor" widens the cavity) -----------------------------------------------
   const lidFasteners = input.lid?.fasteners;
   const bossStyle: BossStyle = lidFasteners?.bossStyle ?? DEFAULT_BOSS_STYLE;
+  const stack = !!lidFasteners && bossStyle === "stack";
+  // Corner bosses exist with lid fasteners in every style but "stack".
+  const corner = stack ? undefined : lidFasteners;
   if (!BOSS_STYLES.includes(bossStyle)) fail(`lid.fasteners.bossStyle must be one of ${BOSS_STYLES.join(", ")} (got ${String(bossStyle)})`);
   const allowBlockedBoard = lidFasteners?.allowBlockedBoard ?? false;
   if (typeof allowBlockedBoard !== "boolean") fail("lid.fasteners.allowBlockedBoard must be true or false");
   const growAxisInput = lidFasteners?.growAxis;
   if (growAxisInput !== undefined && growAxisInput !== "x" && growAxisInput !== "y") fail(`lid.fasteners.growAxis must be "x" or "y" (got ${String(growAxisInput)})`);
   if (growAxisInput !== undefined && bossStyle !== "floor") fail(`lid.fasteners.growAxis applies only to bossStyle "floor" (got bossStyle "${bossStyle}")`);
-  const bossD = lidFasteners ? positive("lid.fasteners.bossDiameterMm", lidFasteners.bossDiameterMm ?? 6) : 0;
+  // Default boss diameter: 6 mm, or the sourced insert wall around the insert hole when the base takes inserts.
+  const lidInsertDefault = corner?.base === "heat-set-insert" && corner.bossDiameterMm === undefined ? heatSetInsert(corner.screw, corner.insertLengthMm) : undefined;
+  if (stack && lidFasteners!.bossDiameterMm !== undefined) fail("lid.fasteners.bossDiameterMm is for corner bosses; with bossStyle \"stack\" the lid posts take the standoff diameter (standoffs.outerDiameterMm)");
+  const bossD = corner ? positive("lid.fasteners.bossDiameterMm", corner.bossDiameterMm ?? (lidInsertDefault ? Math.max(6, r9(lidInsertDefault.holeDiameterMm + 2 * lidInsertDefault.minWallMm)) : 6)) : 0;
   const bossR = bossD / 2;
   // Each corner boss axis is this far from both adjoining inner walls, so the boss overlaps each wall by bossWallOverlapMm.
   const bossInset = bossR - bossWallOverlapMm;
-  if (lidFasteners && bossInset <= 0) fail(`lid.fasteners.bossDiameterMm ${bossD} must exceed ${2 * bossWallOverlapMm} mm`);
+  if (corner && bossInset <= 0) fail(`lid.fasteners.bossDiameterMm ${bossD} must exceed ${2 * bossWallOverlapMm} mm`);
   // "floor": a boss standing on the floor must lie outside the board keep-out (board outline + boardClearance). The keep-out
   // edge must be at least one boss radius from the boss axis, so the cavity grows by 2 x (bossInset + bossR) in ONE axis.
   // Growing an axis moves its two end walls away from the board, so an opening on one of them would no longer reach the
@@ -402,7 +502,6 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
     const need = 2 * (bossInset + bossR);
     const opened = new Set<CaseWall>([
       ...(input.openings ?? []).map((opening) => opening.wall).filter((wall): wall is CaseWall => wall !== "lid" && wall !== "floor"),
-      ...(input.vents && input.vents.on !== "lid" ? [input.vents.on] : []),
     ]);
     const xOpen = (["x-", "x+"] as const).filter((wall) => opened.has(wall));
     const yOpen = (["y-", "y+"] as const).filter((wall) => opened.has(wall));
@@ -432,12 +531,22 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
   const outerL = cavityL + 2 * w;
   const outerW = cavityW + 2 * w;
   if (Ro > 0 && Ro >= Math.min(outerL, outerW) / 2 - EPS) fail(`walls.outerCornerRadiusMm ${Ro} must be less than half the outer size (${r9(Math.min(outerL, outerW) / 2)})`);
-  // Inner corner radius: the outer radius minus the wall (a uniform wall), but never more than the board's square corner
-  // allows. The board corner sits boardClearance (c) from both walls; a cavity corner of radius Ri clears it when
-  // Ri <= c x (2 + sqrt 2). The plan keeps cornerFitMarginMm between the board corner and the arc:
-  // Ri <= (c x sqrt 2 - margin) / (sqrt 2 - 1).
-  const RiBoard = Math.max(0, (Math.SQRT2 * bc - LIMITS.cornerFitMarginMm) / (Math.SQRT2 - 1));
-  const Ri = Math.min(Math.max(0, Ro - w), RiBoard);
+  // Inner corner radius: the outer radius minus the wall (a uniform wall), but never more than the board clearance, so
+  // the diagonal gap from the board's square corner to the arc (sqrt 2 x c - Ri x (sqrt 2 - 1)) is at least c, the play
+  // reported on every side. walls.innerCornerRadiusMm sets it explicitly while that gap stays at least minCornerGapMm.
+  const RiInput = input.walls?.innerCornerRadiusMm;
+  let Ri: number;
+  if (RiInput !== undefined) {
+    Ri = nonnegative("walls.innerCornerRadiusMm", RiInput);
+    const largest = (Math.SQRT2 * bc - LIMITS.minCornerGapMm) / (Math.SQRT2 - 1);
+    if (Math.SQRT2 * bc - Ri * (Math.SQRT2 - 1) < LIMITS.minCornerGapMm - EPS) fail(`walls.innerCornerRadiusMm ${Ri} leaves a ${r3(Math.SQRT2 * bc - Ri * (Math.SQRT2 - 1))} mm diagonal gap between the board corner and the arc, below ${LIMITS.minCornerGapMm} mm; with fit.boardClearanceMm ${bc} it may be at most ${floor3(Math.max(0, largest))}`);
+  } else {
+    Ri = Math.min(Math.max(0, Ro - w), bc);
+  }
+  if (RiInput !== undefined && Ri > Math.min(L + 2 * bc + growth[0], W + 2 * bc + growth[1]) / 2 - LIMITS.minFilletRadiusMm + EPS) fail(`walls.innerCornerRadiusMm ${Ri} must be less than half the cavity size minus ${LIMITS.minFilletRadiusMm} mm (${r9(Math.min(L + 2 * bc + growth[0], W + 2 * bc + growth[1]) / 2 - LIMITS.minFilletRadiusMm)})`);
+  if (Ri > 0 && Ri < LIMITS.minFilletRadiusMm - EPS) fail(`the inner corner radius would be ${r9(Ri)} mm (${RiInput !== undefined ? "walls.innerCornerRadiusMm" : "min(walls.outerCornerRadiusMm - walls.wallMm, fit.boardClearanceMm)"}); it must be 0 or at least ${LIMITS.minFilletRadiusMm} mm (a smaller fillet fails natively)`);
+  const RiCap = RiInput !== undefined ? Ri : bc;
+  const cornerGap = Math.SQRT2 * bc - Ri * (Math.SQRT2 - 1);
   const cornerWall = w * Math.SQRT2 - (Ro - Ri) * (Math.SQRT2 - 1);
   const cavMin: Vector2 = [ox + w, oy + w];
   const cavMax: Vector2 = [ox + w + cavityL, oy + w + cavityW];
@@ -450,12 +559,19 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
   }
   const cornerLimit = Math.max(LIMITS.minCornerWallMm, LIMITS.minCornerWallFractionOfWall * w);
   if (cornerWall < cornerLimit - EPS) {
-    const maxRo = RiBoard + (w * Math.SQRT2 - cornerLimit) / (Math.SQRT2 - 1);
-    fail(`the corner wall is ${r3(cornerWall)} mm (walls.wallMm ${w} x sqrt 2 - (outer radius ${Ro} - inner radius ${r3(Ri)}) x (sqrt 2 - 1)), below the ${r3(cornerLimit)} mm minimum (the larger of ${LIMITS.minCornerWallMm} and ${LIMITS.minCornerWallFractionOfWall} x walls.wallMm); the board's square corner caps the inner radius at ${r3(RiBoard)}, so walls.outerCornerRadiusMm may be at most ${floor3(maxRo)}`);
+    const maxRo = RiCap + (w * Math.SQRT2 - cornerLimit) / (Math.SQRT2 - 1);
+    fail(`the corner wall is ${r3(cornerWall)} mm (walls.wallMm ${w} x sqrt 2 - (outer radius ${Ro} - inner radius ${r3(Ri)}) x (sqrt 2 - 1)), below the ${r3(cornerLimit)} mm minimum (the larger of ${LIMITS.minCornerWallMm} and ${LIMITS.minCornerWallFractionOfWall} x walls.wallMm); the inner radius is at most ${r3(RiCap)} (${RiInput !== undefined ? "walls.innerCornerRadiusMm" : "fit.boardClearanceMm"}), so walls.outerCornerRadiusMm may be at most ${floor3(maxRo)}`);
   }
 
   // --- standoffs -----------------------------------------------------------------------------------------------------
-  const standoffInput = input.standoffs;
+  if (stack) {
+    if (input.standoffs?.fastener) fail("with bossStyle \"stack\" the lid screws go into the standoffs, which take lid.fasteners.base; remove standoffs.fastener (giving both is ambiguous), or choose another bossStyle");
+    if (holes.length < 2) fail(`bossStyle "stack" needs at least 2 board holes for the lid screws (the board has ${holes.length})`);
+    const close = clearanceHole(lidFasteners!.screw, "close");
+    holes.forEach((hole, index) => { if (hole.diameterMm < close.diameterMm - EPS) fail(`bossStyle "stack": board.holes[${index}] (Ø${hole.diameterMm}) is smaller than the ${lidFasteners!.screw} close-fit clearance Ø${close.diameterMm}, so the lid screw cannot pass through the board`); });
+  }
+  // With bossStyle "stack" the standoffs exist without a fastener block: they take the lid fastener's base.
+  const standoffInput = stack ? { heightMm: input.standoffs?.heightMm, outerDiameterMm: input.standoffs?.outerDiameterMm } : input.standoffs;
   const supportH = standoffInput ? positive("standoffs.heightMm", standoffInput.heightMm ?? U) : U;
   if (standoffInput) atMost("standoffs.heightMm", supportH, LIMITS.maxHeightMm, "height");
   if (standoffInput && supportH < U - EPS) fail(`standoffs.heightMm ${supportH} is below board.undersideClearanceMm ${U}: parts under the board would hit the floor`);
@@ -467,19 +583,24 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
   let standoffFastener: BoardCaseDerived["fasteners"]["standoffs"];
   const standoffGroups: CylinderPattern[] = [];
   let standoffFloorHoles: BoardCasePlan["standoffFloorHoles"];
-  const standoffs: Array<{ label: string; axis: Vector2; radius: number }> = [];
+  const standoffs: Array<{ label: string; axis: Vector2; radius: number; holeRadius: number }> = [];
   if (standoffInput) {
-    const fastener = standoffInput.fastener;
+    const maybe: NonNullable<NonNullable<BoardCaseInput["standoffs"]>["fastener"]> | undefined = stack
+      ? { screw: lidFasteners!.screw, mode: lidFasteners!.base, pilotDiameterMm: lidFasteners!.pilotDiameterMm, pilotDepthMm: lidFasteners!.pilotDepthMm, insertLengthMm: lidFasteners!.insertLengthMm }
+      : (standoffInput as NonNullable<BoardCaseInput["standoffs"]>).fastener;
+    if (!maybe) fail("standoffs.fastener is required (screw and mode), except with bossStyle \"stack\"");
+    const fastener = maybe!;
+    const where = stack ? "lid.fasteners" : "standoffs.fastener";
     let holeDiameterMm: number;
     let holeDepthMm = supportH;
     let source: string;
     const extra: Partial<NonNullable<BoardCaseDerived["fasteners"]["standoffs"]>> = {};
     if (fastener.mode === "pilot") {
-      holeDiameterMm = positive("standoffs.fastener.pilotDiameterMm", requirePilotDiameter(fastener.screw, fastener.pilotDiameterMm, "standoffs.fastener"));
-      holeAtLeast("standoffs.fastener.pilotDiameterMm", holeDiameterMm);
-      holeDepthMm = positive("standoffs.fastener.pilotDepthMm", fastener.pilotDepthMm ?? supportH);
-      if (holeDepthMm < LIMITS.minHoleDepthMm - EPS) fail(`standoffs.fastener.pilotDepthMm ${holeDepthMm} is below the ${LIMITS.minHoleDepthMm} mm minimum hole depth`);
-      if (holeDepthMm > supportH + EPS) fail(`standoffs.fastener.pilotDepthMm ${holeDepthMm} exceeds the standoff height ${supportH}`);
+      holeDiameterMm = positive(`${where}.pilotDiameterMm`, requirePilotDiameter(fastener!.screw, fastener!.pilotDiameterMm, where));
+      holeAtLeast(`${where}.pilotDiameterMm`, holeDiameterMm);
+      holeDepthMm = positive(`${where}.pilotDepthMm`, fastener!.pilotDepthMm ?? supportH);
+      if (holeDepthMm < LIMITS.minHoleDepthMm - EPS) fail(`${where}.pilotDepthMm ${holeDepthMm} is below the ${LIMITS.minHoleDepthMm} mm minimum hole depth`);
+      if (holeDepthMm > supportH + EPS) fail(`${where}.pilotDepthMm ${holeDepthMm} exceeds the standoff height ${supportH}${stack ? "; raise standoffs.heightMm (the screw stack ends in the standoff)" : ""}`);
       source = CALLER_SOURCE;
     } else if (fastener.mode === "heat-set-insert") {
       const insert = heatSetInsert(fastener.screw, fastener.insertLengthMm);
@@ -495,8 +616,10 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
       source = hole.source;
       Object.assign(extra, { confidence: hole.confidence, clearanceFit: fit });
     }
-    const outerDiameters = holes.map((hole) => standoffInput.outerDiameterMm ?? r9(hole.diameterMm + 3));
-    holes.forEach((hole, index) => standoffs.push({ label: `standoff ${index}`, axis: [boardMin[0] + hole.xMm, boardMin[1] + hole.yMm], radius: outerDiameters[index]! / 2 }));
+    // Default standoff diameter: board hole + 3, or the sourced insert wall around the insert hole if that is larger.
+    const insertMinimum = extra.minWallMm !== undefined ? holeDiameterMm + 2 * extra.minWallMm : 0;
+    const outerDiameters = holes.map((hole) => standoffInput.outerDiameterMm ?? r9(Math.max(hole.diameterMm + 3, insertMinimum)));
+    holes.forEach((hole, index) => standoffs.push({ label: `standoff ${index}`, axis: [boardMin[0] + hole.xMm, boardMin[1] + hole.yMm], radius: outerDiameters[index]! / 2, holeRadius: holeDiameterMm / 2 }));
     outerDiameters.forEach((od, index) => {
       positive(`standoffs.outerDiameterMm (hole ${index})`, od);
       if (od <= holeDiameterMm + EPS) fail(`standoff ${index}: outer diameter ${od} must exceed its ${holeDiameterMm} mm hole`);
@@ -535,7 +658,7 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
   // The circle the screw head needs on the lid top: the countersink rim, or the given head (or the hole) without one.
   let headCircleDiameter = 0;
   if (lidFasteners) {
-    if (lidFasteners.count !== undefined && lidFasteners.count !== 4) fail("lid.fasteners.count must be 4 (one boss per cavity corner)");
+    if (lidFasteners.count !== undefined && (stack || lidFasteners.count !== 4)) fail(stack ? "lid.fasteners.count is for corner bosses; with bossStyle \"stack\" there is one lid screw per board hole" : "lid.fasteners.count must be 4 (one boss per cavity corner)");
     const fit = lidFasteners.clearanceFit ?? "medium";
     const lidHole = clearanceHole(lidFasteners.screw, fit);
     let baseHole: NonNullable<BoardCaseDerived["fasteners"]["lid"]>["baseHole"];
@@ -544,20 +667,23 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
       holeAtLeast("lid.fasteners.pilotDiameterMm", diameterMm);
       if (lidFasteners.pilotDepthMm === undefined) fail("lid.fasteners.pilotDepthMm is required with base \"pilot\": it sets the corner boss length (boss = pilot depth + 1 mm)");
       const depthMm = positive("lid.fasteners.pilotDepthMm", lidFasteners.pilotDepthMm);
+      atMost("lid.fasteners.pilotDepthMm", depthMm, LIMITS.maxHeightMm, "height");
       if (depthMm < LIMITS.minHoleDepthMm - EPS) fail(`lid.fasteners.pilotDepthMm ${depthMm} is below the ${LIMITS.minHoleDepthMm} mm minimum hole depth`);
       baseHole = { diameterMm, depthMm, source: CALLER_SOURCE };
     } else {
       const insert = heatSetInsert(lidFasteners.screw, lidFasteners.insertLengthMm);
-      if (bossD < insert.holeDiameterMm + 2 * insert.minWallMm - EPS) {
+      if (corner && bossD < insert.holeDiameterMm + 2 * insert.minWallMm - EPS) {
         fail(`lid boss diameter ${bossD} leaves less than the sourced ${insert.minWallMm} mm insert wall around the ${insert.holeDiameterMm} mm ${insert.insert} hole (needs ${r9(insert.holeDiameterMm + 2 * insert.minWallMm)})`);
       }
       baseHole = { diameterMm: insert.holeDiameterMm, depthMm: insert.blindHoleDepthMm, source: insert.source, confidence: insert.confidence, insert: insert.insert, minWallMm: insert.minWallMm };
     }
-    if (baseHole.diameterMm >= bossD - EPS) fail(`lid boss diameter ${bossD} must exceed its ${baseHole.diameterMm} mm hole`);
-    if ((bossD - baseHole.diameterMm) / 2 < LIMITS.minHoleWallMm - EPS) fail(`lid boss diameter ${bossD} leaves a ${r9((bossD - baseHole.diameterMm) / 2)} mm wall around its ${baseHole.diameterMm} mm hole, below the ${LIMITS.minHoleWallMm} mm minimum (needs ${r9(baseHole.diameterMm + 2 * LIMITS.minHoleWallMm)})`);
-    if (lidHole.diameterMm >= bossD - EPS) fail(`lid boss diameter ${bossD} must exceed the ${lidHole.diameterMm} mm lid clearance hole`);
-    postLength = r9(baseHole.depthMm + bossFloorMm);
-    postHole = { diameterMm: baseHole.diameterMm, depthMm: baseHole.depthMm };
+    if (corner) {
+      if (baseHole.diameterMm >= bossD - EPS) fail(`lid boss diameter ${bossD} must exceed its ${baseHole.diameterMm} mm hole`);
+      if ((bossD - baseHole.diameterMm) / 2 < LIMITS.minHoleWallMm - EPS) fail(`lid boss diameter ${bossD} leaves a ${r9((bossD - baseHole.diameterMm) / 2)} mm wall around its ${baseHole.diameterMm} mm hole, below the ${LIMITS.minHoleWallMm} mm minimum (needs ${r9(baseHole.diameterMm + 2 * LIMITS.minHoleWallMm)})`);
+      if (lidHole.diameterMm >= bossD - EPS) fail(`lid boss diameter ${bossD} must exceed the ${lidHole.diameterMm} mm lid clearance hole`);
+      postLength = r9(baseHole.depthMm + bossFloorMm);
+      postHole = { diameterMm: baseHole.diameterMm, depthMm: baseHole.depthMm };
+    }
     let countersink: NonNullable<BoardCaseDerived["fasteners"]["lid"]>["countersink"];
     if (lidFasteners.countersunk ?? true) {
       let headDiameterMm: number;
@@ -625,17 +751,18 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
   const lidTopZ = wallTopZ + tl + exploded;
   requireBoardCaseInvariants({
     lipDepthMm: d, innerHeightMm: innerHeight, lipBottomZMm: lipBottomZ, componentTopZMm: componentTopZ,
-    bossBottomZMm: lidFasteners && bossStyle !== "floor" ? postBottomZ : undefined,
+    bossBottomZMm: corner && bossStyle !== "floor" ? postBottomZ : undefined,
     taperBottomZMm: lidFasteners && bossStyle === "tapered" ? taperBottomZ : undefined,
   });
   if (lidFasteners && bossStyle === "floor" && postLength > wallTopZ - floorTopZ + EPS) fail(`the ${postLength} mm boss hole does not fit the ${r9(wallTopZ - floorTopZ)} mm floor-standing boss`);
+  if (postHole && postHole.depthMm > (bossStyle === "floor" ? wallTopZ - floorTopZ : postLength) - OV + EPS) fail(`the ${postHole.depthMm} mm boss hole must be at most the boss length minus ${OV} mm`);
   if (lidFastener && bossStyle === "floor") lidFastener.bossLengthMm = r9(wallTopZ - floorTopZ);
   // The no-overhang property is computed from the derived geometry, never assumed.
   const overhangGeometry: BossUndersideGeometry = {
     style: bossStyle, bossRadiusMm: bossR, bossInsetMm: bossInset, bossBottomZMm: postBottomZ, floorTopZMm: floorTopZ,
     ...(bossStyle === "tapered" ? { taper: { apexZMm: taperApexZ, topZMm: postBottomZ, topRadiusMm: taperReach } } : {}),
   };
-  const maxBossOverhang = lidFasteners ? maxBossOverhangDeg(overhangGeometry) : undefined;
+  const maxBossOverhang = corner ? maxBossOverhangDeg(overhangGeometry) : undefined;
   if (maxBossOverhang !== undefined && bossStyle !== "hanging" && maxBossOverhang > BOSS_TAPER_ANGLE_DEG + BOSS_OVERHANG_TOLERANCE_DEG) {
     throw new BoardCaseValidationError(`internal: the ${bossStyle} boss underside overhangs ${maxBossOverhang} degrees, more than ${BOSS_TAPER_ANGLE_DEG}`);
   }
@@ -645,20 +772,29 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
   if (2 * lipInset >= Math.min(cavityL, cavityW) - EPS) fail(`lid lip (clearance ${lc} + wall ${lw} per side) does not fit the ${r9(cavityL)} x ${r9(cavityW)} cavity`);
   const lipRadius = Math.max(0, Ri - lc);
   const lipInnerRadius = Math.max(0, Ri - lipInset);
+  for (const [label, radius] of [["lid lip corner radius (inner radius - fit.lidClearanceMm)", lipRadius], ["lid lip inner corner radius (inner radius - lid clearance - lip wall)", lipInnerRadius]] as const) {
+    if (radius > 0 && radius < LIMITS.minFilletRadiusMm - EPS) fail(`the ${label} would be ${r9(radius)} mm; it must be 0 or at least ${LIMITS.minFilletRadiusMm} mm (a smaller fillet fails natively): change fit.lidClearanceMm or lid.lipWallMm`);
+  }
 
   const s = bossInset;
   const posts: Array<{ label: string; axis: Vector2; radius: number }> = [];
   const cavityCorners: Vector2[] = [[cavMin[0], cavMin[1]], [cavMax[0], cavMin[1]], [cavMin[0], cavMax[1]], [cavMax[0], cavMax[1]]];
-  if (lidFasteners) {
+  if (corner) {
     const reach = s + bossD / 2 + lc;
     if (2 * reach >= Math.min(cavityL, cavityW) - EPS) {
       fail(`the four ${bossD} mm corner bosses (plus lid clearance) overlap each other in the ${r9(cavityL)} x ${r9(cavityW)} cavity`);
     }
     const corners: Vector2[] = [[cavMin[0] + s, cavMin[1] + s], [cavMax[0] - s, cavMin[1] + s], [cavMin[0] + s, cavMax[1] - s], [cavMax[0] - s, cavMax[1] - s]];
     corners.forEach((axis, index) => posts.push({ label: `lid boss ${index}`, axis: [r9(axis[0]), r9(axis[1])], radius: bossD / 2 }));
+    // R2: a floor boss and a standoff both stand on the floor, so they may merge. The standoff hole is cut before the
+    // bosses are joined, so the boss circle must stay minHoleWallMm clear of the standoff hole (and that also keeps the
+    // material between the two holes); each hole keeps its own wall to the outside (checked with its diameter).
     if (bossStyle === "floor") {
-      standoffs.forEach((standoff) => posts.forEach((post) => {
-        if (Math.hypot(post.axis[0] - standoff.axis[0], post.axis[1] - standoff.axis[1]) < post.radius + standoff.radius - EPS) fail(`${post.label} collides with ${standoff.label}`);
+      standoffs.forEach((standoff, standoffIndex) => posts.forEach((post) => {
+        const distance = Math.hypot(post.axis[0] - standoff.axis[0], post.axis[1] - standoff.axis[1]);
+        if (distance < post.radius + standoff.radius - EPS && distance < post.radius + standoff.holeRadius + LIMITS.minHoleWallMm - EPS) {
+          fail(`${post.label} merges with ${standoff.label} but comes ${r3(distance - post.radius - standoff.holeRadius)} mm from its Ø${r9(2 * standoff.holeRadius)} hole, less than ${LIMITS.minHoleWallMm} mm: move board.holes[${standoffIndex}] at least ${r3(post.radius + standoff.holeRadius + LIMITS.minHoleWallMm - distance)} mm away from the corner, or use bossStyle "stack" (the lid screws go through the board holes into the standoffs, no corner bosses)`);
+        }
       }));
     }
     lidHoleSpec!.entryCentersMm = posts.map((post) => [post.axis[0], post.axis[1], r9(wallTopZ + tl)] as Vector3);
@@ -677,7 +813,7 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
       }
     });
   }
-  if (lidFasteners) {
+  if (corner) {
     // Every boss, and (tapered) every gusset, stays bossInsideOuterMm inside the outer profile, rounded corners included.
     // A gusset is clipped bossWallOverlap into the walls, so its outermost points are the corners of the cavity grown by
     // that overlap (the cone top disc always covers them).
@@ -704,18 +840,207 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
     }
   }
 
+  // R4: webs. Any gap narrower than minGapMm between a boss or standoff and a wall (or the rounded cavity corner), or
+  // between two of them, is closed by a web the full height of the lower feature: a box from the feature's axis to the
+  // wall (webWallOverlapMm into it) or to the corner, or a strip between two axes as wide as the smaller diameter. The
+  // webs are joined right after the cavity cut, before the standoffs and bosses, so every hole is cut through them; a
+  // web that would cross another feature's hole at its height is refused.
+  const webs: BoardCaseWeb[] = [];
+  {
+    type WebFeature = { label: string; axis: Vector2; radius: number; z: Vector2; holeRadius: number; holeZ: Vector2 };
+    const standoffHoleDepth = standoffFastener ? (standoffFastener.mode === "through" ? supportH + f : standoffFastener.holeDepthMm) : 0;
+    const features: WebFeature[] = [
+      ...standoffs.map((standoff) => ({ label: standoff.label, axis: standoff.axis, radius: standoff.radius, z: [floorTopZ - OV, boardBottomZ] as Vector2, holeRadius: standoff.holeRadius, holeZ: [boardBottomZ - standoffHoleDepth, boardBottomZ] as Vector2 })),
+      ...posts.map((post) => ({ label: post.label, axis: post.axis, radius: post.radius, z: (bossStyle === "floor" ? [floorTopZ - OV, wallTopZ] : [postBottomZ, wallTopZ]) as Vector2, holeRadius: (postHole?.diameterMm ?? 0) / 2, holeZ: [wallTopZ - (postHole?.depthMm ?? 0), wallTopZ] as Vector2 })),
+    ];
+    const gapLimit = LIMITS.minGapMm;
+    const overlap = LIMITS.webWallOverlapMm;
+    // Holes of other features at the web's height (a web only touches a hole it shares a height with).
+    const holesOf = (except: WebFeature[], z: Vector2) => features.filter((feature) => !except.includes(feature) && feature.holeRadius > 0 && overlaps(feature.holeZ, z));
+    const keepInside = (label: string, points: Vector2[]) => {
+      const margin = Math.min(...points.map((point) => roundedRectInsideDistance(point, outerRect, Ro)));
+      if (margin < LIMITS.standoffWallKeptMm - EPS) fail(`the web closing the gap at ${label} would come ${r3(margin)} mm from the outer surface (at least ${LIMITS.standoffWallKeptMm} mm): move the feature or thicken the wall`);
+    };
+    const boxWeb = (label: string, kind: BoardCaseWeb["kind"], gap: number, min: Vector2, max: Vector2, z: Vector2, probe: Vector2, ends: WebFeature[]) => {
+      for (const other of holesOf(ends, z)) if (circleHitsRect(other.axis, other.holeRadius + LIMITS.minHoleWallMm, { min, max })) fail(`the web closing the ${r3(gap)} mm gap at ${label} would cross the ${other.label} hole; move the feature so the gap is 0 or at least ${gapLimit} mm`);
+      keepInside(label, [[min[0], min[1]], [max[0], min[1]], [min[0], max[1]], [max[0], max[1]]]);
+      webs.push({ label, kind, features: ends.map((end) => end.label), gapMm: r9(gap), box: { originMm: [r9(min[0]), r9(min[1]), r9(z[0])], sizeMm: [r9(max[0] - min[0]), r9(max[1] - min[1]), r9(z[1] - z[0])] }, probeMm: [r9(probe[0]), r9(probe[1]), r9((z[0] + OV + z[1]) / 2)] });
+    };
+    for (const feature of features) {
+      const [ax, ay] = feature.axis;
+      const r = feature.radius;
+      // Distance from the circle to each inner wall plane (negative: it reaches into the wall).
+      const gaps = { "x-": ax - cavMin[0] - r, "x+": cavMax[0] - ax - r, "y-": ay - cavMin[1] - r, "y+": cavMax[1] - ay - r };
+      const nearX = gaps["x-"] < gaps["x+"] ? "x-" : "x+";
+      const nearY = gaps["y-"] < gaps["y+"] ? "y-" : "y+";
+      const cornerX = nearX === "x-" ? cavMin[0] : cavMax[0];
+      const cornerY = nearY === "y-" ? cavMin[1] : cavMax[1];
+      const sx = nearX === "x-" ? 1 : -1;
+      const sy = nearY === "y-" ? 1 : -1;
+      // The corner pocket: from the circle to the rounded corner along the diagonal through the corner arc's midpoint.
+      const q = Ri * (1 - Math.SQRT1_2);
+      const arcPoint: Vector2 = [cornerX + sx * q, cornerY + sy * q];
+      const pocket = Math.hypot(ax - arcPoint[0], ay - arcPoint[1]) - r;
+      const gx = gaps[nearX];
+      const gy = gaps[nearY];
+      const near = (gap: number) => gap > EPS && gap < gapLimit - EPS;
+      // The webs run to the axis: the feature's own hole is cut through them later.
+      const stop = 0;
+      // A box to each wall the circle is narrowly short of (as wide as the circle, along the wall).
+      for (const wall of ["x-", "x+", "y-", "y+"] as const) {
+        const gap = gaps[wall];
+        if (!near(gap)) continue;
+        const alongX = wall.startsWith("y");
+        const face = wall === "x-" ? cavMin[0] : wall === "x+" ? cavMax[0] : wall === "y-" ? cavMin[1] : cavMax[1];
+        const out = wall.endsWith("-") ? -1 : 1;
+        const normal = [(alongX ? ay : ax) + out * stop, face + out * overlap].sort((a, b) => a - b) as Vector2;
+        const along: Vector2 = alongX ? [ax - r, ax + r] : [ay - r, ay + r];
+        const min: Vector2 = alongX ? [along[0], normal[0]] : [normal[0], along[0]];
+        const max: Vector2 = alongX ? [along[1], normal[1]] : [normal[1], along[1]];
+        const probe: Vector2 = alongX ? [ax, face - out * (gap / 2)] : [face - out * (gap / 2), ay];
+        boxWeb(`${feature.label} and wall ${wall}`, "wall", gap, min, max, feature.z, probe, [feature]);
+      }
+      // Near both walls of a corner: a box from the corner to the axis closes the corner pocket (and the niche the two
+      // wall boxes leave at the corner).
+      if (gx < gapLimit - EPS && gy < gapLimit - EPS && (near(gx) || near(gy) || near(pocket))) {
+        const towards = Math.hypot(ax - arcPoint[0], ay - arcPoint[1]);
+        // The probe sits in the pocket's middle, or (wall gaps only) in the niche just off the corner arc.
+        const wallGap = Math.min(...[gx, gy].filter((value) => value > EPS), Infinity);
+        const gapHere = near(pocket) ? pocket : wallGap;
+        const reach = near(pocket) ? pocket / 2 : Math.min(wallGap / 2, 0.1);
+        const probe: Vector2 = [arcPoint[0] + ((ax - arcPoint[0]) * reach) / towards, arcPoint[1] + ((ay - arcPoint[1]) * reach) / towards];
+        const xs = [cornerX - sx * overlap, ax - sx * stop].sort((a, b) => a - b) as Vector2;
+        const ys = [cornerY - sy * overlap, ay - sy * stop].sort((a, b) => a - b) as Vector2;
+        boxWeb(`${feature.label} and the ${nearX}/${nearY} corner`, "corner", gapHere, [xs[0], ys[0]], [xs[1], ys[1]], feature.z, probe, [feature]);
+      }
+    }
+    // Between two features that share a height: a strip from axis to axis, as wide as the smaller diameter.
+    for (let first = 0; first < features.length; first += 1) {
+      for (let second = first + 1; second < features.length; second += 1) {
+        const a = features[first]!;
+        const b = features[second]!;
+        const z: Vector2 = [Math.max(a.z[0], b.z[0]), Math.min(a.z[1], b.z[1])];
+        if (!(z[1] > z[0] + EPS)) continue;
+        const distance = Math.hypot(b.axis[0] - a.axis[0], b.axis[1] - a.axis[1]);
+        const circleGap = distance - a.radius - b.radius;
+        if (circleGap <= EPS) continue;
+        // The narrowest gap between the two, counting the wall and corner webs each already has (a web that comes within
+        // minGapMm of the other feature leaves a slot of its own).
+        const boxesOf = (feature: WebFeature) => webs.filter((web) => web.box && web.features.includes(feature.label) && overlaps([web.box.originMm[2], web.box.originMm[2] + web.box.sizeMm[2]], z)).map((web) => ({ min: [web.box!.originMm[0], web.box!.originMm[1]] as Vector2, max: [web.box!.originMm[0] + web.box!.sizeMm[0], web.box!.originMm[1] + web.box!.sizeMm[1]] as Vector2 }));
+        const circleToBox = (feature: WebFeature, box: Rect) => Math.hypot(Math.max(box.min[0] - feature.axis[0], 0, feature.axis[0] - box.max[0]), Math.max(box.min[1] - feature.axis[1], 0, feature.axis[1] - box.max[1])) - feature.radius;
+        const gaps = [circleGap, ...boxesOf(b).map((box) => circleToBox(a, box)), ...boxesOf(a).map((box) => circleToBox(b, box)), ...boxesOf(a).flatMap((boxA) => boxesOf(b).map((boxB) => rectGap(boxA, boxB)))];
+        if (gaps.some((value) => value <= EPS)) continue;
+        const gap = Math.min(...gaps);
+        if (!(gap < gapLimit - EPS)) continue;
+        const dir: Vector2 = [(b.axis[0] - a.axis[0]) / distance, (b.axis[1] - a.axis[1]) / distance];
+        const half = Math.min(a.radius, b.radius);
+        const side: Vector2 = [-dir[1] * half, dir[0] * half];
+        // The strip starts and ends half a radius inside each circle (not on the axes), so its end faces never pass through
+        // the axis where a wall or corner web box of the same feature has a face or a corner (coincident geometry made the
+        // native union fail live).
+        const startAt = a.radius / 2;
+        const endAt = distance - b.radius / 2;
+        const from: Vector2 = [a.axis[0] + dir[0] * startAt, a.axis[1] + dir[1] * startAt];
+        const to: Vector2 = [a.axis[0] + dir[0] * endAt, a.axis[1] + dir[1] * endAt];
+        const corners: Vector2[] = [[from[0] - side[0], from[1] - side[1]], [to[0] - side[0], to[1] - side[1]], [to[0] + side[0], to[1] + side[1]], [from[0] + side[0], from[1] + side[1]]];
+        for (const other of holesOf([a, b], z)) {
+          // Distance from the other hole's axis to the strip (a segment of half-width `half`).
+          const t = Math.max(0, Math.min(distance, (other.axis[0] - a.axis[0]) * dir[0] + (other.axis[1] - a.axis[1]) * dir[1]));
+          const off = Math.hypot(other.axis[0] - (a.axis[0] + dir[0] * t), other.axis[1] - (a.axis[1] + dir[1] * t));
+          if (off < half + other.holeRadius + LIMITS.minHoleWallMm - EPS) fail(`the web closing the ${r3(gap)} mm gap between ${a.label} and ${b.label} would cross the ${other.label} hole`);
+        }
+        const mid = a.radius + gap / 2;
+        webs.push({ label: `${a.label} and ${b.label}`, kind: "between", features: [a.label, b.label], gapMm: r9(gap), strip: { cornersMm: corners.map((point) => [r9(point[0]), r9(point[1])] as Vector2), bottomZMm: r9(z[0]), heightMm: r9(z[1] - z[0]) }, probeMm: [r9(a.axis[0] + dir[0] * mid), r9(a.axis[1] + dir[1] * mid), r9((z[0] + OV + z[1]) / 2)] });
+      }
+    }
+  }
+
+  // --- S: screw stack (lid posts over the board holes) -----------------------------------------------------------------
+  let lidPosts: CylinderPattern[] | undefined;
+  const lidWebs: NonNullable<BoardCasePlan["lidWebs"]> = [];
+  let stackDerived: BoardCaseDerived["stack"];
+  const stackPosts: Array<{ label: string; axis: Vector2; radius: number; index: number }> = [];
+  if (stack) {
+    const postBottom = boardTopZ + LIMITS.stackPostGapMm;
+    const postLength = wallTopZ - postBottom;
+    const holeD = lidHoleSpec!.diameterMm;
+    const lipOuterRect: Rect = { min: [cavMin[0] + lc, cavMin[1] + lc], max: [cavMax[0] - lc, cavMax[1] - lc] };
+    const lipInnerRect: Rect = { min: [cavMin[0] + lipInset, cavMin[1] + lipInset], max: [cavMax[0] - lipInset, cavMax[1] - lipInset] };
+    standoffs.forEach((standoff, index) => {
+      const label = `the lid post over board.holes[${index}]`;
+      if ((2 * standoff.radius - holeD) / 2 < LIMITS.minHoleWallMm - EPS) fail(`${label} (Ø${r9(2 * standoff.radius)}, the standoff diameter) leaves less than ${LIMITS.minHoleWallMm} mm around its Ø${holeD} screw clearance hole; raise standoffs.outerDiameterMm to at least ${r9(holeD + 2 * LIMITS.minHoleWallMm)}`);
+      // The post hangs inside the lid lip outline (it may merge into the lip); its hole keeps minHoleWallMm to that outline.
+      const outside = roundedRectInsideDistance(standoff.axis, lipOuterRect, lipRadius);
+      if (outside - standoff.radius < -EPS) fail(`${label} reaches ${r3(standoff.radius - outside)} mm past the lid lip outline toward the base wall; move the hole or use a smaller standoffs.outerDiameterMm`);
+      if (outside - holeD / 2 < LIMITS.minHoleWallMm - EPS) fail(`${label}: its screw hole comes within ${r3(outside - holeD / 2)} mm of the lid lip outline (at least ${LIMITS.minHoleWallMm} mm)`);
+      // A narrow gap to the lip's inner face is closed by a lid web the lip's height (R4).
+      const gaps = { "x-": standoff.axis[0] - lipInnerRect.min[0] - standoff.radius, "x+": lipInnerRect.max[0] - standoff.axis[0] - standoff.radius, "y-": standoff.axis[1] - lipInnerRect.min[1] - standoff.radius, "y+": lipInnerRect.max[1] - standoff.axis[1] - standoff.radius };
+      for (const [side, gap] of Object.entries(gaps) as Array<[CaseWall, number]>) {
+        if (!(gap > EPS && gap < LIMITS.minGapMm - EPS)) continue;
+        const alongX = side.startsWith("y");
+        const face = side === "x-" ? lipInnerRect.min[0] : side === "x+" ? lipInnerRect.max[0] : side === "y-" ? lipInnerRect.min[1] : lipInnerRect.max[1];
+        const out = side.endsWith("-") ? -1 : 1;
+        const normal = [alongX ? standoff.axis[1] : standoff.axis[0], face + out * Math.min(LIMITS.webWallOverlapMm, lw / 2)].sort((a, b) => a - b) as Vector2;
+        const along: Vector2 = alongX ? [standoff.axis[0] - standoff.radius, standoff.axis[0] + standoff.radius] : [standoff.axis[1] - standoff.radius, standoff.axis[1] + standoff.radius];
+        const min: Vector2 = alongX ? [along[0], normal[0]] : [normal[0], along[0]];
+        const max: Vector2 = alongX ? [along[1], normal[1]] : [normal[1], along[1]];
+        for (const [otherIndex, other] of standoffs.entries()) if (otherIndex !== index && circleHitsRect(other.axis, holeD / 2 + LIMITS.minHoleWallMm, { min, max })) fail(`the lid web closing the ${r3(gap)} mm gap between ${label} and the lid lip would cross another lid screw hole`);
+        lidWebs.push({ label: `${label} and the lid lip ${side}`, gapMm: r9(gap), originMm: [r9(min[0]), r9(min[1]), r9(lipBottomZ)], sizeMm: [r9(max[0] - min[0]), r9(max[1] - min[1]), r9(wallTopZ + OV - lipBottomZ)] });
+      }
+      stackPosts.push({ label, axis: standoff.axis, radius: standoff.radius, index });
+    });
+    // Posts merge where they overlap; a narrow gap between two posts is refused (the lid prints top face down, a strip
+    // there is not needed to hold anything).
+    for (let first = 0; first < stackPosts.length; first += 1) for (let second = first + 1; second < stackPosts.length; second += 1) {
+      const a = stackPosts[first]!;
+      const b = stackPosts[second]!;
+      const gap = Math.hypot(a.axis[0] - b.axis[0], a.axis[1] - b.axis[1]) - a.radius - b.radius;
+      if (gap > EPS && gap < LIMITS.minGapMm - EPS) fail(`${a.label} and ${b.label} leave a ${r3(gap)} mm gap; move a hole or change standoffs.outerDiameterMm so they merge or stand ${LIMITS.minGapMm} mm apart`);
+    }
+    lidHoleSpec!.entryCentersMm = standoffs.map((standoff) => [r9(standoff.axis[0]), r9(standoff.axis[1]), r9(wallTopZ + tl)] as Vector3);
+    const ods = [...new Set(standoffs.map((standoff) => r9(2 * standoff.radius)))];
+    lidPosts = ods.map((od) => ({
+      centersMm: standoffs.filter((standoff) => r9(2 * standoff.radius) === od).map((standoff) => [r9(standoff.axis[0]), r9(standoff.axis[1]), r9(wallTopZ)] as Vector3),
+      outerDiameterMm: od,
+      heightMm: r9(postLength),
+      holeDiameterMm: holeD,
+      holeDepthMm: r9(postLength),
+      baseOverlapMm: OV,
+    }));
+    const engagement = lidFastener!.base === "pilot" ? lidFastener!.baseHole.depthMm : heatSetInsert(lidFasteners!.screw, lidFasteners!.insertLengthMm).insertLengthMm;
+    stackDerived = {
+      postAxesMm: standoffs.map((standoff) => [r9(standoff.axis[0]), r9(standoff.axis[1])] as Vector2),
+      postOuterDiametersMm: standoffs.map((standoff) => r9(2 * standoff.radius)),
+      postBottomZMm: r9(postBottom + exploded),
+      postLengthMm: r9(postLength),
+      holeDiameterMm: holeD,
+      screwLengthMm: r9(tl + postLength + LIMITS.stackPostGapMm + T + engagement),
+      engagementMm: engagement,
+      lidWebs: lidWebs.map((web) => ({ label: web.label, gapMm: web.gapMm })),
+    };
+    lidFastener!.bossDiameterMm = Math.max(...ods);
+    lidFastener!.bossLengthMm = r9(postLength);
+    // The screw head (countersink rim) stays headInsideLidMm inside the lid outline over every post too.
+    standoffs.forEach((standoff, index) => {
+      const margin = roundedRectInsideDistance(standoff.axis, outerRect, Ro) - headCircleDiameter / 2;
+      if (margin < LIMITS.headInsideLidMm - EPS) fail(`the Ø${headCircleDiameter} ${lidHoleSpec?.countersink ? "countersink" : "screw head"} over board.holes[${index}] comes ${r3(margin)} mm from the lid edge; it must stay ${LIMITS.headInsideLidMm} mm inside the lid outline`);
+    });
+  }
+
   // Lid lip notches: the piece of lip a round notch leaves between itself and the corner; under minLipPieceMm the notch
   // becomes a box from the corner past the whole boss circle (boss + lid clearance), so no sliver remains.
-  const lipCornerPiece = lidFasteners ? lipCornerPieceMm({ inset: s, notchRadius: bossR + lc, lipClearance: lc, lipWall: lw, outerRadius: lipRadius, innerRadius: lipInnerRadius }) : 0;
+  const lipCornerPiece = corner ? lipCornerPieceMm({ inset: s, notchRadius: bossR + lc, lipClearance: lc, lipWall: lw, outerRadius: lipRadius, innerRadius: lipInnerRadius }) : 0;
   const widenNotches = lipCornerPiece > 1e-6 && lipCornerPiece < LIMITS.minLipPieceMm - EPS;
 
   // --- openings ------------------------------------------------------------------------------------------------------
   const lipInnerRect: Rect = { min: [cavMin[0] + lipInset, cavMin[1] + lipInset], max: [cavMax[0] - lipInset, cavMax[1] - lipInset] };
   const floorRect: Rect = { min: [cavMin[0] + Ri, cavMin[1] + Ri], max: [cavMax[0] - Ri, cavMax[1] - Ri] };
-  const lidKeepouts = posts.map((post) => ({
+  const lidKeepouts = [...posts, ...stackPosts].map((post) => ({
     label: post.label,
     axis: post.axis,
-    radius: Math.max(post.radius + lc, (lidHoleSpec?.countersink?.majorDiameterMm ?? lidHoleSpec?.diameterMm ?? 0) / 2),
+    // Corner bosses are notched into the lip with lid clearance; a stack post hangs from the lid itself.
+    radius: Math.max(post.radius + (stack ? 0 : lc), (lidHoleSpec?.countersink?.majorDiameterMm ?? lidHoleSpec?.diameterMm ?? 0) / 2),
+    headRadius: (lidHoleSpec?.countersink?.majorDiameterMm ?? lidHoleSpec?.diameterMm ?? 0) / 2,
   }));
   const wallFrame = (wall: CaseWall) => {
     const alongIndex = wall === "x-" || wall === "x+" ? 1 : 0;
@@ -741,7 +1066,8 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
     if (!overlaps(z, height)) return false;
     if (circleHitsRect(center, radius, wallCutterRect(wall, along))) return true;
     const frame = wallFrame(wall);
-    if (Math.abs(center[frame.normalIndex]! - frame.innerFace) >= radius - EPS) return false;
+    // Within minGapMm of the wall the cylinder is webbed to it (R4), so it counts as merged too.
+    if (Math.abs(center[frame.normalIndex]! - frame.innerFace) >= radius + LIMITS.minGapMm - EPS) return false;
     const c = center[frame.alongIndex]!;
     return overlaps(along, [c - radius, c + radius]);
   };
@@ -787,6 +1113,16 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
       if (cylinderHitsWallFeature(wall, along, z, post.axis, post.radius, postZ)) fail(`${label} on wall ${wall} collides with ${post.label}`);
     }
     if (taperHitsRect(plan, z)) fail(`${label} on wall ${wall} collides with the 45 degree gusset under a lid boss`);
+    // Stack posts keep out of the space in front of a wall opening: its along range + minWebMm, from the inner wall face
+    // to stackKeepOutPastBoardEdgeMm inside the board edge, at the post's height.
+    if (stackPosts.length > 0 && overlaps(z, [boardTopZ + LIMITS.stackPostGapMm, wallTopZ])) {
+      const boardEdge = wall === "x-" ? boardMin[0] : wall === "x+" ? boardMin[0] + L : wall === "y-" ? boardMin[1] : boardMin[1] + W;
+      const inward = wall.endsWith("-") ? 1 : -1;
+      const depth = [frame.innerFace, boardEdge + inward * LIMITS.stackKeepOutPastBoardEdgeMm].sort((a, b) => a - b) as Vector2;
+      const widened: Vector2 = [along[0] - LIMITS.minWebMm, along[1] + LIMITS.minWebMm];
+      const keepOut: Rect = frame.alongIndex === 1 ? { min: [depth[0], widened[0]], max: [depth[1], widened[1]] } : { min: [widened[0], depth[0]], max: [widened[1], depth[1]] };
+      for (const post of stackPosts) if (circleHitsRect(post.axis, post.radius, keepOut)) fail(`${label} on wall ${wall}: ${post.label} stands in its keep-out (the opening's along range + ${LIMITS.minWebMm} mm, from the wall to ${LIMITS.stackKeepOutPastBoardEdgeMm} mm inside the board edge); move the opening or use bossStyle "floor"`);
+    }
     features.push({ label, face: wall, plan, inPlane: { min: [along[0], z[0]], max: [along[1], z[1]] }, z });
   };
   const checkFlatFeature = (label: string, face: "lid" | "floor", rect: Rect) => {
@@ -794,11 +1130,26 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
     if (!rectInside(rect, region)) {
       fail(`${label} on the ${face} (x ${r9(rect.min[0])}..${r9(rect.max[0])}, y ${r9(rect.min[1])}..${r9(rect.max[1])}) is not inside the ${face === "lid" ? "area inside the lid lip" : "flat floor"} (x ${r9(region.min[0])}..${r9(region.max[0])}, y ${r9(region.min[1])}..${r9(region.max[1])})`);
     }
+    // A flat opening keeps minWebMm of material to a standoff or floor boss (floor) and to a countersink (lid).
+    const keepWeb = (what: string, axis: Vector2, radius: number, web: number) => {
+      if (circleHitsRect(axis, radius, rect)) fail(`${label} on the ${face} collides with ${what}`);
+      if (web > 0 && circleHitsRect(axis, radius + web, rect)) fail(`${label} on the ${face} leaves less than the ${web} mm web to ${what}`);
+    };
     if (face === "lid") {
-      for (const keepout of lidKeepouts) if (circleHitsRect(keepout.axis, keepout.radius, rect)) fail(`${label} on the lid collides with ${keepout.label}`);
+      for (const keepout of lidKeepouts) {
+        keepWeb(keepout.label, keepout.axis, keepout.radius, 0);
+        if (keepout.headRadius > 0) keepWeb(`the ${keepout.label} screw head`, keepout.axis, keepout.headRadius, LIMITS.minWebMm);
+      }
     } else {
-      for (const standoff of standoffs) if (circleHitsRect(standoff.axis, standoff.radius, rect)) fail(`${label} on the floor collides with ${standoff.label}`);
-      if (bossStyle === "floor") for (const post of posts) if (circleHitsRect(post.axis, post.radius, rect)) fail(`${label} on the floor collides with ${post.label}`);
+      for (const standoff of standoffs) keepWeb(standoff.label, standoff.axis, standoff.radius, LIMITS.minWebMm);
+      if (bossStyle === "floor") for (const post of posts) keepWeb(post.label, post.axis, post.radius, LIMITS.minWebMm);
+      for (const web of webs) {
+        if ((web.box?.originMm[2] ?? web.strip!.bottomZMm) > floorTopZ + EPS) continue;
+        const box: Rect = web.box
+          ? { min: [web.box.originMm[0], web.box.originMm[1]], max: [web.box.originMm[0] + web.box.sizeMm[0], web.box.originMm[1] + web.box.sizeMm[1]] }
+          : { min: [Math.min(...web.strip!.cornersMm.map((point) => point[0])), Math.min(...web.strip!.cornersMm.map((point) => point[1]))], max: [Math.max(...web.strip!.cornersMm.map((point) => point[0])), Math.max(...web.strip!.cornersMm.map((point) => point[1]))] };
+        if (rectsOverlap(growRect(box, LIMITS.minWebMm), rect)) fail(`${label} on the floor leaves less than the ${LIMITS.minWebMm} mm web to the web between ${web.label}`);
+      }
     }
     features.push({ label, face, plan: rect, inPlane: rect });
   };
@@ -820,11 +1171,16 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
       height = width;
     } else {
       height = positive(`${label}: heightMm`, opening.heightMm);
+      if (Math.min(width, height) < LIMITS.minOpeningSideMm - EPS) fail(`${label}: a ${opening.shape} opening needs sides of at least ${LIMITS.minOpeningSideMm} mm (got ${width} x ${height})`);
     }
     let corner = 0;
+    // A rounded-rect whose radius is exactly half the shorter side is a slot (stadium) and is built as one.
+    let slot = false;
     if (opening.shape === "rounded-rect") {
       corner = positive(`${label}: cornerRadiusMm`, opening.cornerRadiusMm);
-      if (corner >= Math.min(width, height) / 2 - EPS) fail(`${label}: cornerRadiusMm ${corner} must be less than half the width and height`);
+      const half = Math.min(width, height) / 2;
+      if (Math.abs(corner - half) <= EPS && Math.abs(width - height) > EPS) slot = true;
+      else if (corner > half - LIMITS.minCornerRadiusMarginMm + EPS) fail(`${label}: cornerRadiusMm ${corner} must be at most half the shorter side minus ${LIMITS.minCornerRadiusMarginMm} mm (${r9(half - LIMITS.minCornerRadiusMarginMm)}), or exactly half (${r9(half)}) for a slot`);
     } else if (opening.shape === "rect" && opening.cornerRadiusMm !== undefined && opening.cornerRadiusMm !== 0) {
       fail(`${label}: a rect opening has square corners; use shape "rounded-rect" for cornerRadiusMm`);
     }
@@ -836,7 +1192,7 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
       checkFlatFeature(label, opening.wall, { min: [center[0] - width / 2, center[1] - height / 2], max: [center[0] + width / 2, center[1] + height / 2] });
       const top = opening.wall === "lid";
       const entry: Vector3 = [r9(center[0]), r9(center[1]), r9(top ? wallTopZ + tl : oz)];
-      openings.push({ label, target: top ? "lid" : "base", shape: opening.shape, entryCenterMm: entry, axis: [0, 0, top ? -1 : 1], widthDirection: [1, 0, 0], widthMm: width, heightMm: height, cornerRadiusMm: corner, throughDepthMm: top ? tl : f });
+      openings.push({ label, target: top ? "lid" : "base", shape: opening.shape, entryCenterMm: entry, axis: [0, 0, top ? -1 : 1], widthDirection: [1, 0, 0], widthMm: width, heightMm: height, cornerRadiusMm: corner, throughDepthMm: top ? tl : f, face: opening.wall, ...(slot ? { slot } : {}) });
       openingsDerived.push({ label, wall: opening.wall, shape: opening.shape, centerMm: [entry[0], entry[1], r9(top ? lidTopZ : oz)], sizeMm: [width, height], ...(corner > 0 ? { cornerRadiusMm: corner } : {}) });
     } else {
       if (opening.aboveBoardMm === undefined || !Number.isFinite(opening.aboveBoardMm)) fail(`${label}: a wall opening needs aboveBoardMm (its bottom above the board top surface)`);
@@ -847,7 +1203,7 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
       checkWallFeature(label, opening.wall, [alongCenter - width / 2, alongCenter + width / 2], [zBottom, zBottom + height]);
       const entry: Vector3 = frame.alongIndex === 1 ? [frame.outerFace, alongCenter, zBottom + height / 2] : [alongCenter, frame.outerFace, zBottom + height / 2];
       const rounded = entry.map(r9) as Vector3;
-      openings.push({ label, target: "base", shape: opening.shape, entryCenterMm: rounded, axis: frame.axis, widthDirection: frame.widthDirection, widthMm: width, heightMm: height, cornerRadiusMm: corner, throughDepthMm: w });
+      openings.push({ label, target: "base", shape: opening.shape, entryCenterMm: rounded, axis: frame.axis, widthDirection: frame.widthDirection, widthMm: width, heightMm: height, cornerRadiusMm: corner, throughDepthMm: w, face: opening.wall, ...(slot ? { slot } : {}) });
       openingsDerived.push({ label, wall: opening.wall, shape: opening.shape, centerMm: rounded, sizeMm: [width, height], ...(corner > 0 ? { cornerRadiusMm: corner } : {}) });
       // A flat ceiling (rect, or the straight part of a rounded-rect) is a bridge when the base prints floor-down.
       const flat = opening.shape === "circle" ? 0 : width - 2 * corner;
@@ -865,6 +1221,8 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
     const sl = positive("vents.slotLengthMm", vent.slotLengthMm);
     const pitch = positive("vents.pitchMm", vent.pitchMm);
     if (sl <= sw + EPS) fail(`vents.slotLengthMm ${sl} must exceed vents.slotWidthMm ${sw} (the length includes the round ends)`);
+    if (sw < LIMITS.minSlotWidthMm - EPS) fail(`vents.slotWidthMm ${sw} is below the ${LIMITS.minSlotWidthMm} mm minimum slot width`);
+    if (sl < sw + LIMITS.minSlotStraightMm - EPS) fail(`vents.slotLengthMm ${sl} must be at least vents.slotWidthMm + ${LIMITS.minSlotStraightMm} (${r9(sw + LIMITS.minSlotStraightMm)}): the straight part of a slot is at least ${LIMITS.minSlotStraightMm} mm`);
     if (vent.slots > 1 && pitch < sw + LIMITS.minWebMm - EPS) fail(`vents.pitchMm ${pitch} must exceed vents.slotWidthMm ${sw} by at least ${LIMITS.minWebMm} mm (the web between two slots), so at least ${r9(sw + LIMITS.minWebMm)}`);
     const offsets = Array.from({ length: vent.slots }, (_, index) => (index - (vent.slots - 1) / 2) * pitch);
     const centers: Vector3[] = [];
@@ -907,6 +1265,14 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
     }
   }
 
+  // R1: a profile-based cut (rect, rounded-rect or slot opening; vent slots) followed by another on the same face deletes
+  // its profile Wire right after its cut.
+  openings.forEach((opening, index) => {
+    if (opening.shape === "circle") return;
+    const later = openings.slice(index + 1).some((other) => other.face === opening.face && other.shape !== "circle") || (input.vents !== undefined && input.vents.on === opening.face);
+    if (later) opening.dropProfile = true;
+  });
+
   // --- board stand-in ------------------------------------------------------------------------------------------------
   let board: BoardCasePlan["board"];
   if (input.boardStandIn) {
@@ -926,29 +1292,50 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
   const blockers = posts.filter((post) => circleHitsRect(post.axis, post.radius, grownBoard)).map((post) => post.label);
   if (taperHitsRect(grownBoard, [-Infinity, Infinity])) blockers.push("the 45 degree gussets");
   const boardDropIn = blockers.length === 0;
+  // A blocker over the board outline itself stops the board; one only inside the 0.2 mm margin may let it pass, tightly.
+  const boardRect: Rect = { min: [boardMin[0], boardMin[1]], max: [boardMin[0] + L, boardMin[1] + W] };
+  const hardBlock = posts.some((post) => circleHitsRect(post.axis, post.radius, boardRect)) || taperHitsRect(boardRect, [-Infinity, Infinity]);
   const assembly = {
     boardDropIn,
     note: boardDropIn
       ? posts.length === 0
-        ? "no corner bosses: the board drops straight in"
+        ? stack ? "bossStyle \"stack\": no corner bosses (the lid screws run through the board holes), so the board drops straight in onto the standoffs" : "no corner bosses: the board drops straight in"
         : `plan view: no corner boss or gusset overlaps the board outline grown by ${dropIn} mm, so the board drops straight in past the ${bossStyle} bosses`
-      : `plan view: ${blockers.join(", ")} overlap the board outline grown by ${dropIn} mm, so the board cannot be lowered straight into the finished base${bossStyle === "floor" ? " (fit.boardClearanceMm is below the drop-in clearance)" : "; bossStyle \"floor\" keeps the bosses beside the board"}`,
+      : hardBlock
+        ? `plan view: ${blockers.join(", ")} overlap the board outline, so the board cannot be lowered straight into the finished base${bossStyle === "floor" ? "" : "; bossStyle \"floor\" keeps the bosses beside the board"}`
+        : `plan view: the board comes within ${dropIn} mm of ${blockers.join(", ")}, so it may not lower freely${bossStyle === "floor" ? " (fit.boardClearanceMm is below the drop-in clearance)" : "; bossStyle \"floor\" keeps the bosses beside the board"}`,
   };
   if (!boardDropIn && !allowBlockedBoard) {
     if (bossStyle === "floor") {
       fail(`the floor-standing corner bosses are fit.boardClearanceMm ${bc} mm from the board, less than the ${dropIn} mm the board needs to drop in past them; raise fit.boardClearanceMm to ${dropIn}, or pass lid.fasteners.allowBlockedBoard: true to build it anyway`);
     }
-    fail(`with bossStyle "${bossStyle}" the corner bosses${bossStyle === "tapered" ? " and their 45 degree gussets" : ""} hang over the board corners: in plan view ${blockers.join(", ")} overlap the board outline grown by ${dropIn} mm, so the board cannot be lowered into the finished base. Use bossStyle "floor" (the bosses stand beside the board), or pass lid.fasteners.allowBlockedBoard: true to build it anyway`);
+    fail(hardBlock
+      ? `with bossStyle "${bossStyle}" the corner bosses${bossStyle === "tapered" ? " and their 45 degree gussets" : ""} hang over the board corners: in plan view ${blockers.join(", ")} overlap the board outline grown by ${dropIn} mm, so the board cannot be lowered into the finished base. Use bossStyle "floor" (the bosses stand beside the board), or pass lid.fasteners.allowBlockedBoard: true to build it anyway`
+      : `with bossStyle "${bossStyle}" the board comes within ${dropIn} mm of ${blockers.join(", ")} in plan view, so it may not lower freely. Use bossStyle "floor" (the bosses stand beside the board), or pass lid.fasteners.allowBlockedBoard: true to build it anyway`);
   }
 
   const notches: LipNotch[] = posts.map((post, index) => {
-    if (!widenNotches) return { kind: "cylinder", centerMm: [post.axis[0], post.axis[1], r9(lipBottomZ - OV)] as Vector3, radiusMm: r9(post.radius + lc), heightMm: r9(d + 3 * OV) };
+    // A corner web of this boss rises to the wall top in the corner quadrant: no lip piece may stay there either.
+    const cornerWebbed = webs.some((web) => web.kind === "corner" && web.features.includes(post.label));
+    if (!widenNotches && !(cornerWebbed && lipCornerPiece > 1e-6)) return { kind: "cylinder", centerMm: [post.axis[0], post.axis[1], r9(lipBottomZ - OV)] as Vector3, radiusMm: r9(post.radius + lc), heightMm: r9(d + 3 * OV) };
     const corner = cavityCorners[index]!;
     const far: Vector2 = [post.axis[0] + Math.sign(post.axis[0] - corner[0]) * (post.radius + lc), post.axis[1] + Math.sign(post.axis[1] - corner[1]) * (post.radius + lc)];
     const near: Vector2 = [corner[0] - Math.sign(post.axis[0] - corner[0]) * OV, corner[1] - Math.sign(post.axis[1] - corner[1]) * OV];
     const min: Vector3 = [r9(Math.min(near[0], far[0])), r9(Math.min(near[1], far[1])), r9(lipBottomZ - OV)];
     return { kind: "box", originMm: min, sizeMm: [r9(Math.abs(far[0] - near[0])), r9(Math.abs(far[1] - near[1])), r9(d + 3 * OV)], cornerPieceMm: r9(lipCornerPiece) };
   });
+  // The lip piece between the two notches of one side narrows where the notch discs come closest (the lip row nearest the
+  // boss axes); it must stay minLipNeckMm wide there (a box notch cuts straight across at boss + lid clearance).
+  if (posts.length > 0) {
+    const notchRadius = bossR + lc;
+    const band: Vector2 = [lc, lc + lw];
+    const rowDistance = s < band[0] ? band[0] - s : s > band[1] ? s - band[1] : 0;
+    const chordHalf = widenNotches ? notchRadius : rowDistance >= notchRadius ? 0 : Math.sqrt(notchRadius * notchRadius - rowDistance * rowDistance);
+    for (const [side, length] of [["x", cavityL], ["y", cavityW]] as const) {
+      const neck = length - 2 * s - 2 * chordHalf;
+      if (neck < LIMITS.minLipNeckMm - EPS) fail(`the lid lip between the two boss notches along ${side} is ${r3(neck)} mm wide at its narrowest, below the ${LIMITS.minLipNeckMm} mm minimum: use a smaller lid.fasteners.bossDiameterMm, a thinner lid.lipWallMm or a larger board clearance`);
+    }
+  }
 
   const bounds = (min: Vector3, max: Vector3): Bounds => ({ min: min.map(r9) as Vector3, max: max.map(r9) as Vector3 });
   const lidHoles = lidHoleSpec;
@@ -962,8 +1349,11 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
       innerRadiusMm: r9(Ri),
     },
     standoffGroups,
+    webs,
     ...(standoffFloorHoles ? { standoffFloorHoles } : {}),
-    ...(lidFasteners && postHole ? {
+    ...(lidPosts ? { lidPosts } : {}),
+    ...(lidWebs.length > 0 ? { lidWebs } : {}),
+    ...(corner && postHole ? {
       posts: {
         // Hung bosses start at postBottom (the cylinder reaches OV below its base centre); floor bosses stand on the floor top.
         centersMm: posts.map((post) => [post.axis[0], post.axis[1], r9(bossStyle === "floor" ? floorTopZ : postBottomZ + OV)] as Vector3),
@@ -1010,6 +1400,7 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
     outerMm: bounds([ox, oy, oz], [ox + outerL, oy + outerW, wallTopZ]),
     cavityMm: bounds([cavMin[0], cavMin[1], floorTopZ], [cavMax[0], cavMax[1], wallTopZ]),
     innerCornerRadiusMm: r9(Ri),
+    cornerGapMm: r9(cornerGap),
     cornerWallMm: r9(cornerWall),
     floorTopZMm: r9(floorTopZ),
     boardMm: bounds([boardMin[0], boardMin[1], boardBottomZ], [boardMin[0] + L, boardMin[1] + W, boardTopZ]),
@@ -1017,12 +1408,14 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
     componentTopZMm: r9(componentTopZ),
     wallTopZMm: r9(wallTopZ),
     lidTopZMm: r9(lidTopZ),
-    lidMm: bounds([ox, oy, lipBottomZ + exploded], [ox + outerL, oy + outerW, lidTopZ]),
+    lidMm: bounds([ox, oy, Math.min(lipBottomZ, stack ? boardTopZ + LIMITS.stackPostGapMm : lipBottomZ) + exploded], [ox + outerL, oy + outerW, lidTopZ]),
     explodedMm: exploded,
     standoffAxesMm: standoffs.map((standoff) => [r9(standoff.axis[0]), r9(standoff.axis[1])]),
     ...(standoffInput ? { standoffTopZMm: r9(boardBottomZ) } : {}),
     lidBossAxesMm: posts.map((post) => post.axis),
-    ...(lidFasteners ? { lidBossBottomZMm: r9(postBottomZ), bossStyle } : {}),
+    ...(lidFasteners ? { bossStyle, bossStyleReason: resolved?.styleReason ?? "lid.fasteners.bossStyle" } : {}),
+    ...(corner ? { lidBossBottomZMm: r9(postBottomZ) } : {}),
+    ...(stackDerived ? { stack: stackDerived } : {}),
     assembly,
     boardWallClearanceMm: {
       xNeg: r9(boardMin[0] - cavMin[0]), xPos: r9(cavMax[0] - (boardMin[0] + L)),
@@ -1038,6 +1431,7 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
       // Top face down, a countersink widens toward the bed: its cone faces down at half the included angle from
       // vertical. Every other lid face (plate, lip, notches, holes, lid openings, lid vents) is vertical or horizontal.
       lidMaxOverhangDeg: r9(lidHoleSpec?.countersink ? lidHoleSpec.countersink.includedAngleDeg / 2 : 0),
+      ...(stack ? { lidPostOverhangDeg: 0 } : {}),
       openingCeilings,
     },
     lipOuterMm: bounds([cavMin[0] + lc, cavMin[1] + lc, lipBottomZ + exploded], [cavMax[0] - lc, cavMax[1] - lc, wallTopZ + exploded]),
@@ -1045,6 +1439,7 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
     openings: openingsDerived,
     ...(ventsDerived ? { vents: ventsDerived } : {}),
     plannedUndoSteps,
+    webs,
     fasteners: { ...(standoffFastener ? { standoffs: standoffFastener } : {}), ...(lidFastener ? { lid: lidFastener } : {}) },
   };
 
@@ -1056,21 +1451,24 @@ export function planBoardCase(input: BoardCaseInput): BoardCasePlan {
 export function countBoardCaseSteps(plan: Omit<BoardCasePlan, "name" | "derived">, exploded: number): number {
   const pattern = (count: number, single: number, perItem: number) => count === 1 ? single : perItem * count + 1;
   let steps = 1 + (plan.base.outerRadiusMm > 0 ? 1 : 0) + 1 + (plan.base.innerRadiusMm > 0 ? 1 : 0) + 1;
+  if (plan.webs.length > 0) steps += plan.webs.reduce((sum, web) => sum + (web.strip ? 2 : 1), 0) + 1;
   for (const group of plan.standoffGroups) steps += group.centersMm.length === 1 ? 4 : 2 * group.centersMm.length + 2;
   if (plan.standoffFloorHoles) steps += pattern(plan.standoffFloorHoles.entryCentersMm.length, 2, 1);
   if (plan.taper) steps += 3 * plan.taper.cones.length + 1;
   if (plan.posts) steps += plan.posts.centersMm.length === 1 ? 4 : 2 * plan.posts.centersMm.length + 2;
+  if (plan.lidWebs && plan.lidWebs.length > 0) steps += plan.lidWebs.length + 1;
+  for (const group of plan.lidPosts ?? []) steps += group.centersMm.length === 1 ? 4 : 2 * group.centersMm.length + 2;
   const lid = plan.lid;
   steps += 1 + (lid.plateRadiusMm > 0 ? 1 : 0) + 1 + (lid.lipRadiusMm > 0 ? 1 : 0) + 1 + (lid.lipInnerRadiusMm > 0 ? 1 : 0) + lid.notches.length + 2;
   if (lid.holes) steps += lid.holes.countersink ? pattern(lid.holes.entryCentersMm.length, 4, 3) : pattern(lid.holes.entryCentersMm.length, 2, 1);
-  for (const opening of plan.openings) steps += opening.shape === "circle" ? 2 : 3 + (opening.cornerRadiusMm > 0 ? 1 : 0);
+  for (const opening of plan.openings) steps += (opening.shape === "circle" ? 2 : opening.slot ? 5 : 3 + (opening.cornerRadiusMm > 0 ? 1 : 0)) + (opening.dropProfile ? 1 : 0);
   if (plan.vents) steps += pattern(plan.vents.entryCentersMm.length, 5, 4);
   if (plan.board) {
     steps += 1;
     for (const group of plan.board.holeGroups) steps += pattern(group.entryCentersMm.length, 2, 1);
   }
   // One delete for the construction Wires the cone, countersink, connector opening and slot recipes keep.
-  if (plan.taper || lid.holes?.countersink || plan.openings.some((opening) => opening.shape !== "circle") || plan.vents) steps += 1;
+  if (plan.taper || lid.holes?.countersink || plan.openings.some((opening) => opening.shape !== "circle" && !opening.dropProfile) || plan.vents || plan.webs.some((web) => web.strip)) steps += 1;
   if (exploded > 0) steps += 1;
   return steps;
 }
@@ -1264,7 +1662,7 @@ export class BoardCaseRecipe {
       await native(operation, run, (before, after) => [id = singleAdded(before, after, `${stage} ${operation}`, type)]);
       return id;
     };
-    const sub = async (run: (revision: string) => Promise<SubRecipeResult>, targetId: number): Promise<void> => {
+    const sub = async (run: (revision: string) => Promise<SubRecipeResult>, targetId: number): Promise<SubRecipeResult> => {
       const before = current;
       const listedBefore = steps.length;
       try {
@@ -1274,6 +1672,7 @@ export class BoardCaseRecipe {
         requireSameDocument(initial, current);
         if (current.revision !== report.afterRevision) throw new Error(`${stage}: the document moved on after the sub-recipe (${report.afterRevision} -> ${current.revision})`);
         if (report.resultBodyIds.length !== 1 || report.resultBodyIds[0] !== targetId) throw new Error(`${stage}: expected the sub-recipe to keep body ${targetId}, got ${report.resultBodyIds.join(", ")}`);
+        return report;
       } catch (error) {
         const partial = (error as { completedSteps?: RecipeStep[] }).completedSteps;
         if (Array.isArray(partial) && steps.length === listedBefore) steps.push(...partial.map((entry) => ({ stage, operation: entry.operation, beforeRevision: entry.beforeRevision, afterRevision: entry.afterRevision, affectedBodyIds: entry.affectedBodyIds })));
@@ -1312,6 +1711,27 @@ export class BoardCaseRecipe {
       const cavityId = await create("create-cavity-cutter", (revision) => ops.createBox(plan.base.cavityOriginMm, plan.base.cavitySizeMm, undefined, revision));
       if (plan.base.innerRadiusMm > 0) await native("round-cavity-cutter", (revision) => ops.fillet(cavityId, verticalEdgeIds(current, cavityId, "cavity cutter"), plan.base.innerRadiusMm, revision), solidKept(cavityId));
       await native("cut-cavity", (revision) => ops.boolean([baseId], [cavityId], "difference", false, revision), (_before, after) => { requireSolid(after, baseId, stage); requireAbsent(after, [cavityId], stage); return [baseId]; });
+
+      // Webs that close narrow gaps (R4), joined before the standoffs and bosses so their holes are cut through them.
+      if (plan.webs.length > 0) {
+        stage = "webs";
+        const webIds: number[] = [];
+        for (const web of plan.webs) {
+          if (web.box) {
+            const box = web.box;
+            webIds.push(await create("create-web-box", (revision) => ops.createBox(box.originMm, box.sizeMm, undefined, revision)));
+            continue;
+          }
+          const strip = web.strip!;
+          const points = strip.cornersMm.map((point) => [point[0], point[1], strip.bottomZMm] as Vector3);
+          const profileId = await create("create-web-profile", (revision) => ops.createPolyline(points, true, revision), "Wire");
+          const expected = { min: [Math.min(...points.map((point) => point[0])), Math.min(...points.map((point) => point[1]))], max: [Math.max(...points.map((point) => point[0])), Math.max(...points.map((point) => point[1]))] };
+          const matching = current.regions.filter((region) => region.sketchWireIds.includes(profileId) && Math.abs(region.displayBoundsMm.min[0] - expected.min[0]!) <= 0.05 && Math.abs(region.displayBoundsMm.min[1] - expected.min[1]!) <= 0.05 && Math.abs(region.displayBoundsMm.max[0] - expected.max[0]!) <= 0.05 && Math.abs(region.displayBoundsMm.max[1] - expected.max[1]!) <= 0.05);
+          if (matching.length !== 1) throw new Error(`webs: expected one Region for the web profile ${profileId}, found ${matching.length}`);
+          webIds.push(await create("extrude-web", (revision) => ops.extrudeRegions([matching[0]!.id], strip.heightMm, revision)));
+        }
+        await native("join-webs", (revision) => ops.boolean([baseId], webIds, "union", false, revision), (_before, after) => { requireSolid(after, baseId, stage); requireAbsent(after, webIds, stage); return [baseId]; });
+      }
 
       // Standoffs under the board holes.
       stage = "standoffs";
@@ -1373,6 +1793,17 @@ export class BoardCaseRecipe {
         return ringIds;
       });
       await native("join-lip-to-lid", (revision) => ops.boolean([lidId], ringIds, "union", false, revision), (_before, after) => { requireSolid(after, lidId, stage); requireAbsent(after, ringIds, stage); return [lidId]; });
+      // Stack: lid webs (R4, the lip's height), then the posts hanging from the plate with their screw clearance holes.
+      if (plan.lidWebs && plan.lidWebs.length > 0) {
+        stage = "lid-webs";
+        const webIds: number[] = [];
+        for (const web of plan.lidWebs) webIds.push(await create("create-lid-web-box", (revision) => ops.createBox(web.originMm, web.sizeMm, undefined, revision)));
+        await native("join-lid-webs", (revision) => ops.boolean([lidId], webIds, "union", false, revision), (_before, after) => { requireSolid(after, lidId, stage); requireAbsent(after, webIds, stage); return [lidId]; });
+      }
+      if (plan.lidPosts) {
+        stage = "lid-posts";
+        for (const group of plan.lidPosts) await sub((revision) => bossPattern(recipes, lidId, group, revision, [0, 0, -1]), lidId);
+      }
       if (plan.lid.holes) {
         stage = "lid-screw-holes";
         const holes = plan.lid.holes;
@@ -1386,9 +1817,19 @@ export class BoardCaseRecipe {
       for (const opening of plan.openings) {
         stage = `opening:${opening.label}`;
         const targetId = opening.target === "lid" ? lidId : baseId;
-        await sub((revision) => opening.shape === "circle"
+        const heightDirection: Vector3 = [opening.axis[1] * opening.widthDirection[2] - opening.axis[2] * opening.widthDirection[1], opening.axis[2] * opening.widthDirection[0] - opening.axis[0] * opening.widthDirection[2], opening.axis[0] * opening.widthDirection[1] - opening.axis[1] * opening.widthDirection[0]];
+        const report = await sub((revision) => opening.shape === "circle"
           ? recipes.createThroughHole({ targetId, entryCenterMm: opening.entryCenterMm, axis: opening.axis, holeDiameterMm: opening.widthMm, throughDepthMm: opening.throughDepthMm, overshootMm: BOARD_CASE_CONSTANTS.overshootMm, revision })
-          : recipes.createConnectorOpening({ targetId, entryCenterMm: opening.entryCenterMm, axis: opening.axis, widthDirection: opening.widthDirection, widthMm: opening.widthMm, heightMm: opening.heightMm, cornerRadiusMm: opening.cornerRadiusMm, throughDepthMm: opening.throughDepthMm, overshootMm: BOARD_CASE_CONSTANTS.overshootMm, revision }), targetId);
+          : opening.slot
+            // Radius = half the shorter side: a slot along the longer side.
+            ? recipes.createSlottedHole({ targetId, entryCenterMm: opening.entryCenterMm, axis: opening.axis, slotDirection: opening.widthMm >= opening.heightMm ? opening.widthDirection : heightDirection.map((value) => Math.abs(value) < 1e-12 ? 0 : value) as Vector3, overallLengthMm: Math.max(opening.widthMm, opening.heightMm), widthMm: Math.min(opening.widthMm, opening.heightMm), throughDepthMm: opening.throughDepthMm, overshootMm: BOARD_CASE_CONSTANTS.overshootMm, revision })
+            : recipes.createConnectorOpening({ targetId, entryCenterMm: opening.entryCenterMm, axis: opening.axis, widthDirection: opening.widthDirection, widthMm: opening.widthMm, heightMm: opening.heightMm, cornerRadiusMm: opening.cornerRadiusMm, throughDepthMm: opening.throughDepthMm, overshootMm: BOARD_CASE_CONSTANTS.overshootMm, revision }), targetId);
+        if (opening.dropProfile) {
+          // Another profile cut follows on this face: remove this profile Wire now (see OpeningCut.dropProfile).
+          const profileId = (report as { profileBodyId?: number }).profileBodyId ?? addedIds(initial, current, "Wire").at(-1);
+          if (profileId === undefined) throw new Error(`${stage}: the opening profile Wire is missing`);
+          await native("delete-opening-profile", (revision) => ops.remove([profileId], revision), (_before, after) => { requireAbsent(after, [profileId], stage); return [profileId]; });
+        }
       }
       if (plan.vents) {
         stage = "vents";
@@ -1537,8 +1978,8 @@ export class BoardCaseRecipe {
   }
 }
 
-function bossPattern(recipes: PlasticityRecipes, targetId: number, pattern: CylinderPattern, revision: string): Promise<SubRecipeResult> {
-  const shared = { targetId, axis: [0, 0, 1] as Vector3, outerDiameterMm: pattern.outerDiameterMm, heightMm: pattern.heightMm, holeDiameterMm: pattern.holeDiameterMm, holeDepthMm: pattern.holeDepthMm, baseOverlapMm: pattern.baseOverlapMm, cutterOvershootMm: BOARD_CASE_CONSTANTS.overshootMm, revision };
+function bossPattern(recipes: PlasticityRecipes, targetId: number, pattern: CylinderPattern, revision: string, axis: Vector3 = [0, 0, 1]): Promise<SubRecipeResult> {
+  const shared = { targetId, axis, outerDiameterMm: pattern.outerDiameterMm, heightMm: pattern.heightMm, holeDiameterMm: pattern.holeDiameterMm, holeDepthMm: pattern.holeDepthMm, baseOverlapMm: pattern.baseOverlapMm, cutterOvershootMm: BOARD_CASE_CONSTANTS.overshootMm, revision };
   return pattern.centersMm.length === 1
     ? recipes.createScrewBoss({ ...shared, baseCenterMm: pattern.centersMm[0]! })
     : recipes.createScrewBossPattern({ ...shared, baseCentersMm: pattern.centersMm });

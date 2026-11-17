@@ -216,13 +216,13 @@ test("lid.fasteners.bossStyle is a strict enum defaulting to floor; each style b
   await withClient(async (client, calls) => {
     const tools = (await client.listTools()).tools;
     const schema = tools.find((entry) => entry.name === "plasticity_create_board_case")!.inputSchema as unknown as { properties: { lid: { properties: { fasteners: { properties: { bossStyle: { enum?: string[] } } } } } } };
-    assert.deepEqual(schema.properties.lid.properties.fasteners.properties.bossStyle.enum, ["tapered", "hanging", "floor"]);
+    assert.deepEqual(schema.properties.lid.properties.fasteners.properties.bossStyle.enum, ["tapered", "hanging", "floor", "stack"]);
     const bad = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...CASE, lid: { fasteners: { ...CASE.lid.fasteners, bossStyle: "pillar" } }, revision: "r0" } });
     assert.equal(bad.isError, true);
     assert.deepEqual(calls, []);
   });
-  // The tapered wall top: componentTop 6.6 + 5 + 1 = 12.6, + boss length 6, + reach (2.5 sqrt 2 + 3), - rise (1 mm inner radius x (sqrt 2 - 1)).
-  const taperedWallTop = Math.round((12.6 + 6 + 2.5 * Math.SQRT2 + 3 - (Math.SQRT2 - 1)) * 1e6) / 1e6;
+  // The tapered wall top (round-1 value; the inner radius is the 0.5 mm board clearance again).
+  const taperedWallTop = 24.928427;
   // No bossStyle: the default floor style; CASE has an x- wall opening, so the cavity grows along y (B). "floor" with
   // growAxis "x" keeps the x growth of the earlier rows.
   for (const [style, growAxis, expectedWallTop] of [[undefined, undefined, 14.1], ["tapered", undefined, taperedWallTop], ["hanging", undefined, 18.6], ["floor", "x", 14.1]] as const) {
@@ -251,13 +251,30 @@ test("allowBlockedBoard and growAxis are strict schema fields; the corner radius
     const fasteners = schema.properties.lid.properties.fasteners.properties;
     assert.equal(fasteners.allowBlockedBoard!.type, "boolean");
     assert.deepEqual(fasteners.growAxis!.enum, ["x", "y"]);
-    assert.match(fasteners.bossStyle!.description ?? "", /^Default floor/);
-    assert.match(schema.properties.walls.properties.outerCornerRadiusMm.description ?? "", /min\(radius - wall, .*board corner/);
+    assert.match(fasteners.bossStyle!.description ?? "", /^Default stack when the board has 2\+ holes .* else floor/);
+    assert.match(schema.properties.walls.properties.outerCornerRadiusMm.description ?? "", /min\(radius - wall, board clearance\)/);
     const blocked = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...CASE, lid: { fasteners: { ...CASE.lid.fasteners, allowBlockedBoard: undefined } }, revision: "r0" } });
     assert.equal(blocked.isError, true);
     assert.match(text(blocked), /hang over the board corners.*bossStyle "floor"/);
     const wrongType = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...CASE, lid: { fasteners: { ...CASE.lid.fasteners, allowBlockedBoard: "yes" } }, revision: "r0" } });
     assert.equal(wrongType.isError, true);
     assert.deepEqual(calls, []);
+  });
+});
+
+test("S: a stack case passes the strict schema without standoffs.fastener and builds through plasticity_call", async () => {
+  await withClient(async (client, calls) => {
+    const stack = {
+      originMm: [2000, 0, 0],
+      board: { lengthMm: 51.5, widthMm: 28.3, holes: [[2.6, 2.6], [48.9, 2.6], [2.6, 25.7], [48.9, 25.7]].map(([xMm, yMm]) => ({ xMm, yMm, diameterMm: 3 })), componentHeightMm: 8 },
+      standoffs: { heightMm: 4, outerDiameterMm: 5 },
+      lid: { fasteners: { screw: "M2.5", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 4, countersunk: false } },
+    };
+    const result = json(await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_create_board_case", arguments: { ...stack, revision: "r0" } } }));
+    assert.equal(result.derived.bossStyle, "stack");
+    assert.match(result.derived.bossStyleReason, /^default: the lid screws go through the 4 board holes/);
+    assert.equal(result.derived.stack.postAxesMm.length, 4);
+    assert.equal(result.undoSteps, calls.length);
+    assert.equal(result.undoSteps, result.derived.plannedUndoSteps);
   });
 });
