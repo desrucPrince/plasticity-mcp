@@ -547,7 +547,12 @@ Entry side, from exact rays. Each axis is judged by exact ray hits on the
 target from the kernel (the operation behind `plasticity_probe_surface`), not
 by face bounds. The rays run parallel to the axis: the axis ray and 8 rays on
 the bore radius, plus 8 on the head radius with a countersink or counterbore,
-cast both ways. For `select` they start at the two ends of the source hole
+and a clearance ring of the same number of rays 0.05 mm outside each of those
+radii, at the same angles, cast both ways. A ring has 16 rays instead of 8
+when the widest probed diameter (the bore, its countersink head or
+counterbore) is above 10 mm. Only the axis ray and the radius rings find the
+side, the entry, the rim and the wall; the clearance rings serve the two
+guards described below. For `select` they start at the two ends of the source hole
 (along +axis from its upper end, along -axis from its lower end); for `axesMm`
 they start at `pointMm`. A face a ray starts on and leaves is ignored, so a
 part touching the source face works. With `axesMm`, rays that hit the target
@@ -591,8 +596,63 @@ counterbore's depth in the bore and head rays' wall. Countersunk (90 degrees)
 and counterbore holes are through holes; a countersink opens on the entry face
 (the face toward the source). The existing through, blind, countersink and
 counterbore recipes (single or pattern, one call per drill direction) do the
-cut; a transfer adds `ceil(rays / 64)` probe calls (18 rays per axis, 34 with
-a head), a few milliseconds each. The read-back requires, for every axis, a
+cut; a transfer adds `ceil(rays / 64)` probe calls (34 rays per axis, 66 with
+a head or above Ø10, 130 with both), a few milliseconds each.
+
+Thin walls (final review). Four guards refuse a cut that would leave a wall
+or membrane thinner than 0.05 mm, or that the rays cannot prove:
+
+1. The clearance ring. Each ray 0.05 mm outside the bore radius must meet the
+   same crossings, at the same distances, as the ray at the same angle on the
+   bore radius, as far as the cut reaches (the whole line for a through bore,
+   the depth plus 0.05 mm for a blind hole; a head's ring is compared down to
+   the counterbore depth or the countersink's cone depth plus 0.05 mm). A
+   difference is a wall, a void or a step within 0.05 mm of the cut surface:
+   the call is refused before the edit ("the hole leaves a wall thinner than
+   0.05 mm beside the bore", with the axis, the ray and the two faces). A bore
+   whose rim is 0.002 mm from a pocket wall or from an internal void, and a
+   Ø0.99 hole up a 1 mm wall, are refused this way; 0.06 mm of wall is cut.
+2. 16 rays per ring above Ø10, so the gap between neighbouring rays stays
+   below 0.39 x the radius.
+3. Complete rays only. A probe ray is complete when it carries neither
+   `unresolvedCrossings` nor `grazing` (see `plasticity_probe_surface`). A
+   `grazing` entry within the cut's reach, a crossing the probe cannot place
+   (a display-mesh crossing no exact hit explains), or an odd crossing count
+   whose crossings do not alternate (into the material, out of it) through
+   the first one past the cut's reach refuses the call before the edit: "the
+   entry could not be proven", with the ray and the reason. On the side away
+   from the drill the rays must be complete up to the entry distance, and an
+   axis with no crossing at all is a miss (which `onMiss: "skip"` may pass)
+   only when every one of its rays is complete. Before this round the two
+   flags refused nothing: `unresolvedCrossings` only withheld the planner's
+   internal `wallMm`, and `grazing` was not read.
+4. The blind-floor rule. After a blind cut, rays run from each floor into
+   the material behind it: one from the floor centre and one ring (8, or 16
+   above Ø10) 0.01 mm inside the floor's rim, at angles half a step off the
+   planning rings, so they are lines the plan did not sample. On every ray
+   the next face behind the floor must be at least 0.05 mm away and the ray
+   must be complete; otherwise the cut is undone ("the blind hole leaves a
+   membrane thinner than 0.05 mm under its floor", with the face and the
+   distance). The reply's `floorProbe` (`{ rays, calls, ms }`) counts these
+   rays. A Ø4 blind hole that stops 0.02 mm above a Ø1 cross hole lying
+   between the planning rays is undone this way.
+
+What the rays still cannot see. The rays are samples, not a sweep. A feature
+that lies wholly between two neighbouring rays of a ring and off the axis
+ray is met by none of them: a cross hole or slot narrower than the gap
+between rays (0.77 x the radius with 8 rays: 1.5 mm on a Ø4 bore, 3.8 mm on
+Ø10; 0.39 x the radius with 16), a thin rib, the corner of a void. Under a
+blind floor the union of the planning lines and the floor lines is 16
+directions on the rim and the centre, and nothing between the centre and the
+rim. Such a feature is found only when the cut itself shows it in the
+read-back: a bore face that is not a whole cylinder, an edge shorter than
+0.05 mm, a body that is not closed and natively valid. A wall or membrane
+thinner than 0.05 mm that no ray crosses and that leaves every cut face whole
+is not found. Move the axis, or check the wall with `plasticity_probe_surface`
+rays of your own, when a part has features smaller than those gaps near a
+hole.
+
+The read-back requires, for every axis, a
 full-turn hole face of the diameter coaxial with the source axis within
 1e-6 mm, an entry circle centred on the entry point bordering a planar face in
 the entry plane, every face the cut made whole (each bore cylinder, the
@@ -612,7 +672,9 @@ accept:native-bracket-mate -- --target ID --allow-disposable-mutations
 pair, a Z bracket with a 2 x 2 grid, a block + bracket mate chain as direct
 calls and as one lean batch, live rejections, cases `d1`-`d11` with the
 review's failing inputs, one per defect, and cases `r2b1` (recessed entries),
-`r2b2` (countersink and counterbore breakout) and `r2t` (ray time); every check reads the geometry with
+`r2b2` (countersink and counterbore breakout), `r2t` (ray time) and `t1` (the final review's thin walls: the
+membrane over a cross hole, the bore beside a pocket wall and a void, Ø0.99 up a 1 mm wall, with a cut control for
+each, and the ray counts at Ø10 and Ø12); every check reads the geometry with
 `plasticity_find_faces`/`plasticity_find_edges` (limit 1000),
 `plasticity_validate_bodies`, `plasticity_check_interference` and
 `plasticity_measure_parallel_planar_face_clearance`; every refusal checks
@@ -3799,10 +3861,28 @@ npm run accept:native-solid-split -- --target TARGET_ID --allow-disposable-mutat
   When one of these intersections fails, the error names the target and the
   tool. Plasticity rolls the whole command back; the error says whether the
   document reads back as before the call (Undo depth and every body's version)
-  and gives the current revision, which the rollback changes. Plasticity refuses
-  an intersection that would not change the target ("Operation has no effect")
-  both when the tool misses the target and when it contains it, so a tool that
-  contains a target (after the earlier tools) also fails the call.
+  and gives the current revision, which the rollback changes. Final review: an
+  intersection always runs one pass per target and tool, so several targets
+  with ONE tool keep their IDs too (they used to vanish, with new bodies in
+  their place). Plasticity refuses an intersection that would not change the
+  target ("Operation has no effect") both when the tool misses the target and
+  when it contains it. The kernel decides first; only for a pass it refuses
+  that way does the kernel's clash test (`Eval.Collisions`, Parasolid
+  `PK_TOPOL_clash`) of the current target against that tool say which it is.
+  The target inside the tool (`AinB`): the target is unchanged by that tool,
+  the call goes on, the reply lists the tool in `unchangedBy` (and target and
+  tool in `unchangedPairs`), and the tool is still consumed unless
+  `keepTools` (inside the same command, so the call stays one Undo step; a
+  call in which nothing was cut and every tool is kept still adds one Undo
+  step that changes nothing). No contact: the intersection is empty and the
+  call fails ("the intersection is empty"). Touching surfaces only: it fails
+  ("the intersection has no volume"). Anything else, or a clash test that
+  fails: the call fails and says the two could not be told apart. A failed
+  call that Plasticity rolled back ends with "The document is unchanged."
+  after the read-back sentence and the current revision, and carries no
+  stack. The clash test alone never skips a pass: a tool with an internal
+  void that lies inside the target answers `AinB` too, and the kernel still
+  cuts it (a 40 mm cube in a 60 mm cube with a 10 mm void gives 63,000 mm3).
 - `plasticity_screenshot` with `frame`: the saved camera is the one that holds
   still. A camera still easing toward its end pose after `plasticity_set_view`
   or `plasticity_set_camera` is waited for (up to 2 s) before it is saved, so the

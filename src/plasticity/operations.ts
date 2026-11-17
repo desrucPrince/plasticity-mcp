@@ -454,6 +454,86 @@ export const CHAMFER_SOURCE = nativeFunction`async function (Factory, args) {
   return evidence;
 }`;
 
+// The intersection passes of booleanDetailed: one kernel intersection per target and tool inside one command. The kernel
+// decides first. Only when it refuses a pass with "Operation has no effect" does its clash test (Eval.Collisions,
+// Parasolid PK_TOPOL_clash) of the CURRENT target against the tool say why. Live on 26.1.3 both a tool that contains the
+// target and a tool that misses it are refused with that same text, and the clash test tells them apart:
+//   [AinB]         the target lies inside the tool and nothing was cut: the target is unchanged by this tool;
+//   []             no contact (also a target inside a void of the tool): the intersection is empty;
+//   Abut*          the bodies touch on their surfaces only: no volume;
+//   anything else  (or a clash test that throws): not told apart, the call fails and says so.
+// The clash test alone is NOT a containment test: a tool with an internal void that lies inside the target answers [AinB]
+// too, while the kernel cuts that pass (40 mm box in a 60 mm box with a 10 mm void: 63,000 mm3). So it never skips a pass.
+// A failing pass throws 'BOOLEAN_PASS: <sentence>' (and 'BOOLEAN_NOTE: <sentence>' on the next line) so the host can quote
+// it without the renderer's stack.
+export const BOOLEAN_INTERSECTION_SOURCE = nativeFunction`async function (Factory, pk_default, args) {
+  ${findView}
+  const model = id => {
+    for (const [versionId, item] of nativeApi.geo.geometryModel) if (nativeApi.db.lookupStableId(versionId) === id) return item.model;
+    throw new Error('Unknown body ID: ' + id);
+  };
+  const firstLine = error => String(error?.message ?? error).split('\\n')[0];
+  const clash = (targetId, toolId) => {
+    const kernel = pk_default.a;
+    const evaluator = new kernel.Eval(kernel.Context.Get());
+    const result = evaluator.Collisions(Int32Array.of(model(targetId).Id()), Int32Array.of(model(toolId).Id()));
+    return Array.from(result?.clashTypes ?? [], type => String(kernel.ClashType[Number(type)] ?? type));
+  };
+  if (this.executor.isBusy) throw new Error('Plasticity is busy');
+  const editor = this;
+  const unchanged = [];
+  let failure;
+  const refuse = (sentence, note) => { failure = new Error('BOOLEAN_PASS: ' + sentence + (note ? '\\nBOOLEAN_NOTE: ' + note : '')); return failure; };
+  const command = new this.commands.BooleanCommand(this);
+  command.remember = false;
+  command.execute = async function () {
+    const unconsumed = [];
+    for (const [targetIndex, targetId] of args.targetIds.entries()) {
+      const last = targetIndex === args.targetIds.length - 1;
+      for (const toolId of args.toolIds) {
+        const pair = 'target ' + targetId + ' with tool ' + toolId;
+        const factory = new Factory(editor).resource(this);
+        try {
+          factory.targets = [find(targetId)];
+          factory.tools = [find(toolId)];
+          factory.operationType = 15901;
+          factory.keepTools = args.keepTools || !last;
+          await factory.commit();
+          continue;
+        } catch (error) {
+          const reason = firstLine(error);
+          if (!/no effect/i.test(reason)) throw refuse('Intersection of ' + pair + ' failed: ' + reason);
+          let types, clashError;
+          try { types = clash(targetId, toolId); } catch (problem) { clashError = firstLine(problem); }
+          if (types && types.length > 0 && types.every(type => type === 'AinB')) {
+            // Proven twice: the kernel cut nothing, and its clash test puts the target inside the tool.
+            unchanged.push({ targetId, toolId });
+            if (last && !args.keepTools) unconsumed.push(toolId);
+            try { await factory.cancel(); } catch {}
+            continue;
+          }
+          if (types && types.length === 0) throw refuse('Intersection of ' + pair + ' failed: the intersection is empty: Plasticity refused it (' + reason + ') and the kernel clash test finds no contact between the two bodies');
+          if (types && types.every(type => type === 'AbutNoClass' || type === 'AbutBOutA')) throw refuse('Intersection of ' + pair + ' failed: the intersection has no volume: Plasticity refused it (' + reason + ') and the kernel clash test finds the two bodies touching only on their surfaces');
+          throw refuse('Intersection of ' + pair + ' failed: ' + reason,
+            'The kernel clash test could not tell a tool that contains the target (which would leave the target unchanged) from an empty intersection: ' + (clashError ? 'it failed (' + clashError + ')' : 'it reported ' + [...new Set(types)].join(', ')) + '.');
+        }
+      }
+    }
+    // A tool whose pass on the last target cut nothing was not consumed by a factory; without keepTools it goes too,
+    // through DeleteCommand's own execute run inside this command (one Undo step). Calling geo.removeItem here directly
+    // left Plasticity refusing every later command ("Cannot start command while another command is running") in a live
+    // probe.
+    if (unconsumed.length > 0) {
+      editor.selection.selected.removeAll();
+      for (const toolId of unconsumed) editor.selection.selected.add(find(toolId));
+      await editor.commands.DeleteCommand.prototype.execute.call(this);
+    }
+  };
+  await this.exec(command);
+  if (failure) throw failure;
+  return { unchanged };
+}`;
+
 // ExtensionShape members the MCP exposes (probes-2026-11 FINDINGS gap 3). Arc fails on NURBS sheets and
 // bias, Bbox have no measurable effect, so they stay out.
 export const SHEET_EXTENSION_SHAPES = { linear: "Linear", soft: "Soft", reflective: "Reflective", natural: "Natural" } as const;
@@ -6153,41 +6233,23 @@ export class PlasticityOperations {
   }
 
   async boolean(targetIds: number[], toolIds: number[], operation: "union" | "difference" | "intersection", keepTools: boolean, revision: string): Promise<RuntimeState> {
+    return (await this.booleanDetailed(targetIds, toolIds, operation, keepTools, revision)).state;
+  }
+
+  // Intersection always runs one pass per target and tool inside one native command (one Undo step):
+  //  - the kernel's intersection with several tools is target AND (tool 1 OR tool 2 ...), so each tool is its own pass;
+  //  - its intersection with several targets gives the results new IDs, so each target is its own pass (also with one tool);
+  //  - a pass the kernel refuses with "Operation has no effect" is judged by the kernel's clash test of the current target
+  //    against that tool (BOOLEAN_INTERSECTION_SOURCE): a tool that contains the target leaves it as it is and is reported
+  //    in unchangedBy; no contact makes the intersection empty, and the call fails and Plasticity rolls it back.
+  // Every tool is kept until the last target's pass with it; then keepTools decides, also for a pass that cut nothing.
+  async booleanDetailed(targetIds: number[], toolIds: number[], operation: "union" | "difference" | "intersection", keepTools: boolean, revision: string): Promise<{ state: RuntimeState; unchangedBy: Array<{ targetId: number; toolId: number }> }> {
     const before = await this.assertRevision(revision);
     if (targetIds.some((id) => toolIds.includes(id))) throw new Error("Target and tool IDs must not overlap");
-    if (operation === "intersection" && new Set(toolIds).size > 1) {
-      // The kernel's intersection takes target AND (tool 1 OR tool 2 ...) when given several tools, so each tool is
-      // intersected in turn inside one native command: the result is target AND tool 1 AND tool 2 ... A native
-      // intersection with several targets does not keep the target IDs, so each target gets its own one-target
-      // passes. Every tool is kept until the last target's pass with it, then keepTools decides.
+    if (operation === "intersection") {
+      let outcome: { unchanged?: Array<{ targetId: number; toolId: number }> } | undefined;
       try {
-        await this.runtime.mutate(nativeFunction`async function (Factory, args) {
-          ${findView}
-          if (this.executor.isBusy) throw new Error('Plasticity is busy');
-          const editor = this;
-          let failure;
-          const command = new this.commands.BooleanCommand(this);
-          command.remember = false;
-          command.execute = async function () {
-            for (const [targetIndex, targetId] of args.targetIds.entries()) {
-              for (const toolId of args.toolIds) {
-                try {
-                  const factory = new Factory(editor).resource(this);
-                  factory.targets = [find(targetId)];
-                  factory.tools = [find(toolId)];
-                  factory.operationType = 15901;
-                  factory.keepTools = args.keepTools || targetIndex < args.targetIds.length - 1;
-                  await factory.commit();
-                } catch (error) {
-                  failure = new Error('Intersection of target ' + targetId + ' with tool ' + toolId + ' failed: ' + String(error?.message ?? error));
-                  throw failure;
-                }
-              }
-            }
-          };
-          await this.exec(command);
-          if (failure) throw failure;
-        }`, ["BooleanFactory"], [{ targetIds: [...new Set(targetIds)], toolIds: [...new Set(toolIds)], keepTools }]);
+        outcome = await this.runtime.mutate(BOOLEAN_INTERSECTION_SOURCE, ["BooleanFactory", "pk_default"], [{ targetIds: [...new Set(targetIds)], toolIds: [...new Set(toolIds)], keepTools }]);
       } catch (error) {
         if (this.runtime.isUncertain?.() === true) throw error;
         let now: RuntimeState;
@@ -6196,13 +6258,15 @@ export class PlasticityOperations {
         } catch {
           throw error;
         }
-        const message = (error instanceof Error ? error.message : String(error)).replace(/\.\s*$/u, "");
+        const raw = error instanceof Error ? error.message : String(error);
+        const message = (/BOOLEAN_PASS: ([^\n]*)/u.exec(raw)?.[1] ?? raw).replace(/\.\s*$/u, "");
+        const note = /BOOLEAN_NOTE: ([^\n]*)/u.exec(raw)?.[1];
         const back = now.undoDepth === before.undoDepth && sameBodies(before, now);
         throw new Error(`${message}. ${back
           ? `Plasticity rolled the command back: the document reads back as before this call (Undo depth ${now.undoDepth}, every body at its earlier version)`
-          : `The document does not read back as before this call (Undo depth ${now.undoDepth}, was ${before.undoDepth}); read the bodies before you continue`}; the current revision is ${now.revision}.`);
+          : `The document does not read back as before this call (Undo depth ${now.undoDepth}, was ${before.undoDepth}); read the bodies before you continue`}; the current revision is ${now.revision}.${back ? " The document is unchanged." : ""}${note ? ` ${note}` : ""}`);
       }
-      return await this.state();
+      return { state: await this.state(), unchangedBy: Array.isArray(outcome?.unchanged) ? outcome.unchanged : [] };
     }
     await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findView}
@@ -6213,7 +6277,7 @@ export class PlasticityOperations {
       factory.keepTools = args.keepTools;
       ${commandEnd}
     }`, ["BooleanFactory"], [{ targetIds, toolIds, operation, keepTools }]);
-    return await this.state();
+    return { state: await this.state(), unchangedBy: [] };
   }
 
   // MultiCutFactory with Wire cutters: each curve is swept along direction (Plasticity's own choice

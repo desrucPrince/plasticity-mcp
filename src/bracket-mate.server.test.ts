@@ -355,3 +355,32 @@ test("review fixes through the server: kind, onMiss, relation and allowOverlap a
   assert.equal(kernel.calls.filter((name) => name === "undo").length, 0);
   await close();
 });
+
+test("final review T1 through the server: a rim within 0.05 mm of the plate edge is refused with the revision unchanged; a blind hole reports its floor rays", async () => {
+  const kernel = boxKernel();
+  const { client, close } = await connect(kernel.fake);
+  const description = (await client.listTools()).tools.find((tool) => tool.name === "plasticity_transfer_holes")!.description!;
+  assert.match(description, /walls under 0\.05 mm beside the bore or under a blind floor/);
+  const call = async (toolName: string, args: Record<string, unknown>) => {
+    const response = await client.callTool({ name: "plasticity_call", arguments: { toolName, arguments: { ...args, revision: kernel.state().revision } } });
+    return { isError: response.isError === true, text: text(response) };
+  };
+  await call("plasticity_create_box", { originMm: [0, 0, 0], sizeMm: [5, 5, 5], name: "source" });
+  const plate = JSON.parse((await call("plasticity_create_box", { originMm: [10, 5, -4], sizeMm: [40, 30, 4], name: "plate" })).text).change.added[0].id;
+  const before = kernel.state();
+  const mutations = kernel.calls.length;
+  // Ø3 with its axis 1.52 mm from the plate's x- side: the rim is 0.02 mm inside the top face, the clearance ring leaves it.
+  const thin = await call("plasticity_transfer_holes", { sourceId: 1, targetId: plate, axesMm: [{ pointMm: [11.52, 20, 30], axis: [0, 0, -1] }], hole: { diameterMm: 3, through: true } });
+  assert.equal(thin.isError, true);
+  assert.match(thin.text, /axis 0 \(point \[11\.52,20,30\], direction \[0,0,-1\]\): the hole leaves a wall thinner than 0\.05 mm beside the bore: the ray at radius 1\.55 mm, \d+ degrees \(0\.05 mm outside the bore\) meets no further face where the ray on the bore radius meets face \d+:pz\+ \(Plane\) 0 mm from the entry plane/);
+  assert.equal(kernel.state().revision, before.revision, "refused before the edit: the revision did not move");
+  assert.equal(kernel.calls.length, mutations, "no native mutation");
+  // 0.06 mm of wall is cut, and a blind hole comes back with the floor rays it cast.
+  const cut = await call("plasticity_transfer_holes", { sourceId: 1, targetId: plate, axesMm: [{ pointMm: [11.56, 20, 30], axis: [0, 0, -1] }], hole: { diameterMm: 3, through: true } });
+  assert.equal(cut.isError, false, cut.text);
+  const blind = await call("plasticity_transfer_holes", { sourceId: 1, targetId: JSON.parse(cut.text).targetId, axesMm: [{ pointMm: [30, 20, 30], axis: [0, 0, -1] }], hole: { diameterMm: 3, depthMm: 2 } });
+  assert.equal(blind.isError, false, blind.text);
+  const reply = JSON.parse(blind.text);
+  assert.deepEqual([reply.holeCount, reply.probe.rays, reply.floorProbe.rays, reply.floorProbe.calls], [1, 34, 9, 1]);
+  await close();
+});
