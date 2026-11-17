@@ -5,7 +5,7 @@ import { copyFile, mkdir, mkdtemp, open, readFile, realpath, rm, rmdir, stat, wr
 import { basename, dirname, extname, join, resolve } from "node:path";
 
 import { NATIVE_VIEWPORT_CAPTURE } from "./viewport-capture.ts";
-import { boundsExactness, CAMERA_RESTORE_TOLERANCE, exactBounds, explainXNurbsError, probeSurface, SCREENSHOT_VIEW_SOURCE, type ScreenshotViewRestored, SQUARE_ENDS_SOURCE, squareClosureProblem, SURFACE_ALIGN_CONTINUITY, SURFACE_ALIGN_COINCIDENCE_MM, SURFACE_ALIGN_DRIVE, SURFACE_ALIGN_FALLBACK_WAIT_MS, SURFACE_ALIGN_READBACK_SOURCE, SURFACE_ALIGN_READY_MS, SURFACE_ALIGN_TIMEOUTS, type AlignReadBackNative, type SurfaceAlignContinuity, readSupportBounds, supportBounds, validateScreenshotView, withScreenshotView, type ExactBoundsEvidence, type ProbeSurfaceEvidence, type ProbeSurfaceRequest, type ScreenshotViewOptions } from "./surfacing.ts";
+import { boundsExactness, CAMERA_RESTORE_TOLERANCE, PENDING_VIEW_SAME_POSE, PROBE_SURFACE_COLLECT_ABOVE_MB, PROBE_SURFACE_HEAP_CHECK_EVERY_RAYS, exactBounds, explainXNurbsError, probeSurface, SCREENSHOT_VIEW_SOURCE, type ScreenshotViewRestored, SQUARE_ENDS_SOURCE, squareClosureProblem, SURFACE_ALIGN_CONTINUITY, SURFACE_ALIGN_COINCIDENCE_MM, SURFACE_ALIGN_DRIVE, SURFACE_ALIGN_FALLBACK_WAIT_MS, SURFACE_ALIGN_READBACK_SOURCE, SURFACE_ALIGN_READY_MS, SURFACE_ALIGN_TIMEOUTS, type AlignReadBackNative, type SurfaceAlignContinuity, readSupportBounds, supportBounds, validateScreenshotView, withScreenshotView, type ExactBoundsEvidence, type ProbeSurfaceEvidence, type ProbeSurfaceRequest, type ScreenshotViewOptions } from "./surfacing.ts";
 import { nativeFunction } from "./native-function.ts";
 import { classifyPickOutcome, type PickCancelResult, type PickOutcome, type PickOutcomeFacts } from "./pick-command-outcome.ts";
 import { LONG_NATIVE_IMPORT_TIMEOUT_MS, NATIVE_STATE_READ_TIMEOUT_MS, PlasticityRuntime, type RevisionProbe, type RuntimeState } from "./runtime.ts";
@@ -781,7 +781,7 @@ export interface PickCommandSpec {
   extraBindings?: string[];
   /** The dialog is a DOM element, not a scene object (Surface Align's AlignEdgeDialog): also search the document for it. */
   domDialog?: boolean;
-  /** Never cancel the command while its state is not Awaiting (it is computing); leave it running and report undetermined. */
+  /** Never cancel the command while it may be computing (command not Awaiting, its factory in progress, or after finish()); leave it running and report undetermined. */
   cancelOnlyWhenAwaiting?: boolean;
   /** Put the user's selection back after the command, on success and on failure. */
   restoreSelection?: boolean;
@@ -956,15 +956,25 @@ function pickCommandSource(drive: string, extraBindings: string[] = []): string 
     const ourActive = () => command !== null && executor.active?.command === command;
     // Cancels OUR command only, then waits until it has settled and is no longer active. Never throws.
     // cancelOnlyWhenAwaiting (Surface Align): a command that is computing is never cancelled (a cancel mid-compute killed
-    // the renderer); the helper waits up to cancelMs for it to reach Awaiting or settle, and otherwise leaves it running.
+    // the renderer). Measured live on 26.1.3 (probes-2026-11-surfacing FINDINGS, "Command and factory states"): the
+    // command reads Awaiting while its factory updates (factory state "updating") and from finish() until the commit has
+    // landed (then Finished, factory "committed"). So the command state alone does not say "idle": a cancel is sent only
+    // when the command is Awaiting, its factory is not in progress (updating, committing) and finish() has not started a
+    // commit. Otherwise the helper waits up to cancelMs for that, or for the command to settle, and then leaves it running.
     const stateTag = value => value === null || value === undefined ? null : typeof value === 'string' ? value : (value.tag ?? value.constructor?.name ?? null);
+    let dialogFound = null;
+    const factoryTag = () => { const state = dialogFound?.params?._state; return state && typeof state === 'object' && 'value' in state ? stateTag(state.value) : null; };
+    // driveFailed: the drive step threw before finish(), so the call it awaited (the factory update) has ended; a factory
+    // tag left at "updating" is stale then.
+    let driveFailed = false;
+    const computing = () => stateTag(command?._state) !== 'Awaiting' || (!driveFailed && /ing$/.test(String(factoryTag() ?? ''))) || (finishCalled && !finishThrew);
     const cancel = async () => {
       if (cancelStart === null) cancelStart = Date.now();
       if (args.cancelOnlyWhenAwaiting && ourActive()) {
         const waitUntil = Date.now() + args.timeouts.cancelMs;
-        while (ourActive() && !settled && stateTag(command?._state) !== 'Awaiting' && Date.now() < waitUntil) await sleep(10);
-        if (ourActive() && !settled && stateTag(command?._state) !== 'Awaiting') {
-          result.cancelError = 'not cancelled: the command was still computing (state ' + String(stateTag(command?._state)) + '); it was left to finish';
+        while (ourActive() && !settled && computing() && Date.now() < waitUntil) await sleep(10);
+        if (ourActive() && !settled && computing()) {
+          result.cancelError = 'not cancelled: the command may still be computing (command state ' + String(stateTag(command?._state)) + ', factory state ' + String(factoryTag()) + (finishCalled && !finishThrew ? ', after finish()' : '') + '); it was left to finish';
           result.cancel = 'failed';
           return false;
         }
@@ -1029,6 +1039,7 @@ function pickCommandSource(drive: string, extraBindings: string[] = []): string 
         if (dialog) break;
         await sleep(10);
       }
+      dialogFound = dialog;
       if (!dialog) {
         if (settled) {
           result.outcome = 'rejected';
@@ -1058,6 +1069,7 @@ function pickCommandSource(drive: string, extraBindings: string[] = []): string 
         driveOpen = false;
         if (driveError !== null || !driveDone) {
           result.driveThrew = driveError !== null;
+          driveFailed = driveError !== null;
           result.error = driveError ?? 'the drive step did not return';
           if (finishCalled) await cancelAfterFinish('drive');
           else {
@@ -2481,9 +2493,37 @@ export class PlasticityOperations {
   }
 
   // Surfacing reads (src/plasticity/surfacing.ts): exact ray hits on curved faces and exact NURBS extents. Read-only.
+  // The probe keeps nothing in the renderer (measured: after a forced collection the heap is where it was), but every
+  // call leaves garbage there (objects that outlived a scavenge) that V8 frees only at its next major collection, and
+  // V8 may let hundreds of megabytes pile up first. A forced collection takes 4 to 6 s on a Plasticity renderer
+  // (measured), so it is not done on a fixed schedule: every PROBE_SURFACE_HEAP_CHECK_EVERY_RAYS rays the used heap is
+  // read, and a collection is asked for only when it has grown PROBE_SURFACE_COLLECT_ABOVE_MB above the lowest reading
+  // since the last collection.
+  private probeHeap = { rays: 0, baseline: null as number | null };
   async probeSurface(request: ProbeSurfaceRequest, revision: string): Promise<ProbeSurfaceEvidence> {
     const state = await this.assertRevision(revision);
-    return await probeSurface(this.runtime, state, request);
+    const evidence = await probeSurface(this.runtime, state, request);
+    this.probeHeap.rays += evidence.rays.length;
+    if (this.probeHeap.rays >= PROBE_SURFACE_HEAP_CHECK_EVERY_RAYS) {
+      this.probeHeap.rays = 0;
+      await this.releaseProbeGarbage();
+    }
+    return evidence;
+  }
+
+  // Best effort: a renderer that refuses these requests still answered the probe.
+  private async releaseProbeGarbage(): Promise<void> {
+    if (typeof this.runtime.cdp !== "function") return;
+    try {
+      const used = async () => Number(((await this.runtime.cdp("Runtime.getHeapUsage")) as { usedSize?: unknown } | undefined)?.usedSize);
+      const now = await used();
+      if (!Number.isFinite(now)) return;
+      if (this.probeHeap.baseline === null || now < this.probeHeap.baseline) { this.probeHeap.baseline = now; return; }
+      if (now - this.probeHeap.baseline < PROBE_SURFACE_COLLECT_ABOVE_MB * 1e6) return;
+      await this.runtime.cdp("HeapProfiler.collectGarbage");
+      const after = await used();
+      this.probeHeap.baseline = Number.isFinite(after) ? after : null;
+    } catch { /* the probe result stands */ }
   }
 
   async exactBounds(ids: number[], revision?: string): Promise<ExactBoundsEvidence> {
@@ -12299,8 +12339,10 @@ export class PlasticityOperations {
   }
 
   // Undo a shader/camera change an interrupted screenshot call left on the renderer (nothing happens when none is pending).
+  // A pending camera is put back only while the camera still is where the interrupted call left it; a camera moved since
+  // is the user's, so that record is dropped (pendingViewDiscarded). The shader is restored either way.
   async restorePendingScreenshotView() {
-    return await this.runtime.readNative<ScreenshotViewRestored>(SCREENSHOT_VIEW_SOURCE, ["name2shader"], [{ op: "restore", tolerance: CAMERA_RESTORE_TOLERANCE }], 15_000);
+    return await this.runtime.readNative<ScreenshotViewRestored>(SCREENSHOT_VIEW_SOURCE, ["name2shader"], [{ op: "restore", stale: true, tolerance: CAMERA_RESTORE_TOLERANCE, samePose: PENDING_VIEW_SAME_POSE }], 15_000);
   }
 
   // plasticity_screenshot's shader and frame options: set the analysis shader and/or aim the camera, capture, and always

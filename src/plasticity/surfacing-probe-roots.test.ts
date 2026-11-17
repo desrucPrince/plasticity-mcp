@@ -84,10 +84,24 @@ function runtimeFor(shapes: Shape[], type = "Solid") {
     geo: { geometryModel: new Map([[19, { view, model: {} }]]), automatics: new Set() },
     db: { lookupStableId: (versionId: number) => (versionId === 19 ? 9 : undefined), lookupFaceCollection: (ids: string[]) => ({ Size: () => 1, Get: () => faces[versionIds.indexOf(ids[0]!)] }), commit() {} },
   };
+  // The kernel range read: the distance from each point to its face (here the untrimmed analytic shape), all faces in one call.
+  class Eval {
+    DistancesToPoints(ids: Int32Array, xyz: Float64Array, offsets: Int32Array) {
+      const count = offsets[ids.length]!;
+      const distances = new Float64Array(count), nearests = new Float64Array(3 * count), params = new Float64Array(2 * count), errors = new Int32Array(count);
+      ids.forEach((id, i) => {
+        for (let k = offsets[i]!; k < offsets[i + 1]!; k += 1) {
+          const p: V = [xyz[3 * k]!, xyz[3 * k + 1]!, xyz[3 * k + 2]!], near = faces[id - 700]!.FindPointNear(K(p)), q = arr(near.exact);
+          distances[k] = len(sub(p, q)); nearests.set(q, 3 * k); params.set([near.u, near.v], 2 * k);
+        }
+      });
+      return { distances, nearests, params, errors, ok: count };
+    }
+  }
   const runtime = {
     async readNative(source: string, _bindings: string[], values: unknown[]) {
       const execute = new Function(`return (${source})`)() as (...args: unknown[]) => unknown;
-      return execute.apply(editor, [{ a: { Vector: KVector } }, ...values]);
+      return execute.apply(editor, [{ a: { Vector: KVector, Eval, Context: { Get: () => ({}) } } }, ...values]);
     },
   } as unknown as PlasticityRuntime;
   const state = { revision: "r1", bodies: [{ id: 9, versionId: 19, type, name: "b", boundsMm: { min: [-1000, -1000, -1000], max: [1000, 1000, 1000] }, faceIds: versionIds, edgeIds: [], faces: [], edges: [] }] } as unknown as RuntimeState;

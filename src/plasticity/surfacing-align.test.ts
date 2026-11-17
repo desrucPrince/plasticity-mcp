@@ -9,7 +9,7 @@ import { SURFACE_ALIGN_DRIVE, SURFACE_ALIGN_READBACK_SOURCE } from "./surfacing.
 // plasticity_surface_align (P6) on runPickCommand: the real generated renderer source runs against a stub editor whose
 // AlignEdgeDialog is a DOM element (a stub document), with the 26.1.3 executor that swallows execute() errors.
 
-type Scenario = "commit" | "update-throws" | "never-ready" | "computing" | "hang-after-finish" | "commit-misses";
+type Scenario = "commit" | "update-throws" | "never-ready" | "updating" | "computing" | "hang-after-finish" | "commit-misses";
 
 const CONTINUITY = { C1: 23150, C2: 23151, C3: 23152, G1: 23153, G2: 23154, G3: 23155, G0: 23156, Free: 23157 };
 
@@ -68,23 +68,34 @@ function fixture(scenario: Scenario = "commit", options: { cancel?: "normal" | "
           pairs: [edgeView(seen.selection![0]!), edgeView(seen.selection![1]!)],
           _state: { value: { tag: "updating" } },
           setContinuityForEdge(edge: { versionId: string }, value: number) { (seen.perEdge ??= []).push([edge.versionId, value]); },
-          async update() { if (scenario === "update-throws") throw new Error("XNurbs operation failed with error `30`."); updated = true; },
+          // Live (26.1.3): the factory reads "updating" while update() runs and "updated" after it; the command stays Awaiting.
+          async update() { factory._state = { value: { tag: "updating" } }; if (scenario === "update-throws") throw new Error("XNurbs operation failed with error `30`."); await new Promise((done) => setTimeout(done, 2)); updated = true; factory._state = { value: { tag: "updated" } }; },
         };
         if (options.observable === false) { delete factory._state; }
         const dialog = new FakeAlignDialog(factory);
         seen.dialog = dialog;
         dom = [{ notADialog: true }, dialog];
-        // The command settles into Awaiting and the factory updates shortly after the dialog appears.
-        // never-ready: the command reaches Awaiting (so a cancel is allowed) but its factory never finishes updating.
+        // The states are the ones measured live on 26.1.3 (probes-2026-11-surfacing FINDINGS, "Command and factory states"):
+        // the dialog appears with the command "None" and the factory "updating"; about 20 ms later the command is Awaiting
+        // and the factory "updated"; from finish() the command stays Awaiting (factory "updated") until the commit has
+        // landed, then it is Finished and the factory "committed".
+        // never-ready: the command is Awaiting and its factory is idle but never "updated" (a cancel is allowed).
+        // updating: the command is Awaiting while its factory never stops updating (a cancel must never be sent).
         // computing: the command never reaches Awaiting (a cancel must never be sent).
-        if (scenario === "never-ready") setTimeout(() => { this._state = { tag: "Awaiting" }; }, 20);
+        this._state = { tag: "None" };
+        if (scenario === "never-ready") setTimeout(() => { this._state = { tag: "Awaiting" }; factory._state = { value: { tag: "failed" } }; }, 20);
+        else if (scenario === "updating") setTimeout(() => { this._state = { tag: "Awaiting" }; }, 20);
         else if (scenario !== "computing" && options.observable !== false) setTimeout(() => { this._state = { tag: "Awaiting" }; factory._state = { value: { tag: "updated" } }; }, 20);
         dialog.onFinish = () => {
           seen.updateBeforeFinish = updated;
-          if (scenario === "hang-after-finish") { this._state = { tag: "Committing" }; return; }
+          // A commit that never lands: the command stays Awaiting and the factory "updated", exactly as in the first
+          // milliseconds of a real commit, so the states alone cannot tell a stalled commit from an idle command.
+          if (scenario === "hang-after-finish") return;
           dom = [];
           undoStack.push({ align: true });
           moving.versionId += 1;
+          this._state = { tag: "Finished" };
+          if (factory._state) factory._state = { value: { tag: "committed" } };
           resolve(undefined);
         };
       });
@@ -255,6 +266,21 @@ test("no cancel is ever sent while the command is not Awaiting: a computing comm
   const mutate = f.calls.find((call) => call.kind === "mutate")!;
   assert.equal((mutate.values[0] as { cancelOnlyWhenAwaiting?: boolean }).cancelOnlyWhenAwaiting, true);
   assert.equal((mutate.values[0] as { restoreSelection?: boolean }).restoreSelection, true);
+});
+
+test("A2: a factory still updating under an Awaiting command is never cancelled: left running, undetermined", async () => {
+  const f = fixture("updating");
+  await assert.rejects(align(f, { dialogMs: 1000, finishMs: 60, cancelMs: 200 }), (error: Error) => { assert.match(error.message, /reconcile/); assert.match(error.message, /factory state updating/); return true; });
+  assert.equal(f.seen.dialog!.finished, 0);
+  assert.equal(f.seen.cancelled, 0);
+  assert.equal(f.isUncertain(), true);
+});
+
+test("A2: after finish() the command still reads Awaiting while the commit runs: no cancel is sent then either", async () => {
+  const f = fixture("hang-after-finish");
+  await assert.rejects(align(f, { dialogMs: 1000, finishMs: 150, cancelMs: 200, settleMs: 50 }), (error: Error) => { assert.match(error.message, /reconcile/); assert.match(error.message, /after finish\(\)/); return true; });
+  assert.equal(f.seen.cancelled, 0);
+  assert.equal(f.isUncertain(), true);
 });
 
 test("a stall after finish() is not cancelled while the commit computes (state not Awaiting)", async () => {

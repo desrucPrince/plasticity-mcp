@@ -102,8 +102,24 @@ function stubEditor(options: { undoGrows?: boolean } = {}) {
     db: { lookupStableId: (versionId: number) => (versionId === 17 ? 7 : undefined), lookupFaceCollection: (ids: string[]) => { lookups.push(ids); return { Size: () => 1, Get: () => kernelFace }; }, commit() {} },
   };
   class Vector { x: number; y: number; z: number; constructor(x: number, y: number, z: number) { this.x = x; this.y = y; this.z = z; } }
-  const pk_default = { a: { Vector } };
-  return { editor, pk_default, lookups };
+  // The kernel range read (Eval.DistancesToPoints on face 501): the distance to the trimmed square, in one call for all points.
+  const rangeCalls: number[] = [];
+  class Eval {
+    DistancesToPoints(ids: Int32Array, xyz: Float64Array, offsets: Int32Array) {
+      assert.deepEqual(Array.from(ids), [501]);
+      const count = offsets[1]! - offsets[0]!;
+      rangeCalls.push(count);
+      const distances = new Float64Array(count), nearests = new Float64Array(3 * count), params = new Float64Array(2 * count), errors = new Int32Array(count);
+      for (let k = 0; k < count; k += 1) {
+        const p = { x: xyz[3 * k]!, y: xyz[3 * k + 1]!, z: xyz[3 * k + 2]! }, near = kernelFace.FindPointNear(p);
+        distances[k] = Math.hypot(p.x - near.exact.x, p.y - near.exact.y, p.z - near.exact.z);
+        nearests.set([near.exact.x, near.exact.y, near.exact.z], 3 * k); params.set([near.u, near.v], 2 * k);
+      }
+      return { distances, nearests, params, errors, ok: count };
+    }
+  }
+  const pk_default = { a: { Vector, Eval, Context: { Get: () => ({}) } } };
+  return { editor, pk_default, lookups, rangeCalls };
 }
 
 function executingRuntime(stub: ReturnType<typeof stubEditor>, calls: Array<{ bindings: string[]; values: unknown[] }> = []) {

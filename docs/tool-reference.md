@@ -1472,38 +1472,129 @@ along the ray: `pointMm`, `faceId` (`otherFaceIds` when the ray crosses an edge
 shared by several faces), `normal` (outward on a Solid), `distanceMm`, the
 kernel's `uCurvaturePerMm`/`vCurvaturePerMm` (signed by the surface
 parametrisation; compare magnitudes) and `residualMm`. `hits: 0` is a miss.
-How crossings are found (round 3): for Plane, Cylinder, Cone, Sphere and Torus
-faces every root of the ray against the untrimmed surface comes from a
-polynomial of degree 1, 2 or 4 built from the kernel's own surface data
-(`GetInfo`; a torus, which has no `GetInfo` on 26.1.3, from its constant
-principal curvature and three spine points), after the model is checked on nine
-kernel surface points; each root is then kept only if the kernel puts it on the
-trimmed face (`Face.FindPointNear` residual at most 0.000001 mm, refined by
-Newton steps when needed). B-spline faces (and any face whose model fails the
-check) are searched by sampling the ray's signed distance to the face every 1 mm
-(8 to 48 samples across the face's box), narrowing each closest approach between
-samples to a crossing pair or a tangency, plus display-mesh seeds. Hits on two
-faces within 0.001 mm along the ray are one crossing (an edge). A ray is
-complete when it carries neither flag: `unresolvedCrossings` (with
-`unresolvedReason` for the parity guard) says crossings may be missing - a
-display-mesh crossing no exact hit explains, or an odd number of crossings on a
-closed Solid from an origin outside its box; `grazing` lists faces the ray passes
-within 0.001 mm of without a crossing there, and a tangent touch (where the ray
-runs along the surface, |n.d| below 1e-6) is reported there instead of being
-counted. A hit at the ray origin is reported at distance 0 with the residual of
-that point. Points are rounded to 1e-9 mm. Live on 26.1.3, against the
-independent review's cases (sphere r20 at 19.96-19.9999 mm off axis, r1500 at
-1498 mm, torus at z 4.99 and y 14.99, an oblique ray 9.99 mm from a cylinder
-axis, a cone at 9.99 mm), every crossing comes back; 4,096 random rays on a
-torus, a sphere and a filleted box match the closed-form count on every ray, and
-on those three and the grip pad no ray returns an odd count without a flag.
-Speed: about 25 ms per 64 rays on the analytic bodies, about 40 ms on a 67-face
-body, about 190 ms for 64 random oblique rays across the B-spline grip pad. Live on 26.1.3
-(`accept:native-surfacing`): a sphere, a cylinder and a 30 degree plane agree
-with analytic heights within 5e-10 mm; a cubic Bezier extruded sheet agrees
-with its control-polygon formula (z = 3a s(1-s)) within 1e-15 mm; a ray through
-a holed block returns four hits. The read changes nothing: the native call checks the undo depth and body
-count before and after.
+How crossings are found (final review). Two kernel reads work together, because
+neither is enough alone (both measured live on 26.1.3):
+
+- The range read (`Eval.DistancesToPoints` on a face) gives the global distance
+  from a point to the trimmed face. It never failed, but it reads 0 for a point
+  within the kernel's resolution (0.00001 mm) of the face. All the points of one
+  search round go to the kernel in one call.
+- The nearest-point read (`Face.FindPointNear`) is precise to 1e-12 mm beside
+  the face interior. Beside a face boundary it can throw, or return a point
+  millimetres from the nearest one (2.8 mm on a trimmed torus face, 4.2 mm on a
+  G2 corner patch).
+
+The range read decides where the ray can meet a face. The nearest-point read
+only polishes a crossing that the range read has bracketed. Every reported
+point is then confirmed by the range read.
+
+- Plane, Cylinder, Cone, Sphere and Torus faces: every root of the ray against
+  the untrimmed surface comes from a polynomial of degree 1, 2 or 4 built from
+  the kernel's own surface data (`GetInfo`; a torus, which has no `GetInfo` on
+  26.1.3, from its constant principal curvature and three spine points), after
+  the model is checked on nine kernel surface points. The ray parameter is
+  measured from the ray point nearest the face and scaled by the surface size,
+  so the result does not depend on how far away the origin is (1 mm to 1 km in
+  the unit tests). A ray that runs in the surface (in a plane, along a ruling)
+  has no usable equation and is searched like a B-spline face.
+- B-spline faces: the distance from the ray to the trimmed face is read inside
+  the face's box. The distance changes by at most the step along a unit ray, so
+  two reads farther from the face than they are apart prove that the ray stays
+  clear between them. Every other stretch is read at 1 mm or finer. A change of
+  side between two reads is solved as its own crossing, inside its own bracket
+  (or it is a jump past the face boundary). A closest approach between two
+  reads is narrowed until it is clear, crosses (two crossings), or comes within
+  the kernel's resolution. The search assumes one closest approach between two
+  reads 1 mm apart.
+- The display mesh never supplies a value. Its crossings are extra seeds; a
+  crossing that only a seed finds is returned and flagged (`missed-crossing`).
+
+Accuracy: each point lies on its face's surface within `residualMm` (at most
+0.000001 mm), and on the trimmed face within the kernel's resolution, so at a
+face edge a point can lie up to 0.00001 mm outside the body. Hits on two faces
+within 0.001 mm along the ray are one crossing (an edge; `otherFaceIds`). A hit
+at the ray origin is reported at distance 0 with the residual of that point.
+Points are rounded to 1e-9 mm.
+
+A ray is complete when it carries neither flag.
+
+- `grazing: [{ faceId, minDistanceMm, atMm }]` lists faces the ray passes
+  within 0.001 mm of without a clean crossing: a tangent touch (where the ray
+  runs along the surface, |n.d| below 1e-6; never counted as a hit), a ray lying
+  in a planar face or along a ruling, a pass within 0.001 mm of a face edge,
+  and, on a B-spline face, a pair of crossings less than 0.001 mm deep (both
+  crossings are still returned).
+- `unresolvedCrossings` (a count) flags what could not be settled, with
+  `unresolvedReason` (text), `unresolvedFaceIds`, `unresolvedCode` and
+  `unresolvedCodes`. A kernel error on one face marks only that face, for that
+  ray; the other faces and rays are answered.
+
+`unresolvedCode` is the stable, machine-readable reason (exported as
+`PROBE_SURFACE_UNRESOLVED_CODES`). Match on it, not on the text.
+
+| code | meaning |
+|---|---|
+| `parity` | The crossings of the line with a closed Solid do not alternate entry and exit, or one of them is tangent or an edge touch. |
+| `kernel-error` | A kernel read failed on a face for this ray. |
+| `bracket-unresolved` | The range read located a crossing that the nearest-point read did not confirm. |
+| `search-limit` | The search of a face did not settle within its budget. |
+| `missed-crossing` | A display-mesh seed found a crossing that the distance search had missed. |
+| `mesh-crossing` | A display-mesh crossing that no exact hit explains (records of the older search only). |
+
+`unresolvedCodes` lists every code of the ray in the order of the table.
+`unresolvedCode` is `parity` only when the parity rule is the sole reason;
+otherwise it is the first other code.
+
+Parity rule (closed Solid only): the crossings of the whole line, behind the
+origin too, must alternate entry and exit by their normals, with an entry first
+and an exit last. This holds wherever the origin is, so an origin inside the
+bounds box but outside the body needs no special case. The crossings behind
+the origin are used for this check only and are never returned. For an odd
+count from an origin outside the bounds box the reason text is unchanged from
+earlier versions ("odd number of crossings (N) on a closed Solid from an outside
+origin: ...").
+
+Live on 26.1.3 (isolated instance):
+
+- The review's B-spline sheet (z = 27u(1-u)), 20,032 rays of the review's
+  families against the closed form: 18,306 rays have an unambiguous truth; 0
+  wrong counts without a flag (567 before), 7 wrong with a flag (447 before).
+- The grip pad: 4,159 rays from origins inside the bounds box but outside the
+  body: 0 odd counts. The review's two chords under the crown return 2 hits.
+- A torus probed from 3,300 mm away returns its 4 crossings within 1e-6 mm.
+- The two rays that made the whole call throw on a G2-filleted box return.
+- Earlier cases still hold: sphere r20 at 19.96-19.9999 mm off axis, r1500 at
+  1498 mm, torus at z 4.99 and y 14.99, an oblique ray 9.99 mm from a cylinder
+  axis, a cone at 9.99 mm; 4,096 random rays on a torus, a sphere and a
+  filleted box match the closed-form count on every ray.
+
+Speed, 64 random rays from outside the body, median, measured back to back on
+one machine:
+
+| body | tool call before | tool call now | native call before | native call now |
+|---|---|---|---|---|
+| sphere, cylinder, cone, torus | 34-40 ms | 35-40 ms | 7-9 ms | 8-11 ms |
+| filleted box (26 analytic faces), holed block | 35-42 ms | 38-41 ms | 9-14 ms | 13-16 ms |
+| B-spline sheet (1 face) | 105 ms | 51 ms | 77 ms | 27 ms |
+| grip pad (26 faces, B-spline crown) | 211 ms | 110 ms | 179 ms | 85 ms |
+| G2-filleted box (20 B-spline faces) | 228 ms | 120 ms | 201 ms | 105 ms |
+
+Analytic bodies are 1 to 4 ms slower per native call: one more kernel call
+confirms the crossings, and a Solid is searched along the whole line. Rays that
+graze a face cost more than these (they are narrowed in extra rounds).
+
+Memory: the probe keeps nothing in the renderer: after a forced collection the
+heap is where it was. Each call leaves garbage (objects that outlived a
+scavenge) that V8 frees only at its next major collection. A forced collection
+takes 4 to 6 s on a Plasticity renderer, so the tool does not force one on a
+fixed schedule: it reads the used heap after every 512 rays and asks for a
+collection (`HeapProfiler.collectGarbage`) only when the heap has grown 20 MB
+since the last one. Measured over 200,000 rays: 81.37 MB before and after a
+forced collection; without one the heap stood 12 MB higher at the end and
+19 MB higher at its peak (before: 29 MB higher after 60,000 rays).
+
+The read changes nothing: the native call checks the undo depth and body count
+before and after.
 
 `plasticity_exact_bounds` gives the exact axis-aligned extent of 1-32 Solid or
 Sheet bodies. Plasticity 26.1.3 has no kernel extrema call, so every Solid and
@@ -1529,11 +1620,20 @@ both out when the support read fails.
 Experimental: `plasticity_surface_align` exists only when the environment
 variable `PLASTICITY_EXPERIMENTAL_TOOLS` (a comma-separated list, read when the
 server starts) contains `surface_align`; otherwise it is absent from the tool
-list, the catalog and `plasticity_call`. It never cancels the command while
-Plasticity is computing (a cancel mid-compute killed the test renderer): a
-stalled computation is left to finish and the call returns undetermined
-(reconcile). Your selection is put back afterwards, on success and on failure
-(items of the rebuilt Sheet are left out, because they no longer exist).
+list, the catalog and `plasticity_call`. It never sends a cancel while
+Plasticity may be computing (a cancel mid-compute killed the test renderer).
+Live on 26.1.3 the command reads `Awaiting` also while its factory updates and
+from `finish()` until the commit has landed, so the command state alone is not
+enough: a cancel goes out only when the command is `Awaiting`, its factory is
+not in progress (`updating`) and `finish()` has not started a commit. Otherwise
+the command is left to finish and the call returns undetermined (reconcile).
+Your selection is put back afterwards, on success and on failure (items of the
+rebuilt Sheet are left out, because they no longer exist). Known limit, not
+specific to this tool: while a face stays selected, Plasticity starts its
+default face command after the next edit of any kind, and that edit call does
+not return (10 s timeout, session uncertain). Call `plasticity_clear_selection`
+before the next edit. See `discovery/probes-2026-11-surfacing/FINDINGS.md`,
+"Selected faces and the next edit".
 `plasticity_surface_align` moves the boundary edge of one Sheet (`moving`) onto
 the boundary edge of another Sheet (`reference`) with `g0`, `g1` or `g2`
 continuity, as Plasticity's Align (Edge Align) does: the moving Sheet is
@@ -3711,6 +3811,13 @@ npm run accept:native-solid-split -- --target TARGET_ID --allow-disposable-mutat
   when it still moved after 2 s) and `cameraSettleWaitMs`. A restore that is
   still not exact (`cameraRestored: false`, with the deviation) returns the
   written image; it is no longer an error.
+- `plasticity_screenshot` after an interrupted shader or frame call: the next
+  capture undoes what that call left behind (`restoredPendingView: true`). The
+  camera part is put back only while the camera still is where the interrupted
+  call left it (within 1e-6). A camera moved since (`plasticity_set_camera`,
+  `plasticity_set_view`, the mouse) stays where it is: the stale record is
+  dropped and the reply says `pendingViewDiscarded: true`. The shader part is
+  restored either way.
 - STEP, IGES and Parasolid exports: the file header names the output file, not
   the staging path, and carries no OS user name (STEP author and organisation are
   empty strings; IGES Global parameter 4 and the Parasolid `KEY=`/`FILE=` lines

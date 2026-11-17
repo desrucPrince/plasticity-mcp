@@ -127,3 +127,59 @@ test("validateScreenshotView rejects bad shaders and frames before any native ca
   assert.throws(() => validateScreenshotView({ frame: { bodyIds: [9] } }, state), /current body IDs: 9/);
   validateScreenshotView({ shader: "topo", frame: { bodyIds: [7, 8] } }, state);
 });
+
+// S1: a pending view left by an interrupted call. Its camera is put back only while the camera still is where that
+// call left it; a camera the user moved since stays, the record is dropped and the reply says so.
+const interruptedShaderAndFrame = async (stub: ReturnType<typeof stubEditor>) => {
+  await stub.runtime.readNative(SCREENSHOT_VIEW_SOURCE, ["name2shader"], [{ op: "apply", shader: "zebraVertical", frame: { bodyIds: [7] }, tolerance: 1e-9, samePose: 1e-6 }]);
+  assert.equal(stub.current()?.name, "zebraVertical");
+  assert.ok((globalThis as Record<symbol, unknown>)[KEY], "the interrupted call left its record");
+};
+const pendingRestore = async (stub: ReturnType<typeof stubEditor>) =>
+  await stub.runtime.readNative(SCREENSHOT_VIEW_SOURCE, ["name2shader"], [{ op: "restore", stale: true, tolerance: 1e-9, samePose: 1e-6 }]) as { restored: boolean; pendingViewDiscarded?: boolean; shader: string | null; cameraDeviation: number | null };
+
+test("S1: a stale pending view does not override a camera the user moved afterwards; the shader still comes back", async () => {
+  const stub = stubEditor();
+  await interruptedShaderAndFrame(stub);
+  // The user moves the camera (plasticity_set_camera): a new target and distance.
+  stub.controls.target.set(1, 2, 3); stub.controls.radius = 0.5; stub.controls.update();
+  const moved = { p: stub.camera.position.toArray(), t: stub.camera.target.toArray() };
+  const restored = await pendingRestore(stub);
+  assert.equal(restored.pendingViewDiscarded, true);
+  assert.equal(restored.restored, true, "the shader part was restored");
+  assert.equal(restored.cameraDeviation, null);
+  assert.equal(stub.current(), null);
+  assert.deepEqual(stub.camera.position.toArray(), moved.p);
+  assert.deepEqual(stub.camera.target.toArray(), moved.t);
+  assert.equal((globalThis as Record<symbol, unknown>)[KEY], undefined, "the stale record is dropped");
+  // Nothing is pending any more: the next plain capture restores nothing and reports nothing.
+  assert.deepEqual({ restored: (await pendingRestore(stub)).restored, discarded: (await pendingRestore(stub)).pendingViewDiscarded }, { restored: false, discarded: undefined });
+});
+
+test("S1: a pending view whose camera was not touched since is put back as before", async () => {
+  const stub = stubEditor();
+  const before = { p: stub.camera.position.toArray(), t: stub.camera.target.toArray(), z: stub.camera.zoom };
+  await interruptedShaderAndFrame(stub);
+  assert.notDeepEqual(stub.camera.target.toArray(), before.t);
+  const restored = await pendingRestore(stub);
+  assert.equal(restored.restored, true);
+  assert.equal(restored.pendingViewDiscarded, undefined);
+  assert.ok(restored.cameraDeviation !== null && restored.cameraDeviation <= 1e-9);
+  const close = (a: number[], b: number[]) => a.every((value, index) => Math.abs(value - b[index]!) <= 1e-12);
+  assert.ok(close(stub.camera.position.toArray(), before.p) && close(stub.camera.target.toArray(), before.t));
+  assert.equal(stub.camera.zoom, before.z);
+  assert.equal(stub.current(), null);
+});
+
+test("S1: a new shader+frame call after a moved camera drops the stale camera, reports it, and restores to the moved pose", async () => {
+  const stub = stubEditor();
+  await interruptedShaderAndFrame(stub);
+  stub.controls.target.set(1, 2, 3); stub.controls.radius = 0.5; stub.controls.update();
+  const moved = { p: stub.camera.position.toArray(), t: stub.camera.target.toArray() };
+  const result = await withScreenshotView(stub.runtime, { frame: { bodyIds: [7] } }, async () => ({ ok: true }));
+  assert.equal(result.pendingViewDiscarded, true);
+  assert.equal(result.view.frame?.cameraRestored, true);
+  const close = (a: number[], b: number[]) => a.every((value, index) => Math.abs(value - b[index]!) <= 1e-12);
+  assert.ok(close(stub.camera.position.toArray(), moved.p) && close(stub.camera.target.toArray(), moved.t), "the camera is back at the user's pose, not the stale one");
+  assert.equal(stub.current(), null);
+});

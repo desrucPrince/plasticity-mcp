@@ -17,9 +17,14 @@ import { SCREENSHOT_VIEW_SOURCE } from "../src/plasticity/surfacing.ts";
 import { PlasticityRuntime } from "../src/plasticity/runtime.ts";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const SECTIONS = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p6stall"] as const;
+const SECTIONS = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p6stall", "p6select"] as const;
 // p6stall is opt-in (--only p6stall): an injected stall ends in a cancel while Plasticity may still be computing, and in
 // one of about 150 such trials the isolated renderer died.
+// p6select is opt-in (--only p6select): the final review's A1 check (an edit straight after an align, with faces still
+// selected). It fails on Plasticity 26.1.3 with this server, and not because of the align: with a face selected,
+// Plasticity starts its default face command after ANY edit that runs through editor.exec, so the edit call never
+// returns (measured with no align at all; discovery/probes-2026-11-surfacing/FINDINGS.md, "Selected faces and the next
+// edit"). The fix belongs in the shared command wrapper of operations.ts. Each failing trial costs a 10 s timeout.
 const DEFAULT_SECTIONS: Section[] = ["p1", "p2", "p3", "p4", "p5", "p6", "p7"];
 type Section = (typeof SECTIONS)[number];
 
@@ -80,6 +85,9 @@ It builds disposable geometry at x >= 5000 mm and checks, per section:
      left behind.
   p6stall (opt-in) stalls injected at the operations layer before and after finish(): classified, never a certain
      "unchanged" after finish(). One of about 150 such trials killed the renderer, so it is not in the default run.
+  p6select (opt-in) the final review's A1 check: plasticity_join_sheets, plasticity_move and plasticity_fillet straight
+     after an align with one and with two faces selected (under 1 s, selection kept, no active command), plus the same
+     edit with no align. Fails on 26.1.3 until the shared command wrapper stops Plasticity's default face command.
   p7 plasticity_square_surface: four curves (boundary heights read by probe rays); a flat neighbour Sheet plus three
      curves at g0 and g1 (joined, read by the continuity tool); error 30 on an open box at g1; refusals; one undo restores.
 Every section undoes to its start. At the end the undo depth, body set, shader and camera equal the start.`;
@@ -155,6 +163,29 @@ const VIEW_STATE = nativeFunction`function () {
     pendingView: Boolean(globalThis[Symbol.for('plasticity-mcp.screenshot-view')]),
     globals: Object.getOwnPropertyNames(globalThis).filter(name => /align|probe|plasticity|surfacing/i.test(name)).sort(),
   };
+}`;
+// The camera with every orbit-control field (plain numbers), and the same put back exactly: the S1 check moves the camera
+// with plasticity_set_camera and must leave the instance as it found it.
+const SAVE_CAMERA = `function () {
+  const viewport = Array.from(this.viewports)[0], camera = viewport.camera, controls = viewport.orbitControls, out = { vectors: {}, numbers: {}, wantsSnap: controls.wantsSnap };
+  for (const name of ['target', 'targetEnd', 'focalOffset', 'focalOffsetEnd', 'pivot', 'quaternion', 'quaternionEnd', 'snaplessQuaternion', 'snappedQuaternion']) if (controls[name]?.toArray) out.vectors[name] = controls[name].toArray();
+  for (const name of ['radius', 'radiusEnd', 'zoom', 'zoomEnd']) if (typeof controls[name] === 'number') out.numbers[name] = controls[name];
+  return { controls: out, position: camera.position.toArray(), target: camera.target.toArray(), quaternion: camera.quaternion.toArray(), zoom: camera.zoom };
+}`;
+const RESTORE_CAMERA = `async function (args) {
+  const viewport = Array.from(this.viewports)[0], camera = viewport.camera, controls = viewport.orbitControls, saved = args.camera;
+  for (const [name, value] of Object.entries(saved.controls.vectors)) controls[name].fromArray(value);
+  for (const [name, value] of Object.entries(saved.controls.numbers)) controls[name] = value;
+  if (typeof saved.controls.wantsSnap === 'boolean') controls.wantsSnap = saved.controls.wantsSnap;
+  for (const name of ['targetVelocity', 'focalOffsetVelocity']) controls[name]?.set?.(0, 0, 0);
+  for (const name of ['radiusVelocity', 'zoomVelocity']) if (controls[name] && typeof controls[name].value === 'number') controls[name].value = 0;
+  camera.zoom = saved.zoom;
+  controls.setNeedsUpdate(); controls.update(1 / 60); camera.updateProjectionMatrix();
+  camera.position.fromArray(saved.position); camera.quaternion.fromArray(saved.quaternion); camera.target.fromArray(saved.target); camera.zoom = saved.zoom;
+  camera.updateMatrixWorld?.(true); camera.updateProjectionMatrix();
+  viewport.setNeedsRender();
+  for (let i = 0; i < 6; i += 1) await new Promise(resolve => { let done = false; const finish = () => { if (!done) { done = true; resolve(); } }; try { requestAnimationFrame(finish); } catch { finish(); } setTimeout(finish, 250); });
+  return { position: camera.position.toArray(), target: camera.target.toArray(), quaternion: camera.quaternion.toArray(), zoom: camera.zoom };
 }`;
 const CANCEL_ACTIVE = nativeFunction`async function () {
   if (this.executor.active) await this.executor.cancelActiveCommand();
@@ -372,6 +403,110 @@ async function p1(ctx: Ctx) {
     check(ctx, "p1", `${name}: 4,096 random rays, zero unflagged odd counts${name === "grip-pad" ? "" : ", every count equal to the closed-form count"}`, oddUnflagged === 0 && mismatch === 0, randomStats[name]);
   }
   results.random = randomStats;
+  // ---- Final review (P1-P4): the reviewer's rays, the sheet against its closed form, parity from inside the bounds box ----
+  const final: Record<string, unknown> = {};
+  const flaggedRay = (ray: any) => Boolean(ray.unresolvedCrossings) || Boolean(ray.grazing);
+  // P1: the sheet is z = 27 u (1 - u), u = (x - 5300) / 60, x in [5300, 5360], y in [0, 30].
+  const pairRay = await probe(sheet, { rays: [{ originMm: [5270.77, 7.3, 6.749], direction: [0.955336, 0.29552, 0] }] }, "P1 sheet close pair");
+  final.pair = { hits: pairRay.rays[0].hits, distances: pairRay.rays[0].intersections.map((hit: any) => hit.distanceMm), grazing: pairRay.rays[0].grazing };
+  check(ctx, "p1", "P1: the reviewer's sheet ray returns both crossings of the close pair (61.617 and 62.381 mm)", pairRay.rays[0].hits === 2 && Math.abs(pairRay.rays[0].intersections[0].distanceMm - 61.617) < 1e-3 && Math.abs(pairRay.rays[0].intersections[1].distanceMm - 62.381) < 1e-3, final.pair);
+  let mseed = 0x1234567;
+  const mrnd = () => { mseed |= 0; mseed = (mseed + 0x6d2b79f5) | 0; let t = Math.imul(mseed ^ (mseed >>> 15), 1 | mseed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  type P = [number, number, number];
+  const vsub = (a: P, b: P): P => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], vadd = (a: P, b: P): P => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], vmul = (a: P, k: number): P => [a[0] * k, a[1] * k, a[2] * k];
+  const vdot = (a: P, b: P) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], vunit = (a: P): P => vmul(a, 1 / Math.hypot(...a));
+  const vcross = (a: P, b: P): P => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const rdir = (): P => { for (;;) { const v: P = [2 * mrnd() - 1, 2 * mrnd() - 1, 2 * mrnd() - 1]; const n = Math.hypot(...v); if (n > 0.05 && n <= 1) return vmul(v, 1 / n); } };
+  const surf = (x: number) => { const u = (x - 5300) / 60; return 27 * u * (1 - u); };
+  // Closed-form crossings; ambiguous within 5e-5 mm of the sheet boundary, at t = 0, at tangency (1e-7 mm) and for pairs under 0.002 mm.
+  const sheetTruth = (o: P, d: P, eps = 0) => {
+    const centre: P = [5330, 15, 3], t0 = vdot(vsub(centre, o), d), q: P = vadd(o, vmul(d, t0));
+    const u0 = (q[0] - 5300) / 60, du = d[0] / 60, A = 27 * du * du, B = d[2] - 27 * du * (1 - 2 * u0), C = q[2] - 27 * u0 * (1 - u0);
+    let roots: number[] = [], amb = false;
+    if (Math.abs(A) < 1e-14) { if (Math.abs(B) > 1e-12) roots = [-C / B]; else if (Math.abs(C) < 1e-6) amb = true; }
+    else { const disc = B * B - 4 * A * C; if (Math.abs(C - B * B / (4 * A)) < 1e-7) amb = true; if (disc > 0) { const k = -0.5 * (B + Math.sign(B || 1) * Math.sqrt(disc)); roots = [k / A, C / k].sort((x, y) => x - y); if (roots[1]! - roots[0]! < 2e-3) amb = true; } }
+    const ts: number[] = [];
+    for (const r of roots) { const t = t0 + r, x = o[0] + t * d[0], y = o[1] + t * d[1], mx = Math.min(x - 5300, 5360 - x), my = Math.min(y, 30 - y);
+      if (Math.abs(mx) < 5e-5 || Math.abs(my) < 5e-5) amb = true; if (mx < -eps || my < -eps) continue; if (Math.abs(t) < 1e-6) amb = true; if (t > 0) ts.push(t); }
+    return { ts, amb };
+  };
+  const centre: P = [5330, 15, 3.4], radius = 34, L = radius * 2.5;
+  const family = (): { o: P; d: P } => {
+    const u = mrnd();
+    if (u < 0.3) { const o = vadd(centre, vmul(rdir(), L)); return { o, d: vunit(vsub(vadd(centre, vmul(rdir(), radius * Math.cbrt(mrnd()))), o)) }; }
+    if (u < 0.4) { const k = Math.floor(mrnd() * 3), sgn = mrnd() < 0.5 ? 1 : -1, d: P = [0, 0, 0]; d[k] = -sgn; const o: P = [5300 + 60 * (mrnd() * 1.1 - 0.05), 30 * (mrnd() * 1.1 - 0.05), 9 * (mrnd() * 1.2 - 0.1)]; o[k] = centre[k]! + sgn * L; return { o, d }; }
+    if (u < 0.75) { const x = 5300 + 60 * mrnd(), y = 30 * mrnd(), slope = 27 * (1 - 2 * (x - 5300) / 60) / 60, n = vunit([-slope, 0, 1]), a = mrnd() * 2 * Math.PI;
+      const tau = vunit(vadd(vmul(vunit([1, 0, slope]), Math.cos(a)), vmul([0, 1, 0], Math.sin(a)))), delta = (mrnd() < 0.5 ? 1 : -1) * 10 ** (-7 + 6.5 * mrnd());
+      return { o: vsub(vadd([x, y, surf(x)], vmul(n, delta)), vmul(tau, L)), d: tau }; }
+    if (u < 0.88) { const onX = mrnd() < 0.5, x = onX ? (mrnd() < 0.5 ? 5300 : 5360) : 5300 + 60 * mrnd(), y = onX ? 30 * mrnd() : (mrnd() < 0.5 ? 0 : 30), d = rdir(), off = mrnd() < 0.3 ? 0 : 10 ** (-8 + 7 * mrnd());
+      return { o: vsub(vadd([x, y, surf(x)], vmul(vunit(vcross(d, rdir())), off)), vmul(d, L)), d }; }
+    if (u < 0.95) return { o: vadd(centre, vmul(rdir(), radius * 0.6 * Math.cbrt(mrnd()))), d: rdir() };
+    const dir = rdir(); return { o: vadd(vadd(centre, vmul(rdir(), radius * 0.8 * Math.cbrt(mrnd()))), vmul(dir, 10 ** (2 + 3 * mrnd()))), d: vmul(dir, -1) };
+  };
+  const sweep = { rays: 0, compared: 0, match: 0, wrongFlagged: 0, wrongUnflagged: 0, examples: [] as unknown[] };
+  for (let k = 0; k < 64; k += 1) {
+    const rays = Array.from({ length: 64 }, family);
+    const result = await call(c, "plasticity_probe_surface", { id: sheet, rays: rays.map((ray) => ({ originMm: ray.o, direction: ray.d })), revision: (await status(c)).revision });
+    result.rays.forEach((ray: any, i: number) => {
+      sweep.rays += 1;
+      const t = sheetTruth(rays[i]!.o, rays[i]!.d);
+      if (t.amb || sheetTruth(rays[i]!.o, rays[i]!.d, 3e-5).ts.length !== t.ts.length || sheetTruth(rays[i]!.o, rays[i]!.d, -3e-5).ts.length !== t.ts.length) return;
+      sweep.compared += 1;
+      if (t.ts.length === ray.hits) sweep.match += 1; else if (flaggedRay(ray)) sweep.wrongFlagged += 1; else { sweep.wrongUnflagged += 1; if (sweep.examples.length < 5) sweep.examples.push({ ray: rays[i], truth: t.ts, got: ray.intersections.map((hit: any) => hit.distanceMm) }); }
+    });
+  }
+  final.sheetSweep = sweep;
+  check(ctx, "p1", "P1: sheet, 4,096 rays of the review's families against the closed form: zero unflagged wrong counts", sweep.wrongUnflagged === 0 && sweep.compared > 3000, sweep);
+  // P1 parity: the pad's crown at (5645, 25); origins inside the bounds box but outside the body, above the crown surface.
+  const crown = top.pointMm[2] as number;
+  const padRays = await probe(pad.id, { rays: [{ originMm: [5601, 12, crown - 0.01], direction: [Math.cos(0.3), Math.sin(0.3), 0] }, { originMm: [5603, 12, crown - 0.001], direction: [Math.cos(0.3), Math.sin(0.3), 0] }] }, "P1 pad chords from inside the bounds box");
+  final.padChords = padRays.rays.map((ray: any) => ({ hits: ray.hits, distances: ray.intersections.map((hit: any) => hit.distanceMm), code: ray.unresolvedCode, grazing: Boolean(ray.grazing) }));
+  check(ctx, "p1", "P1: the reviewer's two pad chords (origin inside the bounds box, outside the body) return two hits or a flag", padRays.rays.every((ray: any) => ray.hits === 2 || flaggedRay(ray)), final.padChords);
+  const inBox = { rays: 0, oddUnflagged: 0, oddFlagged: 0, flagged: 0 };
+  const padBox = pad.boundsMm;
+  while (inBox.rays < 1024) {
+    const xy = Array.from({ length: 64 }, () => [padBox.min[0] + (padBox.max[0] - padBox.min[0]) * mrnd(), padBox.min[1] + (padBox.max[1] - padBox.min[1]) * mrnd()]);
+    const heights = await call(c, "plasticity_probe_surface", { id: pad.id, gridMm: { at: xy }, revision: (await status(c)).revision });
+    const rays = heights.rays.flatMap((ray: any, i: number) => {
+      if (flaggedRay(ray)) return [];
+      const low = Math.max((ray.hits === 0 ? padBox.min[2] - 1 : Math.max(...ray.intersections.map((hit: any) => hit.pointMm[2]))) + 0.05, padBox.min[2] + 0.001), high = padBox.max[2] - 0.001;
+      return high > low ? [{ originMm: [xy[i]![0], xy[i]![1], low + (high - low) * mrnd()], direction: rdir() }] : [];
+    });
+    if (rays.length === 0) continue;
+    const result = await call(c, "plasticity_probe_surface", { id: pad.id, rays, revision: (await status(c)).revision });
+    for (const ray of result.rays) { inBox.rays += 1; if (flaggedRay(ray)) inBox.flagged += 1; if (ray.hits % 2 === 1) { if (flaggedRay(ray)) inBox.oddFlagged += 1; else inBox.oddUnflagged += 1; } }
+  }
+  final.padInsideBox = inBox;
+  check(ctx, "p1", "P1: grip pad, 1,024 rays from inside the bounds box but outside the body: zero unflagged odd counts", inBox.oddUnflagged === 0, inBox);
+  // P2: the torus (centre x = 6300) from 3,300 mm away.
+  const farTorus = await probe(r3id("sf-torus"), { rays: [{ originMm: [9600, 0, 0], direction: [-1, 0, 0] }] }, "P2 torus from 3,300 mm");
+  final.farTorus = farTorus.rays[0].intersections.map((hit: any) => hit.distanceMm);
+  check(ctx, "p1", "P2: a torus probed from 3,300 mm away returns its four crossings (3275, 3285, 3315, 3325 mm, 1e-6)", worst(final.farTorus as number[], [3275, 3285, 3315, 3325]) <= tolerance && !flaggedRay(farTorus.rays[0]), final.farTorus);
+  // P3: a box with all 12 edges filleted G2; the two rays that made the whole call throw.
+  const beforeG2 = idsOf(await status(c));
+  await batch(c, [
+    { toolName: "plasticity_create_box", arguments: { originMm: [6600, 0, 0], sizeMm: [20, 20, 20], name: "sf-g2box" } },
+    { toolName: "plasticity_find_edges", arguments: { query: { bodyIds: ["$0.added[0]"], line: true }, limit: 20 } },
+    { toolName: "plasticity_fillet", arguments: { id: "$0.added[0]", edgeIds: "$1.result.matches[*].id", radiusMm: 3, shape: "g2" } },
+  ]);
+  const g2 = (await added(c, beforeG2)).find((body) => body.name === "sf-g2box")!;
+  const g2Rays = [
+    { originMm: [6654.051320346781, 19.59165853475149, 0.5950813275441331], direction: [-0.9994736189433314, 0.007211406105751431, 0.03163037556366067] },
+    { originMm: [6644.901085281925, 19.809927035136237, 50.85746207249972], direction: [-0.6534572620412744, 0.004263707473651682, -0.7569514036476189] },
+    { originMm: [6610, 10, 100], direction: [0, 0, -1] },
+  ];
+  const g2Probe = await tryCall(c, "plasticity_probe_surface", { id: g2.id, rays: g2Rays, revision: (await status(c)).revision });
+  final.g2 = g2Probe.ok ? g2Probe.value.rays.map((ray: any) => ({ hits: ray.hits, code: ray.unresolvedCode, grazing: ray.grazing?.length })) : g2Probe.error;
+  check(ctx, "p1", "P3: the two rays that threw on the G2-filleted box return (hits or flags), and a plain ray in the same call returns its two hits", g2Probe.ok && g2Probe.value.rays.length === 3 && g2Probe.value.rays[2].hits === 2 && !flaggedRay(g2Probe.value.rays[2]), final.g2);
+  // P4: a ray just above a planar face, in it, and along a cylinder's ruling: grazing.
+  const p4rays = await probe(byName("sf-cylinder"), { rays: [{ originMm: [5150, 3, 40.0005], direction: [-1, 0, 0] }, { originMm: [5150, 3, 40], direction: [-1, 0, 0] }, { originMm: [5110, 0, 100], direction: [0, 0, -1] }, { originMm: [5150, 3, 40.002], direction: [-1, 0, 0] }] }, "P4 coplanar and ruling rays");
+  final.grazing = p4rays.rays.map((ray: any) => ({ hits: ray.hits, grazing: ray.grazing?.map((entry: any) => [entry.faceId, entry.minDistanceMm]) }));
+  check(ctx, "p1", "P4: a ray 0.0005 mm above a planar face, a ray in it and a ray along a cylinder's ruling carry grazing; 0.002 mm above is clean", p4rays.rays.slice(0, 3).every((ray: any) => Boolean(ray.grazing)) && !flaggedRay(p4rays.rays[3]) && p4rays.rays[3].hits === 0, final.grazing);
+  // unresolvedCode: a rim touched from outside is a parity flag with the stable code.
+  const rim = await probe(byName("sf-cylinder"), { rays: [{ originMm: [5140, 0, 10], direction: [-1, 0, 1] }] }, "rim touch");
+  final.rimTouch = { hits: rim.rays[0].hits, code: rim.rays[0].unresolvedCode, codes: rim.rays[0].unresolvedCodes, reason: rim.rays[0].unresolvedReason };
+  check(ctx, "p1", "a rim touched from outside is flagged with unresolvedCode parity", rim.rays[0].unresolvedCode === "parity" && JSON.stringify(rim.rays[0].unresolvedCodes) === JSON.stringify(["parity"]), final.rimTouch);
+  results.finalReview = final;
   ctx.evidence.p1.results = results;
 }
 
@@ -533,6 +668,19 @@ async function p4(ctx: Ctx) {
   const plain = await call(c, "plasticity_screenshot", { path: join(dir, "plain-after-interrupted.png"), captureMode: modes[0] });
   const afterPlain = await viewState(ctx);
   check(ctx, "p4", "a plain screenshot first restores a pending shader and camera left by an interrupted call", leftOver.shader === "zebraVertical" && leftOver.pendingView && plain.restoredPendingView === true && afterPlain.shader === start.shader && !afterPlain.pendingView && JSON.stringify(afterPlain.camera) === JSON.stringify(start.camera), { leftOver: { shader: leftOver.shader, pending: leftOver.pendingView }, plain, after: { shader: afterPlain.shader, pending: afterPlain.pendingView } });
+  // Final review S1: the same interrupted call, then the user moves the camera: the plain capture must leave the camera
+  // where the user put it, drop the stale record and say so; the shader is restored either way.
+  const savedCamera = await ctx.native.read<unknown>(SAVE_CAMERA);
+  await ctx.native.readNative(SCREENSHOT_VIEW_SOURCE, ["name2shader"], [{ op: "apply", shader: "zebraVertical", frame, tolerance: 1e-9, samePose: 1e-6 }], 15000);
+  await call(c, "plasticity_set_camera", { eyeMm: [5200, -150, 120], targetMm: [5020, 0, 10], frameRadiusMm: 60 });
+  // The camera eases to the new pose: wait until it holds still, so "the camera stayed" compares settled poses.
+  let moved = await viewState(ctx);
+  for (let i = 0; i < 40; i += 1) { await new Promise((resolve) => setTimeout(resolve, 100)); const now = await viewState(ctx); const still = JSON.stringify(now.camera) === JSON.stringify(moved.camera); moved = now; if (still) break; }
+  const plainAfterMove = await call(c, "plasticity_screenshot", { path: join(dir, "plain-after-moved-camera.png"), captureMode: modes[0] });
+  const afterMove = await viewState(ctx);
+  check(ctx, "p4", "S1: a stale pending view does not override a camera moved afterwards (pendingViewDiscarded); the shader is restored", moved.pendingView && moved.shader === "zebraVertical" && plainAfterMove.pendingViewDiscarded === true && afterMove.shader === start.shader && !afterMove.pendingView && JSON.stringify(afterMove.camera) === JSON.stringify(moved.camera) && JSON.stringify(moved.camera) !== JSON.stringify(start.camera), { plain: { restoredPendingView: plainAfterMove.restoredPendingView, pendingViewDiscarded: plainAfterMove.pendingViewDiscarded }, shader: afterMove.shader, cameraKept: JSON.stringify(afterMove.camera) === JSON.stringify(moved.camera) });
+  // Put the camera back where the section found it (the frame capture restores to the pose it starts from, so set it first).
+  await ctx.native.read(RESTORE_CAMERA, [{ camera: savedCamera }], 15000);
   const forced = await tryCall(c, "plasticity_screenshot", { path: join(dir, `${modes[0]}-default.png`), captureMode: modes[0], shader: "topo", frame });
   const end = await viewState(ctx);
   check(ctx, "p4", "a forced capture failure still restores the shader and the camera, and leaves nothing pending", !forced.ok && end.shader === start.shader && JSON.stringify(end.camera) === JSON.stringify(start.camera) && end.pendingView === false, { forced, end: { shader: end.shader, pendingView: end.pendingView } });
@@ -617,6 +765,11 @@ async function p6(ctx: Ctx) {
   const selectedAfterRefusal = await selectedFaces();
   results.selection = { selectedBefore, verified: viaTool.coincidence, selectedAfterSuccess, refused: refusedSel, selectedAfterRefusal };
   check(ctx, "p6", "a face selected before the call is still selected after a verified align and after a refusal", selectedBefore.length === 1 && JSON.stringify(selectedAfterSuccess) === JSON.stringify(selectedBefore) && !refusedSel.ok && JSON.stringify(selectedAfterRefusal) === JSON.stringify(selectedBefore), results.selection);
+  const activeAfterAlign = (await viewState(ctx)).activeCommand;
+  check(ctx, "p6", "the align itself leaves no command active while the selection is back", activeAfterAlign === null, activeAfterAlign);
+  // The selection is cleared before the next edits. With a face still selected, Plasticity starts its default face
+  // command after any edit and that edit call does not return; this is not specific to the align (section p6select
+  // shows it, and that it also happens with no align).
   await call(c, "plasticity_clear_selection", { revision: (await status(c)).revision });
   const g0 = await trial("g0", fixture.b, fixture.a, "g0");
   check(ctx, "p6", "G0: one step, edge on the reference (<= 0.001 mm), joined edge reads G0 or better", g0.aligned.undoSteps === 1 && g0.aligned.coincidence.maxGapMm <= 1e-3 && g0.row.passes.G0, results.g0);
@@ -654,6 +807,52 @@ async function p6(ctx: Ctx) {
   const globalsAfter = (await viewState(ctx)).globals;
   check(ctx, "p6", "no prototype patch left on the Align classes and no new renderer globals", JSON.stringify(printsBefore) === JSON.stringify(printsAfter) && JSON.stringify(globalsBefore) === JSON.stringify(globalsAfter), { printsSame: JSON.stringify(printsBefore) === JSON.stringify(printsAfter), globalsBefore, globalsAfter });
   ctx.evidence.p6.results = results;
+}
+
+// Final review A1, as specified: an edit straight after an align with faces still selected, and the same edit with no align.
+async function p6select(ctx: Ctx) {
+  const c = ctx.client;
+  const trials: Array<Record<string, unknown>> = [];
+  const start = (await status(c)).undoDepth;
+  const selectionCount = async () => { const now = await tryCall(c, "plasticity_current_selection", {}); return now.ok ? (now.value.faces ?? []).length as number : -1; };
+  for (const [mode, faces, next] of [["align", 1, "join"], ["align", 1, "move"], ["align", 1, "fillet"], ["align", 2, "join"], ["align", 2, "move"], ["align", 2, "fillet"], ["no align", 2, "move"]] as Array<[string, number, string]>) {
+    const before = idsOf(await status(c));
+    // Without an align the sheets already touch, so the join can succeed.
+    const [bx, by] = mode === "align" ? [30.5, 5.3] : [30, 5];
+    await batch(c, [
+      { toolName: "plasticity_create_control_point_curve", arguments: { pointsMm: [[7000, 0, 0], [7010, 0, 0], [7020, 2, 0], [7030, 5, 0]] } },
+      { toolName: "plasticity_extrude_curves", arguments: { ids: ["$0.added[0]"], distanceMm: 20, direction: [0, 0, 1] } },
+      { toolName: "plasticity_create_control_point_curve", arguments: { pointsMm: [[7000 + bx, by, 0], [7038, 12, 0], [7046, 20, 0], [7054, 30, 0]] } },
+      { toolName: "plasticity_extrude_curves", arguments: { ids: ["$2.added[0]"], distanceMm: 20, direction: [0, 0, 1] } },
+      { toolName: "plasticity_create_box", arguments: { originMm: [7100, 0, 0], sizeMm: [10, 10, 10], name: "sf-select-edit" } },
+      { toolName: "plasticity_create_box", arguments: { originMm: [7150, 0, 0], sizeMm: [10, 10, 10], name: "sf-select-keep" } },
+    ]);
+    const fresh = await added(c, before);
+    const sheets = fresh.filter((body) => body.type === "Sheet").sort((p, q) => p.id - q.id);
+    const A = await info(c, sheets[0].id), B = await info(c, sheets[1].id), edit = await info(c, fresh.find((body) => body.name === "sf-select-edit")!.id), keep = await info(c, fresh.find((body) => body.name === "sf-select-keep")!.id);
+    const vertical = (body: any) => body.edges.filter((edge: any) => edge.tangent && Math.abs(Math.abs(edge.tangent[2]) - 1) < 1e-6);
+    const a = { bodyId: A.id, edgeId: vertical(A).sort((p: any, q: any) => q.centerMm[0] - p.centerMm[0])[0].id }, b = { bodyId: B.id, edgeId: vertical(B).sort((p: any, q: any) => p.centerMm[0] - q.centerMm[0])[0].id };
+    // The user's selection: faces of a body that no later edit touches, so "still selected" has one meaning.
+    await call(c, "plasticity_select_faces", { faces: keep.faces.slice(0, faces).map((face: any) => ({ bodyId: keep.id, faceId: face.id })), revision: (await status(c)).revision });
+    let aligned: unknown = "not run";
+    if (mode === "align") { const run = await tryCall(c, "plasticity_surface_align", { moving: b, reference: a, continuity: "g0", intent: "A1 check", revision: (await status(c)).revision }); aligned = run.ok ? "ok" : run.error.slice(0, 200); }
+    const afterAlign = { selected: await selectionCount(), active: (await viewState(ctx)).activeCommand };
+    const revision = (await status(c)).revision;
+    const started = Date.now();
+    const edited = next === "join" ? await tryCall(c, "plasticity_join_sheets", { ids: [A.id, B.id], revision })
+      : next === "move" ? await tryCall(c, "plasticity_move", { ids: [edit.id], deltaMm: [0, 0, 1], revision })
+        : await tryCall(c, "plasticity_fillet", { id: edit.id, edgeIds: [edit.edges[0].id], radiusMm: 1, revision });
+    const ms = Date.now() - started;
+    const after = await viewState(ctx);
+    const selected = await selectionCount();
+    const trial = { mode, faces, next, aligned, afterAlign, ms, ok: edited.ok, error: edited.ok ? undefined : edited.error.slice(0, 120), selectedAfter: selected, activeAfter: after.activeCommand };
+    trials.push(trial);
+    check(ctx, "p6select", `${mode}, ${faces} face${faces === 1 ? "" : "s"} selected, then ${next}: under 1 s, the selection still there, no command active`, edited.ok && ms < 1000 && selected === faces && after.activeCommand === null && (mode !== "align" || (aligned === "ok" && afterAlign.selected === faces && afterAlign.active === null)), trial);
+    await ctx.native.mutate(CANCEL_ACTIVE, []).catch(() => undefined);
+    await tryCall(c, "plasticity_reconcile", {});
+    await undoTo(c, start);
+  }
+  ctx.evidence.p6select.trials = trials;
 }
 
 async function p6stall(ctx: Ctx) {
@@ -818,7 +1017,7 @@ async function main(): Promise<void> {
     baselineView = await viewState(ctx);
     evidence.baseline = { undoDepth: baseline.undoDepth, bodies: (baseline.bodies as any[]).map((body) => body.id), shader: baselineView.shader, camera: baselineView.camera, globals: baselineView.globals };
     if (baselineView.activeCommand) throw new Error(`A command is active (${baselineView.activeCommand}); nothing was created`);
-    const run: Record<Section, (ctx: Ctx) => Promise<void>> = { p1, p2, p3, p4, p5, p6, p7, p6stall };
+    const run: Record<Section, (ctx: Ctx) => Promise<void>> = { p1, p2, p3, p4, p5, p6, p7, p6stall, p6select };
     for (const name of options.only ?? DEFAULT_SECTIONS) await section(ctx, name, async () => await run[name](ctx));
   } catch (error) {
     failures.push(`run: ${(error as Error).message.slice(0, 2000)}`);

@@ -245,3 +245,112 @@ Vertex Align is PARTIAL.
 - Item 2: the native command was not run on a Solid.
 - Item 3: viewport capture mode with shaders, and shader uniforms, are untested.
 - Selection steps from `FindBoundaryEdgesCommand` add undo entries.
+
+## 8. Final review follow-ups (2026-11-16, Plasticity 26.1.3, isolated instance 127.0.0.1:56131)
+Scratch scripts and raw output: not in the repository (session scratch `surf4-k9w3fd`). The numbers below are the measured ones.
+
+### 8.1 Two kernel reads for the distance from a point to a face
+`plasticity_probe_surface` used `Face.FindPointNear` for the distance from a ray point to a trimmed face. That read is not a global nearest point on a trimmed face.
+
+| read | interior of the face | beside a face boundary | near the face |
+|---|---|---|---|
+| `Face.FindPointNear(Vector)` → `{u, v, exact}` | precise: error 5e-16 m at 1e-13 to 1e-6 m from the face, side always right | can throw (an `Error` with an empty message), or return a point far from the nearest one | resolves down to 1e-15 m |
+| `Eval.DistancesToPoints(Int32Array faceIds, Float64Array xyz, Int32Array offsets)` → `{distances, nearests, params, entities, subEntities, errors, ok}` | exact: `|p - nearest| - distance` is 1e-18 m | exact, never failed (0 errors in 7,800 points on 26 faces) | reads 0, with the point itself as `nearests`, for a point within 1e-8 m of the face |
+
+Measured differences between the two nearest points, 400 random points around each face (`maxNearDiffM`):
+
+| face | difference |
+|---|---|
+| plane (box face) | 3.6e-13 m |
+| B-spline sheet (untrimmed patch) | 2.7e-9 m |
+| G2 fillet face (B-surface) | 7.4e-6 m |
+| grip pad cylinder patch | 6.4e-7 m |
+| grip pad torus patch | 2.8e-3 m |
+| G2 corner patch, points along a ray 20-70 mm away | 4.2e-3 m, and `FindPointNear` threw for 752 of 2,001 points |
+
+Notes on `Eval.DistancesToPoints` with face ids:
+- It takes any topology tag (a body id in `plasticity_exact_bounds`, a face id here). `offsets` is a prefix array: entity `i` gets the points `offsets[i] .. offsets[i+1]`. An empty range is allowed.
+- `params` are the same normalised `(u, v)` that `Face.FindPointNear` returns, so `Face.EvalBasis(u, v)` gives the normal at the nearest point.
+- `subEntities` is 0 when the nearest point is inside the face, else the id of the edge or vertex it lies on.
+- Cost per point in one call: 4-10 µs on analytic faces, 16 µs on the sheet, 41 µs on a G2 fillet, 82 µs on the grip pad's top face. A call for one point costs 30-150 µs (1 ms on the grip pad's top face), so points are batched: one call per search round, for all rays and faces.
+- `Surface.Raycast(origin, unitDirection)` exists but returns one point only (and a point for a ray that misses). Not used.
+
+Use in the probe: the range read decides where the ray can meet a face (two reads farther from the face than they are apart prove the ray is clear between them). `FindPointNear` only polishes a crossing inside a bracket the range read gave. Each reported point is confirmed by a range read of 0.
+
+Why the review's rays failed at `d1f9898`:
+- P1 (one crossing of a close pair lost): two Newton seeds landed on one root, and the "signed distance" near a trimmed boundary was wrong by up to millimetres.
+- P3 ("Error at signedDistance"): `FindPointNear` throws for points beside the G2 corner patches.
+
+### 8.2 Command and factory states (Surface Align, G2)
+One align, states sampled inside the pick-command drive step (`command._state`, `factory._state.value`, undo delta, `executor.isBusy`):
+
+| moment | ms | command | factory | undo delta | isBusy |
+|---|---|---|---|---|---|
+| dialog found | 0.2 | None | updating | 0 | true |
+| ready | 17.5 | Awaiting | updated | 0 | true |
+| `factory.update()` called (same tick) | 18.4 | Awaiting | updating | 0 | true |
+| `update()` resolved | 29.8 | Awaiting | updated | 0 | true |
+| `dialog.finish()` called (same tick) | 30.0 | Awaiting | updated | 0 | true |
+| next poll (`setTimeout 0`) | 36.5 | Finished | committed | 1 | false |
+
+Reading:
+- The command reads `Awaiting` while its factory computes an update, and from `finish()` until the commit has landed. No separate "computing" or "committing" command state was seen. The commit took 6.5 ms and no poll ran inside it.
+- So "the command is `Awaiting`" does not mean "idle". The tool's cancel gate is now: command `Awaiting`, and factory state not in progress (`updating`), and `finish()` has not started a commit. Outside that, no cancel is sent and the outcome is undetermined.
+- Not measured: the factory state after an `update()` that throws, and the states during a commit that takes longer than one poll. The gate therefore treats a drive step that threw before `finish()` as an ended update, whatever tag the factory still shows.
+
+### 8.3 Selected faces and the next edit (the review's A1)
+The review saw `plasticity_join_sheets` hang after an align that had put two selected faces back. The align is not the cause.
+
+Control, with no align (`plasticity_select_faces`, then one edit):
+
+| selection | edit | result |
+|---|---|---|
+| 2 faces of a body the edit does not touch | `plasticity_move` of another body | times out after 10 s; `OffsetFaceCommand` is `Awaiting`; the move itself committed (undo +1) |
+| 1 face of an untouched body | `plasticity_join_sheets` | the same |
+| 1 face of the body that is moved | `plasticity_move` of that body | 109 ms; the selection is gone (the face was replaced) |
+
+With an align first (1 or 2 faces selected, then join, move or fillet): the align returns with the selection back and no command active; the next edit then hangs in the same way (6 of 6).
+
+Cause: after a command that ran through `editor.exec`, the executor asks `commandForSelection` for a default command. With a face selected that is `OffsetFaceCommand`, which waits for input, so `exec()` stays pending and the MCP call times out. This is the behaviour section "Other observations" of `../probes-2026-11-pick/FINDINGS.md` describes for the Dimension command. The pick-command helper clears the selection in a `finally` around `execute()` for that reason; the shared command wrapper (`commandStart`/`commandEnd`) and the other `editor.exec` sites of `operations.ts` do not.
+
+Prototype (scratch copy only, not in the repository): in `commandEnd`, save the selection memento and empty the selection in a `finally` inside the wrapped `execute()`, and put the memento back after `await this.exec(command)` (leaving out ids whose body version is gone). With it, an align followed by `plasticity_join_sheets` took 126 and 161 ms and by `plasticity_fillet` 136 and 116 ms, with the selection kept and no command active. `plasticity_move` still hung: it does not use `commandEnd`, so every `editor.exec` site needs the same treatment.
+
+The live script's opt-in section `p6select` runs the review's check as specified. It fails on this build (7 of 7 trials, one of them with no align).
+
+### 8.4 Renderer memory
+`Runtime.getHeapUsage` after `HeapProfiler.collectGarbage`, before and after each workload (the code of `d1f9898`):
+
+| workload | used heap after a collection |
+|---|---|
+| start | 67.41 MB |
+| 500 trivial calls with a 25 KB source | 67.41 MB |
+| 200,000 `FindPointNear` + `EvalBasis` + `Vector` in 10 calls | 67.42 MB |
+| 20,000 `lookupFaceCollection` + `Get` + `GetSurface` | 67.42 MB |
+| 28,800 probe rays (sphere, sheet, G2 box) | 67.43 MB |
+
+Nothing is kept: no kernel wrapper, no face cache. The growth the review saw is garbage that V8 had not collected yet. `performance.memory.usedJSHeapSize` is bucketed and includes it.
+
+Garbage per 64-ray call (heap growth over 100 calls with no collection in between; noisy, V8 may collect meanwhile):
+
+| workload | `d1f9898` | now |
+|---|---|---|
+| a tagged no-op (the `nativeApi` prelude only) | 10 KB | 10 KB |
+| sphere, 1 ray | 15 KB | 30 KB |
+| sphere, 64 rays | 82 KB | 40 KB |
+| grip pad, 1 ray | 48 KB | 56 KB |
+| grip pad, 64 rays | 194 KB | 274 KB |
+
+It grows with the work in the call, not with the source size. These objects outlive a scavenge inside the call and are promoted, so only a major collection frees them.
+
+A major collection is slow on this renderer: `HeapProfiler.collectGarbage` took 4.1 to 5.6 s (six readings, heap about 81 MB). V8's own major collections show as single probe calls of 0.7 to 4.6 s, about once per 100 to 250 calls, at `d1f9898` too.
+
+So the tool does not force a collection on a fixed schedule (one per 4,096 rays cost 4.5 s per 64 calls, more than the probing itself). It reads the used heap after every 512 rays and asks for a collection only when the heap has grown 20 MB above the lowest reading since the last collection.
+
+Measured through the tool, mixed bodies (sphere, sheet, grip pad, G2 box, holed block, torus), `Runtime.getHeapUsage`:
+
+| run | rays | before (after a collection) | at the end, no collection | peak | after a collection |
+|---|---|---|---|---|---|
+| `d1f9898` | 60,032 | 81.36 MB | 110.26 MB (+28.9) | 120.0 MB | 81.37 MB |
+| a collection every 4,096 rays (tried, dropped: 48 collections, about 3.6 of the 4.7 minutes) | 200,000 | 81.39 MB | 87.95 MB (+6.6) | 93.33 MB | 81.36 MB |
+| now: a collection after 20 MB of growth | 200,000 | 81.37 MB | 93.46 MB (+12.1) | 100.38 MB (+19.0) | 81.37 MB |
+
