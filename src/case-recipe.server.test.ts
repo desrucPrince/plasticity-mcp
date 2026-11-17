@@ -8,6 +8,27 @@ import { createCompactServer, createServer, type SessionLike } from "./server.ts
 import type { PlasticityOperations } from "./plasticity/operations.ts";
 import type { RuntimeState } from "./plasticity/runtime.ts";
 import { exposeDirectTool } from "./tool-catalog.ts";
+import * as recipeModule from "./plasticity/case-recipe.ts";
+
+// W1: the fake kernel answers a volume read of a finished base or lid with the volume of a clean build, which is the
+// plan's prediction (compared with the real kernel on port 58932). withClient notes it for every board case a test
+// sends; the functions are read through the module namespace so that an older recipe still loads this file.
+const { planBoardCase, boardCaseVolumes } = recipeModule as unknown as { planBoardCase: (input: unknown) => { name: string }; boardCaseVolumes?: (plan: unknown) => { baseMm3?: number; lidMm3?: number } };
+const cleanVolumes = new Map<string, number>();
+function noteCleanVolumes(params: { name?: string; arguments?: Record<string, unknown> }): void {
+  const args = params.arguments ?? {};
+  const inputs = params.name === "plasticity_create_board_case" ? [args]
+    : params.name === "plasticity_call" && args.toolName === "plasticity_create_board_case" ? [args.arguments]
+      : params.name === "plasticity_batch" ? ((args.steps as Array<{ toolName?: string; arguments?: unknown }> | undefined) ?? []).filter((step) => step.toolName === "plasticity_create_board_case").map((step) => step.arguments) : [];
+  for (const input of inputs) {
+    try {
+      const plan = planBoardCase({ revision: "r0", ...(input as object) });
+      const volumes = boardCaseVolumes!(plan);
+      cleanVolumes.set(`${plan.name}-base`, volumes.baseMm3 ?? 1000);
+      cleanVolumes.set(`${plan.name}-lid`, volumes.lidMm3 ?? 1000);
+    } catch { /* a refused plan builds nothing */ }
+  }
+}
 
 type V3 = [number, number, number];
 
@@ -43,7 +64,7 @@ function fakeOperations() {
   const vertical: V3[] = [[0, 0, 1], [0, 0, 1], [0, 0, 1], [0, 0, 1], [1, 0, 0], [0, 1, 0]];
   const operations = {
     async state() { return state(); },
-    async createBox(origin: V3, size: V3, name: string | undefined, given: string) { return mutate("createBox", given, () => { bodies.push(solid(nextId++, name ?? null, vertical, { min: [...origin], max: origin.map((value, axis) => value + size[axis]!) as V3 })); }); },
+    async createBox(origin: V3, size: V3, name: string | undefined, given: string) { return mutate("createBox", given, () => { bodies.push({ ...solid(nextId++, name ?? null, vertical, { min: [...origin], max: origin.map((value, axis) => value + size[axis]!) as V3 }), volumeMm3: size[0] * size[1] * size[2] } as RuntimeState["bodies"][number]); }); },
     async createCylinder(center: V3, radius: number, height: number, _name: string | undefined, given: string, axis: V3 = [0, 0, 1]) { return mutate("createCylinder", given, () => { bodies.push(solid(nextId++, null, [], axial(center, axis, height, radius))); }); },
     async fillet(_id: number, _edges: string[], _radius: number, given: string) { return mutate("fillet", given, () => {}); },
     async boolean(targets: number[], tools: number[], kind: string, _keep: boolean, given: string) {
@@ -64,16 +85,38 @@ function fakeOperations() {
       if (given !== `r${revision}`) throw new Error("stale validate");
       return { documentToken: "doc-1", revision: given, measurementSource: "native-brep", bodies: ids.map((id) => ({ id, closed: true, nativeValid: true, printableSolid: true, nativeCheckCodes: [] })) };
     },
+    // A read, like validateBodies: a finished base or lid has the clean build's volume, any other solid its own.
+    async measureSolidProperties(ids: number[], given: string) {
+      if (given !== `r${revision}`) throw new Error("stale volume read");
+      return { documentToken: "doc-1", revision: given, source: "native-brep-mass-properties", bodies: ids.map((id) => {
+        const body = bodies.find((candidate) => candidate.id === id) as (RuntimeState["bodies"][number] & { volumeMm3?: number }) | undefined;
+        return { id, versionId: id, name: body?.name ?? null, volumeMm3: (body?.name ? cleanVolumes.get(body.name) : undefined) ?? body?.volumeMm3 ?? Number.NaN, surfaceAreaMm2: 0, volumeCentroidMm: [0, 0, 0], nativeCheckCodes: [] };
+      }) };
+    },
     async createPolyline(points: V3[], _closed: boolean, given: string) {
       return mutate("createPolyline", given, () => {
         const id = nextId++;
         bodies.push({ ...solid(id, null, []), type: "Wire" });
         const min = [0, 1, 2].map((axis) => Math.min(...points.map((point) => point[axis]!))) as V3;
         const max = [0, 1, 2].map((axis) => Math.max(...points.map((point) => point[axis]!))) as V3;
-        regions.push({ id: `region-${id}`, entityId: id, islandVersionId: id, sketchId: id, sketchWireIds: [id], measurementSource: "render-mesh", displayBoundsMm: { min, max } });
+        // Like Plasticity (live-verified, round 4): a closed profile's plane normal comes from the corner at its first
+        // point (last point, first point, second point). Kept for horizontal profiles (the web profiles): up or down.
+        const [last, first, second] = [points.at(-1)!, points[0]!, points[1]!];
+        const up = (first[0] - last[0]) * (second[1] - first[1]) - (first[1] - last[1]) * (second[0] - first[0]) > 0;
+        // The Region's area (a horizontal profile's own), for the web volume proof (W1).
+        const areaMm2 = Math.abs(points.reduce((sum, point, index) => { const next = points[(index + 1) % points.length]!; return sum + point[0] * next[1] - next[0] * point[1]; }, 0)) / 2;
+        regions.push({ id: `region-${id}`, entityId: id, islandVersionId: id, sketchId: id, sketchWireIds: [id], measurementSource: "render-mesh", displayBoundsMm: { min, max }, ...(min[2] === max[2] ? { extrudesUp: up, areaMm2 } : {}) } as RuntimeState["regions"][number]);
       });
     },
-    async extrudeRegions(_ids: string[], _distance: number, given: string) { return mutate("extrudeRegions", given, () => { bodies.push(solid(nextId++, null, [])); }); },
+    // A horizontal profile's solid gets its bounds (the recipe checks that a web profile extruded up, round 4).
+    async extrudeRegions(ids: string[], distance: number, given: string) {
+      return mutate("extrudeRegions", given, () => {
+        const region = regions.find((candidate) => candidate.id === ids[0]) as (RuntimeState["regions"][number] & { extrudesUp?: boolean; areaMm2?: number }) | undefined;
+        const flat = region && region.extrudesUp !== undefined ? region.displayBoundsMm : undefined;
+        const far = flat ? flat.min[2] + (region!.extrudesUp ? distance : -distance) : 0;
+        bodies.push({ ...solid(nextId++, null, [], flat ? { min: [flat.min[0], flat.min[1], Math.min(flat.min[2], far)], max: [flat.max[0], flat.max[1], Math.max(flat.min[2], far)] } : null), ...(region?.areaMm2 !== undefined ? { volumeMm3: region.areaMm2 * Math.abs(distance) } : {}) } as RuntimeState["bodies"][number]);
+      });
+    },
     async revolveProfile(_id: number, _origin: V3, _axis: V3, _angle: number, given: string) { return mutate("revolveProfile", given, () => { bodies.push(solid(nextId++, null, [])); }); },
     async remove(ids: number[], given: string) { return mutate("remove", given, () => { bodies = bodies.filter((body) => !ids.includes(body.id)); regions = regions.filter((region) => !region.sketchWireIds.some((id) => ids.includes(id))); }); },
     async move(_ids: number[], _delta: V3, given: string) { return mutate("move", given, () => {}); },
@@ -99,6 +142,8 @@ async function withClient<T>(run: (client: Client, calls: string[]) => Promise<T
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
   await client.connect(clientTransport);
+  const callTool = client.callTool.bind(client);
+  client.callTool = ((params: Parameters<typeof callTool>[0], ...rest: unknown[]) => { noteCleanVolumes(params as { name?: string; arguments?: Record<string, unknown> }); return (callTool as (...all: unknown[]) => unknown)(params, ...rest); }) as typeof client.callTool;
   try {
     return await run(client, fake.calls);
   } finally {
@@ -267,8 +312,8 @@ test("S: a stack case passes the strict schema without standoffs.fastener and bu
     const stack = {
       originMm: [2000, 0, 0],
       board: { lengthMm: 51.5, widthMm: 28.3, holes: [[2.6, 2.6], [48.9, 2.6], [2.6, 25.7], [48.9, 25.7]].map(([xMm, yMm]) => ({ xMm, yMm, diameterMm: 3 })), componentHeightMm: 8 },
-      standoffs: { heightMm: 4, outerDiameterMm: 5 },
-      lid: { fasteners: { screw: "M2.5", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 4, countersunk: false } },
+      standoffs: { heightMm: 8, outerDiameterMm: 5 },
+      lid: { fasteners: { screw: "M2.5", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 7, countersunk: false } },
     };
     const result = json(await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_create_board_case", arguments: { ...stack, revision: "r0" } } }));
     assert.equal(result.derived.bossStyle, "stack");
@@ -276,5 +321,148 @@ test("S: a stack case passes the strict schema without standoffs.fastener and bu
     assert.equal(result.derived.stack.postAxesMm.length, 4);
     assert.equal(result.undoSteps, calls.length);
     assert.equal(result.undoSteps, result.derived.plannedUndoSteps);
+  });
+});
+
+// ------------------------------------------------------------------------------------------------- round 4 (D1, D2)
+const cornerHoles = (length: number, width: number, diameterMm: number, inset: number) => [[inset, inset], [length - inset, inset], [inset, width - inset], [length - inset, width - inset]].map(([xMm, yMm]) => ({ xMm, yMm, diameterMm }));
+
+test("D2: a default call with board holes and no standoffs key builds a support post under every hole, through plasticity_call and a lean batch", async () => {
+  // The reviewer's input: the 51.5 x 28.3 board, four Ø3 holes 2.0 mm from the edges, M3 pilots, nothing else.
+  const input = { originMm: [2000, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: cornerHoles(51.5, 28.3, 3, 2), componentHeightMm: 8 }, lid: { fasteners: { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 6 } }, boardStandIn: true };
+  await withClient(async (client, calls) => {
+    const result = json(await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_create_board_case", arguments: { ...input, revision: "r0" } } }));
+    assert.equal(result.status, "completed");
+    assert.equal(result.derived.bossStyle, "floor");
+    assert.equal(result.derived.standoffAxesMm.length, 4);
+    assert.deepEqual([result.derived.fasteners.standoffs.mode, result.derived.fasteners.standoffs.holeDiameterMm, result.derived.standoffTopZMm, result.derived.boardMm.min[2]], ["support", 0, 4, 4]);
+    assert.equal(result.steps.filter((step: { operation: string }) => step.operation === "create-support-post").length, 4);
+    assert.match(result.derived.assembly.note, /plain support posts: the board rests on them, unscrewed$/);
+    assert.equal(result.undoSteps, calls.length);
+    assert.equal(result.undoSteps, result.derived.plannedUndoSteps);
+  });
+  await withClient(async (client) => {
+    const response = json(await client.callTool({ name: "plasticity_batch", arguments: { detail: "lean", steps: [{ toolName: "plasticity_create_board_case", arguments: input, return: ["derived.bossStyle", "derived.fasteners.standoffs.mode", "derived.standoffAxesMm", "derived.cornerGapMm"] }] } }));
+    const first = response.steps[0].result;
+    assert.deepEqual([first["derived.bossStyle"], first["derived.fasteners.standoffs.mode"], first["derived.standoffAxesMm"].length], ["floor", "support", 4]);
+    // D5: the floor style's real diagonal play, sqrt 2 x 0.5.
+    assert.ok(Math.abs(first["derived.cornerGapMm"] - Math.SQRT2 * 0.5) < 1e-6);
+  });
+});
+
+test("D2: lid.fasteners.screw \"auto\" passes the strict schema and is resolved; another value is refused; the description states what the stack does not check", async () => {
+  await withClient(async (client, calls) => {
+    const tools = (await client.listTools()).tools;
+    const board = tools.find((entry) => entry.name === "plasticity_create_board_case")!;
+    assert.match(board.description ?? "", /a standoff under every board hole/);
+    assert.match(board.description ?? "", /its lid posts reach to 0\.2 mm above the board and component positions are not checked/);
+    assert.ok((board.description ?? "").length <= 600);
+    const stack = { originMm: [2000, 0, 0], board: { lengthMm: 60, widthMm: 30, holes: cornerHoles(60, 30, 3, 4.5), componentHeightMm: 8 }, lid: { fasteners: { screw: "auto", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 6.9, countersunk: false } } };
+    const wrong = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...stack, lid: { fasteners: { ...stack.lid.fasteners, screw: "M4" } }, revision: "r0" } });
+    assert.equal(wrong.isError, true);
+    assert.deepEqual(calls, []);
+    const result = json(await client.callTool({ name: "plasticity_create_board_case", arguments: { ...stack, revision: "r0" } }));
+    assert.deepEqual([result.derived.bossStyle, result.derived.fasteners.lid.screw, result.derived.fasteners.standoffs.heightMm, result.derived.stack.screwLengthMm, result.derived.stack.screwLengthMaxMm], ["stack", "M2.5", 7.9, 20, 21]);
+    assert.match(result.derived.fasteners.lid.screwReason, /^screw "auto": M2\.5, the largest whose close-fit clearance \(Ø2\.7\) passes the smallest board hole \(Ø3\)$/);
+    assert.match(result.derived.stack.note, /component positions are not checked/);
+    assert.equal(result.undoSteps, calls.length);
+  });
+});
+
+test("D1: a plan the tangency guards refuse reaches the caller before any native call, with the nearest hole position that plans clean", async () => {
+  await withClient(async (client, calls) => {
+    const input = { originMm: [2000, 0, 0], board: { lengthMm: 35.7, widthMm: 37, holes: cornerHoles(35.7, 37, 2.2, 1.999), componentHeightMm: 6 }, walls: { wallMm: 2.4 }, standoffs: { fastener: { screw: "M2", mode: "pilot", pilotDiameterMm: 1.6 } }, lid: { fasteners: { screw: "M2", base: "pilot", pilotDiameterMm: 1.6, pilotDepthMm: 7, bossStyle: "floor", headDiameterMm: 3.8 } } };
+    const refused = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...input, revision: "r0" } });
+    assert.equal(refused.isError, true);
+    assert.match(text(refused), /would have an edge under 0\.001 mm .*which the kernel cannot build reliably; move board\.holes\[0\] 0\.05 mm toward the board centre along x \(to xMm 2\.049\), and board\.holes\[2\] the same way: that plans clean/);
+    assert.deepEqual(calls, []);
+    // The named position builds.
+    const holes = input.board.holes.map((hole, index) => index === 0 || index === 2 ? { ...hole, xMm: 2.049 } : hole);
+    const result = json(await client.callTool({ name: "plasticity_create_board_case", arguments: { ...input, board: { ...input.board, holes }, revision: "r0" } }));
+    assert.equal(result.status, "completed");
+    assert.equal(result.undoSteps, calls.length);
+  });
+});
+
+test("F3: the typical ESP32 call (screw auto, base pilot, no pilot keys) passes the strict schema and builds a stack; the presets list the stocked lengths and the tapping drills", async () => {
+  // As few keys as the schema allows: the board with its four Ø3 holes 2.0 mm in, the USB opening, screw auto, base pilot.
+  const input = { originMm: [2000, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: cornerHoles(51.5, 28.3, 3, 2), componentHeightMm: 8 }, lid: { fasteners: { screw: "auto", base: "pilot" } }, openings: [{ wall: "x-", shape: "rect", widthMm: 9.2, heightMm: 3.4, alongMm: 14.15, aboveBoardMm: 0 }] };
+  await withClient(async (client, calls) => {
+    const result = json(await client.callTool({ name: "plasticity_create_board_case", arguments: { ...input, revision: "r0" } }));
+    assert.equal(result.status, "completed");
+    const derived = result.derived;
+    assert.deepEqual([derived.bossStyle, derived.fasteners.lid.screw, derived.fasteners.lid.baseHole.diameterMm, derived.fasteners.lid.baseHole.depthMm, derived.fasteners.lid.baseHole.confidence], ["stack", "M2.5", 2.05, 6.9, "low"]);
+    assert.deepEqual(derived.fasteners.lid.defaults.map((entry: string) => entry.split(":")[0]), ["pilotDiameterMm 2.05", "pilotDepthMm 6.9", "countersunk false"]);
+    assert.deepEqual([derived.fasteners.standoffs.mode, derived.fasteners.standoffs.outerDiametersMm, derived.fasteners.standoffs.heightMm, derived.stack.postOuterDiametersMm, derived.stack.screwLengthMm], ["pilot", [4.5, 4.5, 4.5, 4.5], 7.9, [4.5, 4.5, 4.5, 4.5], 20]);
+    assert.match(derived.fasteners.standoffs.outerDiameterReason, /^default: Ø4\.5, the largest \(in 0\.1 mm steps\) that keeps the lid post 0\.05 mm inside the lid lip outline \(board hole \+ 3 would be Ø6\)$/);
+    assert.deepEqual(derived.stack.postAxesMm, derived.standoffAxesMm);
+    assert.deepEqual([derived.outerMm.max[0] - derived.outerMm.min[0], Math.round((derived.outerMm.max[1] - derived.outerMm.min[1]) * 1e6) / 1e6, derived.outerMm.max[2] - derived.outerMm.min[2]], [56.5, 33.3, 22]);
+    assert.equal(result.undoSteps, calls.length);
+    assert.equal(result.undoSteps, derived.plannedUndoSteps);
+    // A named screw still needs its pilot: refused before any native call.
+    const before = calls.length;
+    const named = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...input, lid: { fasteners: { screw: "M2.5", base: "pilot" } }, revision: "r0" } });
+    assert.equal(named.isError, true);
+    assert.match(JSON.stringify(named.content), /a self-tapping pilot diameter for M2\.5 in plastic is not sourced; pass pilotDiameterMm/);
+    assert.equal(calls.length, before);
+    const board = (await client.listTools()).tools.find((entry) => entry.name === "plasticity_create_board_case")!;
+    assert.ok((board.description ?? "").length <= 600);
+    const fasteners = (board.inputSchema as unknown as { properties: { lid: { properties: { fasteners: { properties: Record<string, { description?: string }>; required?: string[] } } }; standoffs: { properties: Record<string, { description?: string }> } } }).properties;
+    assert.deepEqual([...(fasteners.lid.properties.fasteners.required ?? [])].sort(), ["base", "screw"]);
+    assert.match(fasteners.lid.properties.fasteners.properties.pilotDiameterMm!.description ?? "", /Screw auto: default the screw's ISO coarse tapping drill/);
+    assert.match(fasteners.standoffs.properties.outerDiameterMm!.description ?? "", /with bossStyle stack the largest up to that .* A given value is never changed/);
+  });
+  await withClient(async (client) => {
+    const presets = json(await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_fastener_presets", arguments: { screw: "M2.5" } } }));
+    assert.deepEqual(presets.screwLengths.lengthsMm, [3, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 30, 35, 40]);
+    assert.match(presets.screwLengths.note, /the commonly stocked series, not a cited standard/);
+    assert.deepEqual([presets.tapDrills.confidence, presets.tapDrills.rows], ["low", [{ screw: "M2.5", nominalDiameterMm: 2.5, pitchMm: 0.45, diameterMm: 2.05 }]]);
+  }, true);
+});
+
+test("W7, W1: the reply carries top-level warnings and the read-back volumes; a lean batch step can return them", async () => {
+  const typical = { originMm: [2000, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: cornerHoles(51.5, 28.3, 3, 2), componentHeightMm: 8 }, lid: { fasteners: { screw: "auto", base: "pilot" } }, openings: [{ wall: "x-", shape: "rect", widthMm: 9.2, heightMm: 3.4, alongMm: 14.15, aboveBoardMm: 0, label: "usb-c" }] };
+  await withClient(async (client) => {
+    // The typical call: a fastened stack, no warnings; the read-back reports both volumes against the plan's prediction.
+    const cleanResponse = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...typical, revision: "r0" } });
+    assert.equal(cleanResponse.isError, undefined, text(cleanResponse));
+    const clean = json(cleanResponse);
+    assert.deepEqual([clean.status, clean.derived.bossStyle, clean.warnings], ["completed", "stack", []]);
+    const predicted = boardCaseVolumes!(planBoardCase({ ...typical, revision: "r0" }));
+    assert.deepEqual(clean.readBack.volumesMm3, { relativeTolerance: 1e-6, base: { measured: predicted.baseMm3, predicted: predicted.baseMm3 }, lid: { measured: predicted.lidMm3, predicted: predicted.lidMm3 } });
+    // (The lid of this call is the one the kernel measured live: 4324.735657 mm3.)
+    assert.equal(predicted.lidMm3, 4324.735657);
+    assert.equal(clean.derived.openings[0].recessMm, 0.5);
+  });
+  await withClient(async (client) => {
+    // A conflicting optional key: floor bosses with M3 and an unfastened board, said at the top level of the reply.
+    const result = json(await client.callTool({ name: "plasticity_create_board_case", arguments: { ...typical, lid: { fasteners: { screw: "auto", base: "pilot", countersunk: true } }, revision: "r0" } }));
+    assert.deepEqual([result.status, result.derived.bossStyle, result.derived.fasteners.lid.screw, result.derived.fasteners.standoffs.mode, result.warnings.length], ["completed", "floor", "M3", "support", 1]);
+    assert.match(result.warnings[0], /^the board is not fastened by screws: it rests on plain support posts, and the lid screws go into floor corner bosses\. Cause: default: a screw stack is not possible \(The countersunk head diameter for M2\.5 is not sourced .* set countersunk: false\), so the bosses stand on the floor\. Change: /);
+    // The floor bosses grow the cavity along y (the x- wall carries the opening), so the opening is not recessed.
+    assert.deepEqual([result.derived.growAxis, result.derived.openings[0].recessMm, result.derived.openings[0].recessNote], ["y", 0.5, undefined]);
+    // W8: the corner-boss screw.
+    assert.deepEqual([result.derived.fasteners.lid.screwLengthMm, result.derived.fasteners.lid.screwLengthMaxMm, result.derived.fasteners.lid.engagementMm], [6, 8, 4]);
+  });
+  await withClient(async (client) => {
+    const response = json(await client.callTool({ name: "plasticity_batch", arguments: { detail: "lean", steps: [{ toolName: "plasticity_create_board_case", arguments: { ...typical, lid: { fasteners: { screw: "auto", base: "pilot", pilotDiameterMm: 2.5, growAxis: "x" } } }, return: ["warnings", "derived.bossStyle", "derived.openings", "readBack.volumesMm3.base.predicted"] }] } }));
+    const first = response.steps[0].result;
+    assert.equal(first["derived.bossStyle"], "floor");
+    assert.equal(first.warnings.length, 2);
+    assert.match(first.warnings[0], /pilotDiameterMm 2\.5 is not smaller than the M2\.5 thread .* leave pilotDiameterMm out \(default Ø2\.05\) or name the screw/);
+    // growAxis x moves the x walls: the USB opening is recessed 6 mm, in derived and in the second warning.
+    assert.match(first.warnings[1], /^usb-c on wall x- is recessed: the wall's inner face stands 6 mm from the board edge/);
+    assert.deepEqual([first["derived.openings"][0].recessMm, typeof first["derived.openings"][0].recessNote], [6, "string"]);
+    assert.ok(first["readBack.volumesMm3.base.predicted"] > 0);
+  });
+  await withClient(async (client) => {
+    // A lean batch step without `return` keeps a recipe's status and its `warning` string: the warnings are in it.
+    const response = json(await client.callTool({ name: "plasticity_batch", arguments: { detail: "lean", steps: [{ toolName: "plasticity_create_board_case", arguments: { ...typical, lid: { fasteners: { screw: "auto", base: "pilot", countersunk: true } } } }] } }));
+    const lean = response.steps[0].result;
+    assert.equal(lean.status, "completed");
+    assert.match(lean.warning, /^the board is not fastened by screws: it rests on plain support posts, .* set countersunk: false\), so the bosses stand on the floor\. Change: /);
+    // The typical call has nothing to warn about: no `warning` key.
+    const clean = json(await client.callTool({ name: "plasticity_batch", arguments: { detail: "lean", steps: [{ toolName: "plasticity_undo", arguments: { steps: response.undoSteps } }, { toolName: "plasticity_create_board_case", arguments: typical }] } }));
+    assert.deepEqual([clean.steps[1].result.status, "warning" in clean.steps[1].result], ["completed", false]);
   });
 });

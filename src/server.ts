@@ -3956,7 +3956,7 @@ function createServerWithCatalog(
       thicknessMm: boardCaseMm.optional().describe("Default 1.6, at least 0.2"),
       holes: z.array(z.object({ xMm: boardCaseMm, yMm: boardCaseMm, diameterMm: boardCaseMm }).strict()).max(32).optional().describe("Positions from the board's min-x/min-y corner; diameter at least 0.5"),
       componentHeightMm: boardCaseMm.describe("Tallest part above the board top; heights at most 200"),
-      undersideClearanceMm: boardCaseMm.optional().describe("Parts below the board; default 2"),
+      undersideClearanceMm: boardCaseMm.optional().describe("Parts below the board; default 2. Needs board holes: a board without holes has no standoffs and rests on the floor"),
     }).strict(),
     fit: z.object({
       boardClearanceMm: boardCaseMm.optional().describe("Per side; default 0.5, at most 50"),
@@ -3970,8 +3970,8 @@ function createServerWithCatalog(
       innerCornerRadiusMm: boardCaseMm.optional().describe("Override the inner corner radius while the board-corner diagonal gap stays at least 0.2"),
     }).strict().optional(),
     standoffs: z.object({
-      heightMm: boardCaseMm.optional().describe("Default = board.undersideClearanceMm"),
-      outerDiameterMm: boardCaseMm.optional().describe("Default board hole diameter + 3; at least hole + 1, at most wall - 0.4 into the wall"),
+      heightMm: boardCaseMm.optional().describe("Default board.undersideClearanceMm; with bossStyle stack at least what the lid fastener needs (pilot depth + 1, or the insert pocket + 1)"),
+      outerDiameterMm: boardCaseMm.optional().describe("Default board hole diameter + 3; with bossStyle stack the largest up to that (0.1 mm steps) which keeps the lid post inside the lid lip and passes the web rules, never under the screw's close-fit clearance + 1.6 (derived.fasteners.standoffs.outerDiameterReason). A given value is never changed. At least hole + 1, at most wall - 0.4 into the wall"),
       fastener: z.object({
         screw: boardCaseScrew,
         mode: z.enum(["pilot", "heat-set-insert", "through"]),
@@ -3979,23 +3979,23 @@ function createServerWithCatalog(
         pilotDepthMm: boardCaseMm.optional().describe("Default: the standoff height"),
         insertLengthMm: boardCaseMm.optional().describe("CNC Kitchen insert length; required for M3 (5.7 or 3)"),
         clearanceFit: boardCaseFit,
-      }).strict().optional().describe("Required, except with bossStyle stack (the standoffs then take lid.fasteners.base)"),
+      }).strict().optional().describe("Without it the standoffs are plain support posts with no screw hole (derived.fasteners.standoffs.mode support); with bossStyle stack leave it out (the standoffs take lid.fasteners.base)"),
     }).strict().optional(),
     lid: z.object({
       lipDepthMm: boardCaseMm.optional().describe("Default 1.5, at least 0.5"),
       lipWallMm: boardCaseMm.optional().describe("Default 1.2, at least 0.4"),
       fasteners: z.object({
-        screw: boardCaseScrew,
-        count: z.literal(4).optional().describe("Four corner bosses"),
+        screw: z.enum(["M2", "M2.5", "M3", "auto"]).describe("auto: the largest of M3, M2.5, M2 whose close-fit clearance passes the smallest board hole (stack), else M3; derived.fasteners.lid says which and why. With auto, pilotDiameterMm, pilotDepthMm and countersunk may be left out (derived.fasteners.lid.defaults lists what was filled in)"),
+        count: z.literal(4).optional().describe("Four corner bosses (not with bossStyle stack: one screw per board hole)"),
         bossDiameterMm: boardCaseMm.optional().describe("Default 6"),
         bossStyle: z.enum(["tapered", "hanging", "floor", "stack"]).optional().describe("Default stack when the board has 2+ holes the screws pass and no standoffs.fastener (lid posts over the board holes, screws into the standoffs), else floor (bosses beside the board, cavity widens). tapered/hanging: hung bosses over the board corners"),
         allowBlockedBoard: z.boolean().optional().describe("Build tapered/hanging although the bosses block the board from dropping in (derived.assembly.boardDropIn false); default false: refused"),
-        growAxis: z.enum(["x", "y"]).optional().describe("floor only: the axis the cavity grows along; default the axis whose end walls carry no opening (required when both do)"),
-        countersunk: z.boolean().optional().describe("Default true; sourced head only for M3"),
+        growAxis: z.enum(["x", "y"]).optional().describe("floor only: the axis the cavity grows along; default the axis whose end walls carry no opening (required when both do: the refusal says which value plans). A wall on that axis moves away from the board: derived.openings[i].recessMm"),
+        countersunk: z.boolean().optional().describe("Default true; sourced head only for M3 (screw auto: default false when the head is not sourced and no headDiameterMm is given)"),
         headDiameterMm: boardCaseMm.optional().describe("Countersink head diameter for M2/M2.5 (not sourced here)"),
         base: z.enum(["pilot", "heat-set-insert"]),
-        pilotDiameterMm: boardCaseMm.optional().describe("Required for base pilot"),
-        pilotDepthMm: boardCaseMm.optional().describe("Required for base pilot; boss length = depth + 1"),
+        pilotDiameterMm: boardCaseMm.optional().describe("Required for base pilot with a named screw. Screw auto: default the screw's ISO coarse tapping drill (M2 1.6, M2.5 2.05, M3 2.5; a starting value, confidence low), and it must be smaller than the thread"),
+        pilotDepthMm: boardCaseMm.optional().describe("Required for base pilot with a named screw; boss length = depth + 1. Screw auto: default 2 x the thread diameter (stack: the depth at which the shortest stocked screw reaching that engagement ends 1 mm short of the bottom)"),
         insertLengthMm: boardCaseMm.optional().describe("Required for M3 inserts (5.7 or 3)"),
         clearanceFit: boardCaseFit,
       }).strict().optional(),
@@ -4006,8 +4006,8 @@ function createServerWithCatalog(
       widthMm: boardCaseMm.describe("Along the wall (x on lid/floor); circle diameter"),
       heightMm: boardCaseMm.optional().describe("Vertical on a wall (y on lid/floor); not for circle"),
       cornerRadiusMm: boardCaseMm.optional().describe("rounded-rect only"),
-      alongMm: boardCaseMm.describe("Centre along the wall from the board's min corner on that axis (x for lid/floor)"),
-      aboveBoardMm: boardCaseMm.optional().describe("Walls: opening bottom above the board top surface"),
+      alongMm: boardCaseMm.describe("Centre along the wall from the board's min corner on that axis (x for lid/floor). A wall opening's side edges sit exactly on a corner arc start or keep 0.4 mm from it"),
+      aboveBoardMm: boardCaseMm.optional().describe("Walls: opening bottom above the board top surface; it sits exactly on the floor top or at least 0.4 mm above it"),
       acrossMm: boardCaseMm.optional().describe("Lid/floor: centre along y from the board's min-y edge"),
       label: z.string().trim().min(1).max(60).optional(),
     }).strict()).max(16).optional(),
@@ -4026,11 +4026,11 @@ function createServerWithCatalog(
     intent,
     revision,
   }).strict();
-  tool("plasticity_create_board_case", "Build a base + lid enclosure around a rectangular board in one call: shell, standoffs, lid screws as a stack through the board holes (default with 2+ holes) or on corner bosses (floor; tapered and hanging need allowBlockedBoard), a lipped lid with screw holes, openings, a slot vent, an optional board stand-in. derived holds every dimension, computed from the parameters. All plan rules are checked before the first edit; the result is read back (bounds, validity, edges) and a failure or failed read-back undoes the recipe's steps. Millimetres. Reference: docs/tool-reference.md.", boardCaseInputSchema, async ({ intent: purpose, ...input }) => {
+  tool("plasticity_create_board_case", "Build a base + lid enclosure around a rectangular board in one call: shell, a standoff under every board hole, lid screws as a stack through the board holes (default with 2+ holes; its lid posts reach to 0.2 mm above the board and component positions are not checked) or on corner bosses (floor; tapered and hanging need allowBlockedBoard), a lipped lid, openings, a slot vent, an optional board stand-in. derived holds every dimension. Every plan rule is checked before the first edit; the result is read back and a failure undoes the recipe's steps. Millimetres. Reference: docs/tool-reference.md.", boardCaseInputSchema, async ({ intent: purpose, ...input }) => {
     const { BoardCaseRecipe } = await import("./plasticity/case-recipe.ts");
     return await journaled("recipe-board-case", purpose, input, () => new BoardCaseRecipe(session.get()).create(input));
   });
-  tool("plasticity_fastener_presets", "Read the sourced fastener values the board case uses: clearance holes (close, medium, free) following the ISO 273 pattern as two chart pages cite it, CNC Kitchen heat-set insert pockets (two of the sheet's three M3 inserts) and the ISO 10642 M3 countersunk head (6.72 = theoretical sharp-corner diameter), each with its source and confidence, and the values that are not sourced (pilot diameters, M2 and M2.5 countersunk heads).", z.object({ screw: boardCaseScrew.optional() }).strict(), async ({ screw }) =>
+  tool("plasticity_fastener_presets", "Read the sourced fastener values the board case uses: clearance holes (close, medium, free) following the ISO 273 pattern as two chart pages cite it, CNC Kitchen heat-set insert pockets (two of the sheet's three M3 inserts) and the ISO 10642 M3 countersunk head (6.72 = theoretical sharp-corner diameter), each with its source and confidence; the commonly stocked screw lengths (3 to 40 mm; not a cited standard) the stack chooses from; the ISO coarse tapping drills (low confidence; the pilot default with screw auto); and the values that are not sourced (pilot diameters, M2 and M2.5 countersunk heads).", z.object({ screw: boardCaseScrew.optional() }).strict(), async ({ screw }) =>
     (await import("./plasticity/fastener-presets.ts")).fastenerPresetTable(screw), true);
   tool("plasticity_create_mating_enclosure_joint", "Add an exact male lip and clearance-matched female groove to two existing axis-aligned enclosure halves. The seam origin is the lower-left outer corner at the mating plane. All temporary ring solids are consumed and eight native history steps are returned.", matingEnclosureJointInputSchema, async ({ intent: purpose, ...input }) =>
     await journaled("recipe-mating-enclosure-joint", purpose, input, () => new PlasticityRecipes(session.get()).createMatingEnclosureJoint(input)));
