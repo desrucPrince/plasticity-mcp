@@ -14,12 +14,17 @@ import type { PlasticityOperations } from "./operations.ts";
 import { PlasticityRecipes, type RecipeOperations, type RecipeStep } from "./recipes.ts";
 import {
   CALLER_SOURCE,
+  STOCK_SCREW_LENGTHS_MM,
   UnsourcedFastenerValueError,
+  chooseStockScrewLength,
   clearanceHole,
   countersunkHead,
   heatSetInsert,
   requirePilotDiameter,
+  shortestStockScrewLength,
+  tapDrill,
   type ClearanceFit,
+  type PresetConfidence,
   type ScrewSize,
 } from "./fastener-presets.ts";
 
@@ -320,10 +325,14 @@ export interface BoardCaseDerived {
       outerDiametersMm: number[];
       heightMm: number;
       source: string;
-      confidence?: "medium";
+      confidence?: PresetConfidence | "low";
       insert?: string;
       minWallMm?: number;
       clearanceFit?: ClearanceFit;
+      // bossStyle "stack" only: why the standoffs (and the lid posts over them) have this diameter: the input, or the
+      // default rule (the largest up to board hole + 3 that keeps the post inside the lid lip, never below the screw's
+      // close-fit clearance + 1.6 mm).
+      outerDiameterReason?: string;
     };
     lid?: {
       screw: ScrewSize;
@@ -332,7 +341,9 @@ export interface BoardCaseDerived {
       base: "pilot" | "heat-set-insert";
       bossDiameterMm: number;
       bossLengthMm: number;
-      baseHole: { diameterMm: number; depthMm: number; source: string; confidence?: "medium"; insert?: string; minWallMm?: number };
+      baseHole: { diameterMm: number; depthMm: number; source: string; confidence?: PresetConfidence | "low"; insert?: string; minWallMm?: number };
+      // With screw "auto" only: every value the caller left out and the plan filled in, each with its rule.
+      defaults?: string[];
       lidHole: { diameterMm: number; fit: ClearanceFit; source: string; confidence: "medium" };
       countersink?: { headDiameterMm: number; includedAngleDeg: number; depthMm: number; source: string; confidence?: "medium" };
     };
@@ -431,10 +442,19 @@ export function deriveBoardCase(input: BoardCaseInput): BoardCaseDerived {
   return planBoardCase(input).derived;
 }
 
+// Thrown inside the plan when a step-down cap on the default stack diameter changes nothing; never reaches a caller.
+class PostCapSpent extends Error {
+  readonly stop: boolean;
+  constructor(stop: boolean) { super("post cap spent"); this.stop = stop; }
+}
+// Refusals by a web rule: a D1 guard (near-tangent features, sliver edges), a lid web that would cross a screw hole,
+// two lid posts in the gap band. In a stack these depend on the post diameter, so the default diameter steps down past them.
+const webRuleRefusals = new WeakSet<Error>();
+
 // `resolved` and `options` are for the plan's own use and for tests: the reasons of a default it already resolved;
 // fixes: false leaves out the search for the nearest clean hole position when a D1 guard refuses; guards: false returns
 // the plan without running the D1 guards (boardCaseTangencies and boardCaseShortEdges then report what they would refuse).
-export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: string; screwReason?: string }, options: { fixes?: boolean; guards?: boolean } = {}): BoardCasePlan {
+export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: string; screwReason?: string; auto?: boolean; postSearch?: boolean; postCapMm?: number; postCapWhy?: string }, options: { fixes?: boolean; guards?: boolean } = {}): BoardCasePlan {
   // Default boss style: "stack" when the board has at least 2 holes and a stack plan passes every rule, else "floor".
   const given = input.lid?.fasteners;
   if (given && given.bossStyle === undefined && !resolved) {
@@ -474,7 +494,32 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
       screw = "M3";
       why = `screw "auto": M3 (bossStyle "${style}" has no board holes to fit the screws through)`;
     }
-    return planBoardCase({ ...input, lid: { ...input.lid, fasteners: { ...given, screw } } }, { styleReason: resolved?.styleReason ?? "lid.fasteners.bossStyle", screwReason: why }, options);
+    return planBoardCase({ ...input, lid: { ...input.lid, fasteners: { ...given, screw } } }, { styleReason: resolved?.styleReason ?? "lid.fasteners.bossStyle", screwReason: why, auto: true }, options);
+  }
+  // F2: in a stack with no standoffs.outerDiameterMm the default post and standoff diameter also has to pass the web
+  // rules (webRuleRefusals). When one refuses the first default, the default steps down in 0.1 mm steps (never below
+  // the smallest allowed, see the standoff section) to the largest diameter that plans; if none does, the first
+  // refusal stands. Other refusals (an opening on a web, a screw that does not fit) are not stepped past.
+  if (given?.bossStyle === "stack" && input.standoffs?.outerDiameterMm === undefined && !resolved?.postSearch && (input.board?.holes?.length ?? 0) > 0) {
+    const inner = { ...(resolved ?? { styleReason: "lid.fasteners.bossStyle" }), postSearch: true };
+    try {
+      return planBoardCase(input, inner, { ...options, fixes: false });
+    } catch (error) {
+      if (!(error instanceof BoardCaseValidationError)) throw error;
+      if (!webRuleRefusals.has(error)) { if (options.fixes === false) throw error; return planBoardCase(input, inner, options); }
+      const why = error.message.split(", which the kernel cannot build reliably")[0]!;
+      const top = Math.max(...input.board!.holes!.map((hole) => hole.diameterMm)) + 3;
+      for (let cap = Math.ceil(top * 10 - 1e-6) / 10 - 0.1; cap > 0; cap = r9(cap - 0.1)) {
+        try {
+          return planBoardCase(input, { ...inner, postCapMm: r9(cap), postCapWhy: why.length > 300 ? `${why.slice(0, 300)}...` : why }, { ...options, fixes: false });
+        } catch (trial) {
+          if (trial instanceof PostCapSpent) { if (trial.stop) break; continue; }
+          if (!(trial instanceof BoardCaseValidationError) && !(trial instanceof UnsourcedFastenerValueError)) throw trial;
+        }
+      }
+      if (options.fixes === false) throw error;
+      return planBoardCase(input, inner, options); // the first refusal again, now with its nearest clean change
+    }
   }
   const fail = (message: string): never => { throw new BoardCaseValidationError(message); };
   const positive = (label: string, value: number | undefined): number => {
@@ -538,11 +583,60 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
 
   // --- lid-screw boss style (decided first: "floor" widens the cavity) -----------------------------------------------
   // (screw "auto" was resolved above, so the screw is a real size from here on.)
-  const lidFasteners = input.lid?.fasteners as (Omit<NonNullable<NonNullable<BoardCaseInput["lid"]>["fasteners"]>, "screw"> & { screw: ScrewSize }) | undefined;
+  type LidFasteners = Omit<NonNullable<NonNullable<BoardCaseInput["lid"]>["fasteners"]>, "screw"> & { screw: ScrewSize };
+  let lidFasteners = input.lid?.fasteners as LidFasteners | undefined;
   // Stack rules are gathered and refused together, each with the input change that passes it (D2).
   const stackProblems: string[] = [];
+  let stackWebRule = false;
   const bossStyle: BossStyle = lidFasteners?.bossStyle ?? DEFAULT_BOSS_STYLE;
   const stack = !!lidFasteners && bossStyle === "stack";
+  // screw "auto" chose the screw, so the caller cannot know its pilot: the values left out are filled in, each with its
+  // rule (derived.fasteners.lid.defaults). An explicit screw gets no default.
+  const autoDefaults: string[] = [];
+  let pilotDefaulted = false;
+  let pilotDepthDefaulted = false;
+  if (lidFasteners && resolved?.auto) {
+    const filled: LidFasteners = { ...lidFasteners };
+    const screw = filled.screw;
+    if (filled.base === "pilot") {
+      const drill = tapDrill(screw);
+      if (filled.pilotDiameterMm === undefined) {
+        filled.pilotDiameterMm = drill.diameterMm;
+        pilotDefaulted = true;
+        autoDefaults.push(`pilotDiameterMm ${drill.diameterMm}: the ${screw} tapping drill (${drill.nominalDiameterMm} - pitch ${drill.pitchMm}), a starting value for a screw that forms its thread in printed plastic (confidence low)`);
+      } else if (filled.pilotDiameterMm >= drill.nominalDiameterMm - EPS) {
+        const message = `lid.fasteners.pilotDiameterMm ${filled.pilotDiameterMm} is not smaller than the ${screw} thread (Ø${drill.nominalDiameterMm}) that screw "auto" chose, so the screw would not hold; leave pilotDiameterMm out (default Ø${drill.diameterMm}) or name the screw`;
+        if (stack) stackProblems.push(message); else fail(message);
+      }
+      if (filled.pilotDepthMm === undefined) {
+        // Two thread diameters of engagement. Stack: the shortest stocked screw that gives it, plus the tip clearance.
+        const target = 2 * drill.nominalDiameterMm;
+        const through = tl + Hc + headroomMm + d + T;
+        let length = stack ? shortestStockScrewLength(through, target) : undefined;
+        // A given standoffs.heightMm that does not hold that pilot: the longest stocked screw whose pilot it does hold
+        // (still minEngagementMm in the standoff). If there is none, the usual default stands and the stack is refused.
+        const givenHeight = stack && typeof input.standoffs?.heightMm === "number" ? input.standoffs.heightMm : undefined;
+        let shortened: number | undefined;
+        if (length !== undefined && givenHeight !== undefined && length - through + LIMITS.minTipClearanceMm > givenHeight + EPS) {
+          const fitting = STOCK_SCREW_LENGTHS_MM.filter((stocked) => stocked - through >= LIMITS.minEngagementMm - EPS && stocked - through + LIMITS.minTipClearanceMm <= givenHeight + EPS).at(-1);
+          if (fitting !== undefined) { shortened = r9(length - through + LIMITS.minTipClearanceMm); length = fitting; }
+        }
+        filled.pilotDepthMm = length !== undefined ? r9(length - through + LIMITS.minTipClearanceMm) : r9(target + (stack ? LIMITS.minTipClearanceMm : 0));
+        pilotDepthDefaulted = true;
+        autoDefaults.push(length !== undefined
+          ? `pilotDepthMm ${filled.pilotDepthMm}: a stocked ${length} mm screw passes ${r9(through)} mm of lid, post and board and reaches ${r9(length - through)} mm into the standoff (${shortened !== undefined ? `the given standoffs.heightMm ${givenHeight} does not hold the ${shortened} mm pilot for 2 x ${drill.nominalDiameterMm}` : `at least 2 x ${drill.nominalDiameterMm}`}), with ${LIMITS.minTipClearanceMm} mm tip clearance`
+          : `pilotDepthMm ${filled.pilotDepthMm}: 2 x the ${screw} thread diameter${stack ? ` + ${LIMITS.minTipClearanceMm} mm tip clearance` : ""}`);
+      }
+    }
+    if (filled.countersunk === undefined && filled.headDiameterMm === undefined) {
+      try { countersunkHead(screw); } catch (error) {
+        if (!(error instanceof UnsourcedFastenerValueError)) throw error;
+        filled.countersunk = false;
+        autoDefaults.push(`countersunk false: the ${screw} countersunk head is not sourced, so the lid holes are plain (pass headDiameterMm for countersinks)`);
+      }
+    }
+    lidFasteners = filled;
+  }
   // Corner bosses exist with lid fasteners in every style but "stack".
   const corner = stack ? undefined : lidFasteners;
   if (!BOSS_STYLES.includes(bossStyle)) fail(`lid.fasteners.bossStyle must be one of ${BOSS_STYLES.join(", ")} (got ${String(bossStyle)})`);
@@ -678,8 +772,9 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
       holeAtLeast(`${where}.pilotDiameterMm`, holeDiameterMm);
       holeDepthMm = positive(`${where}.pilotDepthMm`, fastener!.pilotDepthMm ?? supportH);
       if (holeDepthMm < LIMITS.minHoleDepthMm - EPS) fail(`${where}.pilotDepthMm ${holeDepthMm} is below the ${LIMITS.minHoleDepthMm} mm minimum hole depth`);
-      if (holeDepthMm > supportH + EPS) (stack ? (message: string) => { stackProblems.push(message); } : fail)(`${where}.pilotDepthMm ${holeDepthMm} exceeds the standoff height ${supportH}${stack ? `; raise standoffs.heightMm to ${r9(holeDepthMm + 1)} or leave it out (the default holds the pilot)` : ""}`);
-      source = CALLER_SOURCE;
+      if (stack && pilotDefaulted) Object.assign(extra, { confidence: "low" });
+      if (holeDepthMm > supportH + EPS) (stack ? (message: string) => { stackProblems.push(message); } : fail)(`${where}.pilotDepthMm ${holeDepthMm}${pilotDepthDefaulted ? " (the default with screw \"auto\")" : ""} exceeds the standoff height ${supportH}${stack ? `; raise standoffs.heightMm to ${r9(holeDepthMm + 1)} or leave it out (the default holds the pilot)` : ""}`);
+      source = stack && pilotDefaulted ? tapDrill(fastener.screw).source : CALLER_SOURCE;
     } else if (fastener.mode === "heat-set-insert") {
       const insert = heatSetInsert(fastener.screw, fastener.insertLengthMm);
       holeDiameterMm = insert.holeDiameterMm;
@@ -700,7 +795,46 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
     }
     // Default standoff diameter: board hole + 3, or the sourced insert wall around the insert hole if that is larger.
     const insertMinimum = extra.minWallMm !== undefined ? holeDiameterMm + 2 * extra.minWallMm : 0;
+    // Stack (F2): the lid post over each hole has the standoff's diameter and must stay tangentBandMm inside the lid lip
+    // outline. So the default there is the largest diameter up to the usual one that does (in 0.1 mm steps), but never
+    // below the screw's close-fit clearance + 1.6 mm (0.8 mm of wall) or any other minimum of a standoff. An explicit
+    // standoffs.outerDiameterMm is never changed.
+    let outerDiameterReason: string | undefined;
     const outerDiameters = holes.map((hole) => standoffInput.outerDiameterMm ?? r9(Math.max(hole.diameterMm + 3, insertMinimum)));
+    if (stack && standoffInput.outerDiameterMm !== undefined) outerDiameterReason = "standoffs.outerDiameterMm";
+    if (stack && standoffInput.outerDiameterMm === undefined) {
+      const lip: Rect = { min: [cavMin[0] + lc, cavMin[1] + lc], max: [cavMax[0] - lc, cavMax[1] - lc] };
+      const close = clearanceHole(lidFasteners!.screw, "close").diameterMm;
+      const through = clearanceHole(lidFasteners!.screw, lidFasteners!.clearanceFit ?? "medium").diameterMm;
+      const reasons: string[] = [];
+      // postCapMm: the step-down of the default while a plan rule refuses it (see the top of planBoardCase).
+      const cap = resolved?.postCapMm;
+      let capLowered = false;
+      let capSpent = true;
+      holes.forEach((hole, index) => {
+        const usual = outerDiameters[index]!;
+        const room = roundedRectInsideDistance([boardMin[0] + hole.xMm, boardMin[1] + hole.yMm], lip, Math.max(0, Ri - lc));
+        const fits = Math.floor(2 * (room - LIMITS.tangentBandMm) * 10 + 1e-6) / 10;
+        const least = r9(Math.max(close + 1.6, hole.diameterMm + LIMITS.standoffOverBoardHoleMm, insertMinimum, through + 2 * LIMITS.minHoleWallMm, holeDiameterMm + 2 * LIMITS.minHoleWallMm));
+        const uncapped = r9(Math.max(least, Math.min(usual, fits)));
+        const chosen = cap === undefined ? uncapped : r9(Math.max(least, Math.min(uncapped, cap)));
+        if (cap !== undefined) {
+          if (chosen < r9(Math.max(least, Math.min(uncapped, cap + 0.1))) - EPS) capLowered = true;
+          if (chosen > least + EPS) capSpent = false;
+        }
+        outerDiameters[index] = chosen;
+        reasons.push(chosen < uncapped - EPS
+          ? `default: Ø${chosen}, the largest (in 0.1 mm steps) that passes the plan rules (at Ø${uncapped}: ${resolved!.postCapWhy})`
+          : chosen >= usual - EPS
+            ? `default: Ø${chosen}, ${insertMinimum > hole.diameterMm + 3 ? "the sourced insert wall around the insert hole" : "board hole + 3"}`
+            : fits >= least - EPS
+              ? `default: Ø${chosen}, the largest (in 0.1 mm steps) that keeps the lid post ${LIMITS.tangentBandMm} mm inside the lid lip outline (board hole + 3 would be Ø${usual})`
+              : `default: Ø${chosen}, the smallest allowed for ${lidFasteners!.screw} (close-fit clearance Ø${close} + 1.6, a hole wall of ${LIMITS.minHoleWallMm} and board hole + ${LIMITS.standoffOverBoardHoleMm}); a post inside the lid lip outline could be at most Ø${fits}`);
+      });
+      // This cap changed no diameter (the plan would repeat the last one): skip it, and stop when every hole is at its smallest.
+      if (cap !== undefined && !capLowered) throw new PostCapSpent(capSpent);
+      outerDiameterReason = new Set(reasons).size === 1 ? reasons[0]! : reasons.map((reason, index) => `board.holes[${index}]: ${reason}`).join("; ");
+    }
     holes.forEach((hole, index) => standoffs.push({ label: `standoff ${index}`, axis: [boardMin[0] + hole.xMm, boardMin[1] + hole.yMm], radius: outerDiameters[index]! / 2, holeRadius: holeDiameterMm / 2 }));
     outerDiameters.forEach((od, index) => {
       positive(`standoffs.outerDiameterMm (hole ${index})`, od);
@@ -725,7 +859,7 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
     if (fastener.mode === "through") {
       standoffFloorHoles = { entryCentersMm: standoffs.map((standoff) => [r9(standoff.axis[0]), r9(standoff.axis[1]), oz] as Vector3), diameterMm: holeDiameterMm, depthMm: f };
     }
-    standoffFastener = { ...(fastener.mode === "support" ? {} : { screw: fastener.screw }), mode: fastener.mode, holeDiameterMm, holeDepthMm: fastener.mode === "through" ? r9(supportH + f) : holeDepthMm, outerDiametersMm: [...outerDiameters], heightMm: supportH, source, ...extra };
+    standoffFastener = { ...(fastener.mode === "support" ? {} : { screw: fastener.screw }), mode: fastener.mode, holeDiameterMm, holeDepthMm: fastener.mode === "through" ? r9(supportH + f) : holeDepthMm, outerDiametersMm: [...outerDiameters], heightMm: supportH, source, ...extra, ...(outerDiameterReason ? { outerDiameterReason } : {}) };
   }
 
   // --- lid-screw corner bosses ---------------------------------------------------------------------------------------
@@ -751,7 +885,7 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
       const depthMm = positive("lid.fasteners.pilotDepthMm", lidFasteners.pilotDepthMm);
       atMost("lid.fasteners.pilotDepthMm", depthMm, LIMITS.maxHeightMm, "height");
       if (depthMm < LIMITS.minHoleDepthMm - EPS) fail(`lid.fasteners.pilotDepthMm ${depthMm} is below the ${LIMITS.minHoleDepthMm} mm minimum hole depth`);
-      baseHole = { diameterMm, depthMm, source: CALLER_SOURCE };
+      baseHole = pilotDefaulted ? { diameterMm, depthMm, source: tapDrill(lidFasteners.screw).source, confidence: "low" } : { diameterMm, depthMm, source: CALLER_SOURCE };
     } else {
       const insert = heatSetInsert(lidFasteners.screw, lidFasteners.insertLengthMm);
       if (corner && bossD < insert.holeDiameterMm + 2 * insert.minWallMm - EPS) {
@@ -792,6 +926,7 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
     lidFastener = {
       screw: lidFasteners.screw,
       screwReason: resolved?.screwReason ?? "lid.fasteners.screw",
+      ...(autoDefaults.length > 0 ? { defaults: autoDefaults } : {}),
       base: lidFasteners.base,
       bossDiameterMm: bossD,
       bossLengthMm: postLength,
@@ -1105,14 +1240,16 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
     const lipInnerRect: Rect = { min: [cavMin[0] + lipInset, cavMin[1] + lipInset], max: [cavMax[0] - lipInset, cavMax[1] - lipInset] };
     // The largest post diameter every post fits with tangentBandMm to the lip outline (the D2 fix for the outline rule).
     const outlineRoom = Math.min(...standoffs.map((standoff) => roundedRectInsideDistance(standoff.axis, lipOuterRect, lipRadius)));
-    const maxPostOd = Math.floor(2 * (outlineRoom - LIMITS.tangentBandMm) * 1000) / 1000;
+    const maxPostOd = Math.floor(2 * (outlineRoom - LIMITS.tangentBandMm) * 1000 + 1e-6) / 1000;
+    // The smallest diameter an explicit standoffs.outerDiameterMm may have at this hole (the standoff and post minimums).
+    const minPostOd = (index: number) => r9(Math.max(holes[index]!.diameterMm + LIMITS.standoffOverBoardHoleMm, holeD + 2 * LIMITS.minHoleWallMm, standoffs[index]!.holeRadius * 2 + 2 * LIMITS.minHoleWallMm, standoffFastener?.minWallMm !== undefined ? standoffs[index]!.holeRadius * 2 + 2 * standoffFastener.minWallMm : 0));
     standoffs.forEach((standoff, index) => {
       const label = `the lid post over board.holes[${index}]`;
       if ((2 * standoff.radius - holeD) / 2 < LIMITS.minHoleWallMm - EPS) stackProblems.push(`${label} (Ø${r9(2 * standoff.radius)}, the standoff diameter) leaves less than ${LIMITS.minHoleWallMm} mm around its Ø${holeD} screw clearance hole; use standoffs.outerDiameterMm ${r9(holeD + 2 * LIMITS.minHoleWallMm)} or more`);
       // The post hangs inside the lid lip outline (it may merge into the lip) and keeps tangentBandMm to it; its hole keeps
       // minHoleWallMm to that outline.
       const outside = roundedRectInsideDistance(standoff.axis, lipOuterRect, lipRadius);
-      if (outside - standoff.radius < LIMITS.tangentBandMm - EPS) stackProblems.push(`${label} ${outside - standoff.radius < 0 ? `reaches ${r3(standoff.radius - outside)} mm past` : `comes within ${r3(outside - standoff.radius)} mm of`} the lid lip outline toward the base wall (it must stay ${LIMITS.tangentBandMm} mm inside); use standoffs.outerDiameterMm ${maxPostOd} or less, or move the hole inward`);
+      if (outside - standoff.radius < LIMITS.tangentBandMm - EPS) stackProblems.push(`${label} ${r3(standoff.radius - outside) > 0 ? `reaches ${r3(standoff.radius - outside)} mm past` : `comes within ${r3(outside - standoff.radius)} mm of`} the lid lip outline toward the base wall (it must stay ${LIMITS.tangentBandMm} mm inside); ${maxPostOd >= minPostOd(index) - EPS ? `use standoffs.outerDiameterMm ${maxPostOd} or less${input.standoffs?.outerDiameterMm === undefined ? ` (the default does not go below Ø${r9(2 * standoff.radius)} for ${lidFasteners!.screw})` : ""}, or ` : ""}move the hole inward${maxPostOd >= minPostOd(index) - EPS ? "" : ` (no standoff diameter fits: at most Ø${maxPostOd} inside the lip, at least Ø${minPostOd(index)} for its holes)`}`);
       if (outside - holeD / 2 < LIMITS.minHoleWallMm - EPS) stackProblems.push(`${label}: its screw hole comes within ${r3(outside - holeD / 2)} mm of the lid lip outline (at least ${LIMITS.minHoleWallMm} mm); move board.holes[${index}] ${r3(LIMITS.minHoleWallMm - (outside - holeD / 2))} mm inward`);
       // A gap to the lip's inner face from -mergeBandMm (a shallow overlap) to minGapMm is closed by a lid web the lip's
       // height (R4, D1); near two lip sides a corner box closes the corner between the two side webs (D3).
@@ -1120,6 +1257,7 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
       const gaps = { "x-": standoff.axis[0] - lipInnerRect.min[0] - standoff.radius, "x+": lipInnerRect.max[0] - standoff.axis[0] - standoff.radius, "y-": standoff.axis[1] - lipInnerRect.min[1] - standoff.radius, "y+": lipInnerRect.max[1] - standoff.axis[1] - standoff.radius };
       const inBand = (gap: number) => gap > -LIMITS.mergeBandMm + EPS && gap < LIMITS.minGapMm - EPS;
       const addLidWeb = (name: string, gap: number, min: Vector2, max: Vector2) => {
+        for (const [otherIndex, other] of standoffs.entries()) if (otherIndex !== index && circleHitsRect(other.axis, holeD / 2 + LIMITS.minHoleWallMm, { min, max })) stackWebRule = true;
         for (const [otherIndex, other] of standoffs.entries()) if (otherIndex !== index && circleHitsRect(other.axis, holeD / 2 + LIMITS.minHoleWallMm, { min, max })) stackProblems.push(`the lid web closing the ${r3(gap)} mm gap between ${label} and the lid lip would cross the screw hole over board.holes[${otherIndex}]; move board.holes[${index}] so the post overlaps the lip by ${LIMITS.mergeBandMm} mm or stands ${LIMITS.minGapMm} mm clear`);
         lidWebs.push({ label: `${label} and the lid lip ${name}`, gapMm: r9(gap), originMm: [r9(min[0]), r9(min[1]), r9(lipBottomZ)], sizeMm: [r9(max[0] - min[0]), r9(max[1] - min[1]), r9(wallTopZ + OV - lipBottomZ)] });
         lidWebParts.push({ label: `${label} and the lid lip ${name}`, polygon: [[min[0], min[1]], [max[0], min[1]], [max[0], max[1]], [min[0], max[1]]], z: [lipBottomZ, wallTopZ + OV], holes: [index] });
@@ -1157,6 +1295,7 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
       const a = stackPosts[first]!;
       const b = stackPosts[second]!;
       const gap = Math.hypot(a.axis[0] - b.axis[0], a.axis[1] - b.axis[1]) - a.radius - b.radius;
+      if (gap > -LIMITS.mergeBandMm + EPS && gap < LIMITS.minGapMm - EPS) stackWebRule = true;
       if (gap > -LIMITS.mergeBandMm + EPS && gap < LIMITS.minGapMm - EPS) stackProblems.push(`${a.label} and ${b.label} are ${r3(gap)} mm apart; move board.holes[${b.index}] ${r3(LIMITS.minGapMm - gap)} mm further from board.holes[${a.index}] (or ${r3(gap + LIMITS.mergeBandMm)} mm closer so they merge)`);
     }
     lidHoleSpec!.entryCentersMm = standoffs.map((standoff) => [r9(standoff.axis[0]), r9(standoff.axis[1]), r9(wallTopZ + tl)] as Vector3);
@@ -1169,20 +1308,34 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
       holeDepthMm: r9(postLength),
       baseOverlapMm: OV,
     }));
-    // D9: the screw passes lid + post + 0.2 mm gap + board, then the standoff hole (pilot depth or insert pocket). The
-    // longest standard length with at least minEngagementMm in the standoff and minTipClearanceMm short of the hole bottom.
+    // D9, F1: the screw passes lid + post + 0.2 mm gap + board, then the standoff hole (pilot depth or insert pocket).
+    // The longest stocked length with at least minEngagementMm in the standoff and minTipClearanceMm short of the hole
+    // bottom; when none fits, the refusal names the nearest pilot depth and the nearest component height that would.
     const through = tl + postLength + LIMITS.stackPostGapMm + T;
     const holeDepth = lidFastener!.baseHole.depthMm;
     const maxLength = through + holeDepth;
-    const standard = standardScrewLengths();
-    const fitting = standard.filter((length) => length - through >= LIMITS.minEngagementMm - EPS && length <= maxLength - LIMITS.minTipClearanceMm + EPS);
-    const screwLength = fitting.length > 0 ? fitting[fitting.length - 1]! : undefined;
+    const screwLength = chooseStockScrewLength(through, holeDepth, { minEngagementMm: LIMITS.minEngagementMm, minTipClearanceMm: LIMITS.minTipClearanceMm })?.lengthMm;
     if (screwLength === undefined) {
-      const next = standard.find((length) => length - through >= LIMITS.minEngagementMm - EPS);
-      const fix = lidFastener!.base === "pilot" && next !== undefined
-        ? `use lid.fasteners.pilotDepthMm ${r9(next - through + LIMITS.minTipClearanceMm)} for a ${next} mm screw (the default standoff height follows)`
-        : `change board.componentHeightMm, lid.lipDepthMm or walls.lidMm so a standard length lands between them`;
-      stackProblems.push(`no standard screw length fits the stack: it needs between ${r9(through + LIMITS.minEngagementMm)} and ${r9(maxLength - LIMITS.minTipClearanceMm)} mm (lid + post + 0.2 mm gap + board = ${r9(through)} mm, at least ${LIMITS.minEngagementMm} mm in the ${holeDepth} mm standoff hole, ${LIMITS.minTipClearanceMm} mm tip clearance; standard lengths step 2 mm to 12, then 4 mm); ${fix}`);
+      const fixes: string[] = [];
+      const next = shortestStockScrewLength(through, LIMITS.minEngagementMm);
+      if (lidFastener!.base === "pilot" && next !== undefined) {
+        // A given standoffs.heightMm that would not hold the deeper pilot is named with it (the default height follows by itself).
+        const depth = r9(next - through + LIMITS.minTipClearanceMm);
+        const height = input.standoffs?.heightMm;
+        fixes.push(`use lid.fasteners.pilotDepthMm ${depth} ${height !== undefined && height < depth + 1 - EPS ? `with standoffs.heightMm ${r9(depth + 1)} ` : ""}for a stocked ${next} mm screw${height === undefined ? " (the default standoff height follows)" : ""}`);
+      }
+      // The nearest component height: the through length that puts a stocked screw between the two limits.
+      let nearest: { delta: number; length: number } | undefined;
+      for (const length of STOCK_SCREW_LENGTHS_MM) {
+        const low = length - holeDepth + LIMITS.minTipClearanceMm;
+        const high = length - LIMITS.minEngagementMm;
+        if (low > high + EPS) continue;
+        const delta = through > high ? high - through : through < low ? low - through : 0;
+        if (Hc + delta > EPS && (!nearest || Math.abs(delta) < Math.abs(nearest.delta) - EPS)) nearest = { delta, length };
+      }
+      if (nearest) fixes.push(`${fixes.length > 0 ? "or " : ""}use board.componentHeightMm ${r9(Hc + nearest.delta)} for a stocked ${nearest.length} mm screw`);
+      if (fixes.length === 0) fixes.push(`use a standoff hole at least ${LIMITS.minEngagementMm + LIMITS.minTipClearanceMm} mm deep and a stack no longer than ${STOCK_SCREW_LENGTHS_MM.at(-1)! - LIMITS.minEngagementMm} mm`);
+      stackProblems.push(`no standard screw length fits the stack: it needs between ${r9(through + LIMITS.minEngagementMm)} and ${r9(maxLength - LIMITS.minTipClearanceMm)} mm (lid + post + 0.2 mm gap + board = ${r9(through)} mm, at least ${LIMITS.minEngagementMm} mm in the ${holeDepth} mm standoff hole, ${LIMITS.minTipClearanceMm} mm tip clearance; stocked lengths ${STOCK_SCREW_LENGTHS_MM.join(", ")}); ${fixes.join(", ")}`);
     }
     const engagement = screwLength !== undefined ? r9(screwLength - through) : 0;
     stackDerived = {
@@ -1628,7 +1781,9 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
       if (group) { if (!group.holes.includes(indexes[0]!)) group.holes.push(indexes[0]!); } else groups.set(key, { message, holes: new Set(indexes).size === 1 ? [indexes[0]!] : [] });
     }
     const listed = [...groups.values()].map(({ message, holes }) => holes.length > 1 ? `${message} (the same for ${holes.slice(1).map((index) => `board.holes[${index}]`).join(", ")})` : message);
-    fail(`${listed[0]!.includes("bossStyle \"stack\"") ? "" : "bossStyle \"stack\": "}${listed.join("; ")}`);
+    const refusal = new BoardCaseValidationError(`${listed[0]!.includes("bossStyle \"stack\"") ? "" : "bossStyle \"stack\": "}${listed.join("; ")}`);
+    if (stackWebRule) webRuleRefusals.add(refusal);
+    throw refusal;
   }
   const plannedUndoSteps = countBoardCaseSteps(body, exploded);
   if (plannedUndoSteps > LIMITS.maxUndoSteps) fail(`the build would take ${plannedUndoSteps} Undo steps, above the ${LIMITS.maxUndoSteps}-step limit; use fewer vent slots, openings or board holes`);
@@ -1695,8 +1850,10 @@ export function planBoardCase(input: BoardCaseInput, resolved?: { styleReason: s
           ? `the outline where ${first.features.join(", ")} meet ${where} would have ${first.valueMm < 0.001 ? "an edge under 0.001 mm" : `a ${r3(first.valueMm)} mm edge`} at x ${r3(first.atMm[0])}, y ${r3(first.atMm[1])}, z ${r3(first.atMm[2])}, under the ${first.stage === "webs" ? LIMITS.minWebStageEdgeMm : LIMITS.minPlanEdgeMm} mm the plan allows`
           : `${first.features.join(", ")} would end ${r3(first.valueMm)} mm apart in height ${where}, under the ${first.stage === "webs" ? LIMITS.minWebStageEdgeMm : LIMITS.minPlanEdgeMm} mm the plan allows`;
       const more = findings.length > 1 ? ` (and ${findings.length - 1} more such spot${findings.length > 2 ? "s" : ""})` : "";
-      const fix = options.fixes === false ? "move a board hole or change standoffs.outerDiameterMm" : nearestCleanChange(input, [...new Set(findings.flatMap((finding) => finding.holes))], (trial) => { planBoardCase(trial, { styleReason: resolved?.styleReason ?? "lid.fasteners.bossStyle", ...(resolved?.screwReason ? { screwReason: resolved.screwReason } : {}) }, { fixes: false }); });
-      fail(`${what}${more}, which the kernel cannot build reliably; ${fix}`);
+      const fix = options.fixes === false ? "move a board hole or change standoffs.outerDiameterMm" : nearestCleanChange(input, [...new Set(findings.flatMap((finding) => finding.holes))], (trial) => { planBoardCase(trial, { styleReason: resolved?.styleReason ?? "lid.fasteners.bossStyle", ...(resolved?.screwReason ? { screwReason: resolved.screwReason } : {}), ...(resolved?.auto ? { auto: true } : {}), postSearch: true }, { fixes: false }); });
+      const refusal = new BoardCaseValidationError(`${what}${more}, which the kernel cannot build reliably; ${fix}`);
+      webRuleRefusals.add(refusal);
+      throw refusal;
     }
   }
 
@@ -2506,14 +2663,6 @@ function circleHitsRect(center: Vector2, radius: number, rect: Rect): boolean {
   const dx = Math.max(rect.min[0] - center[0], 0, center[0] - rect.max[0]);
   const dy = Math.max(rect.min[1] - center[1], 0, center[1] - rect.max[1]);
   return Math.hypot(dx, dy) < radius - EPS;
-}
-
-// Standard screw lengths: 2 mm steps to 12 mm, then 4 mm steps (to 200).
-function standardScrewLengths(): number[] {
-  const lengths: number[] = [];
-  for (let length = 2; length <= 12; length += 2) lengths.push(length);
-  for (let length = 16; length <= 200; length += 4) lengths.push(length);
-  return lengths;
 }
 
 // Does a polygon overlap an axis-aligned rectangle (more than touching it)?

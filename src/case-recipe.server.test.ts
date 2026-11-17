@@ -350,3 +350,39 @@ test("D1: a plan the tangency guards refuse reaches the caller before any native
     assert.equal(result.undoSteps, calls.length);
   });
 });
+
+test("F3: the typical ESP32 call (screw auto, base pilot, no pilot keys) passes the strict schema and builds a stack; the presets list the stocked lengths and the tapping drills", async () => {
+  // As few keys as the schema allows: the board with its four Ø3 holes 2.0 mm in, the USB opening, screw auto, base pilot.
+  const input = { originMm: [2000, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: cornerHoles(51.5, 28.3, 3, 2), componentHeightMm: 8 }, lid: { fasteners: { screw: "auto", base: "pilot" } }, openings: [{ wall: "x-", shape: "rect", widthMm: 9.2, heightMm: 3.4, alongMm: 14.15, aboveBoardMm: 0 }] };
+  await withClient(async (client, calls) => {
+    const result = json(await client.callTool({ name: "plasticity_create_board_case", arguments: { ...input, revision: "r0" } }));
+    assert.equal(result.status, "completed");
+    const derived = result.derived;
+    assert.deepEqual([derived.bossStyle, derived.fasteners.lid.screw, derived.fasteners.lid.baseHole.diameterMm, derived.fasteners.lid.baseHole.depthMm, derived.fasteners.lid.baseHole.confidence], ["stack", "M2.5", 2.05, 6.9, "low"]);
+    assert.deepEqual(derived.fasteners.lid.defaults.map((entry: string) => entry.split(":")[0]), ["pilotDiameterMm 2.05", "pilotDepthMm 6.9", "countersunk false"]);
+    assert.deepEqual([derived.fasteners.standoffs.mode, derived.fasteners.standoffs.outerDiametersMm, derived.fasteners.standoffs.heightMm, derived.stack.postOuterDiametersMm, derived.stack.screwLengthMm], ["pilot", [4.5, 4.5, 4.5, 4.5], 7.9, [4.5, 4.5, 4.5, 4.5], 20]);
+    assert.match(derived.fasteners.standoffs.outerDiameterReason, /^default: Ø4\.5, the largest \(in 0\.1 mm steps\) that keeps the lid post 0\.05 mm inside the lid lip outline \(board hole \+ 3 would be Ø6\)$/);
+    assert.deepEqual(derived.stack.postAxesMm, derived.standoffAxesMm);
+    assert.deepEqual([derived.outerMm.max[0] - derived.outerMm.min[0], Math.round((derived.outerMm.max[1] - derived.outerMm.min[1]) * 1e6) / 1e6, derived.outerMm.max[2] - derived.outerMm.min[2]], [56.5, 33.3, 22]);
+    assert.equal(result.undoSteps, calls.length);
+    assert.equal(result.undoSteps, derived.plannedUndoSteps);
+    // A named screw still needs its pilot: refused before any native call.
+    const before = calls.length;
+    const named = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...input, lid: { fasteners: { screw: "M2.5", base: "pilot" } }, revision: "r0" } });
+    assert.equal(named.isError, true);
+    assert.match(JSON.stringify(named.content), /a self-tapping pilot diameter for M2\.5 in plastic is not sourced; pass pilotDiameterMm/);
+    assert.equal(calls.length, before);
+    const board = (await client.listTools()).tools.find((entry) => entry.name === "plasticity_create_board_case")!;
+    assert.ok((board.description ?? "").length <= 600);
+    const fasteners = (board.inputSchema as unknown as { properties: { lid: { properties: { fasteners: { properties: Record<string, { description?: string }>; required?: string[] } } }; standoffs: { properties: Record<string, { description?: string }> } } }).properties;
+    assert.deepEqual([...(fasteners.lid.properties.fasteners.required ?? [])].sort(), ["base", "screw"]);
+    assert.match(fasteners.lid.properties.fasteners.properties.pilotDiameterMm!.description ?? "", /Screw auto: default the screw's ISO coarse tapping drill/);
+    assert.match(fasteners.standoffs.properties.outerDiameterMm!.description ?? "", /with bossStyle stack the largest up to that .* A given value is never changed/);
+  });
+  await withClient(async (client) => {
+    const presets = json(await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_fastener_presets", arguments: { screw: "M2.5" } } }));
+    assert.deepEqual(presets.screwLengths.lengthsMm, [3, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 30, 35, 40]);
+    assert.match(presets.screwLengths.note, /the commonly stocked series, not a cited standard/);
+    assert.deepEqual([presets.tapDrills.confidence, presets.tapDrills.rows], ["low", [{ screw: "M2.5", nominalDiameterMm: 2.5, pitchMm: 0.45, diameterMm: 2.05 }]]);
+  }, true);
+});

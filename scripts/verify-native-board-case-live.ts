@@ -9,8 +9,10 @@
 // must be refused with the Undo depth, the body count and the revision unchanged (the former forced native failure, a
 // 1e-6 mm board, is now refused in the plan and sits in that list). Every built case also gets the R4 web probes; the pod,
 // the stack case, the benchmark (floor) and the first D2 case get the diagonal corner-gap shift (D5).
+// Follow-up: "d2-holes-3-auto" and "esp32" (screw auto, no pilot keys) must build as stacks with the default post
+// diameter inside the lid lip, a standoff under every hole, coaxial posts, a board that lifts out and no interference.
 // Round 4: the reviewer's three D2 inputs (a standoff under every hole, measured; the board rests on them); "lip-corner"
-// (D3: a line of probe boxes through the lip corner, all inside lid material); and "tangents" (D1: 49 near-tangent
+// (D3: a line of probe boxes through the lip corner, all inside lid material); and "tangents" (D1: 50 near-tangent
 // inputs, the reviewer's own among them, each built, read back and undone; a late failure fails the run). The script refuses to run without
 // PLASTICITY_CDP_URL on 127.0.0.1 and restores the baseline in finally; its last line states the Undo depth and the body
 // count it leaves.
@@ -32,7 +34,7 @@ type Bounds = { min: V3; max: V3 };
 type Face = { id: string; bodyId: number; surfaceType: string; planar: boolean; normal: V3; radiusMm: number | null; axisOriginMm: V3 | null; axisDirection: V3 | null; boundsMm: Bounds; centerMm: V3; coneSemiAngleRad?: number };
 type Edge = { id: string; bodyId: number; curveType: string; circle: boolean; boundsMm: Bounds; centerMm: V3; circleGeometry?: { centerMm: V3; radiusMm: number; normal: V3 } };
 
-export const BOARD_CASES = ["benchmark", "benchmark-tapered", "benchmark-hanging", "audit", "pod", "lip-notch", "openings", "corner-holes", "stack", "inserts", "d2-holes-3", "d2-holes-3.2", "d2-inserts", "lip-corner", "tangents", "rejects"] as const;
+export const BOARD_CASES = ["benchmark", "benchmark-tapered", "benchmark-hanging", "audit", "pod", "lip-notch", "openings", "corner-holes", "stack", "inserts", "d2-holes-3", "d2-holes-3.2", "d2-inserts", "d2-holes-3-auto", "esp32", "lip-corner", "tangents", "rejects"] as const;
 type CaseName = typeof BOARD_CASES[number];
 
 interface Options { help: boolean; target?: string; output?: string; allowDisposableMutations: boolean; cases: CaseName[] }
@@ -70,12 +72,13 @@ hanging with allowBlockedBoard; the audit enclosure; the pod; the reviewer's squ
 independent reads, lifts each board stand-in out of its base in 3 mm steps (boardDropIn), undoes each case with one
 batched undo of the measured undoSteps, probes every R4 web, shifts the board diagonally for the corner gap (pod, stack),
 builds two-opening walls, the corner-hole board (floor and stack) and an insert case, the three default inputs that
-used to leave the board on nothing (a support post under every hole), a stack whose posts sit 0.3 mm from two lip sides
-(probed through the lip corner), 49 near-tangent inputs (each built, read back and undone), and sends the reviewer's bad
+used to leave the board on nothing (a support post under every hole), the first of them with screw auto and the typical
+ESP32 call (both stacks by default: Ø4.5 posts inside the lid lip, default pilots), a stack whose posts sit 0.3 mm from two lip sides
+(probed through the lip corner), 50 near-tangent inputs (each built, read back and undone), and sends the reviewer's bad
 inputs (each refused with nothing changed). The document's Undo depth and body count are restored. Run only against an
 isolated instance (npm run start:plasticity-isolated).`;
 
-// ------------------------------------------------------------------------------------------------- the three cases
+// ------------------------------------------------------------------------------------------------- the cases
 const HOLES_BENCHMARK = [[2.6, 2.6], [48.9, 2.6], [2.6, 25.7], [48.9, 25.7]].map(([xMm, yMm]) => ({ xMm, yMm, diameterMm: 3 }));
 // Four holes the same distance from the board edges.
 const cornerHoles = (length: number, width: number, diameterMm: number, inset: number) => [[inset, inset], [length - inset, inset], [inset, width - inset], [length - inset, width - inset]].map(([xMm, yMm]) => ({ xMm, yMm, diameterMm }));
@@ -160,6 +163,17 @@ export function caseArguments(name: CaseName): Record<string, unknown> {
     const fasteners = name === "d2-inserts" ? { screw: "M3", base: "heat-set-insert", insertLengthMm: 3 } : { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 6 };
     return { originMm: [name === "d2-holes-3" ? 2800 : name === "d2-holes-3.2" ? 2900 : 3000, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes, componentHeightMm: 8 }, lid: { fasteners }, boardStandIn: true, name: name === "d2-holes-3" ? "d2a" : name === "d2-holes-3.2" ? "d2b" : "d2c" };
   }
+  if (name === "d2-holes-3-auto") {
+    // Follow-up F2/F3: the first D2 input with screw "auto" and the pilot keys left out. M2.5 passes the Ø3 holes and the
+    // default post (Ø4.5) fits inside the lid lip, so it builds as a stack.
+    return { originMm: [3300, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: cornerHoles(51.5, 28.3, 3, 2), componentHeightMm: 8 }, lid: { fasteners: { screw: "auto", base: "pilot" } }, boardStandIn: true, name: "d2s" };
+  }
+  if (name === "esp32") {
+    // Follow-up F3: a typical ESP32 dev board call with as few keys as the schema allows: the board, its four Ø3 holes
+    // 2.0 mm in, the USB opening on a short end, screw "auto" and base "pilot". boardStandIn is added only so that the
+    // board can be measured and lifted out; no name (the bodies are case-base, case-lid, case-board).
+    return { originMm: [3400, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: cornerHoles(51.5, 28.3, 3, 2), componentHeightMm: 8 }, lid: { fasteners: { screw: "auto", base: "pilot" } }, openings: [{ wall: "x-", shape: "rect", widthMm: 9.2, heightMm: 3.4, alongMm: 14.15, aboveBoardMm: 0 }], boardStandIn: true };
+  }
   if (name === "lip-corner") {
     // D3: Ø6.2 lid posts 0.3 mm from both lip faces of their corner (holes 4.3 mm in). Round 3 left a 0.3 x 0.3 mm pit
     // between the two side webs at each lip corner.
@@ -201,9 +215,11 @@ export function tangentSample(): Array<[string, Record<string, unknown>]> {
   // g: stack, two holes on the board's centre line: Ø5 posts tangent to one lip face at 3.4 mm in.
   for (const inset of [3.39, 3.4, 3.41, 3.43]) sample.push([`g: lid post and one lip face, holes ${inset} mm in`, { originMm: origin, board: { lengthMm: 51.5, widthMm: 28.3, holes: [{ xMm: inset, yMm: 14.15, diameterMm: 3 }, { xMm: 51.5 - inset, yMm: 14.15, diameterMm: 3 }], componentHeightMm: 8 }, standoffs: { heightMm: 8, outerDiameterMm: 5 }, lid: { fasteners: { screw: "M2.5", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 7, countersunk: false } } }]);
   // The reviewer's own stack inputs, unchanged (6 mm standoffs, 6 mm pilots): round 3 picked the stack and failed late
-  // (b2in, 4.0 mm in: Boolean error) or in the read-back (lip403: a 0.03 mm edge). No standard screw fits them (D9), so
-  // they now take floor bosses, with a support post under every hole. defStack is the reviewer's "true default" input.
+  // (b2in, 4.0 mm in, and b5 with two openings: Boolean error) or in the read-back (lip403: a 0.03 mm edge). They are
+  // stacks again: an 18 mm screw is a stocked length (follow-up F1). defStack is the reviewer's "true default" input;
+  // its 2 mm pilots hold no screw, so it takes floor bosses with a support post under every hole.
   for (const [name, inset] of [["b2in", 4], ["lip403", 4.03], ["lip406", 4.06]] as const) sample.push([`reviewer's ${name}: 60 x 30, holes ${inset} mm in, standoffs.heightMm 6, Ø2.5 x 6 pilots`, { originMm: origin, board: { lengthMm: 60, widthMm: 30, holes: cornerHoles(60, 30, 3.2, inset), componentHeightMm: 8 }, standoffs: { heightMm: 6 }, lid: { fasteners: m3 }, boardStandIn: true }]);
+  sample.push(["reviewer's b5: 60 x 30, holes 4 mm in, standoffs.heightMm 6, Ø2.5 x 6 pilots, openings on x- and y+", { originMm: origin, board: { lengthMm: 60, widthMm: 30, holes: cornerHoles(60, 30, 3.2, 4), componentHeightMm: 8 }, standoffs: { heightMm: 6 }, lid: { fasteners: m3 }, openings: [{ wall: "x-", shape: "rounded-rect", widthMm: 9.5, heightMm: 3.6, cornerRadiusMm: 1, alongMm: 15, aboveBoardMm: 0, label: "usb-c" }, { wall: "y+", shape: "rect", widthMm: 12, heightMm: 5, alongMm: 30, aboveBoardMm: 0.5, label: "side" }], boardStandIn: true }]);
   sample.push(["reviewer's defStack: 60 x 30, holes 5 mm in, no standoffs key, Ø2.5 x 2 pilots", { originMm: origin, board: { lengthMm: 60, widthMm: 30, holes: cornerHoles(60, 30, 3.2, 5), componentHeightMm: 8 }, lid: { fasteners: { ...m3, pilotDepthMm: 2 } }, boardStandIn: true }]);
   return sample;
 }
@@ -242,12 +258,10 @@ export const REVIEW_REJECTS: Array<[string, Record<string, unknown>, RegExp]> = 
   ["R5: lip neck (30 x 10.46 board, lip wall 2.3)", { board: { lengthMm: 30, widthMm: 10.46, componentHeightMm: 8 }, lid: { lipWallMm: 2.3, ...reviewLid() } }, /the lid lip between the two boss notches along y is 0\.06 mm wide/],
   ["S: stack with a hole smaller than the M3 close fit", { board: reviewBoard({ holes: [{ xMm: 4, yMm: 4, diameterMm: 3 }, { xMm: 56, yMm: 36, diameterMm: 3 }] }), lid: reviewLid({ bossStyle: "stack" }) }, /is smaller than the M3 close-fit clearance Ø3\.2/],
   // Round 4.
-  ["D9: a stack with no standard screw length", { board: reviewBoard({ holes: cornerHoles(60, 40, 3.2, 4.5) }), lid: reviewLid({ bossStyle: "stack" }) }, /no standard screw length fits the stack: it needs between 16\.1 and 19\.1 mm .* use lid\.fasteners\.pilotDepthMm 6\.9 for a 20 mm screw/],
+  // (Follow-up F1: with 6 mm pilots an 18 mm screw now fits, so this reject uses 3 mm pilots.)
+  ["D9: a stack with no stocked screw length (3 mm pilots)", { board: reviewBoard({ holes: cornerHoles(60, 40, 3.2, 4.5) }), lid: reviewLid({ bossStyle: "stack", pilotDepthMm: 3 }) }, /no standard screw length fits the stack: it needs between 16\.1 and 16\.1 mm .*stocked lengths 3, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 30, 35, 40\); use lid\.fasteners\.pilotDepthMm 4\.9 for a stocked 18 mm screw .*, or use board\.componentHeightMm 7\.9 for a stocked 16 mm screw/],
   ["D2: an underside clearance on a board without holes", { board: reviewBoard({ undersideClearanceMm: 3 }) }, /board\.undersideClearanceMm needs standoffs: a board without holes has none and rests on the floor/],
   ["D2: screw auto with board holes under the M2 close fit", { board: reviewBoard({ holes: cornerHoles(60, 40, 2, 4.5) }), lid: { fasteners: { screw: "auto", base: "pilot", pilotDiameterMm: 1.6, pilotDepthMm: 6.9, bossStyle: "stack", countersunk: false } } }, /lid\.fasteners\.screw "auto": no screw passes the smallest board hole \(Ø2\)/],
-  // The reviewer's b5 (round 3: a stack that failed late in lid-posts): no standard screw fits its 6 mm pilots, so it
-  // falls back to floor bosses, and its openings on an x wall and a y wall then need growAxis.
-  ["D9: the reviewer's b5 (stack not possible, floor needs growAxis)", { board: { lengthMm: 60, widthMm: 30, holes: cornerHoles(60, 30, 3.2, 4), componentHeightMm: 8 }, standoffs: { heightMm: 6 }, lid: reviewLid(), openings: [{ wall: "x-", shape: "rounded-rect", widthMm: 9.5, heightMm: 3.6, cornerRadiusMm: 1, alongMm: 15, aboveBoardMm: 0, label: "usb-c" }, { wall: "y+", shape: "rect", widthMm: 12, heightMm: 5, alongMm: 30, aboveBoardMm: 0.5, label: "side" }], boardStandIn: true }, /pass lid\.fasteners\.growAxis "x" or "y" to choose which walls move \(the default bossStyle fell back to "floor" because a screw stack is not possible \(bossStyle "stack": no standard screw length fits the stack/],
   ["D1: a strip side 0.0005 mm off a face of its own web (holes 1.999 mm in): refused with the nearest clean hole position", { board: { lengthMm: 35.7, widthMm: 37, holes: cornerHoles(35.7, 37, 2.2, 1.999), componentHeightMm: 6 }, walls: { wallMm: 2.4 }, standoffs: { fastener: { screw: "M2", mode: "pilot", pilotDiameterMm: 1.6 } }, lid: { fasteners: { screw: "M2", base: "pilot", pilotDiameterMm: 1.6, pilotDepthMm: 7, bossStyle: "floor", headDiameterMm: 3.8 } } }, /would have an edge under 0\.001 mm .* move board\.holes\[0\] 0\.05 mm toward the board centre along x \(to xMm 2\.049\), and board\.holes\[2\] the same way: that plans clean/],
 ];
 
@@ -600,6 +614,40 @@ async function verifyCase(client: Client, args: Record<string, unknown>, result:
 // Lift the board stand-in straight up in 3 mm steps until its bottom is above the wall top, checking base-board
 // interference at the start and after every step; then undo the lifts. derived.assembly.boardDropIn must equal "no
 // interference at any step" (an unsupported interference answer fails the check: it proves nothing).
+// Follow-up F2/F3: the two screw-auto cases. From the faces: four lid posts and four standoffs of the default diameter
+// on the board-hole axes, every post at least 0.05 mm inside the measured lid lip outline, pilot holes of the default
+// tapping-drill diameter and depth, and the defaults listed in derived.
+async function stackDefaults(client: Client, result: any, minimalCall: boolean): Promise<Check[]> {
+  const derived = result.derived;
+  const checks: Check[] = [];
+  // (The lift and the probes before this moved and restored bodies: read the revision again.)
+  const revision = (await call(client, "plasticity_status", {})).revision as string;
+  const lidFaces = (await call(client, "plasticity_find_faces", { revision, query: { bodyIds: [result.bodies.lidId] }, limit: 1000 })).matches as Face[];
+  const baseFaces = (await call(client, "plasticity_find_faces", { revision, query: { bodyIds: [result.bodies.baseId] }, limit: 1000 })).matches as Face[];
+  checks.push({ field: "bossStyle", check: "F3: the default boss style is the stack", ok: derived.bossStyle === "stack" && String(derived.bossStyleReason).startsWith("default: the lid screws go through the 4 board holes"), expected: "stack", actual: [derived.bossStyle, derived.bossStyleReason] });
+  const od = derived.fasteners.standoffs.outerDiametersMm[0] as number;
+  const upright = (face: Face) => /cylinder/i.test(face.surfaceType) && face.radiusMm !== null && !!face.axisOriginMm && !!face.axisDirection && Math.abs(Math.abs(face.axisDirection[2]) - 1) < 1e-6;
+  const posts = lidFaces.filter((face) => upright(face) && Math.abs(face.radiusMm! - od / 2) <= TOL && Math.abs(face.boundsMm.min[2] - derived.stack.postBottomZMm) <= TOL);
+  const standoffs = baseFaces.filter((face) => upright(face) && Math.abs(face.radiusMm! - od / 2) <= TOL && Math.abs(face.boundsMm.max[2] - derived.standoffTopZMm) <= TOL);
+  const axesOf = (faces: Face[]) => [...new Set(faces.map((face) => `${r3(face.axisOriginMm![0])},${r3(face.axisOriginMm![1])}`))].sort();
+  const holeAxes = (derived.standoffAxesMm as V2[]).map((axis) => `${r3(axis[0])},${r3(axis[1])}`).sort();
+  checks.push({ field: "fasteners.standoffs", check: `F2: four lid posts and four standoffs Ø${od} (the default), coaxial, on the board-hole axes`, ok: od === 4.5 && JSON.stringify(axesOf(posts)) === JSON.stringify(holeAxes) && JSON.stringify(axesOf(standoffs)) === JSON.stringify(holeAxes) && holeAxes.length === 4, expected: holeAxes, actual: { od, posts: axesOf(posts), standoffs: axesOf(standoffs) } });
+  // The lid lip's outer faces, measured: the vertical planar lid faces farthest out below the lid plate.
+  const lipBand = lidFaces.filter((face) => face.planar && Math.abs(face.normal[2]) < 1e-6 && face.boundsMm.max[2] <= derived.wallTopZMm + TOL && face.boundsMm.min[2] >= derived.lipOuterMm.min[2] - TOL);
+  const side = (axis: 0 | 1, sign: 1 | -1) => { const values = lipBand.filter((face) => Math.abs(face.normal[axis] - sign) < 1e-6).map((face) => face.centerMm[axis]); return values.length === 0 ? Number.NaN : sign > 0 ? Math.max(...values) : Math.min(...values); };
+  const lip = { min: [side(0, -1), side(1, -1)], max: [side(0, 1), side(1, 1)] };
+  const inside = posts.map((face) => r3(Math.min(face.axisOriginMm![0] - lip.min[0]!, lip.max[0]! - face.axisOriginMm![0], face.axisOriginMm![1] - lip.min[1]!, lip.max[1]! - face.axisOriginMm![1]) - face.radiusMm!));
+  checks.push({ field: "fasteners.standoffs", check: "F2: every lid post stays 0.05 mm or more inside the measured lid lip outline", ok: inside.length >= 4 && inside.every((value) => value >= 0.05 - TOL) && Math.abs(lip.min[0]! - derived.lipOuterMm.min[0]) <= TOL && Math.abs(lip.max[1]! - derived.lipOuterMm.max[1]) <= TOL, expected: ">= 0.05", actual: { inside, lip } });
+  checks.push({ field: "fasteners.standoffs", check: "F2: derived says why the diameter was chosen", ok: /^default: Ø4\.5, the largest \(in 0\.1 mm steps\) that keeps the lid post 0\.05 mm inside the lid lip outline \(board hole \+ 3 would be Ø6\)$/.test(derived.fasteners.standoffs.outerDiameterReason ?? ""), actual: derived.fasteners.standoffs.outerDiameterReason });
+  const pilots = baseFaces.filter((face) => upright(face) && Math.abs(face.radiusMm! - 2.05 / 2) <= TOL && Math.abs(face.boundsMm.max[2] - derived.standoffTopZMm) <= TOL);
+  checks.push({ field: "fasteners.lid", check: "F3: screw auto took M2.5; the default pilots are Ø2.05 x 6.9 in every standoff (measured), for a stocked 20 mm screw; the lid holes are plain", ok: derived.fasteners.lid.screw === "M2.5" && JSON.stringify(axesOf(pilots)) === JSON.stringify(holeAxes) && pilots.every((face) => Math.abs(face.boundsMm.min[2] - (derived.standoffTopZMm - 6.9)) <= TOL) && derived.stack.screwLengthMm === 20 && derived.fasteners.lid.countersink === undefined && derived.fasteners.lid.baseHole.confidence === "low", expected: { screw: "M2.5", pilot: [2.05, 6.9], screwLengthMm: 20 }, actual: { screw: derived.fasteners.lid.screw, pilots: axesOf(pilots), bottoms: pilots.map((face) => r3(face.boundsMm.min[2])), screwLengthMm: derived.stack.screwLengthMm } });
+  checks.push({ field: "fasteners.lid", check: "F3: derived lists the three defaults (pilot diameter, pilot depth, plain lid holes)", ok: JSON.stringify((derived.fasteners.lid.defaults ?? []).map((entry: string) => entry.split(":")[0])) === JSON.stringify(["pilotDiameterMm 2.05", "pilotDepthMm 6.9", "countersunk false"]), actual: derived.fasteners.lid.defaults });
+  const size = [r3(derived.outerMm.max[0] - derived.outerMm.min[0]), r3(derived.outerMm.max[1] - derived.outerMm.min[1]), r3(derived.outerMm.max[2] - derived.outerMm.min[2])];
+  checks.push({ field: "outerMm", check: "F3: outer size 56.5 x 33.3 x 22 (the read-back check compares it with the base bounds)", ok: JSON.stringify(size) === JSON.stringify([56.5, 33.3, 22]), expected: [56.5, 33.3, 22], actual: size });
+  if (minimalCall) checks.push({ field: "openings", check: "F3: the USB opening is cut (one opening derived on wall x-)", ok: derived.openings.length === 1 && derived.openings[0].wall === "x-", actual: derived.openings });
+  return checks;
+}
+
 async function liftBoard(client: Client, result: any): Promise<Check[]> {
   const derived = result.derived;
   const { baseId, boardId } = result.bodies as { baseId: number; boardId: number };
@@ -824,12 +872,13 @@ async function main(): Promise<void> {
       // D5: also on two floor cases, where the play is sqrt 2 x the board clearance (the grown axis moves the bosses away).
       if (result.bodies.boardId !== undefined && (name === "pod" || name === "stack" || name === "benchmark" || name === "d2-holes-3")) checks.push(...await shiftCorner(client, result));
       if (name === "lip-corner") checks.push(...await probeLipCorner(client, result));
+      if (name === "d2-holes-3-auto" || name === "esp32") checks.push(...await stackDefaults(client, result, name === "esp32"));
       const measuredDepth = after.undoDepth - before.undoDepth;
       checks.push({ field: "undoSteps", check: "undoSteps equals the measured Undo depth change", ok: result.undoSteps === measuredDepth, expected: measuredDepth, actual: result.undoSteps });
       const expectedIds = [result.bodies.baseId, result.bodies.lidId, ...(result.bodies.boardId !== undefined ? [result.bodies.boardId] : [])].sort((a: number, b: number) => a - b);
       const added = after.bodies.filter((body: any) => !before.bodies.some((old: any) => old.id === body.id));
       checks.push({ field: "bodies", check: "no stray bodies (only base, lid and board added; no Wires)", ok: JSON.stringify(added.map((body: any) => body.id).sort((a: number, b: number) => a - b)) === JSON.stringify(expectedIds) && added.every((body: any) => body.type === "Solid"), expected: expectedIds, actual: added.map((body: any) => ({ id: body.id, type: body.type })) });
-      const prefix = args.name as string;
+      const prefix = (args.name as string | undefined) ?? "case";
       checks.push({ field: "bodies", check: `bodies named ${prefix}-base, ${prefix}-lid, ${prefix}-board`, ok: added.find((body: any) => body.id === result.bodies.baseId)?.name === `${prefix}-base` && added.find((body: any) => body.id === result.bodies.lidId)?.name === `${prefix}-lid` && (result.bodies.boardId === undefined || added.find((body: any) => body.id === result.bodies.boardId)?.name === `${prefix}-board`), actual: added.map((body: any) => body.name) });
       checks.push({ field: "bodies", check: "baseline bodies untouched", ok: baseline.bodies.every((body: any) => after.bodies.some((now: any) => now.id === body.id)) });
       // Lean batch projection of the same tool's result is exercised by the server tests; here: one batched undo.

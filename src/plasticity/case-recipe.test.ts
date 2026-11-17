@@ -25,7 +25,10 @@ import {
 // The round 4 exports are read through the module namespace, so that against an older recipe each test that needs them
 // fails on its own instead of the whole file failing to load.
 const { boardCaseShortEdges, boardCaseTangencies } = recipeModule as unknown as { boardCaseShortEdges: (plan: BoardCasePlan) => BoardCaseFinding[]; boardCaseTangencies: (plan: BoardCasePlan) => BoardCaseFinding[] };
+import * as presetsModule from "./fastener-presets.ts";
 import { CALLER_SOURCE, CLEARANCE_HOLE_SOURCE, COUNTERSUNK_HEAD_SOURCE, HEAT_SET_INSERT_SOURCE } from "./fastener-presets.ts";
+// (The follow-up export, read the same way.)
+const { TAP_DRILL_SOURCE } = presetsModule as unknown as { TAP_DRILL_SOURCE: string };
 import type { RuntimeState } from "./runtime.ts";
 
 type V3 = [number, number, number];
@@ -1455,7 +1458,10 @@ test("S: stack is refused in the plan (and the default falls back to floor, sayi
   await refusedBeforeNative({ ...STACK, board: { ...STACK.board, holes: [STACK.board.holes![0]!] }, lid: lid({}) }, /bossStyle "stack" needs at least 2 board holes for the lid screws \(the board has 1\)/);
   await refusedBeforeNative({ ...STACK, lid: lid({ screw: "M3", pilotDiameterMm: 2.5 }) }, /bossStyle "stack": board\.holes\[0\] \(Ø3\) is smaller than the M3 close-fit clearance Ø3\.2/);
   await refusedBeforeNative({ ...STACK, standoffs: { heightMm: 4, fastener: { screw: "M2.5", mode: "pilot", pilotDiameterMm: 2.1 } }, lid: lid({}) }, /with bossStyle "stack" the lid screws go into the standoffs, which take lid\.fasteners\.base; remove standoffs\.fastener/);
-  await refusedBeforeNative({ ...STACK, standoffs: { heightMm: 8 }, lid: lid({}) }, /the lid post over board\.holes\[0\] reaches 0\.1 mm past the lid lip outline/);
+  // An explicit Ø6 (the old default, board hole + 3) passes the lip outline; follow-up F2: left out, the default is now the
+  // largest that fits, Ø5.7.
+  await refusedBeforeNative({ ...STACK, standoffs: { heightMm: 8, outerDiameterMm: 6 }, lid: lid({}) }, /the lid post over board\.holes\[0\] reaches 0\.1 mm past the lid lip outline/);
+  assert.deepEqual(deriveBoardCase({ ...STACK, standoffs: { heightMm: 8 }, lid: lid({}) }).fasteners.standoffs!.outerDiametersMm, [5.7, 5.7, 5.7, 5.7]);
   await refusedBeforeNative({ ...STACK, lid: lid({}), openings: [{ wall: "x-", shape: "rect", widthMm: 4, heightMm: 3, alongMm: 4, aboveBoardMm: 1, label: "near" }] }, /near on wall x-: the lid post over board\.holes\[0\] stands in its keep-out/);
   await refusedBeforeNative({ ...STACK, standoffs: { heightMm: 4, outerDiameterMm: 5 }, lid: lid({ pilotDepthMm: 5 }) }, /lid\.fasteners\.pilotDepthMm 5 exceeds the standoff height 4; raise standoffs\.heightMm/);
   // Default with M3: the stack is not possible (Ø3 < 3.2), so it falls back to floor and says why. Round 4 (D2): with
@@ -1643,10 +1649,11 @@ test("D2: in a stack the default standoff height holds the lid fastener (pilot d
   // Pilot 6.9 mm deep: standoffs 7.9 (it was 2, so the stack was refused); the board and the wall top rise with it.
   const pilot = deriveBoardCase({ originMm: [0, 0, 0], board: stackBoard(), lid: { fasteners: { ...m3Pilot, pilotDepthMm: 6.9 } }, revision: "r0" });
   assert.deepEqual([pilot.bossStyle, pilot.fasteners.standoffs!.heightMm, pilot.fasteners.standoffs!.holeDepthMm, pilot.standoffTopZMm, pilot.boardMm.min[2], pilot.wallTopZMm], ["stack", 7.9, 6.9, 9.9, 9.9, 2 + 7.9 + 1.6 + 8 + 1 + 1.5]);
-  // M3 x 3 insert: pocket 4 (insert + 1), standoffs 5; M3 x 5.7: pocket 6.7, standoffs 7.7 (7.4 mm parts so a 16 mm screw fits).
+  // M3 x 3 insert: pocket 4 (insert + 1), standoffs 5; M3 x 5.7: pocket 6.7, standoffs 7.7 (7.4 mm parts so a stocked screw fits).
   const insert = (insertLengthMm: number) => deriveBoardCase({ originMm: [0, 0, 0], board: stackBoard(3.2, 7.4), lid: { fasteners: { screw: "M3", base: "heat-set-insert", insertLengthMm, bossStyle: "stack" } }, revision: "r0" });
   assert.deepEqual([insert(3).fasteners.standoffs!.heightMm, insert(3).fasteners.standoffs!.holeDepthMm, insert(3).stack!.screwLengthMm], [5, 4, 16]);
-  assert.deepEqual([insert(5.7).fasteners.standoffs!.heightMm, insert(5.7).fasteners.standoffs!.holeDepthMm, insert(5.7).stack!.screwLengthMm], [7.7, 6.7, 16]);
+  // (Follow-up F1: 18 mm is a stocked length, so the longer pocket takes an 18 mm screw; it was 16.)
+  assert.deepEqual([insert(5.7).fasteners.standoffs!.heightMm, insert(5.7).fasteners.standoffs!.holeDepthMm, insert(5.7).stack!.screwLengthMm], [7.7, 6.7, 18]);
   // Never below the underside clearance (2 by default, 6 here; the 3.5 mm pilot alone would give 4.5), and an explicit
   // height still wins.
   assert.equal(deriveBoardCase({ originMm: [0, 0, 0], board: { ...stackBoard(3.2, 7.4), undersideClearanceMm: 6 }, lid: { fasteners: { ...m3Pilot, pilotDepthMm: 3.5, bossStyle: "stack" } }, revision: "r0" }).fasteners.standoffs!.heightMm, 6);
@@ -1678,14 +1685,21 @@ test("D2: bossStyleReason lists every stack rule that failed, each with the inpu
   const input = D2_INPUTS[0]![1];
   const reason = deriveBoardCase(input).bossStyleReason!;
   assert.match(reason, /^default: a screw stack is not possible \(bossStyle "stack": /);
-  // Three rules fail, each once (the other holes are named, not repeated), each with its fix.
+  // Two rules fail, each once (the other holes are named, not repeated), each with its fix. (Follow-up F1, F2: it was
+  // three. An 18 mm screw is stocked, so the screw-length rule passes; the default post is now the smallest M3 post,
+  // Ø4.8, which passes the lip outline by 0.1 mm, not Ø6 by 0.7.)
   assert.match(reason, /board\.holes\[0\] \(Ø3\) is smaller than the M3 close-fit clearance Ø3\.2, so the lid screw cannot pass through the board; use M2\.5 or screw: "auto" \(the same for board\.holes\[1\], board\.holes\[2\], board\.holes\[3\]\)/);
-  assert.match(reason, /the lid post over board\.holes\[0\] reaches 0\.7 mm past the lid lip outline toward the base wall \(it must stay 0\.05 mm inside\); use standoffs\.outerDiameterMm 4\.499 or less, or move the hole inward \(the same for board\.holes\[1\], board\.holes\[2\], board\.holes\[3\]\)/);
-  assert.match(reason, /no standard screw length fits the stack: it needs between 16\.1 and 19\.1 mm .*; use lid\.fasteners\.pilotDepthMm 6\.9 for a 20 mm screw \(the default standoff height follows\)\), so the bosses stand on the floor$/);
-  assert.equal(reason.split("; ").filter((part) => /^(bossStyle "stack": )?(board\.holes|the lid post|no standard)/.test(part.replace(/^default: a screw stack is not possible \(/, ""))).length, 3);
-  // Apply the three named changes (screw "auto" with the M2.5 pilot, Ø4.499 standoffs, 6.9 mm pilots): the default is the stack.
-  const fixed = deriveBoardCase({ ...input, standoffs: { outerDiameterMm: 4.499 }, lid: { fasteners: { screw: "auto", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 6.9, countersunk: false } } });
-  assert.deepEqual([fixed.bossStyle, fixed.bossStyleReason, fixed.fasteners.lid!.screw, fixed.stack!.screwLengthMm], ["stack", "default: the lid screws go through the 4 board holes into the standoffs (stack)", "M2.5", 20]);
+  assert.match(reason, /the lid post over board\.holes\[0\] reaches 0\.1 mm past the lid lip outline toward the base wall \(it must stay 0\.05 mm inside\); use standoffs\.outerDiameterMm 4\.5 or less \(the default does not go below Ø4\.8 for M3\), or move the hole inward \(the same for board\.holes\[1\], board\.holes\[2\], board\.holes\[3\]\)\), so the bosses stand on the floor$/);
+  assert.doesNotMatch(reason, /no standard screw length/);
+  assert.equal(reason.split("; ").filter((part) => /^(bossStyle "stack": )?(board\.holes|the lid post|no standard)/.test(part.replace(/^default: a screw stack is not possible \(/, ""))).length, 2);
+  // Apply the first named change (M2.5, with its own pilot and plain holes): the default is the stack, and the post
+  // takes the diameter the second message names.
+  const fixed = deriveBoardCase({ ...input, lid: { fasteners: { screw: "M2.5", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 6, countersunk: false } } });
+  assert.deepEqual([fixed.bossStyle, fixed.bossStyleReason, fixed.fasteners.lid!.screw, fixed.fasteners.standoffs!.outerDiametersMm[0], fixed.stack!.screwLengthMm], ["stack", "default: the lid screws go through the 4 board holes into the standoffs (stack)", "M2.5", 4.5, 18]);
+  // The round 4 assertion, unchanged: the three changes that round named (screw "auto" with the M2.5 pilot, Ø4.499
+  // standoffs, 6.9 mm pilots) still give the stack, with a 20 mm screw.
+  const fixed4 = deriveBoardCase({ ...input, standoffs: { outerDiameterMm: 4.499 }, lid: { fasteners: { screw: "auto", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 6.9, countersunk: false } } });
+  assert.deepEqual([fixed4.bossStyle, fixed4.bossStyleReason, fixed4.fasteners.lid!.screw, fixed4.stack!.screwLengthMm], ["stack", "default: the lid screws go through the 4 board holes into the standoffs (stack)", "M2.5", 20]);
 });
 
 // ------------------------------------------------------------------------------------------------------- D1
@@ -2014,15 +2028,18 @@ test("D9: stack.screwLengthMm is the longest standard length with 1 mm tip clear
   // (The standoff height is given, pilot depth + 1, so this test does not lean on the D2 default.)
   const stack = (componentHeightMm: number, pilotDepthMm: number) => deriveBoardCase({ originMm: [0, 0, 0], board: stackBoard(3.2, componentHeightMm), standoffs: { heightMm: pilotDepthMm + 1 }, lid: { fasteners: { ...m3Pilot, pilotDepthMm, bossStyle: "stack" } }, revision: "r0" }).stack!;
   // Through the stack: lid 2 + post (parts + 1 + lip 1.5 - 0.2) + 0.2 + board 1.6 = parts + 6.1.
-  // 8 mm parts, 6.9 mm pilots: through 14.1, bottoming 21; the standard lengths are ..., 12, 16, 20, 24: 20 (5.9 in the pilot).
+  // 8 mm parts, 6.9 mm pilots: through 14.1, bottoming 21: 20 (5.9 in the pilot).
   assert.deepEqual([stack(8, 6.9).screwLengthMm, stack(8, 6.9).screwLengthMaxMm, stack(8, 6.9).engagementMm], [20, 21, 5.9]);
   // 6 mm parts, 6 mm pilots: through 12.1, bottoming 18.1: 16 (3.9 in the pilot; 20 would bottom).
   assert.deepEqual([stack(6, 6).screwLengthMm, stack(6, 6).screwLengthMaxMm, stack(6, 6).engagementMm], [16, 18.1, 3.9]);
-  // 2 mm parts, 5 mm pilots: through 8.1, bottoming 13.1: 2 mm steps up to 12, so 12 (12.1 is the limit; 3.9 in the pilot).
+  // 2 mm parts, 5 mm pilots: through 8.1, bottoming 13.1: 12 (12.1 is the limit; 3.9 in the pilot).
   assert.deepEqual([stack(2, 5).screwLengthMm, stack(2, 5).screwLengthMaxMm, stack(2, 5).engagementMm], [12, 13.1, 3.9]);
   assert.match(stack(8, 6.9).note, /^the posts reach 0\.2 mm above the board inside the component envelope; component positions are not checked$/);
-  // No standard length between 16.1 (2 mm in) and 19.1 (1 mm short of the bottom): refused, with the pilot depth that fits.
-  assert.throws(() => stack(8, 6), /bossStyle "stack": no standard screw length fits the stack: it needs between 16\.1 and 19\.1 mm \(lid \+ post \+ 0\.2 mm gap \+ board = 14\.1 mm, at least 2 mm in the 6 mm standoff hole, 1 mm tip clearance; standard lengths step 2 mm to 12, then 4 mm\); use lid\.fasteners\.pilotDepthMm 6\.9 for a 20 mm screw \(the default standoff height follows\)/);
+  // Follow-up F1: the stocked series has 18 mm, so 8 mm parts with 6 mm pilots (16.1 to 19.1) take an 18 mm screw (it
+  // was refused: the old 4 mm steps had only 16 and 20).
+  assert.deepEqual([stack(8, 6).screwLengthMm, stack(8, 6).screwLengthMaxMm, stack(8, 6).engagementMm], [18, 20.1, 3.9]);
+  // A 3 mm pilot leaves only 16.1 to 16.1: refused, with the nearest pilot depth and the nearest component height.
+  assert.throws(() => stack(8, 3), /bossStyle "stack": no standard screw length fits the stack: it needs between 16\.1 and 16\.1 mm \(lid \+ post \+ 0\.2 mm gap \+ board = 14\.1 mm, at least 2 mm in the 3 mm standoff hole, 1 mm tip clearance; stocked lengths 3, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 30, 35, 40\); use lid\.fasteners\.pilotDepthMm 4\.9 with standoffs\.heightMm 5\.9 for a stocked 18 mm screw, or use board\.componentHeightMm 7\.9 for a stocked 16 mm screw/);
 });
 
 // ------------------------------------------------------------------------------------------------------- D8
@@ -2055,10 +2072,10 @@ test("D8: a sub-recipe failure that the board case rolled back says once that ev
   assert.match(left.message, /does not match the start \(undo failed: undo refused\); inspect it; revision r\d+: Screw boss pattern recipe failed after 2\/6 confirmed steps; partial geometry remains/);
 });
 
-test("D1, D2: the live script's near-tangent sample (49 inputs) plans clean on tangent positions, its D2 and D3 cases plan, and every reject is refused", async () => {
+test("D1, D2: the live script's near-tangent sample (50 inputs) plans clean on tangent positions, its D2 and D3 cases plan, and every reject is refused", async () => {
   const { tangentSample, caseArguments, REVIEW_REJECTS } = await import("../../scripts/verify-native-board-case-live.ts");
   const sample = tangentSample();
-  assert.equal(sample.length, 49);
+  assert.equal(sample.length, 50);
   for (const band of ["a", "b", "c"]) assert.ok(sample.filter(([label]) => label.startsWith(`${band}:`)).length >= 9, `the reviewer's band ${band}`);
   const styles = new Set<string>();
   for (const [label, input] of sample) {
@@ -2070,10 +2087,14 @@ test("D1, D2: the live script's near-tangent sample (49 inputs) plans clean on t
     // band c is the reviewer's strip between a standoff and a floor boss.
     const gaps = [...plan.derived.webs.map((web) => web.gapMm), ...(plan.derived.stack?.lidWebs.map((web) => web.gapMm) ?? [])];
     assert.ok(gaps.length > 0, label);
-    if (label.startsWith("reviewer's")) {
-      // The reviewer's own stack inputs: no standard screw fits, so floor bosses and a support post under every hole.
+    if (label.startsWith("reviewer's defStack")) {
+      // 2 mm pilots hold no screw (2 mm in + 1 mm tip clearance): floor bosses and a support post under every hole.
       assert.deepEqual([plan.derived.bossStyle, plan.derived.fasteners.standoffs!.mode, plan.derived.standoffAxesMm.length], ["floor", "support", 4], label);
       assert.match(plan.derived.bossStyleReason!, /no standard screw length fits the stack/, label);
+    } else if (label.startsWith("reviewer's")) {
+      // Follow-up F1: the reviewer's own stack inputs are stacks again (an 18 mm screw is stocked); round 4 sent them
+      // to floor bosses.
+      assert.deepEqual([plan.derived.bossStyle, plan.derived.fasteners.standoffs!.mode, plan.derived.standoffAxesMm.length, plan.derived.stack!.screwLengthMm], ["stack", "pilot", 4, 18], label);
     } else if (label.startsWith("c:")) assert.equal(plan.derived.webs.filter((web) => web.kind === "between").length, 4, label);
     else if (!label.includes("holes 4.3 mm in")) assert.ok(Math.min(...gaps.map(Math.abs)) <= 0.06 + 1e-9, `${label}: ${Math.min(...gaps.map(Math.abs))}`);
   }
@@ -2131,4 +2152,264 @@ test("D1: an opening may not be cut where a web solid stands at the wall or hang
   const fallback = deriveBoardCase({ ...stack, lid: { fasteners: { ...m3Pilot, pilotDepthMm: 7, countersunk: false } }, openings: corner });
   assert.equal(fallback.bossStyle, "floor");
   assert.match(fallback.bossStyleReason!, /corner on the lid leaves less than the 0\.4 mm web to the lid web/);
+});
+
+// ------------------------------------------------------------------------------------------------ follow-up F1
+test("F1: the lid screw is the longest stocked length (3 ... 40 mm) with 2 mm engagement and 1 mm tip clearance; with none, the refusal names the nearest pilot depth and component height, and each passes", () => {
+  // The default standoff height follows the pilot (depth + 1) or the insert pocket (+ 1).
+  const pilot = (componentHeightMm: number, pilotDepthMm: number, standoffs?: BoardCaseInput["standoffs"]) => deriveBoardCase({ originMm: [0, 0, 0], board: stackBoard(3.2, componentHeightMm), ...(standoffs ? { standoffs } : {}), lid: { fasteners: { ...m3Pilot, pilotDepthMm, bossStyle: "stack" } }, revision: "r0" }).stack!;
+  const insert = (componentHeightMm: number, insertLengthMm: number) => deriveBoardCase({ originMm: [0, 0, 0], board: stackBoard(3.2, componentHeightMm), lid: { fasteners: { screw: "M3", base: "heat-set-insert", insertLengthMm, bossStyle: "stack" } }, revision: "r0" }).stack!;
+  const row = (stack: BoardCasePlan["derived"]["stack"]) => [stack!.screwLengthMm, stack!.screwLengthMaxMm, stack!.engagementMm];
+  // Through the stack: lid 2 + post (parts + 2.3) + 0.2 + board 1.6 = parts + 6.1; then the pilot or the insert pocket.
+  const pilots: Array<[number, number, [number, number, number]]> = [
+    [2, 5, [12, 13.1, 3.9]],     // 10.1 to 12.1
+    [3, 6, [14, 15.1, 4.9]],     // 11.1 to 14.1: 14 is stocked (the old steps chose 12)
+    [6, 6, [16, 18.1, 3.9]],     // 14.1 to 17.1
+    [8, 6, [18, 20.1, 3.9]],     // 16.1 to 19.1: 18 is stocked (the old steps refused: 16, then 20)
+    [8, 6.9, [20, 21, 5.9]],     // 16.1 to 20
+    [10, 7, [22, 23.1, 5.9]],    // 18.1 to 22.1: 22 is stocked (the old steps chose 20)
+    [12, 8, [25, 26.1, 6.9]],    // 20.1 to 25.1: 25 is stocked (the old steps chose 24)
+    [16, 9, [30, 31.1, 7.9]],    // 24.1 to 30.1: 30 is stocked (the old steps chose 28)
+    [20, 6, [30, 32.1, 3.9]],    // 28.1 to 31.1
+  ];
+  for (const [parts, depth, expected] of pilots) assert.deepEqual(row(pilot(parts, depth)), expected, `pilot: ${parts} mm parts, ${depth} mm pilots`);
+  const inserts: Array<[number, number, [number, number, number]]> = [
+    [5, 3, [14, 15.1, 2.9]],      // M3 x 3: pocket 4; 13.1 to 14.1
+    [7.9, 3, [16, 18, 2]],        // 16 to 17: exactly 2 mm in
+    [9.9, 3, [18, 20, 2]],        // 18 to 19
+    [8, 5.7, [18, 20.8, 3.9]],    // M3 x 5.7: pocket 6.7; 16.1 to 19.8
+    [12, 5.7, [22, 24.8, 3.9]],   // 20.1 to 23.8
+  ];
+  for (const [parts, length, expected] of inserts) assert.deepEqual(row(insert(parts, length)), expected, `insert: ${parts} mm parts, M3 x ${length}`);
+
+  // None fits: 22 mm parts and 5 mm pilots need 30.1 to 32.1 (30 and 35 are stocked).
+  const stocked = "stocked lengths 3, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 30, 35, 40";
+  assert.throws(() => pilot(22, 5), new RegExp(`^BoardCaseValidationError: bossStyle "stack": no standard screw length fits the stack: it needs between 30\\.1 and 32\\.1 mm \\(lid \\+ post \\+ 0\\.2 mm gap \\+ board = 28\\.1 mm, at least 2 mm in the 5 mm standoff hole, 1 mm tip clearance; ${stocked}\\); use lid\\.fasteners\\.pilotDepthMm 7\\.9 for a stocked 35 mm screw \\(the default standoff height follows\\), or use board\\.componentHeightMm 21\\.9 for a stocked 30 mm screw$`));
+  // Each named change passes, with the screw it names.
+  assert.deepEqual(row(pilot(22, 7.9)), [35, 36, 6.9]);
+  assert.deepEqual(row(pilot(21.9, 5)), [30, 33, 2]);
+  // A given standoffs.heightMm too low for the deeper pilot is named with it; one that already holds it is not.
+  assert.throws(() => pilot(22, 5, { heightMm: 6 }), /use lid\.fasteners\.pilotDepthMm 7\.9 with standoffs\.heightMm 8\.9 for a stocked 35 mm screw, or use board\.componentHeightMm 21\.9 for a stocked 30 mm screw$/);
+  assert.deepEqual(row(pilot(22, 7.9, { heightMm: 8.9 })), [35, 36, 6.9]);
+  assert.throws(() => pilot(22, 5, { heightMm: 10 }), /use lid\.fasteners\.pilotDepthMm 7\.9 for a stocked 35 mm screw, or use board\.componentHeightMm 21\.9 for a stocked 30 mm screw$/);
+  assert.deepEqual(row(pilot(22, 7.9, { heightMm: 10 })), [35, 36, 6.9]);
+  // An insert pocket cannot be deepened: only the component height is named (M3 x 3, 8 mm parts: 16.1 to 17.1).
+  assert.throws(() => insert(8, 3), new RegExp(`no standard screw length fits the stack: it needs between 16\\.1 and 17\\.1 mm \\(lid \\+ post \\+ 0\\.2 mm gap \\+ board = 14\\.1 mm, at least 2 mm in the 4 mm standoff hole, 1 mm tip clearance; ${stocked}\\); use board\\.componentHeightMm 7\\.9 for a stocked 16 mm screw$`));
+  assert.deepEqual(row(insert(7.9, 3)), [16, 18, 2]);
+  // Past the longest stocked length: the component height for a 40 mm screw.
+  assert.throws(() => pilot(40, 6), /it needs between 48\.1 and 51\.1 mm .*; use board\.componentHeightMm 31\.9 for a stocked 40 mm screw$/);
+  assert.deepEqual(row(pilot(31.9, 6)), [40, 44, 2]);
+  // By default such a stack falls back to floor bosses, and the reason carries the same text.
+  const fallback = deriveBoardCase({ originMm: [0, 0, 0], board: stackBoard(3.2, 22), lid: { fasteners: { ...m3Pilot, pilotDepthMm: 5 } }, revision: "r0" });
+  assert.equal(fallback.bossStyle, "floor");
+  assert.match(fallback.bossStyleReason!, /no standard screw length fits the stack: it needs between 30\.1 and 32\.1 mm .* use lid\.fasteners\.pilotDepthMm 7\.9 for a stocked 35 mm screw/);
+});
+
+// ------------------------------------------------------------------------------------------------ follow-up F2
+// The lid post over a hole must stay 0.05 mm inside the lid lip outline (the cavity less the lid clearance).
+const insideLip = (derived: BoardCasePlan["derived"]) => derived.stack!.postAxesMm.map((axis, index) => r6(Math.min(axis[0] - derived.lipOuterMm.min[0], derived.lipOuterMm.max[0] - axis[0], axis[1] - derived.lipOuterMm.min[1], derived.lipOuterMm.max[1] - axis[1]) - derived.stack!.postOuterDiametersMm[index]! / 2));
+const autoPilot = { screw: "auto" as const, base: "pilot" as const };
+
+test("F2: in a stack the default standoff and lid post diameter is the largest up to board hole + 3 that stays inside the lid lip; derived says which and why", async () => {
+  // The D2 board: Ø3 holes 2.0 mm in. Board hole + 3 = Ø6 passes the lip outline (2.3 mm from the axis); Ø4.5 fits.
+  const d2: BoardCaseInput = { originMm: [0, 0, 0], board: D2_INPUTS[0]![1].board, lid: { fasteners: { ...autoPilot } }, boardStandIn: true, revision: "r0" };
+  const derived = deriveBoardCase(d2);
+  assert.deepEqual([derived.bossStyle, derived.fasteners.lid!.screw, derived.fasteners.standoffs!.outerDiametersMm, derived.stack!.postOuterDiametersMm], ["stack", "M2.5", [4.5, 4.5, 4.5, 4.5], [4.5, 4.5, 4.5, 4.5]]);
+  assert.equal(derived.fasteners.standoffs!.outerDiameterReason, "default: Ø4.5, the largest (in 0.1 mm steps) that keeps the lid post 0.05 mm inside the lid lip outline (board hole + 3 would be Ø6)");
+  assert.deepEqual(insideLip(derived), [0.05, 0.05, 0.05, 0.05]);
+  // The standoff under each post has the same diameter and axis.
+  assert.deepEqual(derived.stack!.postAxesMm, derived.standoffAxesMm);
+  // It builds (the fake runtime): standoffs and posts Ø4.5, every step counted.
+  const { fake, result } = await build(d2);
+  assert.equal(result.undoSteps, result.derived.plannedUndoSteps);
+  assert.equal(fake.calls.filter((entry) => entry.operation === "createCylinder" && Math.abs((entry.args[1] as number) - 2.25) < 1e-9).length, 8);
+  assert.equal(fake.calls.filter((entry) => entry.operation === "createCylinder" && Math.abs((entry.args[1] as number) - 3) < 1e-9).length, 0);
+
+  // 60 x 30, Ø3.2 holes, M3. 2.6 mm in: Ø5.7 (Ø6.2 would pass the outline). 4.5 mm in: Ø6.2, board hole + 3.
+  const m3Stack = (inset: number, standoffs?: BoardCaseInput["standoffs"]) => deriveBoardCase({ originMm: [0, 0, 0], board: { lengthMm: 60, widthMm: 30, holes: corners4(60, 30, 3.2, inset), componentHeightMm: 8 }, ...(standoffs ? { standoffs } : {}), lid: { fasteners: { ...m3Pilot, bossStyle: "stack" } }, revision: "r0" });
+  const near = m3Stack(2.6);
+  assert.deepEqual([near.fasteners.standoffs!.outerDiametersMm, near.stack!.postOuterDiametersMm, insideLip(near), near.fasteners.standoffs!.outerDiameterReason], [[5.7, 5.7, 5.7, 5.7], [5.7, 5.7, 5.7, 5.7], [0.05, 0.05, 0.05, 0.05], "default: Ø5.7, the largest (in 0.1 mm steps) that keeps the lid post 0.05 mm inside the lid lip outline (board hole + 3 would be Ø6.2)"]);
+  const far = m3Stack(4.5);
+  assert.deepEqual([far.fasteners.standoffs!.outerDiametersMm, far.stack!.postOuterDiametersMm, far.fasteners.standoffs!.outerDiameterReason], [[6.2, 6.2, 6.2, 6.2], [6.2, 6.2, 6.2, 6.2], "default: Ø6.2, board hole + 3"]);
+  // Each hole has its own diameter, and the reason says so.
+  const mixed = deriveBoardCase({ originMm: [0, 0, 0], board: { lengthMm: 60, widthMm: 30, componentHeightMm: 8, holes: [{ xMm: 2.6, yMm: 2.6, diameterMm: 3.2 }, { xMm: 55.5, yMm: 4.5, diameterMm: 3.2 }, { xMm: 4.5, yMm: 25.5, diameterMm: 3.2 }, { xMm: 57.4, yMm: 27.4, diameterMm: 3.2 }] }, lid: { fasteners: { ...m3Pilot, bossStyle: "stack" } }, revision: "r0" });
+  assert.deepEqual([mixed.fasteners.standoffs!.outerDiametersMm, mixed.stack!.postOuterDiametersMm], [[5.7, 6.2, 6.2, 5.7], [5.7, 6.2, 6.2, 5.7]]);
+  assert.match(mixed.fasteners.standoffs!.outerDiameterReason!, /^board\.holes\[0\]: default: Ø5\.7, the largest .*; board\.holes\[1\]: default: Ø6\.2, board hole \+ 3; board\.holes\[2\]: default: Ø6\.2, board hole \+ 3; board\.holes\[3\]: default: Ø5\.7, the largest /);
+  // Every 0.05 mm of hole inset from 2.15 to 6: a stack, the post inside the lip by 0.05 mm or more, never over
+  // board hole + 3, and 0.1 mm larger would not fit (or is over board hole + 3).
+  for (let step = 0; step <= 77; step += 1) {
+    const inset = r3(2.15 + step * 0.05);
+    const each = m3Stack(inset);
+    const od = each.fasteners.standoffs!.outerDiametersMm[0]!;
+    assert.ok(Math.min(...insideLip(each)) >= 0.05 - 1e-9 && od <= 6.2 + 1e-9 && od >= 4.8 - 1e-9, `holes ${inset} mm in: Ø${od}`);
+    assert.ok(od === 6.2 || Math.min(...insideLip(each)) - 0.05 < 0.05 - 1e-9, `holes ${inset} mm in: Ø${od} is the largest step`);
+  }
+  // The other styles keep board hole + 3 and report no reason: the rule is the stack's.
+  const floor = deriveBoardCase({ originMm: [0, 0, 0], board: { lengthMm: 60, widthMm: 30, holes: corners4(60, 30, 3.2, 2.6), componentHeightMm: 8 }, lid: { fasteners: { ...m3Pilot, bossStyle: "floor" } }, revision: "r0" });
+  assert.deepEqual([floor.fasteners.standoffs!.outerDiametersMm, floor.fasteners.standoffs!.outerDiameterReason], [[6.2, 6.2, 6.2, 6.2], undefined]);
+});
+
+test("F2: an explicit standoffs.outerDiameterMm is never changed", () => {
+  const m3Stack = (inset: number, outerDiameterMm: number) => deriveBoardCase({ originMm: [0, 0, 0], board: { lengthMm: 60, widthMm: 30, holes: corners4(60, 30, 3.2, inset), componentHeightMm: 8 }, standoffs: { outerDiameterMm }, lid: { fasteners: { ...m3Pilot, bossStyle: "stack" } }, revision: "r0" });
+  // Smaller than the default (Ø6.2 at 4.5 mm in): kept.
+  const small = m3Stack(4.5, 5);
+  assert.deepEqual([small.fasteners.standoffs!.outerDiametersMm, small.stack!.postOuterDiametersMm, small.fasteners.standoffs!.outerDiameterReason], [[5, 5, 5, 5], [5, 5, 5, 5], "standoffs.outerDiameterMm"]);
+  // Too large for the lip (Ø6 at 2.6 mm in; the default would be Ø5.7): refused, not shrunk.
+  assert.throws(() => m3Stack(2.6, 6), /^BoardCaseValidationError: bossStyle "stack": the lid post over board\.holes\[0\] reaches 0\.1 mm past the lid lip outline toward the base wall \(it must stay 0\.05 mm inside\); use standoffs\.outerDiameterMm 5\.7 or less, or move the hole inward \(the same for board\.holes\[1\], board\.holes\[2\], board\.holes\[3\]\)$/);
+  // Below the smallest default (Ø4.5 under M3, whose default stops at Ø4.8): kept, and it is what makes the D2 holes a stack.
+  const thin = m3Stack(2, 4.5);
+  assert.deepEqual([thin.bossStyle, thin.fasteners.standoffs!.outerDiametersMm, thin.fasteners.standoffs!.outerDiameterReason, insideLip(thin)], ["stack", [4.5, 4.5, 4.5, 4.5], "standoffs.outerDiameterMm", [0.05, 0.05, 0.05, 0.05]]);
+  // An explicit diameter a web rule refuses is refused too (the default steps down past it, see the next test).
+  const sliver = { lengthMm: 63.9, widthMm: 32.6, holes: corners4x(63.9, 32.6, 3, 2.36, 2.81), componentHeightMm: 4 };
+  assert.throws(() => planBoardCase({ originMm: [0, 0, 0], board: sliver, fit: { boardClearanceMm: 0.8, lidClearanceMm: 0.3 }, standoffs: { outerDiameterMm: 5.5 }, lid: { fasteners: { ...autoPilot, bossStyle: "stack" } }, revision: "r0" }), /the web at standoff 3 and wall x\+ meet in the base would have a 0\.06 mm edge .*, which the kernel cannot build reliably/);
+});
+const corners4x = (length: number, width: number, diameterMm: number, insetX: number, insetY: number) => [[insetX, insetY], [length - insetX, insetY], [insetX, width - insetY], [length - insetX, width - insetY]].map(([xMm, yMm]) => ({ xMm: r6(xMm!), yMm: r6(yMm!), diameterMm }));
+
+test("F2: the default diameter never goes below the screw's close-fit clearance + 1.6 mm; where that does not fit the lip the stack is refused and the default style is floor", () => {
+  const stack = (diameterMm: number, inset: number, fasteners: LidFasteners) => deriveBoardCase({ originMm: [0, 0, 0], board: { lengthMm: 60, widthMm: 30, holes: corners4(60, 30, diameterMm, inset), componentHeightMm: 8 }, lid: { fasteners }, revision: "r0" });
+  // [screw, board hole, the smallest inset the smallest default fits, that default = close-fit clearance + 1.6].
+  const rows: Array<[string, number, number, number, LidFasteners]> = [
+    ["M3", 3.2, 2.15, 4.8, { ...m3Pilot, bossStyle: "stack" }],              // 3.2 + 1.6
+    ["M2.5", 3, 1.9, 4.3, { ...autoPilot, bossStyle: "stack" }],             // 2.7 + 1.6
+    ["M2", 2.4, 1.65, 3.8, { ...autoPilot, bossStyle: "stack" }],            // 2.2 + 1.6
+  ];
+  for (const [screw, hole, inset, least, fasteners] of rows) {
+    const fits = stack(hole, inset, fasteners);
+    assert.deepEqual([fits.fasteners.lid!.screw, fits.fasteners.standoffs!.outerDiametersMm, insideLip(fits)], [screw, [least, least, least, least], [0.05, 0.05, 0.05, 0.05]], screw);
+    // 0.05 mm further out the smallest default passes the lip: refused, naming the diameter that would fit and the limit.
+    assert.throws(() => stack(hole, r3(inset - 0.05), fasteners), new RegExp(`^BoardCaseValidationError: bossStyle "stack": the lid post over board\\.holes\\[0\\] (reaches|comes within) [0-9.]+ mm (past|of) the lid lip outline toward the base wall \\(it must stay 0\\.05 mm inside\\); use standoffs\\.outerDiameterMm ${String(r3(least - 0.1)).replace(".", "\\.")} or less \\(the default does not go below Ø${String(least).replace(".", "\\.")} for ${screw.replace(".", "\\.")}\\), or move the hole inward`), screw);
+    // The named diameter is accepted as an explicit one.
+    assert.equal(deriveBoardCase({ originMm: [0, 0, 0], board: { lengthMm: 60, widthMm: 30, holes: corners4(60, 30, hole, r3(inset - 0.05)), componentHeightMm: 8 }, standoffs: { outerDiameterMm: r3(least - 0.1) }, lid: { fasteners }, revision: "r0" }).bossStyle, "stack", screw);
+    // By default the same board takes floor bosses, with a support post under every hole.
+    const { bossStyle: _style, ...plain } = fasteners;
+    const fallback = stack(hole, r3(inset - 0.05), plain as LidFasteners);
+    assert.deepEqual([fallback.bossStyle, fallback.fasteners.standoffs!.mode, fallback.standoffAxesMm.length], ["floor", "support", 4], screw);
+    assert.match(fallback.bossStyleReason!, /^default: a screw stack is not possible \(bossStyle "stack": the lid post over board\.holes\[0\] /, screw);
+  }
+  // The D2 Ø3.2 holes (2.0 mm in) under M3: the smallest default Ø4.8 passes the lip (Ø4.5 fits), so floor bosses.
+  const d2 = deriveBoardCase(D2_INPUTS[1]![1]);
+  assert.equal(d2.bossStyle, "floor");
+  assert.match(d2.bossStyleReason!, /reaches 0\.1 mm past the lid lip outline .* use standoffs\.outerDiameterMm 4\.5 or less \(the default does not go below Ø4\.8 for M3\), or move the hole inward/);
+});
+
+test("F2: the default diameter also satisfies the web rules: it steps down 0.1 mm at a time past a web rule refusal and says so", () => {
+  // Ø3 holes 2.36 / 2.81 mm in, 0.8 mm board clearance: Ø5.6 fits the lip, but the web between standoff and wall would
+  // leave a 0.01 mm edge. Ø5.5 leaves 0.06 mm (refused when given, see above); Ø5.4 plans clean.
+  const input: BoardCaseInput = { originMm: [0, 0, 0], board: { lengthMm: 63.9, widthMm: 32.6, holes: corners4x(63.9, 32.6, 3, 2.36, 2.81), componentHeightMm: 4 }, fit: { boardClearanceMm: 0.8, lidClearanceMm: 0.3 }, lid: { fasteners: { ...autoPilot } }, revision: "r0" };
+  const plan = planBoardCase(input);
+  assert.deepEqual([plan.derived.bossStyle, plan.derived.bossStyleReason, plan.derived.fasteners.standoffs!.outerDiametersMm, plan.derived.stack!.postOuterDiametersMm], ["stack", "default: the lid screws go through the 4 board holes into the standoffs (stack)", [5.4, 5.4, 5.4, 5.4], [5.4, 5.4, 5.4, 5.4]]);
+  assert.match(plan.derived.fasteners.standoffs!.outerDiameterReason!, /^default: Ø5\.4, the largest \(in 0\.1 mm steps\) that passes the plan rules \(at Ø5\.6: the outline where the cavity wall, the web at standoff 3 and wall x\+ meet in the base would have a 0\.01 mm edge at x 67\.5, y 35\.395, z 2, under the 0\.1 mm the plan allows \(and 3 more such spots\)\)$/);
+  assert.deepEqual(clean(plan), [[], []]);
+  // The same as an explicit diameter is the same plan.
+  assert.deepEqual(planBoardCase({ ...input, standoffs: { outerDiameterMm: 5.4 } }).derived.fasteners.standoffs!.outerDiametersMm, [5.4, 5.4, 5.4, 5.4]);
+  // A refusal that is not a web rule is not stepped past: an opening on a lid web stays refused (the D1 test above),
+  // and so does a screw that does not pass the board holes.
+  assert.throws(() => planBoardCase({ ...input, lid: { fasteners: { ...m3Pilot, bossStyle: "stack" } } }), /board\.holes\[0\] \(Ø3\) is smaller than the M3 close-fit clearance Ø3\.2/);
+});
+
+// ------------------------------------------------------------------------------------------------ follow-up F3
+// A typical ESP32 dev board call with as few keys as the schema allows: the board, its four Ø3 holes 2.0 mm in, the
+// USB opening on a short end, and screw "auto" with base "pilot".
+const ESP32: BoardCaseInput = {
+  originMm: [0, 0, 0],
+  board: { lengthMm: 51.5, widthMm: 28.3, holes: corners4(51.5, 28.3, 3, 2), componentHeightMm: 8 },
+  lid: { fasteners: { screw: "auto", base: "pilot" } },
+  openings: [{ wall: "x-", shape: "rect", widthMm: 9.2, heightMm: 3.4, alongMm: 14.15, aboveBoardMm: 0 }],
+  revision: "r0",
+};
+
+test("F3: the typical ESP32 call (screw auto, base pilot, nothing else) plans and builds a stack; the pilot diameter, pilot depth and plain lid holes are defaults that derived lists", async () => {
+  const plan = planBoardCase(ESP32);
+  const derived = plan.derived;
+  assert.deepEqual([derived.bossStyle, derived.bossStyleReason], ["stack", "default: the lid screws go through the 4 board holes into the standoffs (stack)"]);
+  // Outer size 56.5 x 33.3 x 22 with the lid top at 24 (2 mm walls, 0.5 mm clearance; 7.9 mm standoffs under the board).
+  assert.deepEqual([derived.outerMm, derived.lidTopZMm, derived.wallTopZMm], [{ min: [0, 0, 0], max: [56.5, 33.3, 22] }, 24, 22]);
+  const lidFastener = derived.fasteners.lid!;
+  assert.deepEqual([lidFastener.screw, lidFastener.screwReason], ["M2.5", "screw \"auto\": M2.5, the largest whose close-fit clearance (Ø2.7) passes the smallest board hole (Ø3)"]);
+  // The three defaults, each with its reason.
+  assert.deepEqual(lidFastener.defaults, [
+    "pilotDiameterMm 2.05: the M2.5 tapping drill (2.5 - pitch 0.45), a starting value for a screw that forms its thread in printed plastic (confidence low)",
+    "pilotDepthMm 6.9: a stocked 20 mm screw passes 14.1 mm of lid, post and board and reaches 5.9 mm into the standoff (at least 2 x 2.5), with 1 mm tip clearance",
+    "countersunk false: the M2.5 countersunk head is not sourced, so the lid holes are plain (pass headDiameterMm for countersinks)",
+  ]);
+  assert.deepEqual(lidFastener.baseHole, { diameterMm: 2.05, depthMm: 6.9, source: TAP_DRILL_SOURCE, confidence: "low" });
+  assert.equal(lidFastener.countersink, undefined);
+  // A pilot standoff under every hole, Ø4.5 (inside the lid lip), 7.9 mm tall (pilot + 1), coaxial with its lid post.
+  const standoffs = derived.fasteners.standoffs!;
+  assert.deepEqual([standoffs.mode, standoffs.screw, standoffs.holeDiameterMm, standoffs.holeDepthMm, standoffs.heightMm, standoffs.outerDiametersMm, standoffs.source, standoffs.confidence], ["pilot", "M2.5", 2.05, 6.9, 7.9, [4.5, 4.5, 4.5, 4.5], TAP_DRILL_SOURCE, "low"]);
+  assert.deepEqual(derived.standoffAxesMm, ESP32.board.holes!.map((hole) => [r6(derived.boardMm.min[0] + hole.xMm), r6(derived.boardMm.min[1] + hole.yMm)]));
+  assert.deepEqual(derived.stack!.postAxesMm, derived.standoffAxesMm);
+  assert.deepEqual([derived.stack!.postOuterDiametersMm, derived.stack!.screwLengthMm, derived.stack!.screwLengthMaxMm, derived.stack!.engagementMm, derived.stack!.holeDiameterMm], [[4.5, 4.5, 4.5, 4.5], 20, 21, 5.9, 2.9]);
+  assert.deepEqual(insideLip(derived), [0.05, 0.05, 0.05, 0.05]);
+  // The board drops in (no corner bosses) and sits on the standoffs; the posts end 0.2 mm above it.
+  assert.deepEqual([derived.assembly.boardDropIn, derived.standoffTopZMm, derived.boardMm.min[2], r6(derived.stack!.postBottomZMm - derived.boardTopZMm)], [true, 9.9, 9.9, 0.2]);
+  assert.deepEqual(clean(plan), [[], []]);
+  const { fake, result } = await build({ ...ESP32, boardStandIn: true });
+  assert.equal(result.undoSteps, result.derived.plannedUndoSteps);
+  assert.equal(result.undoSteps, fake.calls.length);
+  assert.deepEqual(result.derived.fasteners.lid!.defaults, lidFastener.defaults);
+});
+
+test("F3: the defaults apply only with screw auto and only to keys left out; a named screw still needs its pilot, and a pilot that would not hold the chosen screw is refused", () => {
+  const board = ESP32.board;
+  const lidOf = (fasteners: LidFasteners) => deriveBoardCase({ originMm: [0, 0, 0], board, lid: { fasteners }, revision: "r0" });
+  // A named screw: no defaults (the pilot is not sourced), as before.
+  assert.throws(() => lidOf({ screw: "M2.5", base: "pilot" }), /a self-tapping pilot diameter for M2\.5 in plastic is not sourced; pass pilotDiameterMm/);
+  assert.throws(() => lidOf({ screw: "M2.5", base: "pilot", pilotDiameterMm: 2.1 }), /lid\.fasteners\.pilotDepthMm is required with base "pilot"/);
+  assert.equal(lidOf({ screw: "M2.5", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 6.9, countersunk: false }).fasteners.lid!.defaults, undefined);
+  // Keys the caller gives are kept: only what is left out is defaulted and listed.
+  const kept = lidOf({ screw: "auto", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 5.9, countersunk: false }).fasteners.lid!;
+  assert.deepEqual([kept.screw, kept.baseHole, kept.defaults], ["M2.5", { diameterMm: 2.1, depthMm: 5.9, source: CALLER_SOURCE }, undefined]);
+  const depthOnly = lidOf({ screw: "auto", base: "pilot", pilotDepthMm: 5 });
+  assert.deepEqual([depthOnly.fasteners.lid!.baseHole.diameterMm, depthOnly.fasteners.lid!.baseHole.depthMm, depthOnly.fasteners.lid!.defaults!.length, depthOnly.stack!.screwLengthMm], [2.05, 5, 2, 18]);
+  assert.match(depthOnly.fasteners.lid!.defaults!.join(" | "), /^pilotDiameterMm 2\.05: .* \| countersunk false: /);
+  // A given standoffs.heightMm that does not hold the usual default pilot (6.9 mm for a 20 mm screw): the default is
+  // the pilot of the longest stocked screw that the height does hold (18 mm: 4.9 mm), and derived says so.
+  const low = (heightMm: number, extra: Partial<LidFasteners> = {}) => deriveBoardCase({ originMm: [0, 0, 0], board, standoffs: { heightMm }, lid: { fasteners: { screw: "auto", base: "pilot", ...extra } }, revision: "r0" });
+  for (const heightMm of [5, 6]) {
+    const held = low(heightMm);
+    assert.deepEqual([held.bossStyle, held.fasteners.standoffs!.heightMm, held.fasteners.lid!.baseHole.depthMm, held.stack!.screwLengthMm, held.stack!.engagementMm], ["stack", heightMm, 4.9, 18, 3.9], `standoffs.heightMm ${heightMm}`);
+    assert.equal(held.fasteners.lid!.defaults![1], `pilotDepthMm 4.9: a stocked 18 mm screw passes 14.1 mm of lid, post and board and reaches 3.9 mm into the standoff (the given standoffs.heightMm ${heightMm} does not hold the 6.9 mm pilot for 2 x 2.5), with 1 mm tip clearance`);
+  }
+  // A height that holds it changes nothing; one too low for any stocked screw (4 mm: 16 mm would reach 1.9 mm) is
+  // refused as a stack, saying that the depth is the default, and takes floor bosses by default.
+  assert.deepEqual([low(7.9).fasteners.lid!.baseHole.depthMm, low(7.9).stack!.screwLengthMm, low(10).fasteners.lid!.baseHole.depthMm], [6.9, 20, 6.9]);
+  assert.throws(() => low(4, { bossStyle: "stack" }), /bossStyle "stack": lid\.fasteners\.pilotDepthMm 6\.9 \(the default with screw "auto"\) exceeds the standoff height 4; raise standoffs\.heightMm to 7\.9 or leave it out \(the default holds the pilot\)$/);
+  assert.equal(low(4).bossStyle, "floor");
+  // A head diameter from the caller keeps the countersinks: that default is not applied.
+  const head = lidOf({ screw: "auto", base: "pilot", headDiameterMm: 4.4 }).fasteners.lid!;
+  assert.equal(head.defaults!.length, 2);
+  assert.doesNotMatch(head.defaults!.join(" | "), /countersunk/);
+  // The reviewer's M3 pilot keys (Ø2.5 x 6) with screw auto on Ø3 holes: auto takes M2.5, whose thread Ø2.5 would not
+  // hold in a Ø2.5 pilot. The stack is refused with the fix; by default the case takes floor bosses and M3.
+  assert.throws(() => lidOf({ ...m3Pilot, screw: "auto", bossStyle: "stack" }), /bossStyle "stack": lid\.fasteners\.pilotDiameterMm 2\.5 is not smaller than the M2\.5 thread \(Ø2\.5\) that screw "auto" chose, so the screw would not hold; leave pilotDiameterMm out \(default Ø2\.05\) or name the screw$/);
+  const fallback = lidOf({ ...m3Pilot, screw: "auto" });
+  assert.deepEqual([fallback.bossStyle, fallback.fasteners.lid!.screw, fallback.fasteners.lid!.baseHole, fallback.fasteners.standoffs!.mode], ["floor", "M3", { diameterMm: 2.5, depthMm: 6, source: CALLER_SOURCE }, "support"]);
+  assert.match(fallback.bossStyleReason!, /pilotDiameterMm 2\.5 is not smaller than the M2\.5 thread/);
+  // Floor bosses with screw auto: M3, the Ø2.5 tapping drill, 2 x 3 mm deep; the M3 countersunk head is sourced, so the countersinks stay.
+  const floor = lidOf({ screw: "auto", base: "pilot", bossStyle: "floor" }).fasteners.lid!;
+  assert.deepEqual([floor.screw, floor.baseHole, floor.defaults], ["M3", { diameterMm: 2.5, depthMm: 6, source: TAP_DRILL_SOURCE, confidence: "low" }, ["pilotDiameterMm 2.5: the M3 tapping drill (3 - pitch 0.5), a starting value for a screw that forms its thread in printed plastic (confidence low)", "pilotDepthMm 6: 2 x the M3 thread diameter"]]);
+  assert.equal(floor.countersink!.source, COUNTERSUNK_HEAD_SOURCE);
+  // M2 (Ø2.4 holes): the Ø1.6 tapping drill.
+  const small = deriveBoardCase({ originMm: [0, 0, 0], board: { ...board, holes: corners4(51.5, 28.3, 2.4, 2) }, lid: { fasteners: { screw: "auto", base: "pilot" } }, revision: "r0" });
+  assert.deepEqual([small.bossStyle, small.fasteners.lid!.screw, small.fasteners.lid!.baseHole.diameterMm, small.fasteners.standoffs!.outerDiametersMm, small.stack!.screwLengthMm], ["stack", "M2", 1.6, [4.5, 4.5, 4.5, 4.5], 20]);
+});
+
+test("F3: the D2 inputs: Ø3 holes become a stack with screw auto (pilot keys left out); a named M3 and the Ø3.2 holes keep floor bosses", () => {
+  const size = (derived: BoardCasePlan["derived"]) => [r6(derived.outerMm.max[0] - derived.outerMm.min[0]), r6(derived.outerMm.max[1] - derived.outerMm.min[1]), r6(derived.outerMm.max[2] - derived.outerMm.min[2]), derived.lidTopZMm];
+  const [pilot3, pilot32, insert3] = D2_INPUTS.map(([, input]) => input);
+  const auto = (input: BoardCaseInput, fasteners: LidFasteners) => deriveBoardCase({ ...input, lid: { fasteners } });
+  // Named M3, as the reviewer gave them: floor bosses (M3 does not pass Ø3 holes; under Ø3.2 holes the smallest M3 post passes the lip).
+  assert.deepEqual([deriveBoardCase(pilot3!).bossStyle, size(deriveBoardCase(pilot3!))], ["floor", [67.5, 33.3, 16.1, 18.1]]);
+  assert.deepEqual([deriveBoardCase(pilot32!).bossStyle, size(deriveBoardCase(pilot32!))], ["floor", [67.5, 33.3, 16.1, 18.1]]);
+  assert.deepEqual([deriveBoardCase(insert3!).bossStyle, size(deriveBoardCase(insert3!))], ["floor", [69.9, 33.3, 16.1, 18.1]]);
+  // Screw auto, pilot keys left out. Ø3 holes: a stack, M2.5, 11 mm shorter in x and 5.9 mm taller.
+  const stack = auto(pilot3!, { screw: "auto", base: "pilot" });
+  assert.deepEqual([stack.bossStyle, stack.fasteners.lid!.screw, size(stack), stack.fasteners.standoffs!.mode, stack.standoffAxesMm.length], ["stack", "M2.5", [56.5, 33.3, 22, 24], "pilot", 4]);
+  // Ø3.2 holes: auto takes M3, whose smallest post Ø4.8 passes the lip, so floor bosses (with the default pilot).
+  const floor = auto(pilot32!, { screw: "auto", base: "pilot" });
+  assert.deepEqual([floor.bossStyle, floor.fasteners.lid!.screw, size(floor), floor.fasteners.standoffs!.mode, floor.standoffAxesMm.length], ["floor", "M3", [67.5, 33.3, 16.1, 18.1], "support", 4]);
+  // Inserts with screw auto on Ø3 holes: M2.5 has no 3 mm insert, so the stack is not possible; floor bosses with M3.
+  const insert = auto(insert3!, { screw: "auto", base: "heat-set-insert", insertLengthMm: 3 });
+  assert.deepEqual([insert.bossStyle, insert.fasteners.lid!.screw, size(insert)], ["floor", "M3", [69.9, 33.3, 16.1, 18.1]]);
 });
