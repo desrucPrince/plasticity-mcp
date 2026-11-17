@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import * as recipeModule from "./case-recipe.ts";
 import {
+  BOARD_CASE_LIMITS,
   BOARD_CASE_PRINTABILITY_SCOPE,
   BoardCaseRecipe,
   BoardCaseRecipeError,
@@ -13,9 +15,16 @@ import {
   planBoardCase,
   requireBoardCaseInvariants,
   roundedRectInsideDistance,
+  type BoardCaseFinding,
   type BoardCaseInput,
   type BoardCaseOperations,
+  type BoardCasePlan,
+  type BoardCaseWebSolid,
 } from "./case-recipe.ts";
+
+// The round 4 exports are read through the module namespace, so that against an older recipe each test that needs them
+// fails on its own instead of the whole file failing to load.
+const { boardCaseShortEdges, boardCaseTangencies } = recipeModule as unknown as { boardCaseShortEdges: (plan: BoardCasePlan) => BoardCaseFinding[]; boardCaseTangencies: (plan: BoardCasePlan) => BoardCaseFinding[] };
 import { CALLER_SOURCE, CLEARANCE_HOLE_SOURCE, COUNTERSUNK_HEAD_SOURCE, HEAT_SET_INSERT_SOURCE } from "./fastener-presets.ts";
 import type { RuntimeState } from "./runtime.ts";
 
@@ -26,7 +35,7 @@ type V3 = [number, number, number];
 // Bodies carry native-style bounds (boxes, cylinders, cones and extrusions; a union grows the target, an intersection
 // clips it, a move shifts it) so the recipe's read-back can compare them with the plan. validateBodies is a read, not a
 // recorded call.
-function fakeRuntime(options: { fail?: (operation: string, index: number) => Error | undefined; failUndo?: (index: number) => Error | undefined; keepTools?: (index: number) => boolean; noRegion?: (index: number) => boolean; sharedSketch?: boolean; invalid?: (id: number) => boolean; shortEdge?: (id: number) => boolean; skipMove?: boolean } = {}) {
+function fakeRuntime(options: { fail?: (operation: string, index: number) => Error | undefined; failUndo?: (index: number) => Error | undefined; keepTools?: (index: number) => boolean; noRegion?: (index: number) => boolean; sharedSketch?: boolean; invalid?: (id: number) => boolean; shortEdge?: (id: number) => boolean; skipMove?: boolean; flipProfile?: (index: number) => boolean } = {}) {
   let revision = 0;
   let nextId = 100;
   let bodies: RuntimeState["bodies"] = [solid(1, "existing", [])];
@@ -86,7 +95,11 @@ function fakeRuntime(options: { fail?: (operation: string, index: number) => Err
         if (options.noRegion?.(calls.length)) return;
         const min = [0, 1, 2].map((axis) => Math.min(...pointsMm.map((point) => point[axis]!))) as V3;
         const max = [0, 1, 2].map((axis) => Math.max(...pointsMm.map((point) => point[axis]!))) as V3;
-        const normal = unit(cross(sub(pointsMm[1]!, pointsMm[0]!), sub(pointsMm[2]!, pointsMm[0]!)));
+        // Like Plasticity (live-verified, round 4): a closed profile's plane normal comes from the corner at its first
+        // point (last point, first point, second point); an open one from its first three points.
+        const natural = closed && pointsMm.length > 3 ? unit(cross(sub(pointsMm[0]!, pointsMm.at(-1)!), sub(pointsMm[1]!, pointsMm[0]!))) : unit(cross(sub(pointsMm[1]!, pointsMm[0]!), sub(pointsMm[2]!, pointsMm[0]!)));
+        // flipProfile: a renderer that takes the other normal for this profile (it then extrudes the wrong way).
+        const normal = options.flipProfile?.(calls.length) ? natural.map((value) => -value) as V3 : natural;
         // sharedSketch: like Plasticity, coplanar Wires share one sketch, so every Region on that plane lists all of them.
         const planeKey = [...normal.map((value) => Math.round(Math.abs(value) * 1e6)), Math.round(Math.abs(normal[0] * pointsMm[0]![0] + normal[1] * pointsMm[0]![1] + normal[2] * pointsMm[0]![2]) * 1e6)].join(":");
         const coplanar = options.sharedSketch ? regions.filter((region) => (region as unknown as { planeKey: string }).planeKey === planeKey) : [];
@@ -168,11 +181,13 @@ const unit = (a: V3): V3 => { const length = Math.hypot(...a); return a.map((val
 const rounded = (value: unknown): unknown => typeof value === "number" ? Math.round(value * 1e6) / 1e6 + 0 : Array.isArray(value) ? value.map(rounded) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, rounded(item)])) : value;
 
 const r6 = (value: number) => Math.round(value * 1e6) / 1e6 + 0;
+const r3 = (value: number) => Math.round(value * 1e3) / 1e3 + 0;
 // Inner corner radius (R3, the round-1 rule): min(outer radius - wall, board clearance).
 const innerRadius = (outer: number, wall: number, clearance: number) => Math.min(Math.max(0, outer - wall), clearance);
-// Web calls (boxes 1, strips 2, plus one join) and web bodies (boxes 1, strips 2: profile Wire and Solid) a plan adds (R4).
-const webCalls = (input: BoardCaseInput) => { const webs = planBoardCase(input).derived.webs; return webs.length === 0 ? 0 : webs.reduce((sum, web) => sum + (web.strip ? 2 : 1), 0) + 1; };
-const webBodies = (input: BoardCaseInput) => planBoardCase(input).derived.webs.reduce((sum, web) => sum + (web.strip ? 2 : 1), 0);
+// Web calls (a box 1, a profile loop 2, plus one join) and web bodies (a box 1, a loop 2: profile Wire and Solid) a plan
+// adds (R4; round 4: the webs of one height are joined in plan view, one solid per outline loop).
+const webCalls = (input: BoardCaseInput) => { const solids = planBoardCase(input).webSolids; return solids.length === 0 ? 0 : solids.reduce((sum, solid) => sum + (solid.box ? 1 : 2), 0) + 1; };
+const webBodies = (input: BoardCaseInput) => planBoardCase(input).webSolids.reduce((sum, solid) => sum + (solid.box ? 1 : 2), 0);
 // ------------------------------------------------------------------------------------------------- reference input
 const REF: BoardCaseInput = {
   originMm: [0, 0, 0],
@@ -233,18 +248,19 @@ test("derived dimensions follow the stated formulas (table of cases)", () => {
       },
     },
     {
+      // Round 4 (D2): a board with no holes has no standoffs and rests on the floor top (it floated 2 mm up before).
       name: "sensor pod: no holes, no standoffs, lid without screws",
       input: POD,
       expected: {
-        outerMm: { min: [0, 0, 0], max: [22.1, 19.5, 11.1] }, cavityMm: { min: [2, 2, 2], max: [20.1, 17.5, 11.1] }, innerCornerRadiusMm: 0.15,
-        boardMm: { min: [2.15, 2.15, 4], max: [19.95, 17.35, 5.6] }, wallTopZMm: 11.1, lidTopZMm: 13.1,
-        standoffAxesMm: [], lidBossAxesMm: [], lipOuterMm: { min: [2.2, 2.2, 9.6], max: [19.9, 17.3, 11.1] }, openings: [], fasteners: {},
+        outerMm: { min: [0, 0, 0], max: [22.1, 19.5, 9.1] }, cavityMm: { min: [2, 2, 2], max: [20.1, 17.5, 9.1] }, innerCornerRadiusMm: 0.15,
+        boardMm: { min: [2.15, 2.15, 2], max: [19.95, 17.35, 3.6] }, wallTopZMm: 9.1, lidTopZMm: 11.1,
+        standoffAxesMm: [], lidBossAxesMm: [], lipOuterMm: { min: [2.2, 2.2, 7.6], max: [19.9, 17.3, 9.1] }, openings: [], fasteners: {},
       },
     },
     {
       name: "exploded lid: lid features move up, the base stays",
       input: { ...POD, exploded: 10 },
-      expected: { outerMm: { min: [0, 0, 0], max: [22.1, 19.5, 11.1] }, lidTopZMm: 23.1, explodedMm: 10, lipOuterMm: { min: [2.2, 2.2, 19.6], max: [19.9, 17.3, 21.1] } },
+      expected: { outerMm: { min: [0, 0, 0], max: [22.1, 19.5, 9.1] }, lidTopZMm: 21.1, explodedMm: 10, lipOuterMm: { min: [2.2, 2.2, 17.6], max: [19.9, 17.3, 19.1] } },
     },
   ];
   for (const { name, input, expected } of table) {
@@ -256,7 +272,9 @@ test("derived dimensions follow the stated formulas (table of cases)", () => {
 test("the heights obey wallTop = floorTop + support + board + parts + 1 + max(lip, boss length) and the cavity is board + 2 x clearance", () => {
   for (const input of [REF, BENCHMARK, AUDIT, POD, with_((value) => { value.lid = { lipDepthMm: 4 }; })]) {
     const derived = deriveBoardCase(input);
-    const support = input.standoffs ? input.standoffs.heightMm ?? input.board.undersideClearanceMm ?? 2 : input.board.undersideClearanceMm ?? 2;
+    // Round 4 (D2): a board with holes always gets standoffs (default height = the underside clearance); one without
+    // holes rests on the floor top (support 0).
+    const support = input.standoffs ? input.standoffs.heightMm ?? input.board.undersideClearanceMm ?? 2 : (input.board.holes?.length ?? 0) > 0 ? input.board.undersideClearanceMm ?? 2 : 0;
     const boss = derived.fasteners.lid?.bossLengthMm ?? 0;
     const lip = input.lid?.lipDepthMm ?? 1.5;
     const expectedWall = derived.floorTopZMm + support + (input.board.thicknessMm ?? 1.6) + input.board.componentHeightMm + 1 + Math.max(lip, boss);
@@ -278,7 +296,7 @@ test("every preset value a build uses is echoed in derived.fasteners with its so
   const audit = deriveBoardCase(AUDIT).fasteners;
   assert.deepEqual(audit.standoffs, { screw: "M2.5", mode: "heat-set-insert", holeDiameterMm: 4, holeDepthMm: 5, outerDiametersMm: [7.5, 7.5, 7.5, 7.5], heightMm: 5, source: HEAT_SET_INSERT_SOURCE, confidence: "medium", insert: "M2.5x4", minWallMm: 1.6 });
   assert.deepEqual(audit.lid, {
-    screw: "M3", base: "heat-set-insert", bossDiameterMm: 8, bossLengthMm: 5,
+    screw: "M3", screwReason: "lid.fasteners.screw", base: "heat-set-insert", bossDiameterMm: 8, bossLengthMm: 5,
     baseHole: { diameterMm: 4, depthMm: 4, source: HEAT_SET_INSERT_SOURCE, confidence: "medium", insert: "M3x3", minWallMm: 1.6 },
     lidHole: { diameterMm: 3.4, fit: "medium", source: CLEARANCE_HOLE_SOURCE, confidence: "medium" },
     countersink: { headDiameterMm: 6.72, includedAngleDeg: 90, depthMm: 1.66, source: COUNTERSUNK_HEAD_SOURCE, confidence: "medium" },
@@ -364,9 +382,10 @@ test("the reference case composes the shell, the existing recipes and the cleanu
   assert.deepEqual(names, [
     // base shell
     "createBox", "fillet", "createBox", "fillet", "boolean:difference",
-    // R4 webs: each standoff is 0.75 mm from two walls (two wall boxes and a corner box each), each boss leaves a 0.33 mm
-    // corner pocket (a corner box each): ten boxes, one join
-    ...repeat(["createBox"], 10), "boolean:union",
+    // R4 webs: each standoff is 0.75 mm from two walls (two wall boxes and a corner box, joined in plan view into one
+    // L-shaped profile each: round 4), each boss leaves a 0.33 mm corner pocket (a corner box each): two profile loops,
+    // four boxes, one join
+    ...repeat(["createPolyline", "extrudeRegions"], 2), ...repeat(["createBox"], 4), "boolean:union",
     // standoffs (screw boss pattern: bosses, union, pilots, difference)
     ...repeat(["createCylinder"], 2), "boolean:union", ...repeat(["createCylinder"], 2), "boolean:difference",
     // corner bosses for the lid screws
@@ -384,9 +403,14 @@ test("the reference case composes the shell, the existing recipes and the cleanu
     // construction Wires in one delete
     "remove",
   ]);
-  // Calls after the base shell sit W = 11 later (the R4 web stage); the ten web bodies shift later body ids by N = 10.
-  const W = 11;
-  const N = 10;
+  // Calls after the base shell sit W = 9 later (the R4 web stage); the eight web bodies (two profile Wires, two loop
+  // solids, four boxes) shift later body ids by N = 8.
+  const W = 9;
+  const N = 8;
+  // The two web profiles: counter-clockwise L shapes from 0.2 mm inside both walls to the standoff axis and its far
+  // tangents, at z 1.5 (0.5 mm into the floor), extruded 3.5 mm up to the standoff top.
+  assert.deepEqual(rounded(fake.calls[5]!.args), [[[5.5, 8.25, 1.5], [1.8, 8.25, 1.5], [1.8, 1.8, 1.5], [8.25, 1.8, 1.5], [8.25, 5.5, 1.5], [5.5, 5.5, 1.5]], true]);
+  assert.deepEqual((fake.calls[6]!.args as unknown[])[1], 3.5);
   const at = (index: number) => rounded(fake.calls[index < 5 ? index : index + W]!.args);
   assert.deepEqual(at(0), [[0, 0, 0], [35, 25, 18.6], "ref-base"]);
   assert.deepEqual(at(1), [100, ["v101-0", "v101-1", "v101-2", "v101-3"], 3]);
@@ -454,12 +478,13 @@ test("a native failure part-way undoes every step the recipe made and names the 
   assert.ok(error instanceof BoardCaseRecipeError);
   assert.equal(error.failedStage, "lid-screw-holes");
   assert.equal(error.uncertain, false);
-  // 32 steps before the countersink pattern plus the 11 R4 web steps, plus its confirmed through cutter and profile
-  assert.equal(error.completedSteps.length, 45);
-  assert.equal(error.undoneSteps, 45);
-  assert.equal(fake.undoCalls, 45);
+  // 32 steps before the countersink pattern plus the 9 R4 web steps (round 4: two profile loops, four boxes, one join;
+  // it was 11), plus its confirmed through cutter and profile
+  assert.equal(error.completedSteps.length, 43);
+  assert.equal(error.undoneSteps, 43);
+  assert.equal(fake.undoCalls, 43);
   assert.equal(error.restored, true);
-  assert.match(error.message, /failed in stage "lid-screw-holes" after 45 confirmed native steps; undid 45 native steps; the document matches the start .*revolve rejected/);
+  assert.match(error.message, /failed in stage "lid-screw-holes" after 43 confirmed native steps; undid 43 native steps; the document matches the start .*revolve rejected/);
   const after = fake.snapshot();
   assert.equal(after.undoDepth, before.undoDepth);
   assert.deepEqual(after.bodies, before.bodies);
@@ -490,7 +515,8 @@ test("an uncertain native result is not undone and says to reconcile", async () 
 
 test("an undo that fails during the rollback is reported, not hidden", async () => {
   const fake = fakeRuntime({
-    fail: (operation) => operation === "extrudeRegions" ? new Error("extrude failed") : undefined,
+    // The y+ opening's extrude (round 4: the two web profiles are extruded earlier, at calls 7 and 9).
+    fail: (operation, index) => operation === "extrudeRegions" && index > 20 ? new Error("extrude failed") : undefined,
     failUndo: (index) => index === 3 ? new Error("undo refused") : undefined,
   });
   const error = await new BoardCaseRecipe(fake.operations).create(REF).then(() => undefined, (caught: unknown) => caught);
@@ -748,10 +774,11 @@ test("the tapered case composes clip box, cone, clip and one join before the bos
   const repeat = (list: string[], count: number) => Array.from({ length: count }, () => list).flat();
   // Calls after the base shell sit W later (the R4 web stage); web bodies shift later body ids by N.
   // R4 webs after the base shell: standoffs 0.75 mm from two walls (two wall boxes and a corner box each) and four boss
-  // corner pockets: ten boxes and one join (W = 11 calls, N = 10 bodies).
-  const W = 11;
-  const N = 10;
-  assert.deepEqual(names.slice(5, 5 + W), [...repeat(["createBox"], 10), "boolean:union"]);
+  // corner pockets: two profile loops (the standoffs' joined webs), four boxes and one join (round 4: W = 9 calls, N = 8
+  // bodies; it was ten boxes and one join).
+  const W = 9;
+  const N = 8;
+  assert.deepEqual(names.slice(5, 5 + W), [...repeat(["createPolyline", "extrudeRegions"], 2), ...repeat(["createBox"], 4), "boolean:union"]);
   const shifted = (index: number) => index < 5 ? index : index + W;
   assert.deepEqual([...names.slice(0, 5), ...names.slice(5 + W, 11 + W)], [
     "createBox", "fillet", "createBox", "fillet", "boolean:difference",
@@ -785,10 +812,12 @@ test("the floor case grows the cavity cutter, stands the bosses on the floor and
   const fake = fakeRuntime();
   const input = styled(REF, "floor");
   const result = await new BoardCaseRecipe(fake.operations).create(input);
-  // R4 webs after the base shell: standoff 0 and 1 each 0.75 mm from a y wall (two wall boxes), four boss corner boxes and
-  // two boss-standoff strips (profile + extrude each), one join: W = 11 calls.
+  // R4 webs after the base shell: standoff 0 and 1 each 0.75 mm from a y wall and from a floor boss. Round 4: each
+  // standoff's wall box, its strip to the boss, the fill under the strip and that boss's corner box are one profile loop
+  // (profile + extrude); the other two bosses' corner boxes stay boxes; then the four full-height corner boxes; one join:
+  // W = 11 calls.
   const W = 11;
-  assert.deepEqual(fake.calls.slice(5, 5 + W).map((entry) => entry.operation === "boolean" ? `boolean:${String(entry.args[2])}` : entry.operation), [...Array.from({ length: 6 }, () => "createBox"), "createPolyline", "extrudeRegions", "createPolyline", "extrudeRegions", "boolean:union"]);
+  assert.deepEqual(fake.calls.slice(5, 5 + W).map((entry) => entry.operation === "boolean" ? `boolean:${String(entry.args[2])}` : entry.operation), ["createPolyline", "extrudeRegions", "createPolyline", "extrudeRegions", ...Array.from({ length: 6 }, () => "createBox"), "boolean:union"]);
   const at = (index: number) => rounded(fake.calls[index < 5 ? index : index + W]!.args);
   assert.deepEqual(at(0), [[0, 0, 0], [46, 25, 14.1], "ref-base"]);
   assert.deepEqual(at(2), [[2, 2, 2], [42, 21, 12.6], null]);
@@ -811,9 +840,9 @@ test("a failure in the tapered gusset stage undoes every step and names the stag
   assert.ok(error instanceof BoardCaseRecipeError);
   assert.equal(error.failedStage, "lid-boss-tapers");
   assert.equal(error.restored, true);
-  // 11 steps before the gusset (plus the R4 web stage), then the first corner's clip box
-  assert.equal(error.completedSteps.length, 12 + 11);
-  assert.equal(error.undoneSteps, 12 + 11);
+  // 11 steps before the gusset (plus the R4 web stage: 9 steps since round 4), then the first corner's clip box
+  assert.equal(error.completedSteps.length, 12 + 9);
+  assert.equal(error.undoneSteps, 12 + 9);
   assert.deepEqual(fake.snapshot().bodies, before.bodies);
 });
 
@@ -844,8 +873,8 @@ const escape = (value: number | string) => String(value).replace(/[.+()]/g, (mat
 test("A: the default bossStyle is floor, and derived.assembly says the board drops in", () => {
   const derived = deriveBoardCase(review((input) => { input.lid = lidPilot(); }));
   assert.equal(derived.bossStyle, "floor");
-  assert.deepEqual(derived.assembly, { boardDropIn: true, note: "plan view: no corner boss or gusset overlaps the board outline grown by 0.2 mm, so the board drops straight in past the floor bosses" });
-  assert.deepEqual(deriveBoardCase(POD).assembly, { boardDropIn: true, note: "no corner bosses: the board drops straight in" });
+  assert.deepEqual(derived.assembly, { boardDropIn: true, note: "plan view: no corner boss or gusset overlaps the board outline grown by 0.2 mm, so the board drops straight in past the floor bosses. The board has no holes, so there are no standoffs: it rests on the floor top" });
+  assert.deepEqual(deriveBoardCase(POD).assembly, { boardDropIn: true, note: "no corner bosses: the board drops straight in. The board has no holes, so there are no standoffs: it rests on the floor top" });
 });
 
 test("A: tapered and hanging are refused when the bosses block the board, and the refusal names bossStyle floor", async () => {
@@ -873,7 +902,7 @@ test("A: boardDropIn is computed in plan view from the boss circles and the guss
   const gussetClearAt = 0.2 + (REACH + 0.5) / Math.SQRT2;
   const tapered = (clearance: number) => deriveBoardCase(review((input) => { input.fit = { boardClearanceMm: clearance }; input.lid = lidPilot({ bossStyle: "tapered", allowBlockedBoard: true }); })).assembly;
   assert.equal(tapered(gussetClearAt + 0.01).boardDropIn, true);
-  assert.deepEqual(tapered(gussetClearAt - 0.01), { boardDropIn: false, note: "plan view: the board comes within 0.2 mm of the 45 degree gussets, so it may not lower freely; bossStyle \"floor\" keeps the bosses beside the board" });
+  assert.deepEqual(tapered(gussetClearAt - 0.01), { boardDropIn: false, note: "plan view: the board comes within 0.2 mm of the 45 degree gussets, so it may not lower freely; bossStyle \"floor\" keeps the bosses beside the board. The board has no holes, so there are no standoffs: it rests on the floor top" });
   // Clear hung bosses need no override.
   assert.ok(planBoardCase(review((input) => { input.fit = { boardClearanceMm: clearAt + 0.01 }; input.lid = lidPilot({ bossStyle: "hanging" }); })));
 });
@@ -1048,9 +1077,10 @@ test("E: a lip piece shorter than 1 mm between a boss notch and its corner is re
   assert.ok(Math.abs((notch(0, 6)[0] as { cornerPieceMm: number }).cornerPieceMm - square(6)) < 1e-3, "Ø6, square corner: 0.075 mm");
   assert.ok(square(10) >= 1, "Ø10 leaves a 1.38 mm piece, kept");
   // The box runs from 0.5 mm outside the cavity corner past the whole boss circle (boss radius + lid clearance), from
-  // 0.5 mm below the lip bottom (wall top 21.6 - lip 1.5 = 20.1) for lip + 3 x 0.5 mm.
+  // 0.5 mm below the lip bottom (wall top 19.6 - lip 1.5 = 18.1; round 4: the hole-less board rests on the floor) for
+  // lip + 3 x 0.5 mm.
   const box = notch(0, 6)[0] as { kind: string; originMm: number[]; sizeMm: number[] };
-  assert.deepEqual([box.kind, rounded(box.originMm), rounded(box.sizeMm)], ["box", [1.5, 1.5, 19.6], [0.5 + 2.5 + 3.2, 0.5 + 2.5 + 3.2, 3]]);
+  assert.deepEqual([box.kind, rounded(box.originMm), rounded(box.sizeMm)], ["box", [1.5, 1.5, 17.6], [0.5 + 2.5 + 3.2, 0.5 + 2.5 + 3.2, 3]]);
   const far = notch(0, 6)[3] as { originMm: number[]; sizeMm: number[] };
   assert.deepEqual((rounded(far.originMm.map((value, axis) => value + far.sizeMm[axis]!)) as number[]).slice(0, 2), [2 + 61 + 0.5, 2 + 41 + 0.5], "corner 3 runs to 0.5 mm past the far cavity corner (wall 2 + board 60 + 2 x 0.5)");
   // Reviewer P5 (radius 0, Ø6 bosses, exploded 7) builds with box notches and passes the read-back.
@@ -1173,14 +1203,14 @@ test("H: printability states its scope, the lid's top-face-down overhang and eve
   assert.equal(deriveBoardCase(with_((value) => { value.lid!.fasteners!.countersunk = false; })).printability!.lidMaxOverhangDeg, 0);
   // Without lid screws: no boss field, but the lid orientation and the opening ceilings (the pod's 10 mm x+ notch).
   const pod = deriveBoardCase({ ...POD, openings: [{ wall: "x+", shape: "rect", widthMm: 10, heightMm: 4, alongMm: 7.6, aboveBoardMm: -0.5, label: "notch" }] }).printability;
-  assert.deepEqual(pod, { baseOrientation: "floor-down", scope: BOARD_CASE_PRINTABILITY_SCOPE, lidPrintOrientation: "top face down", lidMaxOverhangDeg: 0, openingCeilings: [{ label: "notch", wall: "x+", widthMm: 10, zMm: 5.6 - 0.5 + 4 }] });
+  assert.deepEqual(pod, { baseOrientation: "floor-down", scope: BOARD_CASE_PRINTABILITY_SCOPE, lidPrintOrientation: "top face down", lidMaxOverhangDeg: 0, openingCeilings: [{ label: "notch", wall: "x+", widthMm: 10, zMm: 3.6 - 0.5 + 4 }] });
 });
 
 // ------------------------------------------------------------------------------------------- I: reporting
 test("I: a sub-recipe step that lands but fails its own check is listed with its profile Wire, and undone; the counts agree", async () => {
   // Call 46 is the y+ opening's profile polyline: it lands without a Region, so the connector opening recipe throws before
   // it lists the step.
-  const shift = 11; // the R4 web stage of REF (ten boxes, one join)
+  const shift = 9; // the R4 web stage of REF (round 4: two profile loops, four boxes, one join)
   const fake = fakeRuntime({ noRegion: (index) => index === 46 + shift });
   const error = await new BoardCaseRecipe(fake.operations).create(REF).then(() => undefined, (caught: unknown) => caught);
   assert.ok(error instanceof BoardCaseRecipeError);
@@ -1229,7 +1259,8 @@ test("read-back: a finished case reports native bounds equal to the plan, closed
 test("read-back: an invalid body, a sliver edge or bounds off the plan fail the call, which undoes every step and says so", async () => {
   const cases: Array<[string, Parameters<typeof fakeRuntime>[0], RegExp, BoardCaseInput]> = [
     ["invalid base", { invalid: (id) => id === 100 }, /read-back: body 100 is not closed, not natively valid/, REF],
-    ["sliver edge on the lid", { shortEdge: (id) => id === 124 }, /read-back: body 124 has a 0\.01 mm edge \(short-124\), shorter than 0\.05 mm/, REF],
+    // The lid is body 122 (round 4: eight web bodies before it instead of ten).
+    ["sliver edge on the lid", { shortEdge: (id) => id === 122 }, /read-back: body 122 has a 0\.01 mm edge \(short-122\), shorter than 0\.05 mm/, REF],
     ["lid not where planned", { skipMove: true }, /read-back: the lid bounds .* differ from the planned .* by up to 4 mm/, { ...REF, exploded: 4 }],
   ];
   for (const [name, options, pattern, input] of cases) {
@@ -1381,7 +1412,7 @@ test("R7: heat-set inserts work with the default standoff and boss diameters", a
 test("R8: assembly.note says 'may not lower freely' inside the 0.2 mm margin and 'cannot be lowered' over the board outline", () => {
   // Hung Ø6 bosses clear the board itself when sqrt 2 x (c - 2.5) >= 3 (c >= 4.62) and its 0.2 mm margin from c >= 4.82.
   const note = (clearance: number) => deriveBoardCase(review((input) => { input.fit = { boardClearanceMm: clearance }; input.lid = lidPilot({ bossStyle: "hanging", allowBlockedBoard: true }); })).assembly;
-  assert.deepEqual(note(4.7), { boardDropIn: false, note: "plan view: the board comes within 0.2 mm of lid boss 0, lid boss 1, lid boss 2, lid boss 3, so it may not lower freely; bossStyle \"floor\" keeps the bosses beside the board" });
+  assert.deepEqual(note(4.7), { boardDropIn: false, note: "plan view: the board comes within 0.2 mm of lid boss 0, lid boss 1, lid boss 2, lid boss 3, so it may not lower freely; bossStyle \"floor\" keeps the bosses beside the board. The board has no holes, so there are no standoffs: it rests on the floor top" });
   assert.match(note(1).note, /overlap the board outline, so the board cannot be lowered straight into the finished base/);
 });
 
@@ -1389,9 +1420,10 @@ test("R8: assembly.note says 'may not lower freely' inside the 0.2 mm margin and
 const STACK: BoardCaseInput = {
   originMm: [0, 0, 0],
   board: { lengthMm: 51.5, widthMm: 28.3, holes: [[2.6, 2.6], [48.9, 2.6], [2.6, 25.7], [48.9, 25.7]].map(([xMm, yMm]) => ({ xMm: xMm!, yMm: yMm!, diameterMm: 3 })), componentHeightMm: 8 },
-  standoffs: { heightMm: 4, outerDiameterMm: 5 },
+  // Round 4 (D9): 8 mm standoffs with 7 mm pilots, so a standard 20 mm screw fits (through 14.1, bottoming at 21.1).
+  standoffs: { heightMm: 8, outerDiameterMm: 5 },
   // M2.5: the Ø3 board holes pass its 2.7 mm close-fit clearance (M3's is 3.2, refused below).
-  lid: { fasteners: { screw: "M2.5", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 4, countersunk: false } },
+  lid: { fasteners: { screw: "M2.5", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 7, countersunk: false } },
   openings: [{ wall: "x-", shape: "rounded-rect", widthMm: 9.2, heightMm: 3.4, cornerRadiusMm: 1.2, alongMm: 14.15, aboveBoardMm: 1.6, label: "usb" }, { wall: "y-", shape: "rect", widthMm: 6, heightMm: 3, alongMm: 25.75, aboveBoardMm: 1, label: "button" }],
   boardStandIn: true,
   revision: "r0",
@@ -1401,19 +1433,21 @@ test("S: the default is stack when the board has 2+ holes the screws pass and no
   const derived = deriveBoardCase(STACK);
   assert.equal(derived.bossStyle, "stack");
   assert.equal(derived.bossStyleReason, "default: the lid screws go through the 4 board holes into the standoffs (stack)");
-  // Board bottom 2 + 4, top 7.6; posts from 7.8 up to the wall top 7.6 + 8 + 1 + 1.5 = 18.1.
-  assert.deepEqual(derived.stack, { postAxesMm: derived.standoffAxesMm, postOuterDiametersMm: [5, 5, 5, 5], postBottomZMm: 7.8, postLengthMm: 10.3, holeDiameterMm: 2.9, screwLengthMm: 2 + 10.3 + 0.2 + 1.6 + 4, engagementMm: 4, lidWebs: [] });
+  // Board bottom 2 + 8, top 11.6; posts from 11.8 up to the wall top 11.6 + 8 + 1 + 1.5 = 22.1. D9: through the stack is
+  // 2 + 10.3 + 0.2 + 1.6 = 14.1 mm, a screw bottoms at 14.1 + 7 = 21.1, and the longest standard length with 1 mm tip
+  // clearance and 2 mm engagement is 20 (5.9 mm in the pilot).
+  assert.deepEqual(derived.stack, { postAxesMm: derived.standoffAxesMm, postOuterDiametersMm: [5, 5, 5, 5], postBottomZMm: 11.8, postLengthMm: 10.3, holeDiameterMm: 2.9, screwLengthMm: 20, screwLengthMaxMm: 21.1, engagementMm: 5.9, note: "the posts reach 0.2 mm above the board inside the component envelope; component positions are not checked", lidWebs: [] });
   assert.deepEqual(derived.assembly, { boardDropIn: true, note: "bossStyle \"stack\": no corner bosses (the lid screws run through the board holes), so the board drops straight in onto the standoffs" });
   assert.deepEqual(derived.lidBossAxesMm, []);
   assert.equal(derived.cavityGrowthMm, undefined);
   assert.equal(derived.printability.lidPostOverhangDeg, 0);
   assert.equal(derived.printability.maxBossOverhangDeg, undefined);
   // The standoff holes take the lid fastener's base: Ø2.1 pilots 4 mm deep.
-  assert.deepEqual([derived.fasteners.standoffs!.mode, derived.fasteners.standoffs!.holeDiameterMm, derived.fasteners.standoffs!.holeDepthMm], ["pilot", 2.1, 4]);
+  assert.deepEqual([derived.fasteners.standoffs!.mode, derived.fasteners.standoffs!.holeDiameterMm, derived.fasteners.standoffs!.holeDepthMm], ["pilot", 2.1, 7]);
   // The outer footprint equals the hanging style's (nothing grows), and the lid reaches down to the post bottoms.
   const hanging = deriveBoardCase({ ...STACK, standoffs: { heightMm: 4, outerDiameterMm: 5, fastener: { screw: "M2.5", mode: "pilot", pilotDiameterMm: 2.1 } }, lid: { fasteners: { ...STACK.lid!.fasteners!, bossStyle: "hanging", allowBlockedBoard: true, pilotDepthMm: 6 } } });
   assert.deepEqual([derived.outerMm.min.slice(0, 2), derived.outerMm.max.slice(0, 2)], [hanging.outerMm.min.slice(0, 2), hanging.outerMm.max.slice(0, 2)]);
-  assert.equal(derived.lidMm.min[2], 7.8);
+  assert.equal(derived.lidMm.min[2], 11.8);
 });
 
 test("S: stack is refused in the plan (and the default falls back to floor, saying why)", async () => {
@@ -1421,13 +1455,16 @@ test("S: stack is refused in the plan (and the default falls back to floor, sayi
   await refusedBeforeNative({ ...STACK, board: { ...STACK.board, holes: [STACK.board.holes![0]!] }, lid: lid({}) }, /bossStyle "stack" needs at least 2 board holes for the lid screws \(the board has 1\)/);
   await refusedBeforeNative({ ...STACK, lid: lid({ screw: "M3", pilotDiameterMm: 2.5 }) }, /bossStyle "stack": board\.holes\[0\] \(Ø3\) is smaller than the M3 close-fit clearance Ø3\.2/);
   await refusedBeforeNative({ ...STACK, standoffs: { heightMm: 4, fastener: { screw: "M2.5", mode: "pilot", pilotDiameterMm: 2.1 } }, lid: lid({}) }, /with bossStyle "stack" the lid screws go into the standoffs, which take lid\.fasteners\.base; remove standoffs\.fastener/);
-  await refusedBeforeNative({ ...STACK, standoffs: { heightMm: 4 }, lid: lid({}) }, /the lid post over board\.holes\[0\] reaches 0\.1 mm past the lid lip outline/);
+  await refusedBeforeNative({ ...STACK, standoffs: { heightMm: 8 }, lid: lid({}) }, /the lid post over board\.holes\[0\] reaches 0\.1 mm past the lid lip outline/);
   await refusedBeforeNative({ ...STACK, lid: lid({}), openings: [{ wall: "x-", shape: "rect", widthMm: 4, heightMm: 3, alongMm: 4, aboveBoardMm: 1, label: "near" }] }, /near on wall x-: the lid post over board\.holes\[0\] stands in its keep-out/);
-  await refusedBeforeNative({ ...STACK, lid: lid({ pilotDepthMm: 5 }) }, /lid\.fasteners\.pilotDepthMm 5 exceeds the standoff height 4; raise standoffs\.heightMm/);
-  // Default with M3: the stack is not possible (Ø3 < 3.2), so it falls back to floor and says why (no standoffs here, so
-  // the floor style needs no standoffs.fastener); with standoffs and no fastener the floor fallback is refused, naming both.
+  await refusedBeforeNative({ ...STACK, standoffs: { heightMm: 4, outerDiameterMm: 5 }, lid: lid({ pilotDepthMm: 5 }) }, /lid\.fasteners\.pilotDepthMm 5 exceeds the standoff height 4; raise standoffs\.heightMm/);
+  // Default with M3: the stack is not possible (Ø3 < 3.2), so it falls back to floor and says why. Round 4 (D2): with
+  // standoffs and no standoffs.fastener the floor fallback builds plain support posts under every hole (it was refused).
   const m3 = { fasteners: { screw: "M3" as const, base: "pilot" as const, pilotDiameterMm: 2.5, pilotDepthMm: 4 } };
-  await refusedBeforeNative({ ...STACK, openings: [STACK.openings![0]!], lid: m3 }, /standoffs\.fastener is required .* \(the default bossStyle fell back to "floor" because a screw stack is not possible \(bossStyle "stack": board\.holes\[0\] \(Ø3\) is smaller than the M3 close-fit clearance Ø3\.2/);
+  const supported = deriveBoardCase({ ...STACK, openings: [STACK.openings![0]!], lid: m3 });
+  assert.equal(supported.bossStyle, "floor");
+  assert.deepEqual([supported.fasteners.standoffs!.mode, supported.standoffAxesMm.length], ["support", 4]);
+  assert.match(supported.bossStyleReason!, /^default: a screw stack is not possible \(bossStyle "stack": board\.holes\[0\] \(Ø3\) is smaller than the M3 close-fit clearance Ø3\.2/);
   const fallback = deriveBoardCase({ ...STACK, standoffs: undefined, openings: [STACK.openings![0]!], lid: m3 });
   assert.equal(fallback.bossStyle, "floor");
   assert.match(fallback.bossStyleReason!, /^default: a screw stack is not possible \(bossStyle "stack": board\.holes\[0\] \(Ø3\) is smaller than the M3 close-fit clearance Ø3\.2.*\), so the bosses stand on the floor$/);
@@ -1443,14 +1480,14 @@ test("S: the stack builds: lid posts hang from the plate coaxial with the board 
   const stages = [...new Set(result.steps.map((step) => step.stage))];
   assert.deepEqual(stages, ["base-shell", "webs", "standoffs", "lid-shell", "lid-posts", "lid-screw-holes", "opening:usb", "opening:button", "board-stand-in", "cleanup"]);
   const posts = fake.calls.filter((entry) => entry.operation === "createCylinder" && entry.args[1] === 2.5 && JSON.stringify(entry.args[3]) === JSON.stringify([0, 0, -1]));
-  // Post cylinders: from 0.5 mm inside the plate (z 18.1 + 0.5) down 10.3 + 0.5 to the post bottom 7.8; then the
+  // Post cylinders: from 0.5 mm inside the plate (z 22.1 + 0.5) down 10.3 + 0.5 to the post bottom 11.8; then the
   // Ø2.9 clearance holes from the post bottom up (cut from the free end).
   const axes = derived.standoffAxesMm.map(([x, y]) => [x, y]);
-  assert.deepEqual(rounded(posts.slice(0, 4).map((entry) => entry.args)), axes.map(([x, y]) => [[x, y, 18.6], 2.5, 10.8, [0, 0, -1]]));
+  assert.deepEqual(rounded(posts.slice(0, 4).map((entry) => entry.args)), axes.map(([x, y]) => [[x, y, 22.6], 2.5, 10.8, [0, 0, -1]]));
   // Lid screw holes: plain Ø2.9 through the plate on the same axes; standoff pilots Ø2.1 on the same axes.
   const lidHoles = fake.calls.filter((entry) => entry.operation === "createCylinder" && Math.abs((entry.args[1] as number) - 1.45) < 1e-9 && JSON.stringify(entry.args[3]) === JSON.stringify([0, 0, -1]));
   for (const [x, y] of axes) assert.ok(lidHoles.some((entry) => Math.abs((entry.args[0] as number[])[0]! - x!) < 1e-9 && Math.abs((entry.args[0] as number[])[1]! - y!) < 1e-9), `lid hole at ${x}, ${y}`);
-  assert.ok(result.readBack.lidBoundsMm.min[2] === 7.8, "the lid's read-back bounds reach the post bottoms");
+  assert.ok(result.readBack.lidBoundsMm.min[2] === 11.8, "the lid's read-back bounds reach the post bottoms");
   assert.equal(derived.assembly.boardDropIn, true);
 });
 
@@ -1546,4 +1583,552 @@ test("S: a lid post 0 to 0.8 mm from the lip's inner face is joined to the lip b
   assert.ok(result.steps.some((step) => step.stage === "lid-webs" && step.operation === "join-lid-webs"));
   assert.equal(result.undoSteps, result.derived.plannedUndoSteps);
   assert.equal(result.undoSteps, fake.calls.length);
+});
+
+// =============================================================================================== round 4 (D1-D9)
+const corners4 = (length: number, width: number, diameterMm: number, inset: number) => [[inset, inset], [length - inset, inset], [inset, width - inset], [length - inset, width - inset]].map(([xMm, yMm]) => ({ xMm: xMm!, yMm: yMm!, diameterMm }));
+const m3Pilot = { screw: "M3" as const, base: "pilot" as const, pilotDiameterMm: 2.5, pilotDepthMm: 6 };
+// The reviewer's three D2 inputs: the 51.5 x 28.3 board, four holes 2.0 mm from the edges, M3 lid screws, no standoffs key.
+const D2_INPUTS: Array<[string, BoardCaseInput]> = [
+  ["Ø3 holes, Ø2.5 x 6 pilots", { originMm: [0, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: corners4(51.5, 28.3, 3, 2), componentHeightMm: 8 }, lid: { fasteners: { ...m3Pilot } }, boardStandIn: true, revision: "r0" }],
+  ["Ø3.2 holes, Ø2.5 x 6 pilots", { originMm: [0, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: corners4(51.5, 28.3, 3.2, 2), componentHeightMm: 8 }, lid: { fasteners: { ...m3Pilot } }, boardStandIn: true, revision: "r0" }],
+  ["Ø3 holes, heat-set inserts", { originMm: [0, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: corners4(51.5, 28.3, 3, 2), componentHeightMm: 8 }, lid: { fasteners: { screw: "M3", base: "heat-set-insert", insertLengthMm: 3 } }, boardStandIn: true, revision: "r0" }],
+];
+
+test("D2: the reviewer's three default inputs give a supported board: floor bosses and a plain support post under every hole", async () => {
+  for (const [name, input] of D2_INPUTS) {
+    const derived = deriveBoardCase(input);
+    assert.equal(derived.bossStyle, "floor", name);
+    // A standoff under every hole, on the hole's axis (board origin = cavity + clearance + half the growth).
+    assert.deepEqual(derived.standoffAxesMm, input.board.holes!.map((hole) => [r6(derived.boardMm.min[0] + hole.xMm), r6(derived.boardMm.min[1] + hole.yMm)]), name);
+    const standoffs = derived.fasteners.standoffs!;
+    assert.deepEqual([standoffs.mode, standoffs.screw, standoffs.holeDiameterMm, standoffs.holeDepthMm, standoffs.heightMm, standoffs.source], ["support", undefined, 0, 0, 2, "none: plain support posts (no standoffs.fastener)"], name);
+    // The board stand-in rests on them: its bottom is the standoff top, 2 mm (the underside clearance) above the floor.
+    assert.deepEqual([derived.standoffTopZMm, derived.boardMm.min[2], derived.floorTopZMm], [4, 4, 2], name);
+    assert.match(derived.assembly.note, /With no standoffs\.fastener the standoffs are plain support posts: the board rests on them, unscrewed$/, name);
+    const { fake, result } = await build(input);
+    const posts = result.steps.filter((step) => step.stage === "standoffs").map((step) => step.operation);
+    assert.deepEqual(posts, ["create-support-post", "create-support-post", "create-support-post", "create-support-post", "join-support-posts"], name);
+    // Each post is a plain cylinder from 0.5 mm inside the floor to the standoff top; no hole is cut in it.
+    const cylinders = fake.calls.filter((entry) => entry.operation === "createCylinder" && Math.abs((entry.args[1] as number) - standoffs.outerDiametersMm[0]! / 2) < 1e-9 && (entry.args[0] as number[])[2] === 1.5 && entry.args[2] === 2.5);
+    assert.deepEqual(rounded(cylinders.map((entry) => [(entry.args[0] as number[]).slice(0, 2), entry.args[2]])), derived.standoffAxesMm.map((axis) => [axis, 2.5]), name);
+    assert.equal(result.undoSteps, result.derived.plannedUndoSteps, name);
+    assert.equal(result.undoSteps, fake.calls.length, name);
+    assert.deepEqual(result.readBack.boardBoundsMm, derived.boardMm, name);
+  }
+});
+
+test("D2: every style puts a standoff under every hole; a board without holes has none and rests on the floor", () => {
+  const board = D2_INPUTS[0]![1].board;
+  for (const bossStyle of ["floor", "tapered", "hanging"] as const) {
+    const derived = deriveBoardCase({ originMm: [0, 0, 0], board, lid: { fasteners: { ...m3Pilot, bossStyle, ...(bossStyle === "floor" ? {} : { allowBlockedBoard: true }) } }, revision: "r0" });
+    assert.deepEqual([derived.bossStyle, derived.standoffAxesMm.length, derived.fasteners.standoffs!.mode, derived.standoffTopZMm, derived.boardMm.min[2]], [bossStyle, 4, "support", 4, 4], bossStyle);
+  }
+  // With a standoffs.fastener block the standoffs keep their screw holes, as before.
+  assert.equal(deriveBoardCase({ originMm: [0, 0, 0], board, standoffs: { fastener: { screw: "M2.5", mode: "pilot", pilotDiameterMm: 2.1 } }, lid: { fasteners: { ...m3Pilot } }, revision: "r0" }).fasteners.standoffs!.mode, "pilot");
+  // No lid screws at all: support posts too.
+  assert.deepEqual([deriveBoardCase({ originMm: [0, 0, 0], board, revision: "r0" }).fasteners.standoffs!.mode, deriveBoardCase({ originMm: [0, 0, 0], board, revision: "r0" }).standoffAxesMm.length], ["support", 4]);
+  // No holes: no standoffs; the board sits on the floor top and derived says so.
+  const bare = deriveBoardCase(POD);
+  assert.deepEqual([bare.standoffAxesMm, bare.fasteners.standoffs, bare.standoffTopZMm, bare.boardMm.min[2], bare.floorTopZMm], [[], undefined, undefined, 2, 2]);
+  assert.match(bare.assembly.note, /The board has no holes, so there are no standoffs: it rests on the floor top$/);
+  // An underside clearance cannot be kept without standoffs: refused, naming the fix.
+  assert.throws(() => planBoardCase({ ...POD, board: { ...POD.board, undersideClearanceMm: 3 } }), /board\.undersideClearanceMm needs standoffs: a board without holes has none and rests on the floor; remove it or give board\.holes/);
+});
+
+// A 60 x 30 board with four holes 4.5 mm from the edges: Ø6.2 posts clear the lid lip, so a stack is possible.
+const stackBoard = (diameterMm = 3.2, componentHeightMm = 8) => ({ lengthMm: 60, widthMm: 30, holes: corners4(60, 30, diameterMm, 4.5), componentHeightMm });
+
+test("D2: in a stack the default standoff height holds the lid fastener (pilot depth + 1; insert pocket + 1), and the case height follows", () => {
+  // Pilot 6.9 mm deep: standoffs 7.9 (it was 2, so the stack was refused); the board and the wall top rise with it.
+  const pilot = deriveBoardCase({ originMm: [0, 0, 0], board: stackBoard(), lid: { fasteners: { ...m3Pilot, pilotDepthMm: 6.9 } }, revision: "r0" });
+  assert.deepEqual([pilot.bossStyle, pilot.fasteners.standoffs!.heightMm, pilot.fasteners.standoffs!.holeDepthMm, pilot.standoffTopZMm, pilot.boardMm.min[2], pilot.wallTopZMm], ["stack", 7.9, 6.9, 9.9, 9.9, 2 + 7.9 + 1.6 + 8 + 1 + 1.5]);
+  // M3 x 3 insert: pocket 4 (insert + 1), standoffs 5; M3 x 5.7: pocket 6.7, standoffs 7.7 (7.4 mm parts so a 16 mm screw fits).
+  const insert = (insertLengthMm: number) => deriveBoardCase({ originMm: [0, 0, 0], board: stackBoard(3.2, 7.4), lid: { fasteners: { screw: "M3", base: "heat-set-insert", insertLengthMm, bossStyle: "stack" } }, revision: "r0" });
+  assert.deepEqual([insert(3).fasteners.standoffs!.heightMm, insert(3).fasteners.standoffs!.holeDepthMm, insert(3).stack!.screwLengthMm], [5, 4, 16]);
+  assert.deepEqual([insert(5.7).fasteners.standoffs!.heightMm, insert(5.7).fasteners.standoffs!.holeDepthMm, insert(5.7).stack!.screwLengthMm], [7.7, 6.7, 16]);
+  // Never below the underside clearance (2 by default, 6 here; the 3.5 mm pilot alone would give 4.5), and an explicit
+  // height still wins.
+  assert.equal(deriveBoardCase({ originMm: [0, 0, 0], board: { ...stackBoard(3.2, 7.4), undersideClearanceMm: 6 }, lid: { fasteners: { ...m3Pilot, pilotDepthMm: 3.5, bossStyle: "stack" } }, revision: "r0" }).fasteners.standoffs!.heightMm, 6);
+  assert.equal(deriveBoardCase({ originMm: [0, 0, 0], board: stackBoard(), standoffs: { heightMm: 9 }, lid: { fasteners: { ...m3Pilot, pilotDepthMm: 6.9 } }, revision: "r0" }).fasteners.standoffs!.heightMm, 9);
+  // A shallow pilot never makes the default lower than 2 mm: the refusal is the screw length, not the standoff height.
+  assert.throws(() => planBoardCase({ originMm: [0, 0, 0], board: stackBoard(), lid: { fasteners: { ...m3Pilot, pilotDepthMm: 0.8, bossStyle: "stack" } }, revision: "r0" }), (error: unknown) => error instanceof BoardCaseValidationError && /no standard screw length fits the stack/.test(error.message) && !/exceeds the standoff height/.test(error.message));
+});
+
+test("D2: lid.fasteners.screw \"auto\" takes the largest of M3, M2.5, M2 that passes the smallest board hole (stack), else M3, and says why", () => {
+  const auto = (diameterMm: number, pilotDiameterMm: number, extra: Record<string, unknown> = {}) => deriveBoardCase({ originMm: [0, 0, 0], board: stackBoard(diameterMm), lid: { fasteners: { screw: "auto", base: "pilot", pilotDiameterMm, pilotDepthMm: 6.9, bossStyle: "stack", countersunk: false, ...extra } }, revision: "r0" }).fasteners.lid!;
+  assert.deepEqual([auto(3.4, 2.5).screw, auto(3.4, 2.5).screwReason], ["M3", "screw \"auto\": M3, the largest whose close-fit clearance (Ø3.2) passes the smallest board hole (Ø3.4)"]);
+  assert.deepEqual([auto(3, 2.1).screw, auto(3, 2.1).screwReason], ["M2.5", "screw \"auto\": M2.5, the largest whose close-fit clearance (Ø2.7) passes the smallest board hole (Ø3)"]);
+  assert.deepEqual([auto(2.3, 1.6).screw, auto(2.3, 1.6).screwReason], ["M2", "screw \"auto\": M2, the largest whose close-fit clearance (Ø2.2) passes the smallest board hole (Ø2.3)"]);
+  // The lid clearance hole follows the chosen screw (M2.5 medium: Ø2.9).
+  assert.equal(auto(3, 2.1).lidHole.diameterMm, 2.9);
+  assert.throws(() => auto(2, 1.6), /lid\.fasteners\.screw "auto": no screw passes the smallest board hole \(Ø2\); M2 needs its close-fit Ø2\.2/);
+  // A style with no board holes to fit: M3.
+  assert.deepEqual([auto(3, 2.5, { bossStyle: "floor", pilotDepthMm: 6 }).screw, auto(3, 2.5, { bossStyle: "floor", pilotDepthMm: 6 }).screwReason], ["M3", "screw \"auto\": M3 (bossStyle \"floor\" has no board holes to fit the screws through)"]);
+  // The default style with "auto": the stack takes M2.5 through the Ø3 holes.
+  const byDefault = deriveBoardCase({ originMm: [0, 0, 0], board: stackBoard(3), lid: { fasteners: { screw: "auto", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 6.9, countersunk: false } }, revision: "r0" });
+  assert.deepEqual([byDefault.bossStyle, byDefault.fasteners.lid!.screw], ["stack", "M2.5"]);
+  // An explicit screw is never changed: M3 through Ø3 holes is refused, and says what would pass.
+  const explicit = { originMm: [0, 0, 0] as [number, number, number], board: stackBoard(3), lid: { fasteners: { ...m3Pilot, pilotDepthMm: 6.9, bossStyle: "stack" as const } }, revision: "r0" };
+  assert.throws(() => planBoardCase(explicit), /board\.holes\[0\] \(Ø3\) is smaller than the M3 close-fit clearance Ø3\.2, so the lid screw cannot pass through the board; use M2\.5 or screw: "auto"/);
+  assert.equal(deriveBoardCase({ originMm: [0, 0, 0], board: stackBoard(3.2), lid: { fasteners: { ...m3Pilot, pilotDepthMm: 6.9 } }, revision: "r0" }).fasteners.lid!.screwReason, "lid.fasteners.screw");
+});
+
+test("D2: bossStyleReason lists every stack rule that failed, each with the input change that passes it; with those changes the default is the stack", () => {
+  const input = D2_INPUTS[0]![1];
+  const reason = deriveBoardCase(input).bossStyleReason!;
+  assert.match(reason, /^default: a screw stack is not possible \(bossStyle "stack": /);
+  // Three rules fail, each once (the other holes are named, not repeated), each with its fix.
+  assert.match(reason, /board\.holes\[0\] \(Ø3\) is smaller than the M3 close-fit clearance Ø3\.2, so the lid screw cannot pass through the board; use M2\.5 or screw: "auto" \(the same for board\.holes\[1\], board\.holes\[2\], board\.holes\[3\]\)/);
+  assert.match(reason, /the lid post over board\.holes\[0\] reaches 0\.7 mm past the lid lip outline toward the base wall \(it must stay 0\.05 mm inside\); use standoffs\.outerDiameterMm 4\.499 or less, or move the hole inward \(the same for board\.holes\[1\], board\.holes\[2\], board\.holes\[3\]\)/);
+  assert.match(reason, /no standard screw length fits the stack: it needs between 16\.1 and 19\.1 mm .*; use lid\.fasteners\.pilotDepthMm 6\.9 for a 20 mm screw \(the default standoff height follows\)\), so the bosses stand on the floor$/);
+  assert.equal(reason.split("; ").filter((part) => /^(bossStyle "stack": )?(board\.holes|the lid post|no standard)/.test(part.replace(/^default: a screw stack is not possible \(/, ""))).length, 3);
+  // Apply the three named changes (screw "auto" with the M2.5 pilot, Ø4.499 standoffs, 6.9 mm pilots): the default is the stack.
+  const fixed = deriveBoardCase({ ...input, standoffs: { outerDiameterMm: 4.499 }, lid: { fasteners: { screw: "auto", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 6.9, countersunk: false } } });
+  assert.deepEqual([fixed.bossStyle, fixed.bossStyleReason, fixed.fasteners.lid!.screw, fixed.stack!.screwLengthMm], ["stack", "default: the lid screws go through the 4 board holes into the standoffs (stack)", "M2.5", 20]);
+});
+
+// ------------------------------------------------------------------------------------------------------- D1
+// The round-3 construction, for comparison: every web its own solid, each strip a rectangle from half a radius inside
+// one circle to half a radius inside the other (its end faces showed outside the circles).
+function round3Webs(plan: BoardCasePlan): BoardCasePlan {
+  const d = plan.derived;
+  const feature = (label: string) => {
+    const index = Number(label.split(" ").at(-1));
+    return label.startsWith("standoff") ? { axis: d.standoffAxesMm[index]!, radius: d.fasteners.standoffs!.outerDiametersMm[index]! / 2 } : { axis: d.lidBossAxesMm[index]!, radius: d.fasteners.lid!.bossDiameterMm / 2 };
+  };
+  const webSolids: BoardCaseWebSolid[] = d.webs.map((web) => {
+    if (web.box) {
+      const [x, y, z] = web.box.originMm;
+      const [sx, sy, sz] = web.box.sizeMm;
+      return { label: web.label, loopMm: [[x, y], [x + sx, y], [x + sx, y + sy], [x, y + sy]], bottomZMm: z, heightMm: sz, holes: [] };
+    }
+    const a = feature(web.features[0]!);
+    const b = feature(web.features[1]!);
+    const distance = Math.hypot(b.axis[0] - a.axis[0], b.axis[1] - a.axis[1]);
+    const dir = [(b.axis[0] - a.axis[0]) / distance, (b.axis[1] - a.axis[1]) / distance] as const;
+    const half = Math.min(a.radius, b.radius);
+    const side = [-dir[1] * half, dir[0] * half] as const;
+    const from = [a.axis[0] + (dir[0] * a.radius) / 2, a.axis[1] + (dir[1] * a.radius) / 2] as const;
+    const to = [a.axis[0] + dir[0] * (distance - b.radius / 2), a.axis[1] + dir[1] * (distance - b.radius / 2)] as const;
+    return { label: web.label, loopMm: [[from[0] - side[0], from[1] - side[1]], [to[0] - side[0], to[1] - side[1]], [to[0] + side[0], to[1] + side[1]], [from[0] + side[0], from[1] + side[1]]], bottomZMm: web.strip!.bottomZMm, heightMm: web.strip!.heightMm, holes: [] };
+  });
+  return { ...plan, webSolids };
+}
+const shortestBuiltEdge = (plan: BoardCasePlan) => Math.min(...boardCaseShortEdges(plan).filter((finding) => finding.stage === "built").map((finding) => finding.valueMm));
+const clean = (plan: BoardCasePlan) => [boardCaseTangencies(plan), boardCaseShortEdges(plan)];
+// Plasticity takes a closed profile's normal from the corner at its first point; a web profile must start at a convex one.
+const profilesPointUp = (plan: BoardCasePlan) => [...plan.webSolids, ...(plan.lidWebSolids ?? [])].filter((solid) => !solid.box).every((solid) => {
+  const [last, first, second] = [solid.loopMm.at(-1)!, solid.loopMm[0]!, solid.loopMm[1]!];
+  return (first[0] - last[0]) * (second[1] - first[1]) - (first[1] - last[1]) * (second[0] - first[0]) > 1e-9;
+});
+
+test("D1a: a lid post tangent or near-tangent to the lip's inner face is joined to it by one web solid (stack)", async () => {
+  // The reviewer's board: 60 x 30, Ø3.2 holes, Ø6.2 posts; 4.0 mm in, the posts are tangent to both lip faces of their
+  // corner. (8 mm standoffs and 7 mm pilots, so a standard 20 mm screw fits: D9.)
+  const input = (inset: number): BoardCaseInput => ({ originMm: [0, 0, 0], board: { lengthMm: 60, widthMm: 30, holes: corners4(60, 30, 3.2, inset), componentHeightMm: 8 }, standoffs: { heightMm: 8 }, lid: { fasteners: { ...m3Pilot, pilotDepthMm: 7 } }, revision: "r0" });
+  for (const [inset, gap] of [[3.999, -0.001], [4, 0], [4.001, 0.001], [4.03, 0.03], [4.06, 0.06]] as const) {
+    const plan = planBoardCase(input(inset));
+    assert.equal(plan.derived.bossStyle, "stack", String(inset));
+    // Two side webs and a corner box per post, joined into one L-shaped solid that reaches 0.2 mm into the lip.
+    assert.deepEqual(plan.derived.stack!.lidWebs.map((web) => r6(web.gapMm)), Array.from({ length: 12 }, () => gap), String(inset));
+    assert.deepEqual(plan.lidWebSolids!.map((solid) => solid.loopMm.length), [6, 6, 6, 6], String(inset));
+    const lip = plan.derived.lipInnerMm;
+    const first = plan.lidWebSolids!.find((solid) => solid.holes[0] === 0)!;
+    const [postX, postY] = plan.derived.stack!.postAxesMm[0]!;
+    assert.deepEqual(rounded([...first.loopMm].sort((a, b) => a[0] - b[0] || a[1] - b[1])), rounded([[lip.min[0] - 0.2, lip.min[1] - 0.2], [lip.min[0] - 0.2, postY + 3.1], [postX, postY], [postX, postY + 3.1], [postX + 3.1, lip.min[1] - 0.2], [postX + 3.1, postY]]), String(inset));
+    assert.deepEqual(clean(plan), [[], []], String(inset));
+    assert.ok(profilesPointUp(plan), String(inset));
+    // Without the web solids the pair rule reports the four posts against the lip, at their signed gap.
+    const bare = boardCaseTangencies({ ...plan, lidWebSolids: [] });
+    if (Math.abs(gap) < 0.05) assert.deepEqual(bare.map((finding) => [finding.kind, finding.body, finding.features[0], r3(finding.valueMm)]), [0, 1, 2, 3].map((index) => ["tangent", "lid", "the lid lip", gap]).map((entry, index) => [entry[0], entry[1], entry[2], entry[3]].map((value, slot) => slot === 2 ? "the lid lip" : value)), String(inset));
+    else assert.deepEqual(bare, [], String(inset));
+    // The round-3 webs (two boxes per post, no corner box) left a pit as wide as the gap: an edge of that length.
+    const sides = plan.lidWebs!.filter((web) => !web.label.endsWith("corner")).map((web) => ({ label: web.label, loopMm: [[web.originMm[0], web.originMm[1]], [web.originMm[0] + web.sizeMm[0], web.originMm[1]], [web.originMm[0] + web.sizeMm[0], web.originMm[1] + web.sizeMm[1]], [web.originMm[0], web.originMm[1] + web.sizeMm[1]]] as Array<[number, number]>, bottomZMm: web.originMm[2], heightMm: web.sizeMm[2], holes: [] }));
+    if (gap > 0) assert.equal(r6(shortestBuiltEdge({ ...plan, lidWebSolids: sides })), gap, String(inset));
+    const { fake, result } = await build(input(inset));
+    assert.deepEqual(result.steps.filter((step) => step.stage === "lid-webs").map((step) => step.operation), [...Array.from({ length: 4 }, () => ["create-lid-web-profile", "extrude-lid-web"]).flat(), "join-lid-webs"], String(inset));
+    assert.equal(result.undoSteps, fake.calls.length, String(inset));
+    assert.equal(result.undoSteps, result.derived.plannedUndoSteps, String(inset));
+  }
+});
+
+test("D1b: a standoff tangent or near-tangent to the cavity wall is joined to it, and to the floor boss beside it, by one web solid", async () => {
+  // The reviewer's board: 51.5 x 28.3, Ø3 holes (Ø6 standoffs with Ø2.1 pilots), M3 floor bosses; 2.5 mm in, each
+  // standoff is tangent to its y wall. The live read-back measured the round-3 edge at 2.49, 2.5 and 2.51.
+  const input = (inset: number): BoardCaseInput => ({ originMm: [0, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: corners4(51.5, 28.3, 3, inset), componentHeightMm: 8 }, standoffs: { fastener: { screw: "M2.5", mode: "pilot", pilotDiameterMm: 2.1 } }, lid: { fasteners: { ...m3Pilot } }, revision: "r0" });
+  for (const [inset, gap, round3] of [[2.49, -0.01, 0.032979013], [2.5, 0, 0.035589326], [2.51, 0.01, 0.038196717], [2.56, 0.06, 0.051189293]] as const) {
+    const plan = planBoardCase(input(inset));
+    assert.equal(plan.derived.bossStyle, "floor", String(inset));
+    assert.deepEqual(plan.derived.webs.filter((web) => web.kind === "wall").map((web) => [web.label, r6(web.gapMm)]), [0, 1, 2, 3].map((index) => [`standoff ${index} and wall ${index < 2 ? "y-" : "y+"}`, gap]), String(inset));
+    // Per corner: the standoff's wall box, the strip to the boss, the fill under it and the boss's corner box are one
+    // loop; the four bosses' full-height corner boxes stay boxes.
+    assert.deepEqual(plan.webSolids.map((solid) => solid.box ? "box" : solid.loopMm.length), [9, 9, 9, 9, "box", "box", "box", "box"], String(inset));
+    assert.deepEqual(plan.webSolids[0]!.holes, [0], String(inset));
+    assert.deepEqual(clean(plan), [[], []], String(inset));
+    assert.ok(profilesPointUp(plan), String(inset));
+    // No web reaches more than 0.2 mm into a wall.
+    const cavity = plan.derived.cavityMm;
+    for (const solid of plan.webSolids) for (const point of solid.loopMm) assert.ok(point[0] >= cavity.min[0] - 0.2 - 1e-9 && point[0] <= cavity.max[0] + 0.2 + 1e-9 && point[1] >= cavity.min[1] - 0.2 - 1e-9 && point[1] <= cavity.max[1] + 0.2 + 1e-9, String(inset));
+    // Without the webs: the standoffs against the wall (within the band), and against the bosses 0.02 mm away.
+    const bare = boardCaseTangencies({ ...plan, webSolids: [] });
+    assert.deepEqual(bare.filter((finding) => finding.features.includes("the cavity wall")).map((finding) => r3(finding.valueMm)), Math.abs(gap) < 0.05 ? [gap, gap, gap, gap] : [], String(inset));
+    // The round-3 construction is predicted to give exactly the edge the live read-back measured.
+    assert.ok(Math.abs(shortestBuiltEdge(round3Webs(plan)) - round3) < 1e-8, `${inset}: ${shortestBuiltEdge(round3Webs(plan))}`);
+    const { fake, result } = await build(input(inset));
+    assert.deepEqual(result.steps.filter((step) => step.stage === "webs").map((step) => step.operation), [...Array.from({ length: 4 }, () => ["create-web-profile", "extrude-web"]).flat(), ...Array.from({ length: 4 }, () => "create-web-box"), "join-webs"], String(inset));
+    assert.equal(result.undoSteps, fake.calls.length, String(inset));
+    assert.equal(result.undoSteps, result.derived.plannedUndoSteps, String(inset));
+  }
+});
+
+test("D1c: the web between a standoff and a floor boss leaves no sliver (the round-3 strip gave the 0.0019 and 0.0356 mm edges)", () => {
+  for (const [length, width] of [[35, 25.4], [25, 18]] as const) {
+    for (const [diameter, screw, pilot, round3] of [[2.2, "M2", 1.6, 0.001923789], [2.7, "M2.5", 2.1, 0.035589326]] as const) {
+      const name = `${length} x ${width}, Ø${diameter}`;
+      const plan = planBoardCase({ originMm: [0, 0, 0], board: { lengthMm: length, widthMm: width, holes: corners4(length, width, diameter, 2.5), componentHeightMm: 8 }, standoffs: { heightMm: 5, fastener: { screw, mode: "pilot", pilotDiameterMm: pilot } }, lid: { fasteners: { screw, base: "pilot", pilotDiameterMm: pilot, pilotDepthMm: 5, headDiameterMm: screw === "M2" ? 3.8 : 4.7 } }, revision: "r0" });
+      assert.equal(plan.derived.webs.filter((web) => web.kind === "between").length, 4, name);
+      assert.deepEqual(clean(plan), [[], []], name);
+      assert.ok(Math.abs(shortestBuiltEdge(round3Webs(plan)) - round3) < 1e-8, `${name}: ${shortestBuiltEdge(round3Webs(plan))}`);
+      // The strip: its long sides end on the smaller circle (tangent points), its end notches stay inside the circles.
+      const strip = plan.derived.webs.find((web) => web.kind === "between")!.strip!;
+      assert.equal(strip.cornersMm.length, 6, name);
+      const standoff = plan.derived.standoffAxesMm[0]!;
+      const radius = plan.derived.fasteners.standoffs!.outerDiametersMm[0]! / 2;
+      const fromAxis = strip.cornersMm.map((point) => Math.hypot(point[0] - standoff[0], point[1] - standoff[1]));
+      assert.ok(Math.abs(fromAxis[0]! - radius) < 1e-6 && Math.abs(fromAxis[4]! - radius) < 1e-6 && Math.abs(fromAxis[5]! - radius / 2) < 1e-6, name);
+    }
+  }
+});
+
+test("D1: a plan the guards refuse names the nearest hole position that plans clean, and that position plans", () => {
+  // Holes 1.999 mm in: each standoff's axis is 0.001 mm off its floor boss's, so a strip side runs 0.0005 mm from a
+  // face of the same loop.
+  const input: BoardCaseInput = { originMm: [0, 0, 0], board: { lengthMm: 35.7, widthMm: 37, holes: corners4(35.7, 37, 2.2, 1.999), componentHeightMm: 6 }, walls: { wallMm: 2.4 }, standoffs: { fastener: { screw: "M2", mode: "pilot", pilotDiameterMm: 1.6 } }, lid: { fasteners: { screw: "M2", base: "pilot", pilotDiameterMm: 1.6, pilotDepthMm: 7, bossStyle: "floor", headDiameterMm: 3.8 } }, revision: "r0" };
+  const message = (() => { try { planBoardCase(input); return ""; } catch (error) { return (error as Error).message; } })();
+  assert.match(message, /^the outline where standoff 0, the web at .* meet in the base would have an edge under 0\.001 mm at x 7\.499, y 10\.399, z 2, under the 0\.1 mm the plan allows \(and 3 more such spots\), which the kernel cannot build reliably; move board\.holes\[0\] 0\.05 mm toward the board centre along x \(to xMm 2\.049\), and board\.holes\[2\] the same way: that plans clean$/);
+  const holes = input.board.holes!.map((hole, index) => index === 0 || index === 2 ? { ...hole, xMm: 2.049 } : hole);
+  assert.deepEqual(clean(planBoardCase({ ...input, board: { ...input.board, holes } })), [[], []]);
+  // The findings themselves, from the unguarded plan.
+  const findings = boardCaseShortEdges(planBoardCase(input, undefined, { guards: false }));
+  assert.deepEqual([...new Set(findings.map((finding) => `${finding.kind} ${finding.body} ${finding.stage} ${finding.holes.join(",")}`))], ["edge base built 0", "edge base built 2"]);
+  assert.ok(findings.every((finding) => finding.valueMm < 0.001));
+});
+
+// An independent check of the pair rule for the sweep (its own sampling and distances): every pair of features of one
+// body that shares a height, as { standoff / boss / post circles, cavity wall or lip faces, web solids }. A pair is
+// "near" when its signed gap (least distance from one's surface to the other's material, negative inside) is within
+// 0.05 mm of zero and the spot is not at least 0.1 mm inside a web solid.
+function nearTangentPairs(plan: BoardCasePlan, countWebs = true): string[] {
+  const d = plan.derived;
+  type Prim = { label: string; z: [number, number]; web?: boolean; depth: (p: [number, number]) => number; samples: Array<[number, number]> };
+  const circle = (label: string, c: [number, number], r: number, z: [number, number]): Prim => {
+    const count = Math.ceil((2 * Math.PI * r) / 0.02);
+    return { label, z, depth: (p) => Math.hypot(p[0] - c[0], p[1] - c[1]) - r, samples: Array.from({ length: count }, (_, i) => [c[0] + r * Math.cos((2 * Math.PI * i) / count), c[1] + r * Math.sin((2 * Math.PI * i) / count)] as [number, number]) };
+  };
+  const polygon = (label: string, points: Array<[number, number]>, z: [number, number]): Prim => {
+    const edges = points.map((point, i) => [point, points[(i + 1) % points.length]!] as const);
+    const samples: Array<[number, number]> = [];
+    for (const [a, b] of edges) { const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.02)); for (let i = 0; i <= n; i += 1) samples.push([a[0] + ((b[0] - a[0]) * i) / n, a[1] + ((b[1] - a[1]) * i) / n]); }
+    const toEdge = (p: [number, number], a: readonly [number, number], b: readonly [number, number]) => { const vx = b[0] - a[0], vy = b[1] - a[1]; const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / (vx * vx + vy * vy))); return Math.hypot(p[0] - a[0] - t * vx, p[1] - a[1] - t * vy); };
+    const inside = (p: [number, number]) => { let hit = false; for (const [a, b] of edges) if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) hit = !hit; return hit; };
+    return { label, z, web: true, depth: (p) => { let least = Infinity; for (const [a, b] of edges) least = Math.min(least, toEdge(p, a, b)); return (inside(p) ? -1 : 1) * least; }, samples };
+  };
+  const rect = (bounds: { min: number[]; max: number[] }) => ({ min: [bounds.min[0]!, bounds.min[1]!] as [number, number], max: [bounds.max[0]!, bounds.max[1]!] as [number, number] });
+  const bodies: Prim[][] = [];
+  const cavity = rect(d.cavityMm);
+  const base: Prim[] = [{ label: "wall", z: [d.floorTopZMm, d.wallTopZMm], depth: (p) => roundedRectInsideDistance(p, cavity, d.innerCornerRadiusMm), samples: [] }];
+  d.standoffAxesMm.forEach((axis, i) => base.push(circle(`standoff ${i}`, axis as [number, number], d.fasteners.standoffs!.outerDiametersMm[i]! / 2, [d.floorTopZMm, d.standoffTopZMm!])));
+  if (d.fasteners.lid && d.bossStyle !== "stack") d.lidBossAxesMm.forEach((axis, i) => base.push(circle(`boss ${i}`, axis as [number, number], d.fasteners.lid!.bossDiameterMm / 2, [d.lidBossBottomZMm!, d.wallTopZMm])));
+  if (countWebs) for (const solid of plan.webSolids) base.push(polygon(`web ${solid.label}`, solid.loopMm, [Math.max(solid.bottomZMm, d.floorTopZMm), solid.bottomZMm + solid.heightMm]));
+  bodies.push(base);
+  if (d.stack) {
+    const outer = rect(d.lipOuterMm);
+    const inner = rect(d.lipInnerMm);
+    const lipBottom = d.lipOuterMm.min[2] - d.explodedMm;
+    const lid: Prim[] = [{ label: "lip", z: [lipBottom, d.wallTopZMm], depth: (p) => Math.max(-roundedRectInsideDistance(p, outer, plan.lid.lipRadiusMm), roundedRectInsideDistance(p, inner, plan.lid.lipInnerRadiusMm)), samples: [] }];
+    d.stack.postAxesMm.forEach((axis, i) => lid.push(circle(`post ${i}`, axis as [number, number], d.stack!.postOuterDiametersMm[i]! / 2, [d.stack!.postBottomZMm - d.explodedMm, d.wallTopZMm])));
+    if (countWebs) for (const solid of plan.lidWebSolids ?? []) lid.push(polygon(`lid web ${solid.label}`, solid.loopMm, [lipBottom, d.wallTopZMm]));
+    bodies.push(lid);
+  }
+  const near: string[] = [];
+  for (const prims of bodies) for (let i = 0; i < prims.length; i += 1) for (let j = i + 1; j < prims.length; j += 1) {
+    const a = prims[i]!;
+    const b = prims[j]!;
+    if ((a.web && b.web) || !(Math.min(a.z[1], b.z[1]) > Math.max(a.z[0], b.z[0]) + 1e-9)) continue;
+    // Two sampled features whose boxes are more than 0.1 mm apart cannot be within the band (a wall or a lip has no samples).
+    const box = (prim: Prim) => prim.samples.reduce((acc, p) => [Math.min(acc[0]!, p[0]), Math.min(acc[1]!, p[1]), Math.max(acc[2]!, p[0]), Math.max(acc[3]!, p[1])], [Infinity, Infinity, -Infinity, -Infinity]);
+    if (a.samples.length > 0 && b.samples.length > 0) {
+      const [boxA, boxB] = [box(a), box(b)];
+      if (boxA[0]! > boxB[2]! + 0.1 || boxB[0]! > boxA[2]! + 0.1 || boxA[1]! > boxB[3]! + 0.1 || boxB[1]! > boxA[3]! + 0.1) continue;
+    }
+    let gap = Infinity;
+    let at: [number, number] = [0, 0];
+    for (const [from, to] of [[a, b], [b, a]] as const) for (const p of from.samples) { const value = to.depth(p); if (value < gap) { gap = value; at = p; } }
+    if (!(Math.abs(gap) < 0.05 - 1e-9)) continue;
+    if (prims.some((other) => other.web && other !== a && other !== b && other.z[0] <= Math.max(a.z[0], b.z[0]) + 1e-9 && other.z[1] >= Math.min(a.z[1], b.z[1]) - 1e-9 && other.depth(at) <= -0.1)) continue;
+    near.push(`${a.label} / ${b.label}: ${gap.toFixed(4)}`);
+  }
+  return near;
+}
+
+test("D1: a fixed-seed sweep of more than 3,000 passing plans has no feature pair within 0.05 mm of tangent and no edge under 0.1 mm", () => {
+  // Boards 25 to 70 mm, holes 2.0 to 4.5 mm from the edges in 0.05 mm steps (a third nudged 0.001 to 0.03 mm, to sit
+  // just off a tangent position), M2 / M2.5 / M3, walls 1.6 to 2.4 mm, every style and the default.
+  let seed = 20261116;
+  const random = () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const pick = <T,>(list: readonly T[]) => list[Math.floor(random() * list.length)]!;
+  const sizes = { M2: [2.2, 1.6, 3.8], "M2.5": [2.7, 2.1, 4.7], M3: [3.2, 2.5, undefined] } as const;
+  const passed: Record<string, number> = {};
+  const refusedByGuard: string[] = [];
+  let inputs = 0;
+  let rawNear = 0;
+  let webbed = 0;
+  let checkedIndependently = 0;
+  while (Object.values(passed).reduce((sum, count) => sum + count, 0) < 3200 && inputs < 6000) {
+    inputs += 1;
+    const length = 25 + Math.round(random() * 450) / 10;
+    const width = 25 + Math.round(random() * 450) / 10;
+    const screw = pick(["M2", "M2.5", "M3"] as const);
+    const style = pick([undefined, "stack", "floor", "tapered", "hanging"] as const);
+    const [close, pilot, head] = sizes[screw];
+    const diameter = close + pick([0, 0, 0.2]);
+    const inset = () => r6(2 + Math.round(random() * 50) * 0.05 + (random() < 0.33 ? pick([-0.03, -0.01, -0.001, 0.001, 0.01, 0.03]) : 0));
+    const ix = inset();
+    const iy = random() < 0.6 ? ix : inset();
+    const holes = (random() < 0.75 ? [[ix, iy], [length - ix, iy], [ix, width - iy], [length - ix, width - iy]] : [[ix, iy], [length - ix, width - iy]]).map(([x, y]) => ({ xMm: r6(x!), yMm: r6(y!), diameterMm: diameter }));
+    const kind = style === "stack" ? pick(["none", "height", "diameter"] as const) : pick(["none", "fastener", "height", "diameter"] as const);
+    const standoffs = kind === "none" ? undefined : kind === "fastener" ? { fastener: { screw, mode: "pilot" as const, pilotDiameterMm: pilot } } : kind === "height" ? { heightMm: pick([3, 5, 8]) } : { outerDiameterMm: diameter + pick([1.5, 2, 2.5, 3.5]) };
+    const input: BoardCaseInput = {
+      originMm: [0, 0, 0], board: { lengthMm: length, widthMm: width, holes, componentHeightMm: 3 + Math.round(random() * 8) }, walls: { wallMm: pick([1.6, 1.8, 2, 2.2, 2.4]) },
+      ...(standoffs ? { standoffs } : {}),
+      lid: { fasteners: { screw: random() < 0.15 ? "auto" : screw, base: "pilot", pilotDiameterMm: pilot, pilotDepthMm: pick([4, 5, 6, 7]), ...(style ? { bossStyle: style } : {}), ...(style === "tapered" || style === "hanging" ? { allowBlockedBoard: true } : {}), ...(head ? { headDiameterMm: head } : {}), countersunk: random() < 0.5 } },
+      revision: "r0",
+    };
+    let plan: BoardCasePlan;
+    try {
+      plan = planBoardCase(input, undefined, { fixes: false });
+    } catch (error) {
+      assert.ok(error instanceof BoardCaseValidationError, `input ${inputs}: ${String(error)}`);
+      if (/within 0\.05 mm of tangent|under the 0\.1 mm the plan allows|under the 0\.01 mm the plan allows/.test(error.message.replace(/\(the default bossStyle fell back.*$/, ""))) refusedByGuard.push(`input ${inputs}: ${error.message.slice(0, 160)}`);
+      continue;
+    }
+    const key = `${plan.derived.bossStyle}${style ? "" : " (default)"}`;
+    passed[key] = (passed[key] ?? 0) + 1;
+    // The rule's own predictors, on every passing plan.
+    assert.deepEqual(clean(plan), [[], []], `input ${inputs}`);
+    assert.ok(profilesPointUp(plan), `input ${inputs}: a web profile would extrude down`);
+    assert.equal(plan.derived.standoffAxesMm.length, holes.length, `input ${inputs}: a standoff under every hole`);
+    if (plan.webSolids.length + (plan.lidWebSolids?.length ?? 0) > 0) webbed += 1;
+    // The independent check, on the passing plans of every fourth input: no near pair as built, and whether there was one
+    // before the webs.
+    if (inputs % 4 === 0) {
+      checkedIndependently += 1;
+      assert.deepEqual(nearTangentPairs(plan), [], `input ${inputs}`);
+      if (nearTangentPairs(plan, false).length > 0) rawNear += 1;
+    }
+  }
+  const total = Object.values(passed).reduce((sum, count) => sum + count, 0);
+  assert.ok(total >= 3200, `passing plans: ${total} of ${inputs}`);
+  for (const key of ["stack", "stack (default)", "floor", "floor (default)", "tapered", "hanging"]) assert.ok((passed[key] ?? 0) >= 150, `${key}: ${passed[key] ?? 0}`);
+  // The sweep does sit on tangent positions: among the plans checked independently, dozens had a pair within the band
+  // before the webs (all snapped to a merge), and the guards refused only a handful of the inputs.
+  assert.ok(checkedIndependently >= 700 && rawNear >= 25, `checked ${checkedIndependently}, near before the webs ${rawNear}`);
+  assert.ok(webbed >= 2500, `plans with webs: ${webbed}`);
+  assert.ok(refusedByGuard.length <= 10, refusedByGuard.join("\n"));
+});
+
+// ------------------------------------------------------------------------------------------------------- D3
+test("D3: a lid post near two lip sides gets one web solid that fills the lip corner (no pit between two side webs)", async () => {
+  // Holes 4.3 mm in: Ø6.2 posts 0.3 mm from both lip faces of their corner. Round 3 built two boxes per post and left a
+  // 0.3 x 0.3 mm pit, 1.5 mm deep, between them at the lip corner.
+  const input: BoardCaseInput = { originMm: [0, 0, 0], board: { lengthMm: 60, widthMm: 30, holes: corners4(60, 30, 3.2, 4.3), componentHeightMm: 8 }, standoffs: { heightMm: 8 }, lid: { fasteners: { ...m3Pilot, pilotDepthMm: 7 } }, revision: "r0" };
+  const plan = planBoardCase(input);
+  const lip = plan.derived.lipInnerMm;
+  assert.deepEqual(plan.derived.stack!.lidWebs.slice(0, 3).map((web) => [web.label, r6(web.gapMm)]), [["the lid post over board.holes[0] and the lid lip x-", 0.3], ["the lid post over board.holes[0] and the lid lip y-", 0.3], ["the lid post over board.holes[0] and the lid lip x-/y- corner", 0.3]]);
+  assert.equal(plan.lidWebSolids!.length, 4);
+  // The pit's middle (0.15 mm off both lip faces) is inside the first post's web solid, and so is the lip corner itself.
+  const inside = (loop: Array<[number, number]>, p: [number, number]) => { let hit = false; loop.forEach((a, i) => { const b = loop[(i + 1) % loop.length]!; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) hit = !hit; }); return hit; };
+  const loop = plan.lidWebSolids![0]!.loopMm;
+  assert.ok(inside(loop, [lip.min[0] + 0.15, lip.min[1] + 0.15]) && inside(loop, [lip.min[0] - 0.1, lip.min[1] - 0.1]));
+  // In the round-3 webs (the two side boxes) it was in neither.
+  const sides = plan.lidWebs!.filter((web) => !web.label.endsWith("corner") && web.label.includes("holes[0]"));
+  assert.equal(sides.length, 2);
+  assert.ok(sides.every((web) => !(lip.min[0] + 0.15 > web.originMm[0] && lip.min[0] + 0.15 < web.originMm[0] + web.sizeMm[0] && lip.min[1] + 0.15 > web.originMm[1] && lip.min[1] + 0.15 < web.originMm[1] + web.sizeMm[1])));
+  // The solid is the lip's height (from the lip bottom to 0.5 mm into the plate).
+  assert.deepEqual([plan.lidWebSolids![0]!.bottomZMm, plan.lidWebSolids![0]!.heightMm], [plan.derived.lipInnerMm.min[2], 1.5 + 0.5]);
+  const { fake, result } = await build(input);
+  // Each profile extrudes up (the fake takes the plane normal from the corner at the first point, like Plasticity).
+  const extrusions = fake.calls.filter((entry) => entry.operation === "extrudeRegions");
+  assert.equal(extrusions.length, 4);
+  assert.ok(profilesPointUp(plan));
+  assert.equal(result.undoSteps, result.derived.plannedUndoSteps);
+});
+
+// ------------------------------------------------------------------------------------------------------- D5
+test("D5: derived.cornerGapMm is the real smallest diagonal play in every style (floor: the grown axis moves the corner away)", () => {
+  // Independent: slide the board toward each cavity corner in 0.0005 mm steps until it leaves the rounded cavity or
+  // meets a floor boss or a full-height web box.
+  const play = (input: BoardCaseInput): number => {
+    const plan = planBoardCase(input);
+    const d = plan.derived;
+    const cavity = { min: [d.cavityMm.min[0], d.cavityMm.min[1]] as [number, number], max: [d.cavityMm.max[0], d.cavityMm.max[1]] as [number, number] };
+    const bosses = d.bossStyle === "floor" ? d.lidBossAxesMm : [];
+    const radius = (d.fasteners.lid?.bossDiameterMm ?? 0) / 2;
+    const boxes = plan.webSolids.filter((solid) => solid.box && solid.bottomZMm + solid.heightMm > d.boardMm.min[2] + 1e-9 && solid.bottomZMm < d.boardMm.max[2] - 1e-9).map((solid) => solid.box!);
+    let least = Infinity;
+    for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+      for (let slide = 0; slide < 20; slide += 0.0005) {
+        const dx = (sx * slide) / Math.SQRT2;
+        const dy = (sy * slide) / Math.SQRT2;
+        const min = [d.boardMm.min[0] + dx, d.boardMm.min[1] + dy] as const;
+        const max = [d.boardMm.max[0] + dx, d.boardMm.max[1] + dy] as const;
+        const outside = ([[min[0], min[1]], [max[0], min[1]], [min[0], max[1]], [max[0], max[1]]] as Array<[number, number]>).some((point) => roundedRectInsideDistance(point, cavity, d.innerCornerRadiusMm) < 0);
+        const boss = bosses.some((axis) => Math.hypot(Math.max(min[0] - axis[0], 0, axis[0] - max[0]), Math.max(min[1] - axis[1], 0, axis[1] - max[1])) < radius);
+        const box = boxes.some((entry) => min[0] < entry.originMm[0] + entry.sizeMm[0] && max[0] > entry.originMm[0] && min[1] < entry.originMm[1] + entry.sizeMm[1] && max[1] > entry.originMm[1]);
+        if (outside || boss || box) { least = Math.min(least, slide); break; }
+      }
+    }
+    return least;
+  };
+  const cases: Array<[string, BoardCaseInput, number]> = [
+    // Floor: the corner bosses stand beside the board on the grown axis, so the board meets the other axis's wall first:
+    // sqrt 2 x 0.5 (round 3 reported 0.5, the hung styles' value).
+    ["benchmark, floor", styled(BENCHMARK, "floor"), Math.SQRT2 * 0.5],
+    ["60 x 40, floor, clearance 0.8", review((input) => { input.fit = { boardClearanceMm: 0.8 }; input.lid = lidPilot({ bossStyle: "floor" }); }), Math.SQRT2 * 0.8],
+    // Hung bosses, a stack and no bosses: the rounded cavity corner, sqrt 2 x c - Ri x (sqrt 2 - 1).
+    ["benchmark, hanging", BENCHMARK, 0.5],
+    ["stack", STACK, 0.5],
+    ["pod", POD, Math.SQRT2 * 0.15 - 0.15 * (Math.SQRT2 - 1)],
+    ["60 x 40, square corners", review((input) => { input.walls = { outerCornerRadiusMm: 0 }; }), Math.SQRT2 * 0.5],
+  ];
+  for (const [name, input, expected] of cases) {
+    const derived = deriveBoardCase(input).cornerGapMm;
+    assert.ok(Math.abs(derived - expected) < 1e-8, `${name}: ${derived} vs ${expected}`);
+    assert.ok(Math.abs(derived - play(input)) < 1e-3, `${name}: ${derived} vs the stepped ${play(input)}`);
+  }
+});
+
+// ------------------------------------------------------------------------------------------------------- D9
+test("D9: stack.screwLengthMm is the longest standard length with 1 mm tip clearance and 2 mm engagement; screwLengthMaxMm is the bottoming length", () => {
+  // (The standoff height is given, pilot depth + 1, so this test does not lean on the D2 default.)
+  const stack = (componentHeightMm: number, pilotDepthMm: number) => deriveBoardCase({ originMm: [0, 0, 0], board: stackBoard(3.2, componentHeightMm), standoffs: { heightMm: pilotDepthMm + 1 }, lid: { fasteners: { ...m3Pilot, pilotDepthMm, bossStyle: "stack" } }, revision: "r0" }).stack!;
+  // Through the stack: lid 2 + post (parts + 1 + lip 1.5 - 0.2) + 0.2 + board 1.6 = parts + 6.1.
+  // 8 mm parts, 6.9 mm pilots: through 14.1, bottoming 21; the standard lengths are ..., 12, 16, 20, 24: 20 (5.9 in the pilot).
+  assert.deepEqual([stack(8, 6.9).screwLengthMm, stack(8, 6.9).screwLengthMaxMm, stack(8, 6.9).engagementMm], [20, 21, 5.9]);
+  // 6 mm parts, 6 mm pilots: through 12.1, bottoming 18.1: 16 (3.9 in the pilot; 20 would bottom).
+  assert.deepEqual([stack(6, 6).screwLengthMm, stack(6, 6).screwLengthMaxMm, stack(6, 6).engagementMm], [16, 18.1, 3.9]);
+  // 2 mm parts, 5 mm pilots: through 8.1, bottoming 13.1: 2 mm steps up to 12, so 12 (12.1 is the limit; 3.9 in the pilot).
+  assert.deepEqual([stack(2, 5).screwLengthMm, stack(2, 5).screwLengthMaxMm, stack(2, 5).engagementMm], [12, 13.1, 3.9]);
+  assert.match(stack(8, 6.9).note, /^the posts reach 0\.2 mm above the board inside the component envelope; component positions are not checked$/);
+  // No standard length between 16.1 (2 mm in) and 19.1 (1 mm short of the bottom): refused, with the pilot depth that fits.
+  assert.throws(() => stack(8, 6), /bossStyle "stack": no standard screw length fits the stack: it needs between 16\.1 and 19\.1 mm \(lid \+ post \+ 0\.2 mm gap \+ board = 14\.1 mm, at least 2 mm in the 6 mm standoff hole, 1 mm tip clearance; standard lengths step 2 mm to 12, then 4 mm\); use lid\.fasteners\.pilotDepthMm 6\.9 for a 20 mm screw \(the default standoff height follows\)/);
+});
+
+// ------------------------------------------------------------------------------------------------------- D8
+test("D8: a sub-recipe failure that the board case rolled back says once that everything was undone", async () => {
+  // The standoff pattern's union (the second Boolean union: the first joins the webs) fails natively.
+  const secondUnionFails = (options: Parameters<typeof fakeRuntime>[0] = {}) => {
+    let unions = 0;
+    const inner = fakeRuntime(options);
+    const original = inner.operations.boolean.bind(inner.operations);
+    inner.operations.boolean = (async (targets: number[], tools: number[], kind: string, keep: boolean, revision: string) => {
+      if (kind === "union" && (unions += 1) === 2) throw new Error("Plasticity command failed: Error: Operation Boolean failed at PK_BODY_boolean_2 with error `21653`.");
+      return original(targets, tools, kind as never, keep, revision);
+    }) as typeof inner.operations.boolean;
+    return inner;
+  };
+  const runtime = secondUnionFails();
+  const before = runtime.snapshot();
+  const error = await new BoardCaseRecipe(runtime.operations).create(REF).then(() => undefined, (caught: unknown) => caught);
+  assert.ok(error instanceof BoardCaseRecipeError);
+  assert.equal(error.failedStage, "standoffs");
+  assert.equal(error.restored, true);
+  assert.match(error.message, /^Board case recipe failed in stage "standoffs" after 16 confirmed native steps; undid 16 native steps; the document matches the start \(bodies and Undo depth\); revision r\d+: Screw boss pattern recipe failed after 2\/6 confirmed steps; its partial geometry was undone with the rest; last confirmed revision r16: Plasticity command failed: .*21653/);
+  assert.doesNotMatch(error.message, /partial geometry remains/);
+  assert.deepEqual(runtime.snapshot().bodies, before.bodies);
+  // When the rollback itself fails, the inner text stays: partial geometry does remain.
+  const stuck = secondUnionFails({ failUndo: (index) => index === 2 ? new Error("undo refused") : undefined });
+  const left = await new BoardCaseRecipe(stuck.operations).create(REF).then(() => undefined, (caught: unknown) => caught);
+  assert.ok(left instanceof BoardCaseRecipeError);
+  assert.equal(left.restored, false);
+  assert.match(left.message, /does not match the start \(undo failed: undo refused\); inspect it; revision r\d+: Screw boss pattern recipe failed after 2\/6 confirmed steps; partial geometry remains/);
+});
+
+test("D1, D2: the live script's near-tangent sample (49 inputs) plans clean on tangent positions, its D2 and D3 cases plan, and every reject is refused", async () => {
+  const { tangentSample, caseArguments, REVIEW_REJECTS } = await import("../../scripts/verify-native-board-case-live.ts");
+  const sample = tangentSample();
+  assert.equal(sample.length, 49);
+  for (const band of ["a", "b", "c"]) assert.ok(sample.filter(([label]) => label.startsWith(`${band}:`)).length >= 9, `the reviewer's band ${band}`);
+  const styles = new Set<string>();
+  for (const [label, input] of sample) {
+    const plan = planBoardCase({ ...input, revision: "r0" } as unknown as BoardCaseInput);
+    styles.add(plan.derived.bossStyle!);
+    assert.deepEqual(clean(plan), [[], []], label);
+    assert.ok(profilesPointUp(plan), label);
+    // Bands a, b and d to g sit within 0.06 mm of a tangent position (band a's last input is the D3 pit, 0.3 mm);
+    // band c is the reviewer's strip between a standoff and a floor boss.
+    const gaps = [...plan.derived.webs.map((web) => web.gapMm), ...(plan.derived.stack?.lidWebs.map((web) => web.gapMm) ?? [])];
+    assert.ok(gaps.length > 0, label);
+    if (label.startsWith("reviewer's")) {
+      // The reviewer's own stack inputs: no standard screw fits, so floor bosses and a support post under every hole.
+      assert.deepEqual([plan.derived.bossStyle, plan.derived.fasteners.standoffs!.mode, plan.derived.standoffAxesMm.length], ["floor", "support", 4], label);
+      assert.match(plan.derived.bossStyleReason!, /no standard screw length fits the stack/, label);
+    } else if (label.startsWith("c:")) assert.equal(plan.derived.webs.filter((web) => web.kind === "between").length, 4, label);
+    else if (!label.includes("holes 4.3 mm in")) assert.ok(Math.min(...gaps.map(Math.abs)) <= 0.06 + 1e-9, `${label}: ${Math.min(...gaps.map(Math.abs))}`);
+  }
+  assert.deepEqual([...styles].sort(), ["floor", "hanging", "stack", "tapered"]);
+  // The three D2 cases: floor bosses and a support post under each of the four holes; the D3 case: a stack with four lid web solids.
+  for (const name of ["d2-holes-3", "d2-holes-3.2", "d2-inserts"] as const) {
+    const derived = deriveBoardCase({ ...caseArguments(name), revision: "r0" } as unknown as BoardCaseInput);
+    assert.deepEqual([derived.bossStyle, derived.fasteners.standoffs!.mode, derived.standoffAxesMm.length], ["floor", "support", 4], name);
+  }
+  const lipCorner = planBoardCase({ ...caseArguments("lip-corner"), revision: "r0" } as unknown as BoardCaseInput);
+  assert.deepEqual([lipCorner.derived.bossStyle, lipCorner.lidWebSolids!.length], ["stack", 4]);
+  for (const [label, input, pattern] of REVIEW_REJECTS) assert.throws(() => planBoardCase({ originMm: [2600, 0, 0], name: "reject", ...input, revision: "r0" } as unknown as BoardCaseInput), (error: unknown) => error instanceof Error && pattern.test(error.message), label);
+});
+
+test("D1, D3: a web profile that extrudes the wrong way is caught at once and rolled back (the read-back alone would not see it)", async () => {
+  // Base: the first web profile of the D1b case (call 6) extrudes down into the floor.
+  const floor: BoardCaseInput = { originMm: [0, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: corners4(51.5, 28.3, 3, 2.5), componentHeightMm: 8 }, standoffs: { fastener: { screw: "M2.5", mode: "pilot", pilotDiameterMm: 2.1 } }, lid: { fasteners: { ...m3Pilot } }, revision: "r0" };
+  const stack: BoardCaseInput = { originMm: [0, 0, 0], board: { lengthMm: 60, widthMm: 30, holes: corners4(60, 30, 3.2, 4.3), componentHeightMm: 8 }, standoffs: { heightMm: 8 }, lid: { fasteners: { ...m3Pilot, pilotDepthMm: 7 } }, revision: "r0" };
+  for (const [name, input, stage, pattern] of [
+    ["base web", floor, "webs", /the web profile \d+ must extrude from z 1\.5 up to 4, but its solid spans z -1 to 1\.5/],
+    // Lid: a web that hangs 2 mm under the lip stays inside the lid's bounds (the posts reach lower), so only this check sees it.
+    ["lid web", stack, "lid-webs", /the web profile \d+ must extrude from z 20\.6 up to 22\.6, but its solid spans z 18\.6 to 20\.6/],
+  ] as const) {
+    const clean = fakeRuntime();
+    await new BoardCaseRecipe(clean.operations).create(input);
+    const first = clean.calls.findIndex((entry, index) => entry.operation === "createPolyline" && clean.calls[index + 1]?.operation === "extrudeRegions" && (stage === "webs" || index > 20)) + 1;
+    const fake = fakeRuntime({ flipProfile: (index) => index === first });
+    const before = fake.snapshot();
+    const error = await new BoardCaseRecipe(fake.operations).create(input).then(() => undefined, (caught: unknown) => caught);
+    assert.ok(error instanceof BoardCaseRecipeError, name);
+    assert.equal(error.failedStage, stage, name);
+    assert.match(error.message, pattern, name);
+    assert.equal(error.restored, true, name);
+    assert.deepEqual(fake.snapshot().bodies, before.bodies, name);
+    assert.equal(fake.snapshot().undoDepth, before.undoDepth, name);
+  }
+});
+
+test("D1: an opening may not be cut where a web solid stands at the wall or hangs under the lid", async () => {
+  // Floor style, holes 3.0 mm in: boss 0 covers x 1.5 to 7.5 along the y- wall and standoff 0 covers 8 to 14; the fill
+  // under the strip between them stands at the wall from 4.5 to 11. A 0.5 mm opening at 7.5 to 8, below the board,
+  // misses both circles' footprints but would cut into that fill.
+  const base: BoardCaseInput = { originMm: [0, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: corners4(51.5, 28.3, 3, 3), componentHeightMm: 8 }, standoffs: { fastener: { screw: "M2.5", mode: "pilot", pilotDiameterMm: 2.1 } }, lid: { fasteners: { ...m3Pilot, growAxis: "x" } }, revision: "r0" };
+  const plan = planBoardCase(base);
+  assert.deepEqual([plan.derived.lidBossAxesMm[0], plan.derived.standoffAxesMm[0], plan.derived.boardMm.min[0]], [[4.5, 4.5], [11, 5.5], 8]);
+  await refusedBeforeNative({ ...base, openings: [{ wall: "y-", shape: "rect", widthMm: 0.5, heightMm: 1, alongMm: -0.25, aboveBoardMm: -3.4, label: "low" }] }, /low on wall y- collides with the web at standoff 0 and wall y-; lid boss 0 and the x-\/y- corner; standoff 0 and lid boss 0/);
+  // The same opening above the board (over the webs, which end at the board bottom) is fine.
+  assert.ok(planBoardCase({ ...base, openings: [{ wall: "y-", shape: "rect", widthMm: 0.5, heightMm: 1, alongMm: -0.25, aboveBoardMm: 1, label: "high" }] }));
+  // Stack, posts 0.3 mm from two lip sides: a 1 x 1 lid opening in the corner between post and lip sits on the lid web.
+  const stack: BoardCaseInput = { originMm: [0, 0, 0], board: { lengthMm: 60, widthMm: 30, holes: corners4(60, 30, 3.2, 4.3), componentHeightMm: 8 }, standoffs: { heightMm: 8 }, lid: { fasteners: { ...m3Pilot, pilotDepthMm: 7, countersunk: false, bossStyle: "stack" } }, revision: "r0" };
+  const corner = [{ wall: "lid" as const, shape: "rect" as const, widthMm: 1, heightMm: 1, alongMm: 1.5, acrossMm: 1.5, label: "corner" }];
+  await refusedBeforeNative({ ...stack, openings: corner }, /corner on the lid leaves less than the 0\.4 mm web to the lid web at the lid post over board\.holes\[0\] and the lid lip x-/);
+  assert.equal(planBoardCase({ ...stack, openings: [{ wall: "lid", shape: "rect", widthMm: 6, heightMm: 6, alongMm: 30, acrossMm: 15, label: "middle" }] }).derived.bossStyle, "stack");
+  // By default the same opening sends the case to floor bosses, and the reason says why.
+  const fallback = deriveBoardCase({ ...stack, lid: { fasteners: { ...m3Pilot, pilotDepthMm: 7, countersunk: false } }, openings: corner });
+  assert.equal(fallback.bossStyle, "floor");
+  assert.match(fallback.bossStyleReason!, /corner on the lid leaves less than the 0\.4 mm web to the lid web/);
 });

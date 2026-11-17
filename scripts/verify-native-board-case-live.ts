@@ -7,9 +7,13 @@
 // at every step: derived.assembly.boardDropIn must equal "no interference at any step". After each case one batched undo
 // of the measured undoSteps must restore the document. The "rejects" case sends the reviewer's bad inputs, each of which
 // must be refused with the Undo depth, the body count and the revision unchanged (the former forced native failure, a
-// 1e-6 mm board, is now refused in the plan and sits in that list). Every built case also gets the R4 web probes; the pod
-// and the stack case get the diagonal corner-gap shift. The script refuses to run without PLASTICITY_CDP_URL on 127.0.0.1
-// and restores the baseline in finally.
+// 1e-6 mm board, is now refused in the plan and sits in that list). Every built case also gets the R4 web probes; the pod,
+// the stack case, the benchmark (floor) and the first D2 case get the diagonal corner-gap shift (D5).
+// Round 4: the reviewer's three D2 inputs (a standoff under every hole, measured; the board rests on them); "lip-corner"
+// (D3: a line of probe boxes through the lip corner, all inside lid material); and "tangents" (D1: 49 near-tangent
+// inputs, the reviewer's own among them, each built, read back and undone; a late failure fails the run). The script refuses to run without
+// PLASTICITY_CDP_URL on 127.0.0.1 and restores the baseline in finally; its last line states the Undo depth and the body
+// count it leaves.
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -28,7 +32,7 @@ type Bounds = { min: V3; max: V3 };
 type Face = { id: string; bodyId: number; surfaceType: string; planar: boolean; normal: V3; radiusMm: number | null; axisOriginMm: V3 | null; axisDirection: V3 | null; boundsMm: Bounds; centerMm: V3; coneSemiAngleRad?: number };
 type Edge = { id: string; bodyId: number; curveType: string; circle: boolean; boundsMm: Bounds; centerMm: V3; circleGeometry?: { centerMm: V3; radiusMm: number; normal: V3 } };
 
-export const BOARD_CASES = ["benchmark", "benchmark-tapered", "benchmark-hanging", "audit", "pod", "lip-notch", "openings", "corner-holes", "stack", "inserts", "rejects"] as const;
+export const BOARD_CASES = ["benchmark", "benchmark-tapered", "benchmark-hanging", "audit", "pod", "lip-notch", "openings", "corner-holes", "stack", "inserts", "d2-holes-3", "d2-holes-3.2", "d2-inserts", "lip-corner", "tangents", "rejects"] as const;
 type CaseName = typeof BOARD_CASES[number];
 
 interface Options { help: boolean; target?: string; output?: string; allowDisposableMutations: boolean; cases: CaseName[] }
@@ -65,12 +69,16 @@ Builds the board cases at x >= 2000 mm (the benchmark board in all three lid-bos
 hanging with allowBlockedBoard; the audit enclosure; the pod; the reviewer's square-corner case with box lip notches), verifies every derived field and the read-back with
 independent reads, lifts each board stand-in out of its base in 3 mm steps (boardDropIn), undoes each case with one
 batched undo of the measured undoSteps, probes every R4 web, shifts the board diagonally for the corner gap (pod, stack),
-builds two-opening walls, the corner-hole board (floor and stack) and an insert case, and sends the reviewer's bad inputs
-(each refused with nothing changed). The document's Undo depth and body count are restored. Run only against an
+builds two-opening walls, the corner-hole board (floor and stack) and an insert case, the three default inputs that
+used to leave the board on nothing (a support post under every hole), a stack whose posts sit 0.3 mm from two lip sides
+(probed through the lip corner), 49 near-tangent inputs (each built, read back and undone), and sends the reviewer's bad
+inputs (each refused with nothing changed). The document's Undo depth and body count are restored. Run only against an
 isolated instance (npm run start:plasticity-isolated).`;
 
 // ------------------------------------------------------------------------------------------------- the three cases
 const HOLES_BENCHMARK = [[2.6, 2.6], [48.9, 2.6], [2.6, 25.7], [48.9, 25.7]].map(([xMm, yMm]) => ({ xMm, yMm, diameterMm: 3 }));
+// Four holes the same distance from the board edges.
+const cornerHoles = (length: number, width: number, diameterMm: number, inset: number) => [[inset, inset], [length - inset, inset], [inset, width - inset], [length - inset, width - inset]].map(([xMm, yMm]) => ({ xMm, yMm, diameterMm }));
 export function caseArguments(name: CaseName): Record<string, unknown> {
   if (name === "benchmark" || name === "benchmark-tapered" || name === "benchmark-hanging") {
     // The multi-part benchmark's board: 51.5 x 28.3 x 1.6, four Ø3 holes, 8 mm parts, 4 mm standoffs with Ø2.5 pilots,
@@ -119,13 +127,13 @@ export function caseArguments(name: CaseName): Record<string, unknown> {
   if (name === "corner-holes" || name === "stack") {
     // The 51.5 x 28.3 board. corner-holes (R2): four Ø3 holes 2.0 mm from the edges, default standoffs, M3 lid screws,
     // default (floor) style with a usb opening: the floor bosses merge with the standoffs. stack (S): the benchmark holes
-    // (2.6 mm in, Ø3), M2.5 screws (Ø3 passes its 2.7 close fit; M3's 3.2 does not), Ø5 standoffs 4 mm tall with Ø2.1 x 4
-    // pilots, plain lid holes, a usb opening on the short x- end and a button on the long y- wall.
+    // (2.6 mm in, Ø3), M2.5 screws (Ø3 passes its 2.7 close fit; M3's 3.2 does not), Ø5 standoffs 8 mm tall with Ø2.1 x 7
+    // pilots (round 4, D9: a standard 20 mm screw fits), plain lid holes, a usb opening on the short x- end and a button on the long y- wall.
     const at = name === "stack" ? 2.6 : 2;
     const holes = [[at, at], [51.5 - at, at], [at, 28.3 - at], [51.5 - at, 28.3 - at]].map(([xMm, yMm]) => ({ xMm, yMm, diameterMm: 3 }));
     const usb = { wall: "x-", shape: "rounded-rect", widthMm: 9.2, heightMm: 3.4, cornerRadiusMm: 1.2, alongMm: 14.15, aboveBoardMm: 1.6, label: "usb" };
     if (name === "corner-holes") return { originMm: [2500, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes, componentHeightMm: 8 }, standoffs: { fastener: { screw: "M3", mode: "pilot", pilotDiameterMm: 2.5 } }, lid: { fasteners: { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 6 } }, openings: [usb], boardStandIn: true, name: "corner" };
-    return { originMm: [2600, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes, componentHeightMm: 8 }, standoffs: { heightMm: 4, outerDiameterMm: 5 }, lid: { fasteners: { screw: "M2.5", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 4, countersunk: false } }, openings: [usb, { wall: "y-", shape: "rect", widthMm: 6, heightMm: 3, alongMm: 25.75, aboveBoardMm: 1, label: "button" }], vents: { on: "lid", slots: 5, slotWidthMm: 2, slotLengthMm: 12, pitchMm: 4 }, boardStandIn: true, name: "stack" };
+    return { originMm: [2600, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes, componentHeightMm: 8 }, standoffs: { heightMm: 8, outerDiameterMm: 5 }, lid: { fasteners: { screw: "M2.5", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 7, countersunk: false } }, openings: [usb, { wall: "y-", shape: "rect", widthMm: 6, heightMm: 3, alongMm: 25.75, aboveBoardMm: 1, label: "button" }], vents: { on: "lid", slots: 5, slotWidthMm: 2, slotLengthMm: 12, pitchMm: 4 }, boardStandIn: true, name: "stack" };
   }
   if (name === "inserts") {
     // R7: heat-set inserts with the default standoff and boss diameters (both rise to insert hole + 2 x sourced wall).
@@ -144,6 +152,19 @@ export function caseArguments(name: CaseName): Record<string, unknown> {
       name: "notch",
     };
   }
+  if (name === "d2-holes-3" || name === "d2-holes-3.2" || name === "d2-inserts") {
+    // D2: the reviewer's three default inputs (no standoffs key, no bossStyle): the 51.5 x 28.3 board with four holes
+    // 2.0 mm from the edges and M3 lid screws. Each falls back to floor bosses and must put a plain support post under
+    // every hole.
+    const holes = cornerHoles(51.5, 28.3, name === "d2-holes-3.2" ? 3.2 : 3, 2);
+    const fasteners = name === "d2-inserts" ? { screw: "M3", base: "heat-set-insert", insertLengthMm: 3 } : { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 6 };
+    return { originMm: [name === "d2-holes-3" ? 2800 : name === "d2-holes-3.2" ? 2900 : 3000, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes, componentHeightMm: 8 }, lid: { fasteners }, boardStandIn: true, name: name === "d2-holes-3" ? "d2a" : name === "d2-holes-3.2" ? "d2b" : "d2c" };
+  }
+  if (name === "lip-corner") {
+    // D3: Ø6.2 lid posts 0.3 mm from both lip faces of their corner (holes 4.3 mm in). Round 3 left a 0.3 x 0.3 mm pit
+    // between the two side webs at each lip corner.
+    return { originMm: [3100, 0, 0], board: { lengthMm: 60, widthMm: 30, holes: cornerHoles(60, 30, 3.2, 4.3), componentHeightMm: 8 }, standoffs: { heightMm: 8 }, lid: { fasteners: { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 7 } }, boardStandIn: true, name: "lipc" };
+  }
   // A small sensor pod: 17.8 x 15.2 x 1.6 board, no holes (friction fit, 0.15 mm clearance), a 10 x 4 notch on the x+
   // wall, lid without screws.
   const pod = {
@@ -153,6 +174,38 @@ export function caseArguments(name: CaseName): Record<string, unknown> {
     boardStandIn: true,
   };
   return { ...pod, openings: [{ wall: "x+", shape: "rect", widthMm: 10, heightMm: 4, alongMm: 7.6, aboveBoardMm: -0.5, label: "notch" }], name: "pod" };
+}
+
+// D1: near-tangent inputs (a feature within 0.06 mm of touching a wall, a lip face or another feature, or exactly
+// tangent). Bands a, b and c are the reviewer's; d to g put the other styles on a tangent position. Every one must plan,
+// build, pass the read-back and undo cleanly.
+export function tangentSample(): Array<[string, Record<string, unknown>]> {
+  const origin = [3200, 0, 0];
+  const m3 = { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 6 };
+  const sample: Array<[string, Record<string, unknown>]> = [];
+  // a: stack, Ø6.2 lid posts tangent to both lip faces of their corner at 4.0 mm in.
+  for (const inset of [3.95, 3.99, 3.999, 4, 4.001, 4.01, 4.03, 4.049, 4.06, 4.3]) sample.push([`a: lid post and lip, holes ${inset} mm in`, { originMm: origin, board: { lengthMm: 60, widthMm: 30, holes: cornerHoles(60, 30, 3.2, inset), componentHeightMm: 8 }, standoffs: { heightMm: 8 }, lid: { fasteners: { ...m3, pilotDepthMm: 7 } } }]);
+  // b: floor with standoffs.fastener, Ø6 standoffs tangent to their y wall at 2.5 mm in (and 0.02 mm from the floor boss).
+  // 2.49, 2.5, 2.51 and 2.56 are the reviewer's own inputs (tan249 to tan256), board stand-in included.
+  for (const inset of [2.45, 2.49, 2.499, 2.5, 2.501, 2.51, 2.53, 2.549, 2.56]) {
+    const literal = [2.49, 2.5, 2.51, 2.56].includes(inset);
+    sample.push([`b: standoff and wall, holes ${inset} mm in${literal ? ` (the reviewer's tan${Math.round(inset * 100)})` : ""}`, { originMm: origin, board: { lengthMm: 51.5, widthMm: 28.3, holes: cornerHoles(51.5, 28.3, 3, inset), componentHeightMm: 8 }, standoffs: { fastener: { screw: "M2.5", mode: "pilot", pilotDiameterMm: 2.1 } }, lid: { fasteners: m3 }, ...(literal ? { boardStandIn: true } : {}) }]);
+  }
+  // c: the strip between a standoff and a floor boss (round 3: 0.0019 and 0.0356 mm edges).
+  for (const [length, width] of [[35, 25.4], [25, 18]] as const) for (const [diameter, screw, pilot, head] of [[2.2, "M2", 1.6, 3.8], [2.7, "M2.5", 2.1, 4.7]] as const) for (const inset of [2.45, 2.5, 2.55]) sample.push([`c: standoff and floor boss, ${length} x ${width}, Ø${diameter} holes ${inset} mm in`, { originMm: origin, board: { lengthMm: length, widthMm: width, holes: cornerHoles(length, width, diameter, inset), componentHeightMm: 8 }, standoffs: { heightMm: 5, fastener: { screw, mode: "pilot", pilotDiameterMm: pilot } }, lid: { fasteners: { screw, base: "pilot", pilotDiameterMm: pilot, pilotDepthMm: 5, headDiameterMm: head } } }]);
+  // d: the default with no standoffs key: Ø6 support posts tangent to their y wall.
+  for (const inset of [2.49, 2.5, 2.51]) sample.push([`d: support post and wall, holes ${inset} mm in`, { originMm: origin, board: { lengthMm: 51.5, widthMm: 28.3, holes: cornerHoles(51.5, 28.3, 3, inset), componentHeightMm: 8 }, lid: { fasteners: m3 } }]);
+  // e, f: hung bosses; Ø6 standoffs tangent to both walls of their corner.
+  for (const inset of [2.49, 2.5, 2.51, 2.53]) sample.push([`e: standoff and two walls, hanging, holes ${inset} mm in`, { originMm: origin, board: { lengthMm: 60, widthMm: 40, holes: cornerHoles(60, 40, 3, inset), componentHeightMm: 8 }, standoffs: { fastener: { screw: "M2.5", mode: "pilot", pilotDiameterMm: 2.1 } }, lid: { fasteners: { ...m3, bossStyle: "hanging", allowBlockedBoard: true } } }]);
+  for (const inset of [2.49, 2.5, 2.51]) sample.push([`f: standoff and two walls, tapered, holes ${inset} mm in`, { originMm: origin, board: { lengthMm: 60, widthMm: 40, holes: cornerHoles(60, 40, 3, inset), componentHeightMm: 8 }, standoffs: { fastener: { screw: "M2.5", mode: "pilot", pilotDiameterMm: 2.1 } }, lid: { fasteners: { ...m3, bossStyle: "tapered", allowBlockedBoard: true } } }]);
+  // g: stack, two holes on the board's centre line: Ø5 posts tangent to one lip face at 3.4 mm in.
+  for (const inset of [3.39, 3.4, 3.41, 3.43]) sample.push([`g: lid post and one lip face, holes ${inset} mm in`, { originMm: origin, board: { lengthMm: 51.5, widthMm: 28.3, holes: [{ xMm: inset, yMm: 14.15, diameterMm: 3 }, { xMm: 51.5 - inset, yMm: 14.15, diameterMm: 3 }], componentHeightMm: 8 }, standoffs: { heightMm: 8, outerDiameterMm: 5 }, lid: { fasteners: { screw: "M2.5", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 7, countersunk: false } } }]);
+  // The reviewer's own stack inputs, unchanged (6 mm standoffs, 6 mm pilots): round 3 picked the stack and failed late
+  // (b2in, 4.0 mm in: Boolean error) or in the read-back (lip403: a 0.03 mm edge). No standard screw fits them (D9), so
+  // they now take floor bosses, with a support post under every hole. defStack is the reviewer's "true default" input.
+  for (const [name, inset] of [["b2in", 4], ["lip403", 4.03], ["lip406", 4.06]] as const) sample.push([`reviewer's ${name}: 60 x 30, holes ${inset} mm in, standoffs.heightMm 6, Ø2.5 x 6 pilots`, { originMm: origin, board: { lengthMm: 60, widthMm: 30, holes: cornerHoles(60, 30, 3.2, inset), componentHeightMm: 8 }, standoffs: { heightMm: 6 }, lid: { fasteners: m3 }, boardStandIn: true }]);
+  sample.push(["reviewer's defStack: 60 x 30, holes 5 mm in, no standoffs key, Ø2.5 x 2 pilots", { originMm: origin, board: { lengthMm: 60, widthMm: 30, holes: cornerHoles(60, 30, 3.2, 5), componentHeightMm: 8 }, lid: { fasteners: { ...m3, pilotDepthMm: 2 } }, boardStandIn: true }]);
+  return sample;
 }
 
 // The reviewer's bad inputs (60 x 40 board, 8 mm parts unless stated); every one must be refused before any edit.
@@ -188,6 +241,14 @@ export const REVIEW_REJECTS: Array<[string, Record<string, unknown>, RegExp]> = 
   ["R5: rounded-rect radius 1.49 of 3", { board: reviewBoard(), openings: [{ wall: "y-", shape: "rounded-rect", widthMm: 8, heightMm: 3, cornerRadiusMm: 1.49, alongMm: 30, aboveBoardMm: 1 }] }, /or exactly half \(1\.5\) for a slot/],
   ["R5: lip neck (30 x 10.46 board, lip wall 2.3)", { board: { lengthMm: 30, widthMm: 10.46, componentHeightMm: 8 }, lid: { lipWallMm: 2.3, ...reviewLid() } }, /the lid lip between the two boss notches along y is 0\.06 mm wide/],
   ["S: stack with a hole smaller than the M3 close fit", { board: reviewBoard({ holes: [{ xMm: 4, yMm: 4, diameterMm: 3 }, { xMm: 56, yMm: 36, diameterMm: 3 }] }), lid: reviewLid({ bossStyle: "stack" }) }, /is smaller than the M3 close-fit clearance Ø3\.2/],
+  // Round 4.
+  ["D9: a stack with no standard screw length", { board: reviewBoard({ holes: cornerHoles(60, 40, 3.2, 4.5) }), lid: reviewLid({ bossStyle: "stack" }) }, /no standard screw length fits the stack: it needs between 16\.1 and 19\.1 mm .* use lid\.fasteners\.pilotDepthMm 6\.9 for a 20 mm screw/],
+  ["D2: an underside clearance on a board without holes", { board: reviewBoard({ undersideClearanceMm: 3 }) }, /board\.undersideClearanceMm needs standoffs: a board without holes has none and rests on the floor/],
+  ["D2: screw auto with board holes under the M2 close fit", { board: reviewBoard({ holes: cornerHoles(60, 40, 2, 4.5) }), lid: { fasteners: { screw: "auto", base: "pilot", pilotDiameterMm: 1.6, pilotDepthMm: 6.9, bossStyle: "stack", countersunk: false } } }, /lid\.fasteners\.screw "auto": no screw passes the smallest board hole \(Ø2\)/],
+  // The reviewer's b5 (round 3: a stack that failed late in lid-posts): no standard screw fits its 6 mm pilots, so it
+  // falls back to floor bosses, and its openings on an x wall and a y wall then need growAxis.
+  ["D9: the reviewer's b5 (stack not possible, floor needs growAxis)", { board: { lengthMm: 60, widthMm: 30, holes: cornerHoles(60, 30, 3.2, 4), componentHeightMm: 8 }, standoffs: { heightMm: 6 }, lid: reviewLid(), openings: [{ wall: "x-", shape: "rounded-rect", widthMm: 9.5, heightMm: 3.6, cornerRadiusMm: 1, alongMm: 15, aboveBoardMm: 0, label: "usb-c" }, { wall: "y+", shape: "rect", widthMm: 12, heightMm: 5, alongMm: 30, aboveBoardMm: 0.5, label: "side" }], boardStandIn: true }, /pass lid\.fasteners\.growAxis "x" or "y" to choose which walls move \(the default bossStyle fell back to "floor" because a screw stack is not possible \(bossStyle "stack": no standard screw length fits the stack/],
+  ["D1: a strip side 0.0005 mm off a face of its own web (holes 1.999 mm in): refused with the nearest clean hole position", { board: { lengthMm: 35.7, widthMm: 37, holes: cornerHoles(35.7, 37, 2.2, 1.999), componentHeightMm: 6 }, walls: { wallMm: 2.4 }, standoffs: { fastener: { screw: "M2", mode: "pilot", pilotDiameterMm: 1.6 } }, lid: { fasteners: { screw: "M2", base: "pilot", pilotDiameterMm: 1.6, pilotDepthMm: 7, bossStyle: "floor", headDiameterMm: 3.8 } } }, /would have an edge under 0\.001 mm .* move board\.holes\[0\] 0\.05 mm toward the board centre along x \(to xMm 2\.049\), and board\.holes\[2\] the same way: that plans clean/],
 ];
 
 // --------------------------------------------------------------------------------------------------------- checks
@@ -351,13 +412,23 @@ async function verifyCase(client: Client, args: Record<string, unknown>, result:
     const s = fasteners.standoffs;
     const outer = s.outerDiametersMm.flatMap((od: number) => cylinders(baseFaces, od / 2)).filter((face: Face) => near(face.boundsMm.max[2], derived.standoffTopZMm) && near(face.boundsMm.min[2], derived.floorTopZMm));
     checks.axesNear("standoffAxesMm", "standoff outer cylinders (floor to standoff top)", uniqueAxes(outer), derived.standoffAxesMm);
-    const holes = cylinders(baseFaces, s.holeDiameterMm / 2).filter((face) => near(face.boundsMm.max[2], derived.standoffTopZMm));
-    checks.axesNear("standoffAxesMm", `standoff holes Ø${s.holeDiameterMm} (${s.mode}, ${s.source.slice(0, 24)}...)`, uniqueAxes(holes), derived.standoffAxesMm);
-    const bottom = s.mode === "through" ? derived.outerMm.min[2] : derived.standoffTopZMm - s.holeDepthMm;
-    checks.add("fasteners.standoffs", `standoff hole depth ${s.holeDepthMm} (bottom z ${r3(bottom)})`, holes.length > 0 && holes.every((face) => near(face.boundsMm.min[2], bottom) || (s.mode === "through" && face.boundsMm.min[2] <= derived.floorTopZMm + TOL)), bottom, holes.map((face) => r3(face.boundsMm.min[2])));
+    // D2: a standoff under every board hole, on the hole's axis (from the arguments and the board's measured bounds).
+    const holeAxes = (((args.board as { holes?: Array<{ xMm: number; yMm: number }> }).holes) ?? []).map((hole) => [r3(derived.boardMm.min[0] + hole.xMm), r3(derived.boardMm.min[1] + hole.yMm)] as V2);
+    checks.axesNear("standoffAxesMm", `D2: a standoff cylinder under each of the ${holeAxes.length} board holes (floor top to board bottom)`, uniqueAxes(outer), holeAxes);
+    if (s.mode === "support") {
+      // Plain support posts: no hole. No smaller cylinder face shares a standoff axis at or below the standoff top.
+      const bores = baseFaces.filter((face) => /cylinder/i.test(face.surfaceType) && face.radiusMm !== null && face.axisOriginMm && face.axisDirection && Math.abs(Math.abs(face.axisDirection[2]) - 1) < 1e-6 && face.boundsMm.max[2] <= derived.standoffTopZMm + TOL && holeAxes.some((axis, index) => near(face.axisOriginMm![0], axis[0]) && near(face.axisOriginMm![1], axis[1]) && face.radiusMm! < s.outerDiametersMm[index] / 2 - TOL));
+      checks.add("fasteners.standoffs", "support posts (no standoffs.fastener): no hole in any standoff", bores.length === 0 && s.holeDiameterMm === 0 && s.screw === undefined, 0, bores.map((face) => ({ id: face.id, radiusMm: face.radiusMm })));
+    } else {
+      const holes = cylinders(baseFaces, s.holeDiameterMm / 2).filter((face) => near(face.boundsMm.max[2], derived.standoffTopZMm));
+      checks.axesNear("standoffAxesMm", `standoff holes Ø${s.holeDiameterMm} (${s.mode}, ${s.source.slice(0, 24)}...)`, uniqueAxes(holes), derived.standoffAxesMm);
+      const bottom = s.mode === "through" ? derived.outerMm.min[2] : derived.standoffTopZMm - s.holeDepthMm;
+      checks.add("fasteners.standoffs", `standoff hole depth ${s.holeDepthMm} (bottom z ${r3(bottom)})`, holes.length > 0 && holes.every((face) => near(face.boundsMm.min[2], bottom) || (s.mode === "through" && face.boundsMm.min[2] <= derived.floorTopZMm + TOL)), bottom, holes.map((face) => r3(face.boundsMm.min[2])));
+    }
     checks.near("standoffTopZMm", "standoff top faces", planar(baseFaces, [0, 0, 1], derived.standoffTopZMm, 2)[0]?.boundsMm.min[2], derived.standoffTopZMm);
   } else {
-    checks.add("standoffAxesMm", "no standoffs requested, none derived", derived.standoffAxesMm.length === 0);
+    // A board without holes has no standoffs and rests on the floor top (D2).
+    checks.add("standoffAxesMm", "no board holes: no standoffs derived, and the board bottom is the floor top", derived.standoffAxesMm.length === 0 && ((args.board as { holes?: unknown[] }).holes ?? []).length === 0 && near(derived.boardMm.min[2], derived.floorTopZMm), derived.floorTopZMm, derived.boardMm.min[2]);
   }
 
   // Stack (S): lid posts over the board holes, coaxial lid clearance holes, posts 0.2 mm above the board.
@@ -367,7 +438,9 @@ async function verifyCase(client: Client, args: Record<string, unknown>, result:
     checks.axesNear("stack", "lid post cylinders end at the post bottom, on the board-hole axes", uniqueAxes(postFaces), st.postAxesMm);
     const clearance = cylinders(lidFaces, st.holeDiameterMm / 2).filter((face) => near(face.boundsMm.min[2], st.postBottomZMm) || near(face.boundsMm.max[2], derived.lidTopZMm));
     checks.axesNear("stack", `lid clearance holes Ø${st.holeDiameterMm} coaxial with the posts (post bottom to lid top)`, uniqueAxes(clearance), st.postAxesMm);
-    checks.add("stack", "the clearance holes run from the post bottom to the lid top", near(Math.min(...clearance.map((face) => face.boundsMm.min[2])), st.postBottomZMm) && near(Math.max(...clearance.map((face) => face.boundsMm.max[2])), derived.lidTopZMm), [st.postBottomZMm, derived.lidTopZMm], clearance.map((face) => [r3(face.boundsMm.min[2]), r3(face.boundsMm.max[2])]));
+    // With a countersink the cylinder ends where the cone starts (round 4: the stack case has plain holes, the lip-corner case countersinks).
+    const holeTop = derived.lidTopZMm - (fasteners.lid.countersink?.depthMm ?? 0);
+    checks.add("stack", fasteners.lid.countersink ? "the clearance holes run from the post bottom to the countersink under the lid top" : "the clearance holes run from the post bottom to the lid top", near(Math.min(...clearance.map((face) => face.boundsMm.min[2])), st.postBottomZMm) && near(Math.max(...clearance.map((face) => face.boundsMm.max[2])), holeTop), [st.postBottomZMm, holeTop], clearance.map((face) => [r3(face.boundsMm.min[2]), r3(face.boundsMm.max[2])]));
     checks.axesNear("stack", "standoff holes coaxial with the posts", uniqueAxes(cylinders(baseFaces, fasteners.standoffs.holeDiameterMm / 2).filter((face) => near(face.boundsMm.max[2], derived.standoffTopZMm))), st.postAxesMm);
     if (boardId !== undefined) {
       const boardTop = planar(boardFaces, [0, 0, 1], derived.boardTopZMm, 2)[0];
@@ -450,6 +523,11 @@ async function verifyCase(client: Client, args: Record<string, unknown>, result:
       const gaps: number[] = [];
       for (const top of tops) gaps.push((await call(client, "plasticity_measure_parallel_planar_face_clearance", { first: { bodyId: boardId, faceId: bottom!.id }, second: { bodyId: baseId, faceId: top.id }, revision })).minimumDistanceMm);
       checks.add("boardMm", "board sits on every standoff (gap 0)", tops.length === derived.standoffAxesMm.length && gaps.every((gap) => near(gap, 0)), 0, gaps);
+    } else {
+      // No standoffs: the board bottom lies on the floor top.
+      const floorFace = planar(baseFaces, [0, 0, 1], derived.floorTopZMm, 2)[0];
+      const gap = bottom && floorFace ? (await call(client, "plasticity_measure_parallel_planar_face_clearance", { first: { bodyId: boardId, faceId: bottom.id }, second: { bodyId: baseId, faceId: floorFace.id }, revision })).minimumDistanceMm : undefined;
+      checks.near("boardMm", "no standoffs: the board rests on the floor top (gap 0)", gap, 0);
     }
     const wallClearance = derived.boardWallClearanceMm as { xNeg: number; xPos: number; yNeg: number; yPos: number };
     const expectedClearance = [wallClearance.xNeg, wallClearance.xPos, wallClearance.yNeg, wallClearance.yPos];
@@ -560,7 +638,8 @@ async function probeWebs(client: Client, result: any): Promise<Check[]> {
   const baseId = result.bodies.baseId as number;
   const start = await call(client, "plasticity_status", {});
   const webs = derived.webs as Array<{ label: string; gapMm: number; probeMm: V3 }>;
-  const probes = [...webs.map((web) => ({ label: web.label, center: web.probeMm, side: Math.min(0.3, (0.7 * web.gapMm) / Math.SQRT2), expect: "inside" as const })),
+  // A web that closes no gap (it joins two features that touch or overlap: round 4) is probed with the smallest box.
+  const probes = [...webs.map((web) => ({ label: web.label, center: web.probeMm, side: Math.max(0.06, Math.min(0.3, (0.7 * web.gapMm) / Math.SQRT2)), expect: "inside" as const })),
     { label: "control: empty component space over the board centre", center: [(derived.boardMm.min[0] + derived.boardMm.max[0]) / 2, (derived.boardMm.min[1] + derived.boardMm.max[1]) / 2, (derived.boardTopZMm + derived.componentTopZMm) / 2] as V3, side: 0.3, expect: "empty" as const }];
   const results: Array<{ label: string; ok: boolean; status: string; bounds?: unknown }> = [];
   let created = 0;
@@ -583,6 +662,48 @@ async function probeWebs(client: Client, result: any): Promise<Check[]> {
   return [
     { field: "webs", check: `R4 read-back: ${webs.length} web probe(s) fully inside base material, the control probe in empty space`, ok: results.every((entry) => entry.ok), actual: results },
     { field: "webs", check: "the probes were undone", ok: back.undoDepth === start.undoDepth && sameBodies(back, start), expected: start.undoDepth, actual: back.undoDepth },
+  ];
+}
+
+// D3 read-back (independent): a line of probe boxes (0.06 mm cubes, 0.4 mm tall, at the lip's mid height) through the lip
+// corner beside the first lid post: from 0.15 mm inside the lip, across the corner and the square where round 3 left a pit
+// between the two side webs, to 0.2 mm inside the post, every 0.1 mm along the diagonal. Each box must lie wholly inside
+// lid material (plasticity_check_interference: one intersection Solid with the probe's own bounds). A control box in the
+// empty cavity under the lid must not touch it. The probes are undone with one undo.
+async function probeLipCorner(client: Client, result: any): Promise<Check[]> {
+  const derived = result.derived;
+  const lidId = result.bodies.lidId as number;
+  const start = await call(client, "plasticity_status", {});
+  const lip = derived.lipInnerMm as Bounds;
+  const z = (lip.min[2] + lip.max[2]) / 2;
+  const post = derived.stack.postAxesMm[0] as V2;
+  const radius = derived.stack.postOuterDiametersMm[0] / 2;
+  const length = Math.hypot(post[0] - lip.min[0], post[1] - lip.min[1]);
+  const direction: V2 = [(post[0] - lip.min[0]) / length, (post[1] - lip.min[1]) / length];
+  const probes: Array<{ label: string; center: V3; expect: "inside" | "empty" }> = [];
+  for (let along = -0.15; along <= length - radius + 0.2 + 1e-9; along += 0.1) probes.push({ label: `${r3(along)} mm from the lip corner toward the post`, center: [lip.min[0] + direction[0] * along, lip.min[1] + direction[1] * along, z], expect: "inside" });
+  probes.push({ label: "control: the empty cavity over the board centre, at the lip's height", center: [(derived.boardMm.min[0] + derived.boardMm.max[0]) / 2, (derived.boardMm.min[1] + derived.boardMm.max[1]) / 2, z], expect: "empty" });
+  const side = 0.06;
+  const results: Array<{ label: string; ok: boolean; status: string }> = [];
+  let created = 0;
+  for (const probe of probes) {
+    const before = await call(client, "plasticity_status", {});
+    const origin = [probe.center[0] - side / 2, probe.center[1] - side / 2, probe.center[2] - 0.2] as V3;
+    await call(client, "plasticity_create_box", { originMm: origin, sizeMm: [side, side, 0.4], intent: "Board-case acceptance: D3 lip corner probe", revision: before.revision });
+    created += 1;
+    const status = await call(client, "plasticity_status", {});
+    const probeId = status.bodies.find((body: any) => !before.bodies.some((old: any) => old.id === body.id))?.id;
+    const pair = (await call(client, "plasticity_check_interference", { pairs: [{ firstBodyId: lidId, secondBodyId: probeId }], revision: status.revision })).pairs[0];
+    const box = pair.intersectionBodies?.length === 1 ? pair.intersectionBodies[0].boundsMm : undefined;
+    const inside = pair.status === "interfere" && !!box && [0, 1, 2].every((axis) => Math.abs(box.min[axis] - origin[axis]!) <= 1e-3 && Math.abs(box.max[axis] - (origin[axis]! + (axis === 2 ? 0.4 : side))) <= 1e-3);
+    results.push({ label: probe.label, ok: probe.expect === "inside" ? inside : pair.status === "no-volumetric-interference", status: pair.status });
+  }
+  const now = await call(client, "plasticity_status", {});
+  if (created > 0) await call(client, "plasticity_undo", { steps: created, intent: "Board-case acceptance: remove the D3 probes", revision: now.revision });
+  const back = await call(client, "plasticity_status", {});
+  return [
+    { field: "stack.lidWebs", check: `D3: ${probes.length - 1} probe boxes on a line through the lip corner (lip, corner, former pit, web, post) are all inside lid material; the control box in the cavity is not`, ok: results.every((entry) => entry.ok), actual: results },
+    { field: "stack.lidWebs", check: "D3: the probes were undone", ok: back.undoDepth === start.undoDepth && sameBodies(back, start), expected: start.undoDepth, actual: back.undoDepth },
   ];
 }
 
@@ -630,6 +751,47 @@ async function main(): Promise<void> {
     for (const name of options.cases) {
       const before = await call(client, "plasticity_status", {});
       requireCondition(before.undoDepth === baseline.undoDepth && sameBodies(before, baseline), `Document is not at the baseline before case ${name}`);
+      if (name === "tangents") {
+        // D1: every near-tangent input builds, passes the read-back and is undone; a late failure (or a plan refusal)
+        // fails its check.
+        const checks: Check[] = [];
+        const builds: Array<Record<string, unknown>> = [];
+        let lateFailures = 0;
+        let refusedInPlan = 0;
+        const sample = tangentSample();
+        for (const [label, input] of sample) {
+          const status = await call(client, "plasticity_status", {});
+          const startedAt = performance.now();
+          const response = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...input, name: "tan", revision: status.revision } }, undefined, LONG);
+          const reply = toolText(response);
+          const after = await call(client, "plasticity_status", {});
+          if ("isError" in response && response.isError) {
+            const stage = /failed in stage "([^"]+)"/.exec(reply)?.[1];
+            if (stage) lateFailures += 1; else refusedInPlan += 1;
+            checks.push({ field: "tangents", check: `builds: ${label}`, ok: false, expected: "completed", actual: { failed: stage ? `late, in stage ${stage}` : "refused in the plan", reply: reply.slice(0, 400), undoDepth: after.undoDepth, bodies: after.bodies.length } });
+            if (after.undoDepth > status.undoDepth) await call(client, "plasticity_undo", { steps: after.undoDepth - status.undoDepth, intent: "Board-case acceptance: clear a failed near-tangent case", revision: after.revision });
+            continue;
+          }
+          const result = JSON.parse(reply);
+          const added = after.bodies.filter((body: any) => !status.bodies.some((old: any) => old.id === body.id));
+          const bodyCount = input.boardStandIn ? 3 : 2;
+          const holeCount = ((input.board as { holes?: unknown[] }).holes ?? []).length;
+          const sound = result.status === "completed" && result.undoSteps === after.undoDepth - status.undoDepth && result.undoSteps === result.derived.plannedUndoSteps
+            && result.readBack.bodies.length === bodyCount && result.readBack.bodies.every((body: any) => body.closed && body.nativeValid) && result.readBack.minEdgeMm >= 0.05
+            && added.length === bodyCount && added.every((body: any) => body.type === "Solid") && result.derived.standoffAxesMm.length === holeCount;
+          const undo = await client.callTool({ name: "plasticity_batch", arguments: { steps: [{ toolName: "plasticity_undo", arguments: { steps: result.undoSteps } }], detail: "lean" } }, undefined, LONG);
+          const restored = await call(client, "plasticity_status", {});
+          const undone = !("isError" in undo && undo.isError) && restored.undoDepth === baseline.undoDepth && sameBodies(restored, baseline);
+          const build = { label, bossStyle: result.derived.bossStyle ?? null, standoffs: `${result.derived.fasteners.standoffs?.mode} x ${result.derived.standoffAxesMm.length}`, undoSteps: result.undoSteps, minEdgeMm: result.readBack.minEdgeMm, webs: result.derived.webs.length, lidWebs: result.derived.stack?.lidWebs.length ?? 0, clientMs: Math.round(performance.now() - startedAt) };
+          builds.push(build);
+          checks.push({ field: "tangents", check: `builds, reads back (closed, valid, no edge under 0.05 mm, ${result.undoSteps} planned = measured steps, a standoff per hole) and one batch undo restores the document: ${label}`, ok: sound && undone, actual: build });
+        }
+        const minEdgeMm = Math.min(...builds.map((build) => build.minEdgeMm as number));
+        checks.push({ field: "tangents", check: `D1: ${sample.length} near-tangent inputs, zero late failures, zero plan refusals`, ok: sample.length >= 40 && lateFailures === 0 && refusedInPlan === 0 && builds.length === sample.length, expected: { inputs: sample.length, lateFailures: 0, refusedInPlan: 0 }, actual: { built: builds.length, lateFailures, refusedInPlan } });
+        cases[name] = { inputs: sample.length, built: builds.length, lateFailures, refusedInPlan, minEdgeMm, builds, checks };
+        console.log(JSON.stringify({ case: name, inputs: sample.length, built: builds.length, lateFailures, refusedInPlan, minEdgeMm, undoSteps: builds.map((build) => build.undoSteps), passed: checks.filter((check) => check.ok).length, total: checks.length, failedChecks: checks.filter((check) => !check.ok) }));
+        continue;
+      }
       if (name === "rejects") {
         const checks: Check[] = [];
         for (const [label, input, pattern] of REVIEW_REJECTS) {
@@ -659,7 +821,9 @@ async function main(): Promise<void> {
       const baseEdgeCount = (await call(client, "plasticity_find_edges", { revision: after.revision, query: { bodyIds: [result.bodies.baseId] }, limit: 1000 })).matches.length;
       if (result.bodies.boardId !== undefined) checks.push(...await liftBoard(client, result));
       checks.push(...await probeWebs(client, result));
-      if (result.bodies.boardId !== undefined && (name === "pod" || name === "stack")) checks.push(...await shiftCorner(client, result));
+      // D5: also on two floor cases, where the play is sqrt 2 x the board clearance (the grown axis moves the bosses away).
+      if (result.bodies.boardId !== undefined && (name === "pod" || name === "stack" || name === "benchmark" || name === "d2-holes-3")) checks.push(...await shiftCorner(client, result));
+      if (name === "lip-corner") checks.push(...await probeLipCorner(client, result));
       const measuredDepth = after.undoDepth - before.undoDepth;
       checks.push({ field: "undoSteps", check: "undoSteps equals the measured Undo depth change", ok: result.undoSteps === measuredDepth, expected: measuredDepth, actual: result.undoSteps });
       const expectedIds = [result.bodies.baseId, result.bodies.lidId, ...(result.bodies.boardId !== undefined ? [result.bodies.boardId] : [])].sort((a: number, b: number) => a - b);
@@ -726,6 +890,7 @@ async function startMcp(endpoint: string, output: string): Promise<Client> {
     PLASTICITY_HUD: "0",
     PLASTICITY_HUD_NOTIFY: "0",
     PLASTICITY_TIMING: "1",
+    PLASTICITY_MCP_STATE_DIR: join(output, "state"),
     PLASTICITY_STRENGTH_ROOT: join(output, "strength-store"),
     PLASTICITY_CONSTRUCTION_HISTORY_ROOT: join(output, "history"),
     PLASTICITY_CODEX_EXECUTABLE: "/nonexistent/codex",

@@ -70,10 +70,22 @@ function fakeOperations() {
         bodies.push({ ...solid(id, null, []), type: "Wire" });
         const min = [0, 1, 2].map((axis) => Math.min(...points.map((point) => point[axis]!))) as V3;
         const max = [0, 1, 2].map((axis) => Math.max(...points.map((point) => point[axis]!))) as V3;
-        regions.push({ id: `region-${id}`, entityId: id, islandVersionId: id, sketchId: id, sketchWireIds: [id], measurementSource: "render-mesh", displayBoundsMm: { min, max } });
+        // Like Plasticity (live-verified, round 4): a closed profile's plane normal comes from the corner at its first
+        // point (last point, first point, second point). Kept for horizontal profiles (the web profiles): up or down.
+        const [last, first, second] = [points.at(-1)!, points[0]!, points[1]!];
+        const up = (first[0] - last[0]) * (second[1] - first[1]) - (first[1] - last[1]) * (second[0] - first[0]) > 0;
+        regions.push({ id: `region-${id}`, entityId: id, islandVersionId: id, sketchId: id, sketchWireIds: [id], measurementSource: "render-mesh", displayBoundsMm: { min, max }, ...(min[2] === max[2] ? { extrudesUp: up } : {}) } as RuntimeState["regions"][number]);
       });
     },
-    async extrudeRegions(_ids: string[], _distance: number, given: string) { return mutate("extrudeRegions", given, () => { bodies.push(solid(nextId++, null, [])); }); },
+    // A horizontal profile's solid gets its bounds (the recipe checks that a web profile extruded up, round 4).
+    async extrudeRegions(ids: string[], distance: number, given: string) {
+      return mutate("extrudeRegions", given, () => {
+        const region = regions.find((candidate) => candidate.id === ids[0]) as (RuntimeState["regions"][number] & { extrudesUp?: boolean }) | undefined;
+        const flat = region && region.extrudesUp !== undefined ? region.displayBoundsMm : undefined;
+        const far = flat ? flat.min[2] + (region!.extrudesUp ? distance : -distance) : 0;
+        bodies.push(solid(nextId++, null, [], flat ? { min: [flat.min[0], flat.min[1], Math.min(flat.min[2], far)], max: [flat.max[0], flat.max[1], Math.max(flat.min[2], far)] } : null));
+      });
+    },
     async revolveProfile(_id: number, _origin: V3, _axis: V3, _angle: number, given: string) { return mutate("revolveProfile", given, () => { bodies.push(solid(nextId++, null, [])); }); },
     async remove(ids: number[], given: string) { return mutate("remove", given, () => { bodies = bodies.filter((body) => !ids.includes(body.id)); regions = regions.filter((region) => !region.sketchWireIds.some((id) => ids.includes(id))); }); },
     async move(_ids: number[], _delta: V3, given: string) { return mutate("move", given, () => {}); },
@@ -267,8 +279,8 @@ test("S: a stack case passes the strict schema without standoffs.fastener and bu
     const stack = {
       originMm: [2000, 0, 0],
       board: { lengthMm: 51.5, widthMm: 28.3, holes: [[2.6, 2.6], [48.9, 2.6], [2.6, 25.7], [48.9, 25.7]].map(([xMm, yMm]) => ({ xMm, yMm, diameterMm: 3 })), componentHeightMm: 8 },
-      standoffs: { heightMm: 4, outerDiameterMm: 5 },
-      lid: { fasteners: { screw: "M2.5", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 4, countersunk: false } },
+      standoffs: { heightMm: 8, outerDiameterMm: 5 },
+      lid: { fasteners: { screw: "M2.5", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 7, countersunk: false } },
     };
     const result = json(await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_create_board_case", arguments: { ...stack, revision: "r0" } } }));
     assert.equal(result.derived.bossStyle, "stack");
@@ -276,5 +288,65 @@ test("S: a stack case passes the strict schema without standoffs.fastener and bu
     assert.equal(result.derived.stack.postAxesMm.length, 4);
     assert.equal(result.undoSteps, calls.length);
     assert.equal(result.undoSteps, result.derived.plannedUndoSteps);
+  });
+});
+
+// ------------------------------------------------------------------------------------------------- round 4 (D1, D2)
+const cornerHoles = (length: number, width: number, diameterMm: number, inset: number) => [[inset, inset], [length - inset, inset], [inset, width - inset], [length - inset, width - inset]].map(([xMm, yMm]) => ({ xMm, yMm, diameterMm }));
+
+test("D2: a default call with board holes and no standoffs key builds a support post under every hole, through plasticity_call and a lean batch", async () => {
+  // The reviewer's input: the 51.5 x 28.3 board, four Ø3 holes 2.0 mm from the edges, M3 pilots, nothing else.
+  const input = { originMm: [2000, 0, 0], board: { lengthMm: 51.5, widthMm: 28.3, holes: cornerHoles(51.5, 28.3, 3, 2), componentHeightMm: 8 }, lid: { fasteners: { screw: "M3", base: "pilot", pilotDiameterMm: 2.5, pilotDepthMm: 6 } }, boardStandIn: true };
+  await withClient(async (client, calls) => {
+    const result = json(await client.callTool({ name: "plasticity_call", arguments: { toolName: "plasticity_create_board_case", arguments: { ...input, revision: "r0" } } }));
+    assert.equal(result.status, "completed");
+    assert.equal(result.derived.bossStyle, "floor");
+    assert.equal(result.derived.standoffAxesMm.length, 4);
+    assert.deepEqual([result.derived.fasteners.standoffs.mode, result.derived.fasteners.standoffs.holeDiameterMm, result.derived.standoffTopZMm, result.derived.boardMm.min[2]], ["support", 0, 4, 4]);
+    assert.equal(result.steps.filter((step: { operation: string }) => step.operation === "create-support-post").length, 4);
+    assert.match(result.derived.assembly.note, /plain support posts: the board rests on them, unscrewed$/);
+    assert.equal(result.undoSteps, calls.length);
+    assert.equal(result.undoSteps, result.derived.plannedUndoSteps);
+  });
+  await withClient(async (client) => {
+    const response = json(await client.callTool({ name: "plasticity_batch", arguments: { detail: "lean", steps: [{ toolName: "plasticity_create_board_case", arguments: input, return: ["derived.bossStyle", "derived.fasteners.standoffs.mode", "derived.standoffAxesMm", "derived.cornerGapMm"] }] } }));
+    const first = response.steps[0].result;
+    assert.deepEqual([first["derived.bossStyle"], first["derived.fasteners.standoffs.mode"], first["derived.standoffAxesMm"].length], ["floor", "support", 4]);
+    // D5: the floor style's real diagonal play, sqrt 2 x 0.5.
+    assert.ok(Math.abs(first["derived.cornerGapMm"] - Math.SQRT2 * 0.5) < 1e-6);
+  });
+});
+
+test("D2: lid.fasteners.screw \"auto\" passes the strict schema and is resolved; another value is refused; the description states what the stack does not check", async () => {
+  await withClient(async (client, calls) => {
+    const tools = (await client.listTools()).tools;
+    const board = tools.find((entry) => entry.name === "plasticity_create_board_case")!;
+    assert.match(board.description ?? "", /a standoff under every board hole/);
+    assert.match(board.description ?? "", /its lid posts reach to 0\.2 mm above the board and component positions are not checked/);
+    assert.ok((board.description ?? "").length <= 600);
+    const stack = { originMm: [2000, 0, 0], board: { lengthMm: 60, widthMm: 30, holes: cornerHoles(60, 30, 3, 4.5), componentHeightMm: 8 }, lid: { fasteners: { screw: "auto", base: "pilot", pilotDiameterMm: 2.1, pilotDepthMm: 6.9, countersunk: false } } };
+    const wrong = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...stack, lid: { fasteners: { ...stack.lid.fasteners, screw: "M4" } }, revision: "r0" } });
+    assert.equal(wrong.isError, true);
+    assert.deepEqual(calls, []);
+    const result = json(await client.callTool({ name: "plasticity_create_board_case", arguments: { ...stack, revision: "r0" } }));
+    assert.deepEqual([result.derived.bossStyle, result.derived.fasteners.lid.screw, result.derived.fasteners.standoffs.heightMm, result.derived.stack.screwLengthMm, result.derived.stack.screwLengthMaxMm], ["stack", "M2.5", 7.9, 20, 21]);
+    assert.match(result.derived.fasteners.lid.screwReason, /^screw "auto": M2\.5, the largest whose close-fit clearance \(Ø2\.7\) passes the smallest board hole \(Ø3\)$/);
+    assert.match(result.derived.stack.note, /component positions are not checked/);
+    assert.equal(result.undoSteps, calls.length);
+  });
+});
+
+test("D1: a plan the tangency guards refuse reaches the caller before any native call, with the nearest hole position that plans clean", async () => {
+  await withClient(async (client, calls) => {
+    const input = { originMm: [2000, 0, 0], board: { lengthMm: 35.7, widthMm: 37, holes: cornerHoles(35.7, 37, 2.2, 1.999), componentHeightMm: 6 }, walls: { wallMm: 2.4 }, standoffs: { fastener: { screw: "M2", mode: "pilot", pilotDiameterMm: 1.6 } }, lid: { fasteners: { screw: "M2", base: "pilot", pilotDiameterMm: 1.6, pilotDepthMm: 7, bossStyle: "floor", headDiameterMm: 3.8 } } };
+    const refused = await client.callTool({ name: "plasticity_create_board_case", arguments: { ...input, revision: "r0" } });
+    assert.equal(refused.isError, true);
+    assert.match(text(refused), /would have an edge under 0\.001 mm .*which the kernel cannot build reliably; move board\.holes\[0\] 0\.05 mm toward the board centre along x \(to xMm 2\.049\), and board\.holes\[2\] the same way: that plans clean/);
+    assert.deepEqual(calls, []);
+    // The named position builds.
+    const holes = input.board.holes.map((hole, index) => index === 0 || index === 2 ? { ...hole, xMm: 2.049 } : hole);
+    const result = json(await client.callTool({ name: "plasticity_create_board_case", arguments: { ...input, board: { ...input.board, holes }, revision: "r0" } }));
+    assert.equal(result.status, "completed");
+    assert.equal(result.undoSteps, calls.length);
   });
 });
