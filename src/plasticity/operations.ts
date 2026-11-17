@@ -534,6 +534,34 @@ export const BOOLEAN_INTERSECTION_SOURCE = nativeFunction`async function (Factor
   return { unchanged };
 }`;
 
+// faceDistances: one kernel range read for many (face, points) pairs. offsets is the prefix array DistancesToPoints
+// takes (face i owns the points offsets[i] .. offsets[i + 1]); lengths are metres.
+export const FACE_DISTANCES_SOURCE = nativeFunction`function (pk_default, args) {
+  const kernel = pk_default.a;
+  let item;
+  for (const [versionId, candidate] of nativeApi.geo.geometryModel) if (nativeApi.db.lookupStableId(versionId) === args.id) { item = candidate; break; }
+  if (!item) throw new Error('Unknown body ID: ' + args.id);
+  const faces = item.view?.high?.faces;
+  if (!faces) throw new Error('Body ' + args.id + ' has no faces');
+  const evaluator = kernel.Eval && kernel.Context?.Get ? new kernel.Eval(kernel.Context.Get()) : null;
+  if (typeof evaluator?.DistancesToPoints !== 'function') throw new Error('This Plasticity build has no kernel range read (Eval.DistancesToPoints)');
+  const versionIds = Array.from(faces.versionIds, String);
+  const ids = new Int32Array(args.faceIds.length);
+  args.faceIds.forEach((faceId, i) => {
+    const index = versionIds.indexOf(String(faceId));
+    if (index < 0) throw new Error('Stale or unknown face: ' + args.id + ':' + faceId);
+    ids[i] = Number(faces.get(index).entityId);
+  });
+  const result = evaluator.DistancesToPoints(ids, Float64Array.from(args.xyz), Int32Array.from(args.offsets));
+  const count = args.xyz.length / 3;
+  const distances = new Array(count);
+  for (let k = 0; k < count; k += 1) {
+    const value = Number(result.distances?.[k]);
+    distances[k] = Number(result.errors?.[k] ?? 0) === 0 && Number.isFinite(value) ? value : null;
+  }
+  return { distances };
+}`;
+
 // ExtensionShape members the MCP exposes (probes-2026-11 FINDINGS gap 3). Arc fails on NURBS sheets and
 // bias, Bbox have no measurable effect, so they stay out.
 export const SHEET_EXTENSION_SHAPES = { linear: "Linear", soft: "Soft", reflective: "Reflective", natural: "Natural" } as const;
@@ -2591,6 +2619,28 @@ export class PlasticityOperations {
       await this.releaseProbeGarbage();
     }
     return evidence;
+  }
+
+  // The kernel's exact distance (Eval.DistancesToPoints: the global minimum to the TRIMMED face) from points to faces
+  // of one body, for the exact clearance check of plasticity_transfer_holes (mate.ts, cutClearance). A read: it changes
+  // nothing. Faces are named by their versioned ids, so an id of an older revision is refused; null marks a point the
+  // kernel could not answer.
+  async faceDistances(request: { id: number; queries: Array<{ faceId: string; pointsMm: Vector3[] }> }): Promise<{ distancesMm: Array<Array<number | null>> }> {
+    const queries = request.queries.filter((query) => query.pointsMm.length > 0);
+    if (queries.length === 0) return { distancesMm: request.queries.map(() => []) };
+    const offsets: number[] = [0];
+    const xyz: number[] = [];
+    for (const query of queries) {
+      for (const point of query.pointsMm) {
+        if (!point.every(Number.isFinite)) throw new Error("faceDistances needs finite points");
+        xyz.push(point[0] / 1000, point[1] / 1000, point[2] / 1000);
+      }
+      offsets.push(xyz.length / 3);
+    }
+    const native = await this.runtime.readNative<{ distances: Array<number | null> }>(FACE_DISTANCES_SOURCE, ["pk_default"], [{ id: request.id, faceIds: queries.map((query) => query.faceId), xyz, offsets }]);
+    if (!native || !Array.isArray(native.distances) || native.distances.length !== xyz.length / 3) throw new Error("Plasticity returned no face distances");
+    let cursor = 0;
+    return { distancesMm: request.queries.map((query) => query.pointsMm.map(() => { const value = native.distances[cursor]; cursor += 1; return typeof value === "number" && Number.isFinite(value) ? value * 1000 : null; })) };
   }
 
   // Best effort: a renderer that refuses these requests still answered the probe.
@@ -12367,6 +12417,7 @@ export class PlasticityOperations {
     const header = await readFile(input);
     if (header.length < 24 || header.subarray(0, 10).toString() !== "plasticity") throw new Error("Input is not a valid Plasticity document");
     await this.saveCopy(backupPath);
+    // The source names no command, but it replaces the scene the selection points at: it keeps the selection guard.
     const opened = await this.runtime.mutate<{ filename: string }>(`async function (args) {
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
       // A raw saver copy does not clear the native unsaved-changes prompt.
@@ -12378,7 +12429,7 @@ export class PlasticityOperations {
       // Committing OpenFileFactory directly skips that lifecycle.
       await this.open(args.path);
       return { filename: this.document.filename };
-    }`, [], [{ path: input, backup: await realpath(resolve(backupPath)) }], LONG_NATIVE_IMPORT_TIMEOUT_MS);
+    }`, [], [{ path: input, backup: await realpath(resolve(backupPath)) }], LONG_NATIVE_IMPORT_TIMEOUT_MS, { selectionGuard: true });
     if (await realpath(opened.filename) !== input) throw new Error("Plasticity did not open the requested document");
     return await this.state(LONG_NATIVE_IMPORT_TIMEOUT_MS);
   }

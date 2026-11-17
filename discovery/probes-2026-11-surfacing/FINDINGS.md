@@ -315,7 +315,9 @@ Cause: after a command that ran through `editor.exec`, the executor asks `comman
 
 Prototype (scratch copy only, not in the repository): in `commandEnd`, save the selection memento and empty the selection in a `finally` inside the wrapped `execute()`, and put the memento back after `await this.exec(command)` (leaving out ids whose body version is gone). With it, an align followed by `plasticity_join_sheets` took 126 and 161 ms and by `plasticity_fillet` 136 and 116 ms, with the selection kept and no command active. `plasticity_move` still hung: it does not use `commandEnd`, so every `editor.exec` site needs the same treatment.
 
-The live script's opt-in section `p6select` runs the review's check as specified. It fails on this build (7 of 7 trials, one of them with no align).
+The live script's opt-in section `p6select` runs the review's check as specified. At the time of this section it failed (7 of 7 trials, one of them with no align).
+
+**Fixed since (2026-11-16/17).** The prototype above was not taken: clearing the selection inside `execute()` does not cover a failed command or the sites outside `commandEnd`. Every command source now runs inside one selection guard in `PlasticityRuntime.mutate` (`src/plasticity/runtime.ts`, `SELECTION_GUARD_SOURCE`): the selection is saved and emptied before the command and put back after it, and an idle default command is cancelled. `p6select` passes 7 of 7 with it, and the three control rows of the table above return in 40 to 90 ms with the selection kept. Measured behaviour of the executor and the limits of the guard: `../probes-2026-11-pick/FINDINGS.md`, "Selection and default commands". Live check: `npm run accept:native-selection`.
 
 ### 8.4 Renderer memory
 `Runtime.getHeapUsage` after `HeapProfiler.collectGarbage`, before and after each workload (the code of `d1f9898`):

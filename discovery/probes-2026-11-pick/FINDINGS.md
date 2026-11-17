@@ -179,11 +179,32 @@ command was active.
 Every `runtime.mutate()` source runs inside it: entry = save the memento, cancel a default command that idles in
 `Awaiting` (agent `automatic`, no factory at work), empty the selection; exit = cancel a default command a history
 step chained, put the memento back without the ids whose body version is gone (a whole body follows its stable id).
-While the source is pending, an idle default command seen on two checks 50 ms apart is cancelled. Nothing else is ever
-cancelled; with another command active at entry the guard stands aside (the source runs as before; afterwards the
+While the source is pending (and not past the call's timeout), an idle default command seen on two checks 50 ms apart
+is cancelled. "Idle" means untouched, see the next section. Nothing else is ever cancelled; with another command active at entry the guard stands aside (the source runs as before; afterwards the
 saved selection is put back only when nothing is selected and nothing is active).
 
 Live matrix and timing: `scripts/verify-native-selection-live.ts` (`npm run accept:native-selection`).
+
+### A gizmo the user is editing, and a call that is given up (review round 4, 2026-11-17, instance 127.0.0.1:65175)
+A real click on an edge (two CDP mouse clicks at the projected point: the first selects the Solid, the second the edge) starts `FilletShellCommand`, agent `automatic`, `Awaiting`. A real drag of its handle (press at the click point, eight moves of 6 px, hold):
+
+| moment | factory `_state.value` | `factory.temps` | `factory.distance` | `command._isFactoryChanged` |
+|---|---|---|---|---|
+| after the click | `none` | 0 | 0 | false |
+| mouse pressed, not moved | `none` | 0 | 0 | false |
+| mid-drag | `updated` | 1 | 3.299 mm | true |
+| held | `updated` | 1 | 6.598 mm | true |
+| released | `updated` | 1 | 6.598 mm | true |
+
+- The untouched state is the same for the three default commands seen (`FilletShellCommand`, `OffsetFaceCommand`, `RefilletFaceCommand`): `none`, 0 temps, `false`.
+- So "idle" for the guard is: agent `automatic`, state `Awaiting`, factory `none`, no temps, `_isFactoryChanged` not true. Anything else is the user's work. The earlier test (a factory tag ending in "ing") took `updated` for idle and cancelled a held drag.
+- While the preview is held (during the drag and after the release), `editor.measurements.snapshot()` throws `snapshot(): scratch active`. The state read takes that snapshot, so every tool that reads the document first fails then, with or without the guard. The runtime now words that error as "Plasticity is busy: the user is editing ...". Only a call that does not read the state reaches the guard (a raw `mutate`); a source with a command is refused there, a source without one runs and leaves the gizmo.
+- `plasticity_reconcile` in that state: it leaves the gizmo, then the read it needs is refused, so it fails and the session is not reconciled. Its error names the command ("... FilletShellCommand is active and holds changes the user made (the preview of its gizmo); it was not touched ..."). `recovery.activeCommand` with `edited: true` is in a reply only when the document can be read.
+- A screenshot to a file reads no state first. Its own source tests `executor.isBusy`, which is true while the preview is held, and fails with the older "Plasticity is busy". With the untouched gizmo `isBusy` is false and the screenshot is taken.
+- After the user cancels the gizmo, the next edit runs (82 ms).
+- With the idle gizmo: an export leaves it (the source runs no command and is not wrapped); an edit cancels it and puts the edge selection back (86 ms).
+
+A source that does not settle within its call (700 ms timeout): the selection stays set aside (empty). A click on an edge after the timeout gets its idle gizmo and keeps it (read at 700 and 1,100 ms): the guard's watcher stopped at its budget. `reconcile` then cancels that idle gizmo (it cannot tell it from a leftover) and reports that the set-aside selection was not put back because something else is selected. When the source settles, the user's edge stays selected. With nothing selected in the meantime, `reconcile` puts the set-aside face back (`restoredSelection: 1`).
 
 ### Still true on a person's own window
 - The gizmo does not come back. After an edit the selection is back and no command is active; the default command is
@@ -193,13 +214,15 @@ Live matrix and timing: `scripts/verify-native-selection-live.ts` (`npm run acce
   So a later command that is cancelled or fails (Escape on a gizmo, a refused edit in the UI) sends the selection back
   to that empty state, and Undo of the edit in the UI restores the document without the earlier selection.
 - The click points (`selection.hits`) are not saved or put back; the Dimension command clears them.
+- `plasticity_reconcile` cancels an idle, untouched default gizmo even when the person has only just clicked (it cannot tell it from the leftover of a timed-out call). The selection stays; click again for the gizmo.
+- While a person holds a preview in a gizmo, no tool can read the document (Plasticity refuses the snapshot), so the agent cannot work until the person finishes or cancels it. A multi-step tool that is already running when the person starts to drag fails at its next step, and its own undo of the steps so far is refused in the same way: the steps stay, and the error says so.
 - A command of the person that awaits its dialog is still interrupted by an edit (Plasticity does that in `exec()`,
   as before the guard): live, a `FilletShellCommand` (agent `user`) awaiting its dialog read `Cancelled` after a
   `plasticity_move`, and what was typed into the dialog is lost. The guard does not cancel it. The interrupt sends the
   selection back to that of the last history step; when that leaves nothing selected the guard puts the saved
   selection back, otherwise Plasticity's own selection (and the gizmo it starts for it) stays.
-- The edits that run no command (exports, section analyses, save a copy) are guarded too: the selection is empty while
-  they run and an idle gizmo is cancelled. Only the label refresh of a state read runs outside the guard.
+- (Changed in review round 4.) Calls that run no command (exports, section analyses, save a copy, the label refresh of
+  a state read) are not wrapped in the guard any more: they do not touch the selection or a gizmo.
 - A command of the server that is still running when its call returns (a pick command that could not be cancelled;
   the session is uncertain then) keeps the selection empty until it ends; the guard puts it back then (watched for
   15 s).

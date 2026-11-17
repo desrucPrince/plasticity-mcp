@@ -7,6 +7,7 @@ import {
   ANCHOR_POINTS, AxisRefusal, axisRays, boundsAnchor, circleSweepDeg, cylinderRadiiSummary, fullTurnCylinders, GuardedRunError, lineBoxSpan, placeBody, planEntry, planPlacement, planTransfer,
   pointInPlanarFace, quarterTurnMatrix, rotateBounds, runGuarded, selectSourceAxes, transferHoles, type Vector3,
   CLEARANCE_RING_MM, FLOOR_RIM_INSET_MM, floorProblem, floorRays, RIM_RAYS, RIM_RAYS_LARGE, rimRayCount, unprovenRay, UNRESOLVED_CODE_RULE,
+  boreWallPatches, CLEARANCE_RESOLUTION_MM, crossedFaceIds, cutClearance, cutPatches, type ClearanceEntry,
 } from "./mate.ts";
 import { PROBE_SURFACE_UNRESOLVED_CODES, probeOddParityReason, type ProbeRayResult } from "./surfacing.ts";
 
@@ -1532,4 +1533,146 @@ test("T1 guard 4: a floor ray that is not complete, misses the floor or finds no
   assert.match(floorProblem("axis 0", body, hole, 0.25, rays(rayOf([[0.25, 1], [2.25, -1]], { grazing: [{ faceId: "x", minDistanceMm: 0.0005, atMm: [0, 0, 9.74] }] })))!, /could not be proven: floor rim ray 1 of 8 is not complete: it passes 0\.0005 mm from face x/);
   assert.match(floorProblem("axis 0", body, hole, 0.25, rays(rayOf([[0.25, 1]])))!, /floor rim ray 1 of 8 finds no face behind the floor/);
   assert.match(floorProblem("axis 0", body, hole, 0.25, rays(rayOf([[0.9, 1], [2.25, -1]])))!, /floor rim ray 1 of 8 does not meet the flat floor 0\.25 mm ahead \(it meets face f0 at 0\.9 mm\)/);
+});
+
+// ---------- the exact clearance of the cut surface (review round 4) ----------
+
+// The test stand-in for the kernel's range read (PlasticityOperations.faceDistances): the exact distance from a point
+// to a trimmed planar face (its own edges, through pointInPlanarFace) or to a full-turn cylinder face between its circles.
+function faceDistance(body: Body, face: Face, p: Vec): number {
+  if (face.planar) {
+    const n = unitv(face.normal);
+    const h = dotv(sub(p, face.centerMm), n);
+    const foot = sub(p, mul(n, h));
+    const exact = pointInPlanarFace(body, face, foot)!;
+    return exact.inside ? Math.abs(h) : Math.hypot(h, exact.boundaryDistanceMm);
+  }
+  const e = unitv(face.axisDirection!);
+  const w = sub(p, face.axisOriginMm!);
+  const s = dotv(w, e);
+  const radial = Math.hypot(...sub(w, mul(e, s))) - face.radiusMm!;
+  const ends = face.edgeIds.map((id) => body.edges.find((edge) => edge.id === id)!).map((edge) => dotv(sub(edge.circleGeometry!.centerMm, face.axisOriginMm!), e));
+  const beyond = Math.max(0, Math.min(...ends) - s, s - Math.max(...ends));
+  return Math.hypot(radial, beyond);
+}
+/** polyOps plus the kernel range read, and the number of points it was asked for. */
+function clearOps(...bodies: Body[]) {
+  const base = polyOps(...bodies);
+  const reads = { calls: 0, points: 0 };
+  (base.operations as unknown as { faceDistances: unknown }).faceDistances = async (request: { id: number; queries: Array<{ faceId: string; pointsMm: Vec[] }> }) => {
+    const body = bodies.find((candidate) => candidate.id === request.id)!;
+    reads.calls += 1;
+    return { distancesMm: request.queries.map((query) => { const face = body.faces.find((candidate) => candidate.id === query.faceId)!; reads.points += query.pointsMm.length; return query.pointsMm.map((point) => faceDistance(body, face, point)); }) };
+  };
+  return { ...base, reads };
+}
+// The review's block: 40 x 40 x 20 with a Ø6 through hole at (20, 20).
+function holedBlock(): Body {
+  const square = (z: number): Vec[] => [[0, 0, z], [40, 0, z], [40, 40, z], [0, 40, z]];
+  const hole = cylinderFaceOf("void", [20, 20, 0], [0, 0, 1], 3, 0, 20, true);
+  return polyBody(2, [
+    { id: "top", normal: [0, 0, 1], points: square(20), circles: [{ center: [20, 20, 20], radius: 3 }] },
+    { id: "bottom", normal: [0, 0, -1], points: square(0).reverse(), circles: [{ center: [20, 20, 0], radius: 3 }] },
+    ...box6("o", [0, 0, 0], [40, 40, 20], ["oz+", "oz-"]),
+  ], [hole.face], hole.edges);
+}
+const thinBeside = (pattern: RegExp) => (error: unknown) => error instanceof AxisRefusal && error.code === "thin-wall" && /the hole leaves a wall thinner than 0\.05 mm beside the bore/.test(error.message) && pattern.test(error.message) && /refused before the edit/.test(error.message);
+const ANGLES = [0, 10, 22.5, 45, 67.5, 90];
+const WALLS = [0.002, 0.01, 0.04];
+
+test("a wall thinner than 0.05 mm beside the bore is refused at every angle, not only where a ray of the ring points", async () => {
+  // Ø4 through beside the Ø6 hole: the wall between them is `wall` mm, the line of centres at `angle` degrees.
+  const beside = (wall: number, angle: number) => ({ sourceId: 1, targetId: 2, axesMm: AX([20 + (5 + wall) * Math.cos((angle * Math.PI) / 180), 20 + (5 + wall) * Math.sin((angle * Math.PI) / 180), 60]), hole: { diameterMm: 4, through: true as const }, revision: "r1" });
+  for (const wall of WALLS) for (const angle of ANGLES) {
+    const ops = clearOps(sourceStub(), holedBlock());
+    await assert.rejects(transferHoles(ops.operations, beside(wall, angle)), thinBeside(/./), `wall ${wall} mm at ${angle} degrees`);
+    assert.deepEqual(ops.calls, [], `wall ${wall} mm at ${angle} degrees: nothing was cut`);
+  }
+  // Between the rays (10, 22.5, 67.5 degrees) only the kernel's exact distance sees the wall, and it names the face and the distance.
+  const exact = clearOps(sourceStub(), holedBlock());
+  await assert.rejects(transferHoles(exact.operations, beside(0.01, 22.5)), thinBeside(/target face void \(Cylinder\) lies 0\.01\d* mm from the cut surface at \[[^\]]+\] \([\d.]+ mm from the entry plane, the kernel's exact distance\)/));
+  assert.ok(exact.reads.points < 500, `${exact.reads.points} distance reads`);
+  // Where a ray points at the wall (0, 45, 90 degrees) the ring guard still answers first, in its own words.
+  await assert.rejects(transferHoles(clearOps(sourceStub(), holedBlock()).operations, beside(0.01, 45)), thinBeside(/the ray at radius 2\.05 mm, 45 degrees/));
+  // The ring alone (a stub without the range read, as before this check) lets the cut through between its rays.
+  for (const angle of [10, 22.5, 67.5]) await assert.rejects(transferHoles(polyOps(sourceStub(), holedBlock()).operations, beside(0.01, angle)), /reached the cut/, `${angle} degrees, ring only`);
+  // Walls that are thick enough are cut, at any angle: 0.06 mm and 1 mm.
+  for (const wall of [0.06, 1]) for (const angle of ANGLES) {
+    const ops = clearOps(sourceStub(), holedBlock());
+    await assert.rejects(transferHoles(ops.operations, beside(wall, angle)), /reached the cut/, `wall ${wall} mm at ${angle} degrees`);
+    assert.ok(ops.reads.points < 20_000, `wall ${wall} mm at ${angle} degrees: ${ops.reads.points} distance reads`);
+  }
+});
+
+test("a bore whose rim is within 0.05 mm of a pocket wall is refused when the pocket is turned 22.5 degrees", async () => {
+  const turned = () => polyBody(2, turnSpecs(pocketSpecs(), turnZ(22.5, [10, 20, 0])));
+  const n: Vec = [Math.cos((22.5 * Math.PI) / 180), Math.sin((22.5 * Math.PI) / 180), 0];
+  // The pocket wall x = 10 passes through the pivot (10, 20): the bore's rim is `gap` mm from it.
+  const at = (gap: number) => ({ sourceId: 1, targetId: 2, axesMm: AX([10 + n[0] * (1.5 + gap), 20 + n[1] * (1.5 + gap), 60]), hole: T3, revision: "r1" });
+  for (const gap of WALLS) {
+    const ops = clearOps(sourceStub(), turned());
+    await assert.rejects(transferHoles(ops.operations, at(gap)), thinBeside(/target face wx- \(Plane\) lies 0\.0\d+ mm from the cut surface/), `rim ${gap} mm from the wall`);
+    assert.deepEqual(ops.calls, []);
+    await assert.rejects(transferHoles(polyOps(sourceStub(), turned()).operations, at(gap)), /reached the cut/, `rim ${gap} mm, ring only`);
+  }
+  for (const gap of [0.06, 1]) await assert.rejects(transferHoles(clearOps(sourceStub(), turned()).operations, at(gap)), /reached the cut/, `rim ${gap} mm from the wall`);
+});
+
+test("cutClearance: what it guarantees, on a cylinder beside a flat wall and beside a single point, at any angle", async () => {
+  const wallBody = { faces: [{ id: "w", surfaceType: "Plane", boundsMm: { min: [-100, -100, -100], max: [100, 100, 100] } }] } as unknown as Body;
+  const bore = (direction: Vec): ClearanceEntry => ({ label: "axis 0", entryPointMm: [0, 0, 0], direction, patches: cutPatches({ farDistanceMm: 20 }, { diameterMm: 4, through: true }), crossed: new Set() });
+  let reads = 0;
+  // A flat wall parallel to the axis, `wall` mm from the Ø4 cut surface, turned `angle` degrees about the axis.
+  const flat = (wall: number, angle: number) => async (queries: Array<{ faceId: string; pointsMm: Vec[] }>) => queries.map((query) => query.pointsMm.map((p) => { reads += 1; return Math.abs(2 + wall - (p[0] * Math.cos(angle) + p[1] * Math.sin(angle))); }));
+  for (let step = 0; step < 48; step += 1) {
+    const angle = (step * 7.5 * Math.PI) / 180 + 0.0123;
+    reads = 0;
+    const thin = await cutClearance(flat(0.044, angle), wallBody, [bore([0, 0, 1])]);
+    assert.match(thin.problem ?? "", /the hole leaves a wall thinner than 0\.05 mm beside the bore: target face w \(Plane\) lies 0\.04\d+ mm from the cut surface/, `0.044 mm at step ${step}`);
+    assert.equal((await cutClearance(flat(0.0501, angle), wallBody, [bore([0, 0, 1])])).problem, undefined, `0.0501 mm at step ${step}`);
+    assert.ok(reads < 40_000, `${reads} reads at step ${step}`);
+  }
+  // The worst case for the bound: a single point (a corner of another feature) `gap` mm off the cut surface, anywhere.
+  const spike = (gap: number, theta: number, z: number) => { const q: Vec = [(2 + gap) * Math.cos(theta), (2 + gap) * Math.sin(theta), z]; return async (queries: Array<{ faceId: string; pointsMm: Vec[] }>) => queries.map((query) => query.pointsMm.map((p) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]))); };
+  for (const [theta, z] of [[0.3, 0.004], [1.234, 7.77], [2.9, 13.131], [4.4444, 19.999], [5.9, 10]] as Array<[number, number]>) {
+    assert.match((await cutClearance(spike(CLEARANCE_RING_MM - CLEARANCE_RESOLUTION_MM - 0.0005, theta, z), wallBody, [bore([0, 0, 1])])).problem ?? "", /thinner than 0\.05 mm/, `a point 0.0445 mm off at ${theta}, ${z}`);
+    assert.equal((await cutClearance(spike(0.0501, theta, z), wallBody, [bore([0, 0, 1])])).problem, undefined, `a point 0.0501 mm off at ${theta}, ${z}`);
+  }
+  // An oblique axis is the same problem in another frame.
+  const d = unitv([1, 2, 3]);
+  const u = perp(d);
+  const oblique = async (queries: Array<{ faceId: string; pointsMm: Vec[] }>) => queries.map((query) => query.pointsMm.map((p) => Math.abs(2.03 - dotv(p, u))));
+  assert.match((await cutClearance(oblique, wallBody, [bore(d)])).problem ?? "", /lies 0\.0[34]\d* mm from the cut surface/);
+  // A face the cut passes through is not a wall beside it; a face far away is never read.
+  const none = async () => { throw new Error("no read expected"); };
+  assert.deepEqual(await cutClearance(none, wallBody, [{ ...bore([0, 0, 1]), crossed: new Set(["w"]) }]), { points: 0, calls: 0 });
+  const far = { faces: [{ id: "far", surfaceType: "Plane", boundsMm: { min: [10, -5, 0], max: [10, 5, 20] } }] } as unknown as Body;
+  assert.deepEqual(await cutClearance(none, far, [bore([0, 0, 1])]), { points: 0, calls: 0 });
+  // A read the kernel cannot answer, and a proof that runs out of budget, refuse: nothing is cut unproven.
+  assert.match((await cutClearance(async (queries) => queries.map((query) => query.pointsMm.map(() => null)), wallBody, [bore([0, 0, 1])])).problem ?? "", /could not be read from the kernel, so the wall beside the cut is not proven/);
+  const long: ClearanceEntry = { ...bore([0, 0, 1]), patches: cutPatches({ farDistanceMm: 5000 }, { diameterMm: 4, through: true }) };
+  assert.match((await cutClearance(flat(0.0451, 0.5), wallBody, [long])).problem ?? "", /could not be proven at least 0\.05 mm thick/);
+});
+
+test("cutPatches and crossedFaceIds: the cut surface of each kind of hole, and the faces it passes through", () => {
+  // What the plan measures before the edit: the cylindrical walls (the bore, the wall of a counterbore). The cone
+  // and the floors keep their own guards, and a wall that ends on a floor of the cut ends 0.05 mm above it.
+  assert.deepEqual(boreWallPatches({ farDistanceMm: 6 }, { diameterMm: 3, through: true }), [{ what: "bore", rho0: 1.5, z0: 0, rho1: 1.5, z1: 6 }]);
+  assert.deepEqual(boreWallPatches({ farDistanceMm: 6 }, { diameterMm: 3, depthMm: 4 }), [{ what: "bore", rho0: 1.5, z0: 0, rho1: 1.5, z1: 4 - CLEARANCE_RING_MM }]);
+  assert.deepEqual(boreWallPatches({ farDistanceMm: 6 }, { diameterMm: 3.2, through: true, countersunk: { headDiameterMm: 6 } }), [{ what: "bore", rho0: 1.6, z0: 1.4, rho1: 1.6, z1: 6 }]);
+  assert.deepEqual(boreWallPatches({ farDistanceMm: 6 }, { diameterMm: 3.2, depthMm: 5, counterbore: { diameterMm: 6, depthMm: 2 } }), [{ what: "head", rho0: 3, z0: 0, rho1: 3, z1: 2 - CLEARANCE_RING_MM }, { what: "bore", rho0: 1.6, z0: 2, rho1: 1.6, z1: 5 - CLEARANCE_RING_MM }]);
+  assert.deepEqual(boreWallPatches({ farDistanceMm: 6 }, { diameterMm: 3.2, through: true, counterbore: { diameterMm: 6, depthMm: 2 } }), [{ what: "head", rho0: 3, z0: 0, rho1: 3, z1: 2 - CLEARANCE_RING_MM }, { what: "bore", rho0: 1.6, z0: 2, rho1: 1.6, z1: 6 }]);
+  assert.deepEqual(boreWallPatches({ farDistanceMm: 6 }, { diameterMm: 3, depthMm: 0.04 }), [], "a blind hole shallower than the ring has no wall of its own to measure");
+  assert.deepEqual(cutPatches({ farDistanceMm: 6 }, { diameterMm: 3, through: true }), [{ what: "bore", rho0: 1.5, z0: 0, rho1: 1.5, z1: 6 }]);
+  assert.deepEqual(cutPatches({ farDistanceMm: 6 }, { diameterMm: 3, depthMm: 4 }), [{ what: "bore", rho0: 1.5, z0: 0, rho1: 1.5, z1: 4 }, { what: "floor", rho0: 1.5, z0: 4, rho1: 0, z1: 4 }]);
+  assert.deepEqual(cutPatches({ farDistanceMm: 6 }, { diameterMm: 3.2, through: true, countersunk: { headDiameterMm: 6 } }), [{ what: "head", rho0: 3, z0: 0, rho1: 1.6, z1: 1.4 }, { what: "bore", rho0: 1.6, z0: 1.4, rho1: 1.6, z1: 6 }]);
+  assert.deepEqual(cutPatches({ farDistanceMm: 6 }, { diameterMm: 3.2, through: true, counterbore: { diameterMm: 6, depthMm: 2 } }), [{ what: "head", rho0: 3, z0: 0, rho1: 3, z1: 2 }, { what: "head", rho0: 3, z0: 2, rho1: 1.6, z1: 2 }, { what: "bore", rho0: 1.6, z0: 2, rho1: 1.6, z1: 6 }]);
+  // Through the pocket floor: the floor and the bottom are crossed; the pocket walls and the top are not.
+  const body = polyBody(2, pocketSpecs());
+  const axis = { pointMm: [30, 20, 50] as Vec, direction: [0, 0, -1] as Vec, faceIds: [] };
+  const rays = axisRays(axis, [1.5]);
+  const plus = castRays(body, rays.plus) as never as Parameters<typeof crossedFaceIds>[2];
+  const hole = planEntry(body, axis, 0, [1.5], { plus, minus: castRays(body, rays.minus) as never });
+  assert.deepEqual([...crossedFaceIds(body, hole, plus.slice(0, 9), 5)].sort(), ["floor", "oz-"]);
+  assert.deepEqual([...crossedFaceIds(body, hole, plus.slice(0, 9), 2)].sort(), ["floor"], "a blind hole 2 mm deep does not reach the bottom");
 });

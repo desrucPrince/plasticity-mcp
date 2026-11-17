@@ -37,17 +37,34 @@ interface CallResult {
 //         command starts, and ends, with the selection its own source sets.
 //  exit   (success or failure) a default command chained by a history step is cancelled the same way; the saved
 //         selection is put back, without the items whose body version is gone (a whole body follows its stable id).
-// The guard only ever cancels a command that is a default command (agent "automatic"), in state Awaiting, with no
-// factory at work. With any other command active at entry (a command of the user that awaits its dialog, a gizmo
-// that is being dragged) it stands aside: the source runs as it did before the guard, where Plasticity's exec()
-// interrupts that command, runs the source's command and resolves; the chain then belongs to the exec() that was
-// active first, so the call cannot hang on it. That interrupt sends the selection back to that of the last history
-// step, so afterwards the saved selection is put back when nothing is selected and nothing is active.
-// It never throws: a failure inside it leaves the source's own result or error untouched.
+// The guard only ever cancels a default command (agent "automatic") that awaits AND that the user has not touched:
+// its factory still reads "none", holds no temporary objects, and the command does not say its factory changed. A
+// default command the user has changed reads "updated" with a preview (measured live: a held or released drag of the
+// fillet gizmo; a value typed into the command's dialog was not measured, Plasticity's dialogs update the factory in
+// the same way after their debounce). That is the user's work, and nothing here cancels it:
+//  - a source that runs a command (an edit) is refused before it starts, with an error that says the user is editing
+//    and nothing was changed. Refusing cannot hang (the source never runs), and it keeps the preview; running the edit
+//    would make Plasticity's exec() interrupt the command and throw the preview away without a word.
+//  - reconcile() reports it in recovery.activeCommand and leaves it.
+// With a command of the user's own active at entry (agent "user": a dialog that awaits input), or a default command
+// that never reaches Awaiting, the guard stands aside: the source runs as it did before the guard, where Plasticity's
+// exec() interrupts that command, runs the source's command and resolves; the chain then belongs to the exec() that
+// was active first, so the call cannot hang on it. That interrupt sends the selection back to that of the last
+// history step, so afterwards the saved selection is put back when nothing is selected and nothing is active.
+// The guard never throws on its own account, except for that one refusal: a failure inside it leaves the source's own
+// result or error untouched.
 //
-// A source that runs no command at all can opt out with mutate(..., { selectionGuard: false }) (the measurement
-// overlay refresh of a state read: a read must not touch the selection). selection-safe-sites.test.ts fails when a
-// source that runs a command opts out.
+// Only a source that runs a command needs the guard (nothing else reaches the executor). mutate() sends a source
+// that contains none of the command patterns of sourceRunsCommand() as it is: exports, section analyses, a saved
+// copy and the label refresh of a state read never touch the selection or a gizmo. The label refresh also says so
+// explicitly ({ selectionGuard: false }). A source without a pattern that still replaces what the selection points at
+// asks for the guard ({ selectionGuard: true }): opening a document. selection-safe-sites.test.ts uses the same
+// predicate and pins, by name, every mutate() site that goes without the guard and the one that asks for it.
+//
+// A guard has a budget: the timeout of its CDP call. Its watcher stops at the budget. A source that settles after it
+// (the call was given up) puts the saved selection back only into an empty selection: what the user selected in the
+// meantime wins. Until then the guard is listed in a registry of the page, so that reconcile() can put the selection
+// back for it.
 
 // Renderer helpers shared by the guard and by the recovery step of reconcile(). `executor` is editor.executor.
 const EXECUTOR_TOOLS_SOURCE = `function (executor) {
@@ -57,18 +74,26 @@ const EXECUTOR_TOOLS_SOURCE = `function (executor) {
   const active = () => { const entry = executor.active; return entry ? (entry.command ?? entry) : null; };
   const nameOf = command => command?.constructor?.name ?? 'unknown';
   const isDefault = command => command?.agent === 'automatic';
-  // A factory of the command that is updating or committing: the command reads Awaiting meanwhile (FINDINGS surfacing 8.2).
-  const computing = command => {
+  // The user has changed something in the command (measured live on a real drag of the default fillet gizmo): the
+  // command flags its factory as changed, a factory has left the state "none" (updating, updated, failed), or a
+  // factory holds temporary objects (the preview). An untouched default command reads none / 0 / false for
+  // FilletShell, OffsetFace and RefilletFace. A command whose state cannot be read counts as touched.
+  const touched = command => {
     try {
+      if (command._isFactoryChanged === true) return true;
       for (const resource of command.resources ?? []) {
         const state = resource?._state;
-        const tag = stateTag(state !== null && typeof state === 'object' && 'value' in state ? state.value : state);
-        if (typeof tag === 'string' && tag !== 'Awaiting' && /ing$/.test(tag)) return true;
+        if (state !== null && typeof state === 'object' && 'value' in state) { const tag = stateTag(state.value); if (tag !== null && tag !== 'none') return true; }
+        const temps = resource?.temps;
+        const held = temps?.length ?? temps?.size;
+        if (typeof held === 'number' && held > 0) return true;
       }
       return false;
     } catch { return true; }
   };
-  const idleDefault = command => isDefault(command) && stateTag(command._state) === 'Awaiting' && !computing(command);
+  const idleDefault = command => isDefault(command) && stateTag(command._state) === 'Awaiting' && !touched(command);
+  /** A default command that awaits and carries changes of the user: never cancelled. */
+  const editedDefault = command => isDefault(command) && stateTag(command._state) === 'Awaiting' && touched(command);
   // A cancel settles within a few microtask turns (measured: 12); timers are the fallback (a hidden page throttles them).
   const untilIdle = async budgetMs => {
     for (let turn = 0; turn < 256 && executor.active; turn += 1) await Promise.resolve();
@@ -91,7 +116,7 @@ const EXECUTOR_TOOLS_SOURCE = `function (executor) {
     }
     return cancelled;
   };
-  return { stateTag, active, nameOf, isDefault, idleDefault, untilIdle, cancelIdleDefaults };
+  return { stateTag, active, nameOf, isDefault, idleDefault, editedDefault, touched, untilIdle, cancelIdleDefaults };
 }`;
 
 /** How long the guard waits for a default command to reach Awaiting, or to end after its cancel. */
@@ -99,6 +124,18 @@ export const SELECTION_GUARD_SETTLE_MS = 1_500;
 
 /** While the wrapped source is pending, an idle default command is cancelled once it is seen on two checks this far apart. */
 export const SELECTION_GUARD_WATCH_MS = 50;
+/** The budget of a guard when mutate() is given no timeout: the CDP client's own request timeout. */
+export const SELECTION_GUARD_DEFAULT_BUDGET_MS = 10_000;
+/** The start of the error a guarded edit is refused with while the user edits a default gizmo. */
+export const USER_IS_EDITING = "Plasticity is busy: the user is editing";
+
+// What "runs a command" looks like in a native source. Deliberately broad (a regular expression's exec() counts too):
+// a source that matches runs inside the guard, and only a source with none of these is sent as it is.
+const COMMAND_SOURCE_PATTERN = /\.exec\(|\[\s*['"`]exec['"`]\s*\]|\.enqueue\(|\[\s*['"`]enqueue['"`]\s*\]|\.undo\(\)|\.redo\(\)|\[args\.direction\]\(\)|\.execute\(|\.execute\.call\(|cancelActiveCommand\(|enqueueDefaultCommand\(/;
+/** Whether a native source may run a Plasticity command (and so runs inside the selection guard). */
+export function sourceRunsCommand(functionDeclaration: string): boolean {
+  return COMMAND_SOURCE_PATTERN.test(functionDeclaration);
+}
 /** The key of the envelope the guarded source returns: { [key]: report, value: <the source's own result> }. */
 export const SELECTION_GUARD_KEY = "plasticityMcpSelectionGuard";
 
@@ -108,6 +145,8 @@ export interface SelectionGuardReport {
   mode: "guarded" | "pass-through";
   /** Why the guard stood aside (another command was active, or this build lacks the selection API). */
   passThrough?: string;
+  /** The source settled after the guard's budget: the saved selection was put back only into an empty selection. */
+  late?: boolean;
   /** Default commands cancelled before the source ran, while it ran, and after it. */
   cancelledAtEntry: string[];
   cancelledWhileRunning: string[];
@@ -128,11 +167,12 @@ export interface SelectionGuardReport {
 // value } and rethrows the source's own error; nothing it does itself can throw past it.
 // It is not a nativeFunction source: the two things it needs from the document (the geometry model and the stable id
 // of a body version) are read here for both editor layouts, which keeps the 16 KB nativeApi prelude out of every call.
-export const SELECTION_GUARD_SOURCE = `async function (run) {
+export const SELECTION_GUARD_SOURCE = `async function (run, options) {
   const report = { mode: 'pass-through', cancelledAtEntry: [], cancelledWhileRunning: [], cancelledAtExit: [], saved: 0, restored: 0, dropped: 0, problems: [] };
   // Problems of an earlier call whose source threw (it had no envelope to carry them) are reported by this one.
   const pendingKey = Symbol.for('plasticity-mcp.selection-guard-problems');
   try { if (Array.isArray(globalThis[pendingKey])) { report.earlierProblems = globalThis[pendingKey]; delete globalThis[pendingKey]; } } catch {}
+  const stash = problems => { try { globalThis[pendingKey] = [...(Array.isArray(globalThis[pendingKey]) ? globalThis[pendingKey] : []), ...problems].slice(-20); } catch {} };
   const envelope = value => ({ ${SELECTION_GUARD_KEY}: report, value });
   const message = error => String(error?.message ?? error);
   const executor = this.executor;
@@ -159,6 +199,7 @@ export const SELECTION_GUARD_SOURCE = `async function (run) {
   const stableOf = version => { try { return legacy ? this.db.lookupStableId(version) : this.geo.lookupStableId(version); } catch { return undefined; } };
   const typeOf = version => geometry()?.get?.(version)?.view?.constructor?.name ?? null;
   let saved;
+  let refusal;
   // Whole bodies of the selection, by memento id: the stable id and the body type they had at entry.
   const bodies = new Map();
   // The selected items themselves, for the last fallback of restore().
@@ -184,9 +225,11 @@ export const SELECTION_GUARD_SOURCE = `async function (run) {
       } catch { items.length = 0; }
     }
     if (executor.active) report.cancelledAtEntry = await tools.cancelIdleDefaults(${SELECTION_GUARD_SETTLE_MS});
-    // Another command is active (the user's own, or a default command that is computing): change nothing.
     const other = tools.active();
-    if (other) report.passThrough = tools.nameOf(other) + ' is active (state ' + String(tools.stateTag(other._state)) + ')';
+    // A default gizmo the user has changed (its factory holds a preview): the edit is refused below, before the source runs.
+    if (other && tools.editedDefault(other)) refusal = new Error('${USER_IS_EDITING} with the ' + tools.nameOf(other) + ' gizmo (it holds a preview with changes that are not committed). Finish or cancel that gizmo in Plasticity, then repeat this call. Nothing was changed, and the gizmo and its preview were left as they are.');
+    // Another command is active (the user's own, or a default command that does not reach Awaiting): change nothing.
+    else if (other) report.passThrough = tools.nameOf(other) + ' is active (state ' + String(tools.stateTag(other._state)) + ')';
     else {
       if (count() > 0) selected.removeAll();
       report.mode = 'guarded';
@@ -197,7 +240,7 @@ export const SELECTION_GUARD_SOURCE = `async function (run) {
     if (saved !== undefined && report.mode !== 'guarded') { try { if (idsOf(saved).length > 0 && count() === 0) selected.restoreFromMemento(saved); } catch {} }
     if (report.mode !== 'guarded') saved = undefined;
   }
-  const stash = problems => { try { globalThis[pendingKey] = [...(Array.isArray(globalThis[pendingKey]) ? globalThis[pendingKey] : []), ...problems].slice(-20); } catch {} };
+  if (refusal) { if (report.earlierProblems) stash(report.earlierProblems); throw refusal; }
   const currentId = id => {
     const split = id.indexOf(':');
     if (split < 0) return id;
@@ -293,12 +336,27 @@ export const SELECTION_GUARD_SOURCE = `async function (run) {
     report.restored = added; report.dropped = ids.length - added; report.restoredBy = added > 0 ? 'items' : 'left';
     if (added === 0) report.problems.push('restore: the selection could not be put back and is empty (' + kept.length + ' of its ' + ids.length + ' items still exist)');
   };
+  // The budget: the timeout of this guard's CDP call. Past it the call has been given up.
+  const budgetMs = Number.isFinite(options?.budgetMs) && options.budgetMs > 0 ? options.budgetMs : ${SELECTION_GUARD_DEFAULT_BUDGET_MS};
+  const deadline = Date.now() + budgetMs;
+  // The registry of guards whose source is still pending, for reconcile(): it can end the watch of an abandoned guard
+  // and put its saved selection back (into an empty selection only).
+  const registryKey = Symbol.for('plasticity-mcp.selection-guards');
+  const entry = {
+    owner: options?.owner ?? null, deadline, abandoned: false, handedOver: false,
+    held: () => report.mode === 'guarded' && saved !== undefined ? idsOf(saved).length : 0,
+    restoreIfEmpty: () => { if (entry.handedOver || report.mode !== 'guarded' || saved === undefined || idsOf(saved).length === 0 || executor.active || count() !== 0) return 0; entry.handedOver = true; restore(); return report.restored; },
+  };
+  try { (globalThis[registryKey] ??= new Set()).add(entry); } catch {}
+  const abandoned = () => entry.abandoned || Date.now() >= deadline;
   // While the source is pending, a default command that idles in Awaiting keeps an exec() of the source pending (a
   // selection made during the call, or a command of the user that ended between the entry check and the source's
-  // exec()). It is cancelled once it has been seen idle on two checks.
+  // exec()). It is cancelled once it has been seen idle on two checks. The watch ends with the call: when the source
+  // settles, or at the budget, whichever comes first. A gizmo the user starts after that is the user's.
   let seen = null;
   const watch = setInterval(() => {
     try {
+      if (abandoned()) { clearInterval(watch); return; }
       const command = tools.active();
       if (!command || !tools.idleDefault(command)) { seen = null; return; }
       if (seen !== command) { seen = command; return; }
@@ -314,7 +372,16 @@ export const SELECTION_GUARD_SOURCE = `async function (run) {
     return envelope(value);
   } finally {
     clearInterval(watch);
-    if (saved !== undefined && report.mode === 'guarded') {
+    try { globalThis[registryKey]?.delete(entry); } catch {}
+    if (saved !== undefined && report.mode === 'guarded' && abandoned()) {
+      // The call was given up before the source settled. Whatever is selected now was selected by the user (or put
+      // back by reconcile()) in the meantime and wins; a default command that awaits now is the user's gizmo.
+      report.late = true;
+      try {
+        if (!entry.handedOver && !executor.active && count() === 0) restore();
+        else report.restoredBy = 'left';
+      } catch (error) { report.problems.push('exit: ' + message(error)); }
+    } else if (saved !== undefined && report.mode === 'guarded') {
       try {
         if (executor.active) report.cancelledAtExit = await tools.cancelIdleDefaults(${SELECTION_GUARD_SETTLE_MS});
         // A command that is not an idle default command is still active (a pick command left to finish): the selection is its own.
@@ -351,12 +418,12 @@ export const SELECTION_GUARD_SOURCE = `async function (run) {
 }`;
 
 /** Wraps a mutate() source so that it runs inside the selection guard. The wrapped source keeps its `this` and arguments. */
-export function selectionSafeSource(functionDeclaration: string): string {
+export function selectionSafeSource(functionDeclaration: string, options: { budgetMs?: number; owner?: string } = {}): string {
   return `async function (...mcpArguments) {
   const mcpSource = (
 ${functionDeclaration}
   );
-  return await (${SELECTION_GUARD_SOURCE}).call(this, () => mcpSource.apply(this, mcpArguments));
+  return await (${SELECTION_GUARD_SOURCE}).call(this, () => mcpSource.apply(this, mcpArguments), ${JSON.stringify({ budgetMs: options.budgetMs ?? SELECTION_GUARD_DEFAULT_BUDGET_MS, owner: options.owner ?? null })});
 }`;
 }
 
@@ -364,28 +431,43 @@ ${functionDeclaration}
 export interface ReconcileRecovery {
   /** The idle default command(s) that a timed-out call left awaiting input, and that reconcile cancelled. */
   cancelledDefaultCommands?: string[];
-  /** A command that is still active after reconcile; it was not touched. */
-  activeCommand?: { name: string; state: string | null; default: boolean };
+  /** A command that is still active after reconcile; it was not touched. edited: a default gizmo that holds changes of the user. */
+  activeCommand?: { name: string; state: string | null; default: boolean; edited?: boolean };
+  /** Items put back into an empty selection: the selection that a call which timed out had set aside. */
+  restoredSelection?: number;
   note: string;
 }
 
-// The recovery step of reconcile(): cancels a default command that idles in Awaiting (what a timed-out call leaves
-// behind when the chain described above ran), and reports any other active command without touching it. It leaves the
-// selection as Plasticity keeps it and never undoes or repeats an edit.
-export const DEFAULT_COMMAND_RECOVERY_SOURCE = `async function () {
+// The recovery step of reconcile(). It cancels a default command that idles in Awaiting and that the user has not
+// touched (what a timed-out call leaves behind when the chain described above ran); it reports any other active
+// command, also a default gizmo with changes of the user, without touching it; and it ends the watch of a guard whose
+// call was given up and puts that guard's saved selection back when nothing is selected and nothing is active. It
+// never undoes or repeats an edit.
+export const DEFAULT_COMMAND_RECOVERY_SOURCE = `async function (options) {
   const pendingKey = Symbol.for('plasticity-mcp.selection-guard-problems');
   let problems = [];
   try { if (Array.isArray(globalThis[pendingKey])) { problems = globalThis[pendingKey]; delete globalThis[pendingKey]; } } catch {}
   const executor = this.executor;
-  if (!executor || !executor.active) return problems.length > 0 ? { cancelled: [], active: null, problems } : null;
-  const tools = (${EXECUTOR_TOOLS_SOURCE})(executor);
-  const cancelled = await tools.cancelIdleDefaults(${SELECTION_GUARD_SETTLE_MS});
-  const command = tools.active();
-  return {
-    cancelled,
-    active: command ? { name: tools.nameOf(command), state: tools.stateTag(command._state), default: tools.isDefault(command) } : null,
-    problems,
-  };
+  let cancelled = [], active = null;
+  if (executor?.active) {
+    const tools = (${EXECUTOR_TOOLS_SOURCE})(executor);
+    cancelled = await tools.cancelIdleDefaults(${SELECTION_GUARD_SETTLE_MS});
+    const command = tools.active();
+    active = command ? { name: tools.nameOf(command), state: tools.stateTag(command._state), default: tools.isDefault(command), edited: tools.editedDefault(command) } : null;
+  }
+  // Guards whose source is still pending: those of this runtime (its calls run one at a time, so a guard that is
+  // still listed was given up) and those of any other client past their budget.
+  let restored = 0, held = 0;
+  try {
+    for (const entry of globalThis[Symbol.for('plasticity-mcp.selection-guards')] ?? []) {
+      if (!(entry.owner !== null && entry.owner === options?.owner) && Date.now() < entry.deadline) continue;
+      entry.abandoned = true;
+      held += entry.held();
+      restored += entry.restoreIfEmpty();
+    }
+  } catch (error) { problems = [...problems, 'reconcile: ' + String(error?.message ?? error)]; }
+  if (cancelled.length === 0 && active === null && restored === 0 && held === 0 && problems.length === 0) return null;
+  return { cancelled, active, restored, held, problems };
 }`;
 
 export function mutationOutcomeIsUncertain(error: unknown): boolean {
@@ -572,6 +654,8 @@ export class PlasticityRuntime {
   // mutation of this process while the count is unchanged (the batch state reuse in PlasticityOperations).
   private mutations = 0;
   private lastGuard: SelectionGuardReport | undefined;
+  // Names this runtime's guards in the page's registry, so that reconcile() knows which pending guards are its own.
+  private readonly guardOwner = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   private guardLog: (line: string) => void = (line) => { process.stderr.write(`${line}\n`); };
   private readonly connectClient: (url: string) => Promise<CdpClient>;
 
@@ -653,6 +737,7 @@ export class PlasticityRuntime {
     values: unknown[] = [],
     timeoutMs?: number,
     // selectionGuard false: only for a source that runs no command (selection-safe-sites.test.ts checks every such site).
+    // selectionGuard true: the guard also for a source in which sourceRunsCommand() sees no command.
     options: { selectionGuard?: boolean } = {},
   ): Promise<T> {
     this.mutations += 1;
@@ -660,8 +745,10 @@ export class PlasticityRuntime {
       if (this.uncertain) throw new Error("Previous mutation outcome is uncertain; call reconcile before another mutation");
       try {
         // Every command the server runs goes through here, inside the selection guard (see SELECTION_GUARD_SOURCE).
-        if (options.selectionGuard === false) return await this.call<T>(functionDeclaration, bindingNames, values, timeoutMs);
-        return this.unwrapGuarded<T>(await this.call<unknown>(selectionSafeSource(functionDeclaration), bindingNames, values, timeoutMs));
+        // A source that runs no command cannot reach the executor: it is sent as it is and never touches the selection or a gizmo.
+        if (options.selectionGuard === false || (options.selectionGuard !== true && !sourceRunsCommand(functionDeclaration))) return await this.call<T>(functionDeclaration, bindingNames, values, timeoutMs);
+        const guarded = selectionSafeSource(functionDeclaration, { budgetMs: timeoutMs ?? SELECTION_GUARD_DEFAULT_BUDGET_MS, owner: this.guardOwner });
+        return this.unwrapGuarded<T>(await this.call<unknown>(guarded, bindingNames, values, timeoutMs));
       } catch (error) {
         if (mutationOutcomeIsUncertain(error)) this.uncertain = true;
         throw error;
@@ -703,15 +790,25 @@ export class PlasticityRuntime {
   // keeps a timed-out exec() pending. Nothing is undone or repeated; any other active command is reported, not touched.
   async reconcile(timeoutMs = NATIVE_STATE_READ_TIMEOUT_MS): Promise<RuntimeState & { recovery?: ReconcileRecovery }> {
     const recovery = await this.recoverIdleDefaultCommand();
-    const state = await this.getState(timeoutMs);
+    let state: RuntimeState;
+    try {
+      state = await this.getState(timeoutMs);
+    } catch (error) {
+      // Plasticity refuses the read while a preview is held, so there is no state to give and the session stays as
+      // it was. The error then carries what the recovery found: the command that was left, by name.
+      if (recovery && error instanceof Error && error.message.startsWith(USER_IS_EDITING)) {
+        throw new Error(`${USER_IS_EDITING}, so the document cannot be read and the session was not reconciled. ${recovery.note} Repeat plasticity_reconcile after the user has finished or cancelled it in Plasticity. Nothing was changed, and the preview was left as it is. (Plasticity: snapshot(): scratch active)`);
+      }
+      throw error;
+    }
     this.uncertain = false;
     return recovery ? { ...state, recovery } : state;
   }
 
   private async recoverIdleDefaultCommand(): Promise<ReconcileRecovery | undefined> {
-    let found: { cancelled?: unknown; active?: { name?: unknown; state?: unknown; default?: unknown } | null; problems?: unknown } | null;
+    let found: { cancelled?: unknown; active?: { name?: unknown; state?: unknown; default?: unknown; edited?: unknown } | null; restored?: unknown; held?: unknown; problems?: unknown } | null;
     try {
-      found = await this.read<typeof found>(DEFAULT_COMMAND_RECOVERY_SOURCE, [], 10_000);
+      found = await this.read<typeof found>(DEFAULT_COMMAND_RECOVERY_SOURCE, [{ owner: this.guardOwner }], 10_000);
     } catch (error) {
       // A closed or timed-out connection fails the state read that follows as well; anything else must not block it.
       if (mutationOutcomeIsUncertain(error)) throw error;
@@ -721,13 +818,18 @@ export class PlasticityRuntime {
     if (Array.isArray(found.problems)) this.logGuardProblems(found.problems);
     const cancelled = Array.isArray(found.cancelled) ? found.cancelled.map(String) : [];
     const active = found.active && typeof found.active === "object"
-      ? { name: String(found.active.name), state: found.active.state === null || found.active.state === undefined ? null : String(found.active.state), default: found.active.default === true }
+      ? { name: String(found.active.name), state: found.active.state === null || found.active.state === undefined ? null : String(found.active.state), default: found.active.default === true, ...(found.active.edited === true ? { edited: true } : {}) }
       : undefined;
-    if (cancelled.length === 0 && !active) return undefined;
+    const restored = Number.isInteger(found.restored) ? Number(found.restored) : 0;
+    const held = Number.isInteger(found.held) ? Number(found.held) : 0;
+    if (cancelled.length === 0 && !active && restored === 0 && held === 0) return undefined;
     const notes: string[] = [];
-    if (cancelled.length > 0) notes.push(`Cancelled ${cancelled.join(", ")}: an idle default command for the current selection (its gizmo) that was left awaiting input. No edit was undone or repeated, and the selection was kept.`);
-    if (active) notes.push(`${active.name} is still active (state ${active.state ?? "unknown"}) and was not touched; finish or cancel it in Plasticity before the next edit.`);
-    return { ...(cancelled.length > 0 ? { cancelledDefaultCommands: cancelled } : {}), ...(active ? { activeCommand: active } : {}), note: notes.join(" ") };
+    if (cancelled.length > 0) notes.push(`Cancelled ${cancelled.join(", ")}: an idle default command for the current selection (its gizmo, which nobody had changed) that was left awaiting input. No edit was undone or repeated, and the selection was kept.`);
+    if (active?.edited) notes.push(`${active.name} is active and holds changes the user made (the preview of its gizmo); it was not touched. Edits are refused until the user finishes or cancels that gizmo in Plasticity.`);
+    else if (active) notes.push(`${active.name} is still active (state ${active.state ?? "unknown"}) and was not touched; finish or cancel it in Plasticity before the next edit.`);
+    if (restored > 0) notes.push(`Put back the selection (${restored} item${restored === 1 ? "" : "s"}) that a call which timed out had set aside.`);
+    else if (held > 0) notes.push(`A call that timed out had set aside a selection of ${held} item${held === 1 ? "" : "s"}; it was not put back, because ${active ? "a command is active" : "something else is selected now"}.`);
+    return { ...(cancelled.length > 0 ? { cancelledDefaultCommands: cancelled } : {}), ...(active ? { activeCommand: active } : {}), ...(restored > 0 ? { restoredSelection: restored } : {}), note: notes.join(" ") };
   }
 
   mutationCount(): number {
@@ -747,7 +849,22 @@ export class PlasticityRuntime {
     return await this.readStateNative<RevisionProbe>(timeoutMs, [{ probe: true }]);
   }
 
+  // While a gizmo or a command of the user holds a preview that is not committed (measured live: the default fillet
+  // gizmo after a drag, held or released), Plasticity refuses the snapshot this read takes ("snapshot(): scratch
+  // active"). Every tool reads the state first, so that is what an edit, an export or reconcile meets then. The
+  // error says what it means; nothing was changed and the preview is left as it is.
   private async readStateNative<T>(timeoutMs: number, values: unknown[]): Promise<T> {
+    try {
+      return await this.readStateSource<T>(timeoutMs, values);
+    } catch (error) {
+      if (error instanceof Error && /scratch active/.test(error.message)) {
+        throw new Error(`${USER_IS_EDITING} in Plasticity (a gizmo or a command holds a preview with changes that are not committed), so the document cannot be read right now. Finish or cancel it in Plasticity, then repeat this call. Nothing was changed, and the preview was left as it is. (Plasticity: snapshot(): scratch active)`);
+      }
+      throw error;
+    }
+  }
+
+  private async readStateSource<T>(timeoutMs: number, values: unknown[]): Promise<T> {
     return await this.readNative<T>(nativeFunction`function (ConstructionPlaneDatabase, Vector, Quaternion, pk_default, options) {
       const mm = value => value * 1000;
       const vector = value => [mm(value.x), mm(value.y), mm(value.z)];

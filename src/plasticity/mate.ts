@@ -544,11 +544,14 @@ export interface TransferHolesResult {
   skipped?: Array<{ axisIndex: number; pointMm: Vector3; axis: Vector3; reason: string }>;
   maxCoaxialOffsetMm: number;
   probe: { rays: number; calls: number; ms: number }; // the exact ray probe that planned the cut
+  clearance?: { points: number; calls: number; ms: number }; // the exact clearance check of the cut surfaces: kernel distance reads, native calls, time
   floorProbe?: { rays: number; calls: number; ms: number }; // blind holes: the rays cast from each cut floor after the edit
   undoSteps: number;
   steps: MateStep[];
 }
-export type TransferOperations = RecipeOperations & UndoCapable & { validateBodies: PlasticityOperations["validateBodies"]; probeSurface: PlasticityOperations["probeSurface"] };
+// faceDistances (the kernel's exact distance from points to a trimmed face) feeds the exact clearance check of
+// planTransfer. PlasticityOperations always has it; a stub without it gets the ray guards only.
+export type TransferOperations = RecipeOperations & UndoCapable & { validateBodies: PlasticityOperations["validateBodies"]; probeSurface: PlasticityOperations["probeSurface"]; faceDistances?: PlasticityOperations["faceDistances"] };
 
 /** Distinct full-turn cylinder radii of a body (for the no-match error), with kind and the number of distinct axes. */
 export function cylinderRadiiSummary(body: Body): Array<{ radiusMm: number; kind: "hole" | "boss"; axes: number }> {
@@ -989,7 +992,7 @@ const entryRadius = (hole: TransferHoleSpec): number => (hole.counterbore ? hole
 const OVERSHOOT_MM = 0.5;
 const PROBE_BATCH = 64;
 
-export interface TransferPlan { source: Body; target: Body; holes: PlannedHole[]; skipped: NonNullable<TransferHolesResult["skipped"]>; probe: { rays: number; calls: number; ms: number } }
+export interface TransferPlan { source: Body; target: Body; holes: PlannedHole[]; skipped: NonNullable<TransferHolesResult["skipped"]>; probe: { rays: number; calls: number; ms: number }; clearance?: { points: number; calls: number; ms: number } }
 
 /** The source axes of a transfer, checked (pure). */
 function transferAxes(state: RuntimeState, input: TransferHolesInput): { source: Body; target: Body; axes: SourceAxis[] } {
@@ -1030,7 +1033,196 @@ function transferAxes(state: RuntimeState, input: TransferHolesInput): { source:
 /** The probe radii of a hole: the bore, then the countersink head or counterbore when there is one. */
 const probeRadii = (hole: TransferHoleSpec): number[] => (hole.countersunk || hole.counterbore ? [hole.diameterMm / 2, entryRadius(hole)] : [hole.diameterMm / 2]);
 
-export async function planTransfer(operations: Pick<TransferOperations, "probeSurface">, state: RuntimeState, input: TransferHolesInput): Promise<TransferPlan> {
+// ---- The exact clearance of the cut surface (review round 4)
+// The clearance ring above samples 8 or 16 angles, so a wall whose nearest line lies between two rays was not seen (a
+// bore beside a hole with the line of centres at 10, 22.5 or 67.5 degrees; a pocket wall turned 22.5 degrees). The
+// kernel binding has no face-to-face range call (Eval offers DistancesToPoints, Collisions and BoxesCollisions;
+// Measurer.Measure takes mesh vertices), so the minimum is found with the point-to-face range read instead, without
+// trusting any sampling: the distance from a point to a face cannot change faster than the point moves, so one read
+// bounds the distance of every point within a known reach of it. A ring of the cut surface (the whole turn, a stretch
+// along the axis) is read at its axis point: every point of the ring lies within the ring's radius plus half its
+// height of that point. A ring whose bound clears the limit is done; a shorter ring is tried while its radius alone
+// still clears it; otherwise the ring's surface is read, a quarter turn at a time, each piece at its centre: a
+// centre nearer than CLEARANCE_RING_MM refuses the cut, a piece whose bound clears the limit is done, the rest are
+// halved, down to pieces of CLEARANCE_RESOLUTION_MM. The limit of the proof is CLEARANCE_RING_MM -
+// CLEARANCE_RESOLUTION_MM. What this guarantees, for every face shape and every angle:
+//   - a target face (other than the faces the cut passes through) nearer than 0.045 mm to any point of the cut
+//     surface refuses the cut before the edit;
+//   - a cut is refused only for a point of the cut surface that the kernel puts nearer than CLEARANCE_RING_MM (0.05
+//     mm) to such a face, or when the proof runs out of budget (a face that hugs the cut surface between 0.045 and
+//     0.05 mm over a long stretch); between 0.045 and 0.05 mm either can happen.
+// cutPatches() gives the whole ideal cut surface of the plan: the bore cylinder from the entry (or from under the
+// head) to the depth (through: to where the axis leaves the target's bounds), the countersink cone, the counterbore
+// wall and shoulder, and the floor of a blind hole. The plan checks the cylindrical walls of it (boreWallPatches):
+// the bore and the wall of a counterbore. The countersink cone and the floors keep their own guards and their own
+// words: a cone that breaks out is read back after the cut and undone, and so is a membrane under a blind floor
+// (the floor rays); beside a cone only the ring of rays looks, so a wall there is seen where a ray points. A wall
+// that ends on a floor of the cut is measured to CLEARANCE_RING_MM above it: a face under a floor is the floor
+// guard's or the depth rules'. The faces the cut passes through are the planar faces normal to the axis
+// that the axis and radius rays cross within the cut's reach, and every face in one of those planes.
+
+/** The exact clearance check reads the kernel down to pieces of the cut surface this small. */
+export const CLEARANCE_RESOLUTION_MM = 0.005;
+// The kernel's range read resolves 1e-8 m; a distance this far below the limit is still the limit.
+const CLEARANCE_READ_MM = 1e-5;
+// A refusal instead of an unbounded search: more points than this in one round (a wall that hugs the limit over a long bore).
+const CLEARANCE_MAX_POINTS = 60_000;
+// The display-mesh box of a curved face can lie inside the face by its chord error; a face is left out only beyond this.
+const CLEARANCE_BOX_PAD_MM = 1;
+
+/** One piece of the ideal cut surface: the straight profile from (rho0, z0) to (rho1, z1), in mm from the axis and along it from the entry point, turned about the axis. */
+export interface CutPatch { what: "bore" | "head" | "floor"; rho0: number; z0: number; rho1: number; z1: number }
+
+/** Pure: the ideal cut surface of one planned hole. */
+export function cutPatches(hole: Pick<PlannedHole, "farDistanceMm">, spec: TransferHoleSpec): CutPatch[] {
+  const r = spec.diameterMm / 2;
+  const end = spec.depthMm ?? hole.farDistanceMm;
+  const patches: CutPatch[] = [];
+  let top = 0;
+  if (spec.countersunk) { const R = spec.countersunk.headDiameterMm / 2; top = R - r; patches.push({ what: "head", rho0: R, z0: 0, rho1: r, z1: top }); }
+  else if (spec.counterbore) { const R = spec.counterbore.diameterMm / 2; top = spec.counterbore.depthMm; patches.push({ what: "head", rho0: R, z0: 0, rho1: R, z1: top }, { what: "head", rho0: R, z0: top, rho1: r, z1: top }); }
+  if (end > top) patches.push({ what: "bore", rho0: r, z0: top, rho1: r, z1: end });
+  if (spec.depthMm !== undefined) patches.push({ what: "floor", rho0: r, z0: end, rho1: 0, z1: end });
+  return patches;
+}
+
+/**
+ * Pure: the part of the cut surface the plan measures before the edit: the cylindrical walls (the bore, and the wall
+ * of a counterbore). A wall that ends on a floor of the cut (a blind bore, a counterbore on its shoulder) is measured
+ * to CLEARANCE_RING_MM above that floor: what lies under a floor belongs to the depth rules and the floor guard.
+ */
+export function boreWallPatches(hole: Pick<PlannedHole, "farDistanceMm">, spec: TransferHoleSpec): CutPatch[] {
+  return cutPatches(hole, spec).filter((patch) => patch.rho0 === patch.rho1 && patch.z1 > patch.z0)
+    .map((patch) => (patch.what === "head" || spec.depthMm !== undefined ? { ...patch, z1: patch.z1 - CLEARANCE_RING_MM } : patch))
+    .filter((patch) => patch.z1 > patch.z0);
+}
+
+/** Pure: the faces the cut passes through, from the rays on the axis and on the cut radii (the drill side), up to reachMm past the entry. */
+export function crossedFaceIds(target: Body, hole: PlannedHole, innerRays: ProbeRayResult[], reachMm: number): Set<string> {
+  const crossed = new Set<string>();
+  const planes: number[] = [];
+  for (const ray of innerRays) {
+    const hits = entering(ray, hole.direction);
+    const first = hits[0];
+    if (!first) continue;
+    for (const hit of hits) {
+      if (hit.distanceMm > first.distanceMm + reachMm + MIN_FEATURE_MM + RAY_AGREE_MM) break;
+      crossed.add(hit.faceId);
+      planes.push(hit.distanceMm - first.distanceMm);
+    }
+  }
+  // Every face in a plane the cut passes through: it cannot stand beside the cut (a split entry or exit face).
+  for (const face of target.faces) {
+    if (crossed.has(face.id) || !normalToAxis(face, hole.direction)) continue;
+    const along = dot(sub(face.centerMm, hole.entryPointMm), hole.direction);
+    if (planes.some((plane) => Math.abs(plane - along) <= 1e-6)) crossed.add(face.id);
+  }
+  return crossed;
+}
+
+export interface ClearanceEntry { label: string; entryPointMm: Vector3; direction: Vector3; patches: CutPatch[]; crossed: ReadonlySet<string> }
+export interface ClearanceResult { problem?: string; points: number; calls: number }
+type FaceDistanceReader = (queries: Array<{ faceId: string; pointsMm: Vector3[] }>) => Promise<Array<Array<number | null>>>;
+
+/**
+ * The exact clearance check: undefined problem when every point of every cut surface is proven at least
+ * CLEARANCE_RING_MM - CLEARANCE_RESOLUTION_MM from every target face the cut does not pass through. `distances`
+ * returns, per query, the kernel's distance in mm from each point to that trimmed face (null: the read failed).
+ */
+export async function cutClearance(distances: FaceDistanceReader, target: Body, entries: ClearanceEntry[]): Promise<ClearanceResult> {
+  // A piece of a patch: s along the profile (0..1), t around the axis (radians). A ring is the whole turn; it is read
+  // at its axis point, which bounds every point of the ring (none is farther from it than the ring's radius).
+  interface Cell { entry: number; patch: number; faceId: string; s0: number; s1: number; t0: number; t1: number; ring: boolean }
+  const limit = CLEARANCE_RING_MM - CLEARANCE_RESOLUTION_MM;
+  const frames = entries.map((entry) => { const d = unit(entry.direction, "axis"); const u = perpendicular(d); return { d, u, v: cross(d, u) }; });
+  const lengthOf = (patch: CutPatch) => Math.hypot(patch.rho1 - patch.rho0, patch.z1 - patch.z0);
+  const at = (cell: Cell) => {
+    const entry = entries[cell.entry]!, patch = entry.patches[cell.patch]!, frame = frames[cell.entry]!;
+    const s = (cell.s0 + cell.s1) / 2, theta = (cell.t0 + cell.t1) / 2;
+    const rhoAt = (value: number) => patch.rho0 + (patch.rho1 - patch.rho0) * value;
+    const rho = rhoAt(s), z = patch.z0 + (patch.z1 - patch.z0) * s;
+    const onAxis = add(entry.entryPointMm, scale(frame.d, z));
+    const along = lengthOf(patch) * (cell.s1 - cell.s0);
+    if (cell.ring) {
+      // Every point of the ring lies within its largest radius of an axis point, and that within half the ring's height of this one.
+      const height = Math.abs(patch.z1 - patch.z0) * (cell.s1 - cell.s0);
+      return { pointMm: onAxis, radius: Math.max(rhoAt(cell.s0), rhoAt(cell.s1)) + height / 2, reach: Math.min(rhoAt(cell.s0), rhoAt(cell.s1)), along, arc: 0, z };
+    }
+    const pointMm = add(onAxis, add(scale(frame.u, rho * Math.cos(theta)), scale(frame.v, rho * Math.sin(theta))));
+    // No point of the piece is farther from its centre than half its length along the profile plus half its arc there.
+    const arc = rho * (cell.t1 - cell.t0);
+    return { pointMm, radius: along / 2 + arc / 2, reach: 0, along, arc, z };
+  };
+  let cells: Cell[] = [];
+  for (const [e, entry] of entries.entries()) {
+    const frame = frames[e]!;
+    for (const [p, patch] of entry.patches.entries()) {
+      const rhoMax = Math.max(patch.rho0, patch.rho1);
+      const ends = [add(entry.entryPointMm, scale(frame.d, patch.z0)), add(entry.entryPointMm, scale(frame.d, patch.z1))];
+      const spread = [0, 1, 2].map((i) => rhoMax * Math.sqrt(Math.max(0, 1 - frame.d[i]! ** 2)));
+      const box = { min: [0, 1, 2].map((i) => Math.min(ends[0]![i]!, ends[1]![i]!) - spread[i]!), max: [0, 1, 2].map((i) => Math.max(ends[0]![i]!, ends[1]![i]!) + spread[i]!) };
+      for (const face of target.faces) {
+        if (entry.crossed.has(face.id)) continue;
+        const gap = Math.hypot(...[0, 1, 2].map((i) => Math.max(0, face.boundsMm.min[i]! - box.max[i]!, box.min[i]! - face.boundsMm.max[i]!)));
+        if (gap > CLEARANCE_RING_MM + CLEARANCE_BOX_PAD_MM) continue;
+        cells.push({ entry: e, patch: p, faceId: face.id, s0: 0, s1: 1, t0: 0, t1: 2 * Math.PI, ring: true });
+      }
+    }
+  }
+  const faceById = new Map(target.faces.map((face) => [face.id, face]));
+  let points = 0, calls = 0;
+  while (cells.length > 0) {
+    if (cells.length > CLEARANCE_MAX_POINTS) {
+      const entry = entries[cells[0]!.entry]!;
+      return { problem: `${entry.label}: the wall beside the cut could not be proven at least ${CLEARANCE_RING_MM} mm thick (a face runs along the cut surface at about that distance; ${points} kernel distance reads); the cut is refused before the edit`, points, calls };
+    }
+    const byFace = new Map<string, Cell[]>();
+    for (const cell of cells) { const list = byFace.get(cell.faceId); if (list) list.push(cell); else byFace.set(cell.faceId, [cell]); }
+    const groups = [...byFace.entries()];
+    const centres = groups.map(([, list]) => list.map(at));
+    const read = await distances(groups.map(([faceId], g) => ({ faceId, pointsMm: centres[g]!.map((centre) => centre.pointMm) })));
+    calls += 1;
+    points += cells.length;
+    const next: Cell[] = [];
+    let worst: { cell: Cell; distanceMm: number; centre: ReturnType<typeof at> } | undefined;
+    for (const [g, [faceId, list]] of groups.entries()) {
+      for (const [k, cell] of list.entries()) {
+        const distanceMm = read[g]?.[k];
+        const centre = centres[g]![k]!;
+        if (distanceMm === null || distanceMm === undefined || !Number.isFinite(distanceMm)) {
+          return { problem: `${entries[cell.entry]!.label}: the distance from the cut surface to target face ${faceId} could not be read from the kernel, so the wall beside the cut is not proven; the cut is refused before the edit`, points, calls };
+        }
+        // Proven: no point of the piece is nearer than the limit.
+        if (distanceMm - centre.radius >= limit) continue;
+        const half = (cell.s0 + cell.s1) / 2;
+        if (cell.ring) {
+          // A shorter ring can still be proven from the axis while its nearest circle clears the limit; otherwise
+          // (or when it is already as short as the resolution) its surface is read, a quarter turn at a time.
+          if (distanceMm - centre.reach >= limit && centre.along > CLEARANCE_RESOLUTION_MM) next.push({ ...cell, s1: half }, { ...cell, s0: half });
+          else for (let quarter = 0; quarter < 4; quarter += 1) next.push({ ...cell, ring: false, t0: quarter * Math.PI / 2, t1: (quarter + 1) * Math.PI / 2 });
+          continue;
+        }
+        // A point of the cut surface itself: nearer than the clearance is a thin wall.
+        if (distanceMm < CLEARANCE_RING_MM - CLEARANCE_READ_MM) { if (!worst || distanceMm < worst.distanceMm) worst = { cell, distanceMm, centre }; continue; }
+        if (centre.radius <= CLEARANCE_RESOLUTION_MM) continue;
+        if (centre.along >= centre.arc) next.push({ ...cell, s1: half }, { ...cell, s0: half });
+        else { const turn = (cell.t0 + cell.t1) / 2; next.push({ ...cell, t1: turn }, { ...cell, t0: turn }); }
+      }
+    }
+    if (worst) {
+      const entry = entries[worst.cell.entry]!, patch = entry.patches[worst.cell.patch]!, face = faceById.get(worst.cell.faceId);
+      const what = patch.what === "bore" ? "bore" : patch.what === "head" ? "bore's head" : "blind floor";
+      return {
+        problem: `${entry.label}: the hole leaves a wall thinner than ${CLEARANCE_RING_MM} mm beside the ${what}: target face ${worst.cell.faceId} (${face?.surfaceType ?? "face"}) lies ${round6([worst.distanceMm, 0, 0])[0]} mm from the cut surface at ${JSON.stringify(round6(worst.centre.pointMm))} (${round6([worst.centre.z, 0, 0])[0]} mm from the entry plane, the kernel's exact distance); the cut is refused before the edit`,
+        points, calls,
+      };
+    }
+    cells = next;
+  }
+  return { points, calls };
+}
+
+export async function planTransfer(operations: Pick<TransferOperations, "probeSurface" | "faceDistances">, state: RuntimeState, input: TransferHolesInput): Promise<TransferPlan> {
   const { source, target, axes } = transferAxes(state, input);
   const radii = probeRadii(input.hole);
   const reach = Math.max(...radii);
@@ -1055,6 +1247,7 @@ export async function planTransfer(operations: Pick<TransferOperations, "probeSu
   const probe = { rays: flat.length, calls, ms: Math.round((performance.now() - started) * 10) / 10 };
   const holes: PlannedHole[] = [];
   const skipped: TransferPlan["skipped"] = [];
+  const innerRaysOf = new Map<number, AxisRayResults>();
   let cursor = 0;
   for (const [index, axis] of axes.entries()) {
     const rays = perAxis[index];
@@ -1065,6 +1258,9 @@ export async function planTransfer(operations: Pick<TransferOperations, "probeSu
       const minus = results.slice(cursor, cursor + rays.minus.length);
       cursor += rays.minus.length;
       holes.push(planEntry(target, axis, index, radii, { plus, minus }, input.hole.depthMm ?? Number.POSITIVE_INFINITY, headReach));
+      // The axis ray and the rays on the cut radii, for the exact clearance check below.
+      const innerCount = 1 + radii.length * ((plus.length - 1) / (2 * radii.length));
+      innerRaysOf.set(index, { plus: plus.slice(0, innerCount), minus: minus.slice(0, innerCount) });
     } catch (error) {
       if (!(error instanceof AxisRefusal) || error.code !== "miss" || input.onMiss !== "skip") throw error;
       skipped.push({ axisIndex: index, pointMm: round6(axis.pointMm), axis: round6(axis.direction), reason: error.message });
@@ -1088,7 +1284,22 @@ export async function planTransfer(operations: Pick<TransferOperations, "probeSu
     if (hole.unproven) throw new AxisRefusal("unproven", hole.unproven);
     if (hole.thinWall) throw new AxisRefusal("thin-wall", hole.thinWall);
   }
-  return { source, target, holes, skipped, probe };
+  // The exact clearance of every cylindrical wall of the cut, after the ray guards (so that their messages stay as they were).
+  let clearance: TransferPlan["clearance"];
+  if (typeof operations.faceDistances === "function") {
+    const reader = operations.faceDistances.bind(operations);
+    const clearanceStarted = performance.now();
+    const entries = holes.map((hole): ClearanceEntry => {
+      const sides = innerRaysOf.get(hole.index)!;
+      const inner = dot(hole.direction, unit(hole.source.direction, "axis")) > 0 ? sides.plus : sides.minus;
+      const patches = boreWallPatches(hole, input.hole);
+      return { label: describeAxis(hole.index, hole.source), entryPointMm: hole.entryPointMm, direction: hole.direction, patches, crossed: crossedFaceIds(target, hole, inner, Math.max(0, ...patches.map((patch) => Math.max(patch.z0, patch.z1)))) };
+    }).filter((entry) => entry.patches.length > 0);
+    const result = await cutClearance(async (queries) => (await reader({ id: target.id, queries })).distancesMm, target, entries);
+    if (result.problem) throw new AxisRefusal("thin-wall", result.problem);
+    clearance = { points: result.points, calls: result.calls, ms: Math.round((performance.now() - clearanceStarted) * 10) / 10 };
+  }
+  return { source, target, holes, skipped, probe, ...(clearance ? { clearance } : {}) };
 }
 
 // Pattern recipes share one axis and one material depth, so holes group by both.
@@ -1359,6 +1570,7 @@ export async function transferHoles(operations: TransferOperations, input: Trans
     ...(plan.skipped.length > 0 ? { skipped: plan.skipped } : {}),
     maxCoaxialOffsetMm: Math.max(0, ...holes.map((hole) => hole.coaxialOffsetMm)),
     probe: plan.probe,
+    ...(plan.clearance ? { clearance: plan.clearance } : {}),
     ...(floorProbe ? { floorProbe } : {}),
     undoSteps: final.undoDepth - initial.undoDepth,
     steps,

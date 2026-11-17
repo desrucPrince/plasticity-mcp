@@ -21,10 +21,11 @@ const SECTIONS = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p6stall", "p6select
 // p6stall is opt-in (--only p6stall): an injected stall ends in a cancel while Plasticity may still be computing, and in
 // one of about 150 such trials the isolated renderer died.
 // p6select is opt-in (--only p6select): the final review's A1 check (an edit straight after an align, with faces still
-// selected). It fails on Plasticity 26.1.3 with this server, and not because of the align: with a face selected,
-// Plasticity starts its default face command after ANY edit that runs through editor.exec, so the edit call never
-// returns (measured with no align at all; discovery/probes-2026-11-surfacing/FINDINGS.md, "Selected faces and the next
-// edit"). The fix belongs in the shared command wrapper of operations.ts. Each failing trial costs a 10 s timeout.
+// selected). Before the selection guard it failed 7 of 7 on Plasticity 26.1.3, and not because of the align: with a
+// face selected, Plasticity starts its default face command after ANY command that finished, so the edit call never
+// returned (discovery/probes-2026-11-surfacing/FINDINGS.md, "Selected faces and the next edit"). Since the guard
+// (runtime.ts, SELECTION_GUARD_SOURCE; probes-2026-11-pick FINDINGS, "Selection and default commands") it passes 7 of
+// 7. It stays opt-in because it runs plasticity_surface_align seven times.
 const DEFAULT_SECTIONS: Section[] = ["p1", "p2", "p3", "p4", "p5", "p6", "p7"];
 type Section = (typeof SECTIONS)[number];
 
@@ -87,7 +88,7 @@ It builds disposable geometry at x >= 5000 mm and checks, per section:
      "unchanged" after finish(). One of about 150 such trials killed the renderer, so it is not in the default run.
   p6select (opt-in) the final review's A1 check: plasticity_join_sheets, plasticity_move and plasticity_fillet straight
      after an align with one and with two faces selected (under 1 s, selection kept, no active command), plus the same
-     edit with no align. Fails on 26.1.3 until the shared command wrapper stops Plasticity's default face command.
+     edit with no align. Failed 7 of 7 before the selection guard; passes 7 of 7 with it.
   p7 plasticity_square_surface: four curves (boundary heights read by probe rays); a flat neighbour Sheet plus three
      curves at g0 and g1 (joined, read by the continuity tool); error 30 on an open box at g1; refusals; one undo restores.
 Every section undoes to its start. At the end the undo depth, body set, shader and camera equal the start.`;
@@ -767,9 +768,9 @@ async function p6(ctx: Ctx) {
   check(ctx, "p6", "a face selected before the call is still selected after a verified align and after a refusal", selectedBefore.length === 1 && JSON.stringify(selectedAfterSuccess) === JSON.stringify(selectedBefore) && !refusedSel.ok && JSON.stringify(selectedAfterRefusal) === JSON.stringify(selectedBefore), results.selection);
   const activeAfterAlign = (await viewState(ctx)).activeCommand;
   check(ctx, "p6", "the align itself leaves no command active while the selection is back", activeAfterAlign === null, activeAfterAlign);
-  // The selection is cleared before the next edits. With a face still selected, Plasticity starts its default face
-  // command after any edit and that edit call does not return; this is not specific to the align (section p6select
-  // shows it, and that it also happens with no align).
+  // The selection is cleared before the next edits, so that this section checks the align alone. Before the selection
+  // guard an edit with a face still selected did not return (Plasticity starts its default face command after any
+  // command that finished); section p6select runs those edits with the selection kept, and they return now.
   await call(c, "plasticity_clear_selection", { revision: (await status(c)).revision });
   const g0 = await trial("g0", fixture.b, fixture.a, "g0");
   check(ctx, "p6", "G0: one step, edge on the reference (<= 0.001 mm), joined edge reads G0 or better", g0.aligned.undoSteps === 1 && g0.aligned.coincidence.maxGapMm <= 1e-3 && g0.row.passes.G0, results.g0);
