@@ -2558,13 +2558,18 @@ All lengths are millimetres. Inputs and defaults: `originMm` (outer bottom
 corner of the base); `board` `{ lengthMm (x), widthMm (y), thicknessMm 1.6,
 holes [{ xMm, yMm, diameterMm }] from the board's min corner, componentHeightMm,
 undersideClearanceMm 2 }`; `fit` `{ boardClearanceMm 0.5, lidClearanceMm 0.2 }`
-(per side); `walls` `{ wallMm 2 (at least 0.8), floorMm 2 (at least 0.8), lidMm 2,
-outerCornerRadiusMm 3 }`; `standoffs` `{ heightMm = undersideClearanceMm,
+(per side); `walls` `{ wallMm 2 (0.8 to 50), floorMm 2 (0.8 to 50), lidMm 2 (at
+most 50), outerCornerRadiusMm 3 (0 or at least 0.2), innerCornerRadiusMm }`; `standoffs` `{ heightMm = undersideClearanceMm,
 outerDiameterMm = hole + 3, fastener: { screw M2|M2.5|M3, mode
 pilot|heat-set-insert|through, pilotDiameterMm, pilotDepthMm (default the
 standoff height), insertLengthMm, clearanceFit close|medium|free (default
-medium) } }`; `lid` `{ lipDepthMm 1.5, lipWallMm 1.2, fasteners: { screw,
-count 4, bossDiameterMm 6, bossStyle floor|tapered|hanging (default floor),
+medium) } }` (`fastener` is required except with `bossStyle` `stack`, where it is
+refused; with inserts the default diameter rises to insert hole + 2 x sourced
+wall); `lid` `{ lipDepthMm 1.5, lipWallMm 1.2, fasteners: { screw,
+count 4, bossDiameterMm 6 (with inserts: insert hole + 2 x sourced wall if
+larger), bossStyle stack|floor|tapered|hanging (default: stack when the board
+has 2+ holes, no standoffs.fastener is given and a stack plan passes, else
+floor; `derived.bossStyleReason` says which rule chose it),
 allowBlockedBoard false, growAxis x|y (floor only), countersunk true,
 headDiameterMm, base pilot|heat-set-insert, pilotDiameterMm, pilotDepthMm,
 insertLengthMm, clearanceFit } }`; `openings` `[{ wall x-|x+|y-|y+|lid|floor,
@@ -2605,11 +2610,12 @@ f = floor, t = lid, d = lip depth, Ro = outer corner radius):
 - `lidTopZMm` = wallTop + t + exploded. The lid plate (outer size, outer corner
   radius) sits on the wall top. `lidMm` is the lid's planned bounds: the outer
   x/y, from the lip bottom (+ exploded) to the lid top.
-- Inner corner radius (`innerCornerRadiusMm`, Ri) = min(Ro - w, the largest the
-  board's square corner allows). The board corner sits bc from both walls; a
-  rounded cavity corner clears it when Ri <= bc x (2 + sqrt 2). The plan keeps
-  0.05 mm between the board corner and the arc: Ri <= (bc x sqrt 2 - 0.05) /
-  (sqrt 2 - 1) (1.586 for bc 0.5; the defaults give Ri = 1).
+- Inner corner radius (`innerCornerRadiusMm`, Ri) = min(Ro - w, bc), so the
+  diagonal play between the board's square corner and the arc,
+  `cornerGapMm` = bc x sqrt 2 - Ri x (sqrt 2 - 1), is at least bc (the play
+  reported on the sides). `walls.innerCornerRadiusMm` sets Ri explicitly while
+  `cornerGapMm` stays at least 0.2 mm. Ri (and the lip radii Ri - lc and
+  Ri - lc - lip wall) is 0 or at least 0.05 mm.
 - `cornerWallMm` = w x sqrt 2 - (Ro - Ri) x (sqrt 2 - 1), the wall along the
   corner diagonal (= w for a uniform wall, Ri = Ro - w). It must be at least
   max(0.8, 0.75 x w); the refusal names the largest `outerCornerRadiusMm` that
@@ -2629,7 +2635,24 @@ f = floor, t = lid, d = lip depth, Ro = outer corner radius):
   corner past the whole boss circle instead, so no sliver remains. The lid
   holes are coaxial. `lid.fasteners.bossStyle` (default `floor`) chooses how
   the boss is carried; `derived.bossStyle` echoes it:
-  - `floor` (default): the bosses stand on the floor and rise to the wall top
+  - `stack` (the default when it applies): no corner bosses. Each lid screw runs
+    lid -> lid post -> board hole -> standoff. The posts hang from the lid plate
+    over every board hole down to board top + 0.2 mm, as wide as the standoffs,
+    with the screw clearance hole through post and plate and the countersink or
+    plain head hole on top; the lid prints top face down, so the posts stand
+    upright (`printability.lidPostOverhangDeg` 0). The standoff holes take
+    `lid.fasteners.base` (pilot diameter and depth, or the insert); the depth
+    must fit the standoff height. Nothing grows, the board drops in, and
+    openings stay at the board edge on any wall. Refused: fewer than 2 holes, a
+    board hole smaller than the screw's close-fit clearance, `standoffs.fastener`
+    given, a post past the lid lip outline or less than 0.4 mm of lid around its
+    hole, a post in a wall opening's keep-out (its along range + 0.4 mm, from the
+    wall to 3 mm inside the board edge, above the board), a narrow gap between
+    two posts. A post 0 to 0.8 mm from the lip's inner face gets a lid web.
+    `derived.stack` reports the post axes, diameters, bottom, length, the
+    clearance hole and `screwLengthMm` = lid + post + 0.2 + board +
+    engagement (pilot depth or insert length).
+  - `floor` (the default otherwise): the bosses stand on the floor and rise to the wall top
     (`lidBossBottomZMm` = floor top; `fasteners.lid.bossLengthMm` is the real
     floor-to-wall-top length), and the cavity grows so every boss lies outside
     the board keep-out (board outline + boardClearance). The keep-out edge
@@ -2637,8 +2660,8 @@ f = floor, t = lid, d = lip depth, Ro = outer corner radius):
     (bossDiameter/2 - 0.5 + bossDiameter/2) in ONE axis (11 mm for a 6 mm
     boss). Growing an axis moves its two end walls away from the board, so an
     opening on them would no longer reach the board edge. Rule: grow the axis
-    whose two end walls carry no opening (wall openings and wall vents count;
-    lid and floor openings do not); when no wall carries one, the axis whose
+    whose two end walls carry no opening (wall openings count; wall vents, lid
+    and floor openings do not); when no wall carries one, the axis whose
     growth adds less floor area (x unless the cavity is shorter in x than in
     y); when both axes carry one, the call is refused unless
     `lid.fasteners.growAxis` names the axis (an explicit `growAxis` always
@@ -2689,6 +2712,16 @@ f = floor, t = lid, d = lip depth, Ro = outer corner radius):
   [width, height].
 - `plannedUndoSteps` is the number of Undo steps the composition takes, step
   for step; the build's measured `undoSteps` equals it.
+- `webs` (R4): every gap narrower than 0.8 mm between a standoff or boss and a
+  wall (or the rounded corner), or between two of them, is closed by a web the
+  full height of the lower feature: a box from the feature's axis to the wall
+  (0.2 mm into it) or to the corner, or a strip between the two circles as wide
+  as the smaller diameter. Webs are joined right after the cavity cut, so every
+  hole is cut through them later; a web that would cross another feature's hole
+  at its height is refused. Each web carries a `probeMm` point inside the gap it
+  closes. A floor boss and a standoff (both on the floor) may merge when the
+  boss stays 0.4 mm clear of the standoff hole; otherwise the refusal names the
+  hole to move or `bossStyle` `stack`.
 
 Fixed construction constants (returned as `constants`, not engineering values):
 1 mm headroom, 0.5 mm boss-to-wall overlap, 1 mm closed floor under a boss hole,
@@ -2728,14 +2761,22 @@ failed stage (`read-back` for the read-back), the confirmed step count, the
 undone count (they agree; a sub-recipe step that landed but failed its own check
 is listed, with the profile Wire it left) and whether the document matches the
 start; after an uncertain native result it undoes nothing and says to
-reconcile. The plan sets no lower limit on `board.thicknessMm`: a 1e-6 mm
-board stand-in passes it, Plasticity's box command refuses it, and the recipe
-undoes itself.
+reconcile. A profile opening (rect, rounded-rect, slot) that another profile
+cut follows on the same face has its profile Wire deleted right after its cut,
+because Plasticity keeps coplanar Wires in one sketch and the next profile would
+otherwise see two Regions.
 
 The plan's rules: every dimension positive (corner radius and `exploded` may be
 0); `originMm` within 100,000 mm of the document origin; board length and width
 at most 500 mm; board thickness, componentHeight, undersideClearance, standoff
-height, lip depth and `exploded` at most 200 mm; board holes, pilot holes and
+height, lip depth, lid pilot depth and `exploded` at most 200 mm; board
+thickness at least 0.2 mm; lip depth at least 0.5 mm; rect and rounded-rect
+opening sides at least 0.5 mm; a rounded-rect radius at most half the shorter
+side - 0.05 mm, or exactly half (built as a slot); vent slots at least 0.4 mm
+wide and 0.5 mm longer than wide; the lid lip at least 0.8 mm wide between two
+boss notches; `walls.wallMm`, `floorMm`, `lidMm` and `fit.boardClearanceMm` at
+most 50 mm; a floor opening 0.4 mm clear of every standoff, floor boss and floor
+web, a lid opening 0.4 mm clear of every screw head; board holes, pilot holes and
 circle openings at least 0.5 mm across, pilot holes at least 0.5 mm deep, and at
 least 0.4 mm of wall around a pilot or clearance hole in a boss or standoff; wall
 and floor at least 0.8 mm; `lipWallMm` at least 0.4 mm; lid thicker than the
@@ -2758,8 +2799,8 @@ bosses and (style `tapered`) the gussets, tested against their real footprints
 that wall over its height; a gusset its cone radius at the opening's height),
 with the pair named; openings and slots on one face separated by a web of at
 least 0.4 mm (touching or overlapping is refused); vent pitch at least slot
-width + 0.4 mm; four bosses that fit the cavity; a `floor` boss not standing on
-a standoff; the board drop-in and `floor` growth-axis rules above; a lip depth
+width + 0.4 mm; four bosses that fit the cavity; a `floor` boss that merges
+with a standoff staying 0.4 mm clear of its hole; the board drop-in and `floor` growth-axis rules above; a lip depth
 below the base inner height; and at most 400 planned Undo steps (the refusal
 states the count).
 
@@ -2780,10 +2821,15 @@ audit enclosure equivalent with heat-set inserts and a small sensor pod; checks
 every `derived` field and the read-back with independent face, edge, validity,
 interference and clearance reads; lifts each board stand-in straight up in
 3 mm steps until it clears the wall top, checking base-board interference at
-every step (`boardDropIn` must equal "no interference at every step"); undoes
-each case with one batched undo; sends the reviewer's bad inputs (each must be
-refused with the Undo depth, the body count and the revision unchanged); and
-forces one native failure (the 1e-6 mm board stand-in) to prove the rollback.
+every step (`boardDropIn` must equal "no interference at every step"); probes
+every planned web with a small box that must lie wholly in base material (plus
+one control probe in empty space that must not); shifts the pod's and the stack
+case's board diagonally by 0.9 and 1.1 x `cornerGapMm` / sqrt 2 (free, then
+interfering); builds two rect openings on each of three walls (webs 0.4, 1 and
+10 mm), the 51.5 x 28.3 board with holes 2 mm from the edges in floor style, the
+benchmark in stack style and an insert case with default diameters; undoes each
+case with one batched undo; and sends the reviewer's bad inputs (each must be
+refused with the Undo depth, the body count and the revision unchanged).
 
 ## Development and verification
 

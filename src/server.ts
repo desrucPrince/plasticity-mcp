@@ -3776,20 +3776,21 @@ function createServerWithCatalog(
     board: z.object({
       lengthMm: boardCaseMm.describe("Board size along x; at most 500"),
       widthMm: boardCaseMm.describe("Board size along y; at most 500"),
-      thicknessMm: boardCaseMm.optional().describe("Default 1.6"),
+      thicknessMm: boardCaseMm.optional().describe("Default 1.6, at least 0.2"),
       holes: z.array(z.object({ xMm: boardCaseMm, yMm: boardCaseMm, diameterMm: boardCaseMm }).strict()).max(32).optional().describe("Positions from the board's min-x/min-y corner; diameter at least 0.5"),
       componentHeightMm: boardCaseMm.describe("Tallest part above the board top; heights at most 200"),
       undersideClearanceMm: boardCaseMm.optional().describe("Parts below the board; default 2"),
     }).strict(),
     fit: z.object({
-      boardClearanceMm: boardCaseMm.optional().describe("Per side; default 0.5"),
+      boardClearanceMm: boardCaseMm.optional().describe("Per side; default 0.5, at most 50"),
       lidClearanceMm: boardCaseMm.optional().describe("Per side, lip to wall and notch to boss; default 0.2"),
     }).strict().optional(),
     walls: z.object({
-      wallMm: boardCaseMm.optional().describe("Default 2, at least 0.8"),
-      floorMm: boardCaseMm.optional().describe("Default 2, at least 0.8"),
-      lidMm: boardCaseMm.optional().describe("Lid plate thickness; default 2"),
-      outerCornerRadiusMm: boardCaseMm.optional().describe("Default 3. Inner radius = min(radius - wall, the largest the board corner allows); the corner wall must stay at least max(0.8, 0.75 x wall)"),
+      wallMm: boardCaseMm.optional().describe("Default 2; 0.8 to 50"),
+      floorMm: boardCaseMm.optional().describe("Default 2; 0.8 to 50"),
+      lidMm: boardCaseMm.optional().describe("Lid plate thickness; default 2, at most 50"),
+      outerCornerRadiusMm: boardCaseMm.optional().describe("Default 3; 0 or at least 0.2. Inner radius = min(radius - wall, board clearance); the corner wall must stay at least max(0.8, 0.75 x wall)"),
+      innerCornerRadiusMm: boardCaseMm.optional().describe("Override the inner corner radius while the board-corner diagonal gap stays at least 0.2"),
     }).strict().optional(),
     standoffs: z.object({
       heightMm: boardCaseMm.optional().describe("Default = board.undersideClearanceMm"),
@@ -3801,16 +3802,16 @@ function createServerWithCatalog(
         pilotDepthMm: boardCaseMm.optional().describe("Default: the standoff height"),
         insertLengthMm: boardCaseMm.optional().describe("CNC Kitchen insert length; required for M3 (5.7 or 3)"),
         clearanceFit: boardCaseFit,
-      }).strict(),
+      }).strict().optional().describe("Required, except with bossStyle stack (the standoffs then take lid.fasteners.base)"),
     }).strict().optional(),
     lid: z.object({
-      lipDepthMm: boardCaseMm.optional().describe("Default 1.5"),
+      lipDepthMm: boardCaseMm.optional().describe("Default 1.5, at least 0.5"),
       lipWallMm: boardCaseMm.optional().describe("Default 1.2, at least 0.4"),
       fasteners: z.object({
         screw: boardCaseScrew,
         count: z.literal(4).optional().describe("Four corner bosses"),
         bossDiameterMm: boardCaseMm.optional().describe("Default 6"),
-        bossStyle: z.enum(["tapered", "hanging", "floor"]).optional().describe("Default floor: bosses on the floor beside the board, cavity widens in one axis (the board drops in). tapered: hung bosses on a 45 degree gusset (wall top rises). hanging: flat underside. tapered and hanging overhang the board corners"),
+        bossStyle: z.enum(["tapered", "hanging", "floor", "stack"]).optional().describe("Default stack when the board has 2+ holes the screws pass and no standoffs.fastener (lid posts over the board holes, screws into the standoffs), else floor (bosses beside the board, cavity widens). tapered/hanging: hung bosses over the board corners"),
         allowBlockedBoard: z.boolean().optional().describe("Build tapered/hanging although the bosses block the board from dropping in (derived.assembly.boardDropIn false); default false: refused"),
         growAxis: z.enum(["x", "y"]).optional().describe("floor only: the axis the cavity grows along; default the axis whose end walls carry no opening (required when both do)"),
         countersunk: z.boolean().optional().describe("Default true; sourced head only for M3"),
@@ -3848,7 +3849,7 @@ function createServerWithCatalog(
     intent,
     revision,
   }).strict();
-  tool("plasticity_create_board_case", "Build a base + lid enclosure around a rectangular board in one call: shell, standoffs, corner screw bosses (bossStyle floor by default, so the board drops in; tapered and hanging need allowBlockedBoard), a lipped lid with screw holes, openings, a slot vent, an optional board stand-in. derived holds every dimension, computed from the parameters. All plan rules are checked before the first edit; the result is read back (bounds, validity, edges) and a failure or failed read-back undoes the recipe's steps. Millimetres. Reference: docs/tool-reference.md.", boardCaseInputSchema, async ({ intent: purpose, ...input }) => {
+  tool("plasticity_create_board_case", "Build a base + lid enclosure around a rectangular board in one call: shell, standoffs, lid screws as a stack through the board holes (default with 2+ holes) or on corner bosses (floor; tapered and hanging need allowBlockedBoard), a lipped lid with screw holes, openings, a slot vent, an optional board stand-in. derived holds every dimension, computed from the parameters. All plan rules are checked before the first edit; the result is read back (bounds, validity, edges) and a failure or failed read-back undoes the recipe's steps. Millimetres. Reference: docs/tool-reference.md.", boardCaseInputSchema, async ({ intent: purpose, ...input }) => {
     const { BoardCaseRecipe } = await import("./plasticity/case-recipe.ts");
     return await journaled("recipe-board-case", purpose, input, () => new BoardCaseRecipe(session.get()).create(input));
   });
