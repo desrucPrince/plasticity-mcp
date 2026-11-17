@@ -99,6 +99,10 @@ test("a camera that never holds still within the budget is reported, not turned 
   try {
     const result = await withScreenshotView(s.runtime, { frame: { bodyIds: [7] } }, async () => ({ path: "/z.png" }));
     assert.equal(result.view.frame?.cameraSettled, false);
-    assert.equal(typeof result.view.frame?.cameraRestored, "boolean");
+    // The settle budget is 2 s; the camera then moves 1 mm on each of the six frames the restore renders.
+    assert.ok(result.view.frame!.cameraSettleWaitMs! >= 2000 && result.view.frame!.cameraSettleWaitMs! < 2600, `waited ${result.view.frame!.cameraSettleWaitMs} ms`);
+    assert.equal(result.view.frame?.cameraRestored, false);
+    assert.ok(Math.abs(result.view.frame!.cameraDeviation - 0.006) < 1e-9, `deviation ${result.view.frame!.cameraDeviation}`);
+    assert.equal(result.path, "/z.png");
   } finally { delete globals.requestAnimationFrame; }
 });

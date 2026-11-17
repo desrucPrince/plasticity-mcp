@@ -3609,25 +3609,57 @@ npm run accept:native-solid-split -- --target TARGET_ID --allow-disposable-mutat
   tool; difference removes every tool from the target; intersection keeps only
   what lies inside the target and every tool. The kernel's own intersection
   takes the target with the union of its tools, so the tool runs one native
-  intersection per tool inside one native command (one Undo step). `keepTools`
-  keeps every tool body. A failing later tool leaves the document unchanged.
+  intersection per target and tool inside one native command (one Undo step).
+  With several targets each target is intersected on its own and keeps its ID
+  (the kernel's intersection of several targets gives new IDs); the tools stay
+  until the last target's pass with them. `keepTools` keeps every tool body.
+  When one of these intersections fails, the error names the target and the
+  tool. Plasticity rolls the whole command back; the error says whether the
+  document reads back as before the call (Undo depth and every body's version)
+  and gives the current revision, which the rollback changes. Plasticity refuses
+  an intersection that would not change the target ("Operation has no effect")
+  both when the tool misses the target and when it contains it, so a tool that
+  contains a target (after the earlier tools) also fails the call.
 - `plasticity_screenshot` with `frame`: the saved camera is the one that holds
   still. A camera still easing toward its end pose after `plasticity_set_view`
   or `plasticity_set_camera` is waited for (up to 2 s) before it is saved, so the
-  restore is exact. The reply's `view.frame` carries `cameraRestored`,
-  `cameraDeviation`, `cameraSettled` and `cameraSettleWaitMs`. A restore that is
+  restore is exact. The reply's `view.frame` carries `cameraRestored` (true when
+  the camera came back within 1e-9), `cameraDeviation`, `cameraSettled` (false
+  when it still moved after 2 s) and `cameraSettleWaitMs`. A restore that is
   still not exact (`cameraRestored: false`, with the deviation) returns the
   written image; it is no longer an error.
 - STEP, IGES and Parasolid exports: the file header names the output file, not
   the staging path, and carries no OS user name (STEP author and organisation are
   empty strings; IGES Global parameter 4 and the Parasolid `KEY=`/`FILE=` lines
   hold the file name). The model data after the header is unchanged. SAT files
-  never carried a path or a user name. A header the tool cannot rewrite is left
-  as written, and an export that still names its staging folder is refused.
-- `plasticity_chamfer` larger than an arc radius: for a selected arc edge with a
-  radius below the distance Plasticity can answer OK while dropping that arc's
-  chamfer face (7.41 mm on a loop of 4 lines and 4 R7 arcs: 4 new faces for 8
-  edges, 71.6 mm3 more than the ideal chamfer). The tool reads the result back for
-  that case and, when faces are missing, returns a certain error that names the
-  new revision and the one Undo step (`plasticity_undo` restores it).
+  never carried a path or a user name. The IGES Global section is wrapped again
+  by the IGES 5.3 rules (sections 2.2.2 and 2.2.3): a number and its delimiter
+  stay on one line, a string's count and `H` stay together, a string that fits on
+  a line is not split, a longer one runs to column 72 and goes on in column 1,
+  and lines are padded to column 72. Non-ASCII characters in the IGES file name
+  become `_`. A header the tool cannot rewrite is left as written, and an export
+  that still names its staging folder is refused. That check compares bytes: the
+  folder's UTF-8 bytes, and the file's own encoding of it (STEP `\S\` and
+  `\X2\` escapes decoded; IGES with every non-ASCII byte as a blank, as the
+  exporter writes it, and the Global lines unwrapped).
+- `plasticity_chamfer` read-back. Plasticity can answer OK for a chamfer it made
+  only in part: on a 48 x 36 x 22 box with its long edges at R7, 7.41 mm on the
+  end loop left the four arcs without a chamfer face (14 faces, 33,639.98 mm3;
+  the equal-distance chamfer is 18 faces and 33,568.38 mm3). The factory also
+  chamfers the tangent chain of each selected edge, so one selected line gives
+  the same body. The tool reads the chain the factory chamfered
+  (`FilletShellFactory.extendedEdges`) and every face's topology identity
+  (`entityId`) before and after, and needs one new face for every chained edge:
+  a face with an identity the body did not have, next to one of the edge's
+  original faces that survived (any new face when neither survived), each face
+  for one edge only. This proves every chained edge got a chamfer face. It does
+  not prove the distance or the face shape. A missing face whose place a face
+  split off an old face happened to take would pass (not seen live). When edges
+  are missing, the tool undoes its own step and fails. The error names the
+  edges and says whether the document reads back as before the call; then no
+  undo is needed, also inside `plasticity_batch`. Live, the check agreed with
+  the hand-calculated volume on every row of the acceptance matrix: the R7 loop
+  at 5, 7, 7.41 and 9 mm for six selections, countersinks through 4 and 6 mm
+  plates, a hole rim, cylinder rims, a concave boss base and a pocket loop with
+  R2 concave arcs.
 - Live acceptance: `npm run accept:native-gaps`.

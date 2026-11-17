@@ -9,6 +9,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 import { discoverPlasticityTargets } from "../src/cdp/discovery.ts";
 import { nativeFunction } from "../src/plasticity/native-function.ts";
+import { CHAMFER_SOURCE } from "../src/plasticity/operations.ts";
 import { PlasticityRuntime } from "../src/plasticity/runtime.ts";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -53,21 +54,108 @@ const HELP = `Usage:
 With no arguments or --help, this command performs no connection and no mutation.
 PLASTICITY_CDP_URL is mandatory: set it to the isolated Plasticity instance. The command never launches Plasticity
 (it forces PLASTICITY_AUTO_LAUNCH=0 and PLASTICITY_HUD=0) and refuses to start without the variable.
-Live mode takes a baseline, builds disposable geometry at x >= 2400 mm and checks five tool fixes:
-  G1 plasticity_boolean with several tools: intersection with two and three tools is target AND every tool (volume read with
-     plasticity_measure_solid_properties against the hand calculation), one Undo step per call, keepTools keeps every tool,
-     and multi-tool union and difference volumes match the hand calculation;
+Live mode takes a baseline, builds disposable geometry at x >= 2400 mm and checks the tool fixes:
+  G1 plasticity_boolean with several tools: one target intersected with two and three tools (4,000 and 2,000 mm3), keepTools,
+     union (91,200) and difference (36,000); two targets with two and three tools (8,000 and 4,000 mm3 each, IDs kept, both
+     keepTools values); one Undo step that one undo restores; a failure on the second target names target and tool, and
+     the document reads back as before;
   G2 plasticity_screenshot frame: bodies about 0, 400 and 2000 mm from the origin under three camera states (isometric fit,
      top, set_camera), three PNG captures each, plus a capture right after a view change. Every capture succeeds, the file
      exists, the camera read before and after is identical and the Undo depth does not change;
   G3 plasticity_delete_section_analysis: all: true removes the section analysis (Plasticity holds one at a time, so a second
      create is refused) and the list is empty; id and all are mutually exclusive;
-  G4 STEP, IGES, SAT and Parasolid (.x_t, .x_b) exports of one body: no file contains the home directory, the OS user name or
-     the staging folder, the STEP header names the output file with empty author and organisation;
-  G5 a 48 x 36 x 22 box with its four long edges at R7 and the end loop chamfered: 5 mm and 7 mm match the hand calculation;
-     7.41 mm (larger than R7) is refused with a certain error naming the Undo step, and its measured volume is reported.
+  G4 STEP, IGES, SAT and Parasolid (.x_t, .x_b) exports, also into a folder with a non-ASCII name: no file contains the home
+     directory, the OS user name or the staging folder; the STEP header names the output file with empty author and
+     organisation; IGES files named a.igs, bracket.igs and a 120-character name pass the IGES 5.3 line rules
+     (checkIgesGlobalRules);
+  G5 plasticity_chamfer matrix: the R7 box end loop at 5, 7, 7.41 and 9 mm for six selections, through holes, a cylinder rim,
+     a concave boss base, a pocket loop with R2 concave arcs, an edgeQuery selection, a plasticity_batch with undoOnError and
+     a two-body call. Every row: the raw native chamfer's volume against the hand calculation decides whether the chamfer
+     is right; the tool must return OK with the hand volume exactly then, and otherwise fail with the document as before
+     (Undo depth, faces and volume).
 It undoes back to the baseline Undo depth and body count and never saves the document. The last line printed is the result
 with undoDepth and the body IDs. Run it only against an isolated Plasticity instance.`;
+
+/**
+ * Checks an IGES file's fixed-format lines and its Global section against IGES 5.3 sections 2.2.2 and 2.2.3, written
+ * apart from the tool's own wrapper. Every line is 80 columns with a section letter in column 73 and a sequence number
+ * that counts from 1 in each section; the Terminate record's counts match. In the Global section (data in columns
+ * 1-72): a string's count and H sit together on one line, and a string that crosses a line runs to column 72 and goes on
+ * in column 1; a numeric or empty field and its delimiter end on one line, with no blank inside the number; blanks
+ * outside strings only stand between parameters; nothing but blanks follows the record delimiter. Returns the
+ * violations and the parameters read (strings as written, e.g. 8Hpart.igs; numbers trimmed).
+ */
+export function checkIgesGlobalRules(text: string): { violations: string[]; parameters: string[]; counts: Record<string, number> } {
+  const violations: string[] = [];
+  const all = text.split(/\r?\n/u);
+  if (all[all.length - 1] === "") all.pop();
+  const counts: Record<string, number> = {};
+  all.forEach((line, index) => {
+    if (line.length !== 80) violations.push(`line ${index + 1} is ${line.length} columns, not 80`);
+    const letter = line[72] ?? "?";
+    counts[letter] = (counts[letter] ?? 0) + 1;
+    if (!/^[SGDPT]$/u.test(letter)) violations.push(`line ${index + 1} has section letter ${JSON.stringify(letter)}`);
+    if (line.slice(73).length !== 7 || line.slice(73).trim() !== String(counts[letter])) violations.push(`line ${index + 1} (${letter}) has sequence ${JSON.stringify(line.slice(73))}, expected ${counts[letter]}`);
+  });
+  const terminate = all.find((line) => line[72] === "T");
+  const termCounts = terminate ? /^S([ \d]{7})G([ \d]{7})D([ \d]{7})P([ \d]{7})/u.exec(terminate) : null;
+  if (!termCounts) violations.push("no Terminate record with S, G, D and P counts");
+  else for (const [index, letter] of ["S", "G", "D", "P"].entries()) if (Number(termCounts[index + 1]) !== (counts[letter] ?? 0)) violations.push(`Terminate says ${letter} ${Number(termCounts[index + 1])}, the file has ${counts[letter] ?? 0}`);
+  const data = all.filter((line) => line[72] === "G").map((line) => line.slice(0, 72).padEnd(72, " "));
+  const parameters: string[] = [];
+  let row = 0;
+  let col = 0;
+  const at = () => (row < data.length ? data[row]![col] : undefined);
+  const where = () => `G line ${row + 1} column ${col + 1}`;
+  const next = () => { col += 1; if (col === 72) { row += 1; col = 0; } };
+  let ended = false;
+  while (!ended) {
+    while (row < data.length && at() === " ") next(); // blanks between parameters (and line padding)
+    if (row >= data.length) { violations.push("the Global section ends without a record delimiter"); break; }
+    const startRow = row;
+    if (/\d/u.test(at()!)) {
+      let digits = "";
+      while (row === startRow && /\d/u.test(at()!)) { digits += at(); next(); }
+      if (row !== startRow) { violations.push(`a count or number reaches column 72 of G line ${startRow + 1} without its H or delimiter`); break; }
+      if (at() === "H") {
+        next();
+        const length = Number(digits);
+        let value = "";
+        for (let index = 0; index < length; index += 1) {
+          if (row >= data.length) { violations.push(`string ${digits}H runs past the Global section`); break; }
+          value += at();
+          next();
+        }
+        parameters.push(`${digits}H${value}`);
+      } else {
+        let rest = digits;
+        while (row === startRow && at() !== "," && at() !== ";") { rest += at(); next(); }
+        if (row !== startRow) { violations.push(`numeric field ${JSON.stringify(rest.trim())} on G line ${startRow + 1} does not end with its delimiter on that line`); break; }
+        if (/ /u.test(rest.trim())) violations.push(`numeric field ${JSON.stringify(rest)} has a blank inside (${where()})`);
+        parameters.push(rest.trim());
+      }
+    } else if (at() === "," || at() === ";") {
+      parameters.push("");
+    } else {
+      let rest = "";
+      while (row === startRow && at() !== "," && at() !== ";") { rest += at(); next(); }
+      if (row !== startRow) { violations.push(`field ${JSON.stringify(rest.trim())} on G line ${startRow + 1} does not end with its delimiter on that line`); break; }
+      if (/ /u.test(rest.trim())) violations.push(`field ${JSON.stringify(rest)} has a blank inside (${where()})`);
+      parameters.push(rest.trim());
+    }
+    const delimiter = at();
+    if (delimiter !== "," && delimiter !== ";") { violations.push(`expected a delimiter at ${where()}, found ${JSON.stringify(delimiter)}`); break; }
+    next();
+    if (delimiter === ";") ended = true;
+  }
+  if (ended) {
+    const tail = data.slice(row).join("").slice(col);
+    if (tail.trim() !== "") violations.push(`text after the record delimiter: ${JSON.stringify(tail.trim().slice(0, 40))}`);
+    // The record delimiter's line is the last Global line (row moved past it only when ';' sat in column 72).
+    if (data.length - row > (col === 0 ? 0 : 1)) violations.push("a Global line after the record delimiter's line");
+  }
+  return { violations, parameters, counts };
+}
 
 const CAMERA = nativeFunction`function () {
   const viewport = Array.from(this.viewports)[0], camera = viewport.camera, controls = viewport.orbitControls;
@@ -204,6 +292,54 @@ async function main(): Promise<void> {
       requireNear(measured, 36000, "two-tool difference volume (30 x 30 x 40)", 1e-6);
       g1.differenceTwoTools = { volumeMm3: measured, expectedMm3: 36000, undoSteps: step.undoSteps };
       await undoTo(client, baseline.undoDepth);
+
+      // Several targets: t1 and t2 are 40^3 cubes 100 mm apart; tool p keeps y <= 20, tool q keeps z <= 10, tool r keeps
+      // y >= 10. Each target: 40 x 20 x 10 = 8,000 with p and q; 40 x 10 x 10 = 4,000 with p, q and r.
+      const multi: Record<string, unknown> = {};
+      for (const [label, toolCount, keep, expected] of [["twoTools", 2, false, 8000], ["threeTools", 3, false, 4000], ["twoToolsKeep", 2, true, 8000], ["threeToolsKeep", 3, true, 4000]] as const) {
+        const t1 = await box([X, 0, 0], [40, 40, 40]);
+        const t2 = await box([X + 100, 0, 0], [40, 40, 40]);
+        const tools = [await box([X - 10, -10, -10], [160, 30, 60]), await box([X - 10, -10, -10], [160, 60, 20]), await box([X - 10, 10, -10], [160, 60, 60])].slice(0, toolCount);
+        const toolVolumes = await Promise.all(tools.map(async (id) => await volume(id)));
+        const before = await status(client);
+        step = await boolean([t1, t2], tools, "intersection", keep);
+        const v1 = await volume(t1);
+        const v2 = await volume(t2);
+        requireNear(v1, expected, `${label}: target 1 volume`, 1e-6);
+        requireNear(v2, expected, `${label}: target 2 volume`, 1e-6);
+        requireCondition(step.undoSteps === 1, `${label}: ${step.undoSteps} Undo steps`);
+        const after = await status(client);
+        requireCondition(after.bodies.filter((body: { id: number }) => !before.bodies.some((old: { id: number }) => old.id === body.id)).length === 0, `${label}: new body IDs appeared`);
+        for (const [index, id] of tools.entries()) {
+          if (keep) requireNear(await volume(id), toolVolumes[index]!, `${label}: kept tool ${id}`, 1e-6);
+          else requireCondition(!(await exists(id)), `${label}: tool ${id} was not consumed`);
+        }
+        const current = await status(client);
+        await call(client, "plasticity_undo", { intent: "one undo restores the call", revision: current.revision });
+        const undone = await status(client);
+        requireCondition(undone.undoDepth === before.undoDepth && sameBodies(undone, before), `${label}: one undo did not restore every body`);
+        multi[label] = { volumesMm3: [v1, v2], expectedMm3: expected, undoSteps: step.undoSteps, toolsKept: keep, oneUndoRestores: true };
+        await undoTo(client, baseline.undoDepth);
+      }
+      g1.severalTargets = multi;
+
+      // A failure in the second target's passes: tool s covers half of t1 and misses t2, so t1's passes succeed and the
+      // kernel refuses t2 AND s ("Operation has no effect", which it also says for a tool that contains the target).
+      {
+        const t1 = await box([X, 0, 0], [40, 40, 40]);
+        const t2 = await box([X + 100, 0, 0], [40, 40, 40]);
+        const p = await box([X - 10, -10, -10], [160, 30, 60]);
+        const sTool = await box([X - 10, -10, -10], [30, 60, 60]);
+        const before = await status(client);
+        const refused = await callRaw(client, "plasticity_boolean", { targetIds: [t1, t2], toolIds: [p, sTool], operation: "intersection", revision: before.revision });
+        const after = await status(client);
+        requireCondition(refused.isError && new RegExp(`Intersection of target ${t2} with tool ${sTool} failed`).test(refused.text), `the failure does not name target ${t2} and tool ${sTool}: ${refused.text.slice(0, 300)}`);
+        requireCondition(/the document reads back as before this call/.test(refused.text) && refused.text.includes(`the current revision is ${after.revision}`), `the failure message does not say the document is as before at the current revision: ${refused.text.slice(-400)}`);
+        requireCondition(after.undoDepth === before.undoDepth && sameBodies(after, before), "the failed call changed the document");
+        requireNear(await volume(t1), 64000, "target 1 after the failed call", 1e-6);
+        g1.failureOnSecondTarget = { refused: true, undoDepthUnchanged: true, bodiesUnchanged: true, revisionBefore: before.revision, revisionAfter: after.revision, message: refused.text.slice(refused.text.indexOf("Intersection of target"), refused.text.indexOf("Intersection of target") + 120) + " ... " + refused.text.slice(-200) };
+        await undoTo(client, baseline.undoDepth);
+      }
     }
     checks.g1 = g1;
 
@@ -279,43 +415,109 @@ async function main(): Promise<void> {
     // ---- G4: export headers
     const g4: Record<string, unknown> = {};
     {
-      await mkdir(join(output, "exports"));
       const id = await box([X, 0, 0], [10, 20, 30]);
-      const files: Array<[string, string, Record<string, unknown>]> = [
-        ["plasticity_export_step", "part.step", {}], ["plasticity_export_iges", "part.igs", {}], ["plasticity_export_sat", "part.sat", {}],
-        ["plasticity_export_parasolid", "part.x_t", {}], ["plasticity_export_parasolid", "part.x_b", {}],
+      const plain = join(output, "exports");
+      const unicode = join(output, "exports-d\u00efr \u6a21\u578b o'k");
+      await mkdir(plain);
+      await mkdir(unicode);
+      const longName = `${"L".repeat(116)}.igs`;
+      const files: Array<[string, string, string]> = [
+        ["plasticity_export_step", plain, "part.step"], ["plasticity_export_iges", plain, "part.igs"], ["plasticity_export_sat", plain, "part.sat"],
+        ["plasticity_export_parasolid", plain, "part.x_t"], ["plasticity_export_parasolid", plain, "part.x_b"],
+        ["plasticity_export_iges", plain, "a.igs"], ["plasticity_export_iges", plain, "bracket.igs"], ["plasticity_export_iges", plain, longName],
+        ["plasticity_export_step", unicode, "part.step"], ["plasticity_export_iges", unicode, "part.igs"], ["plasticity_export_sat", unicode, "part.sat"],
+        ["plasticity_export_parasolid", unicode, "part.x_t"], ["plasticity_export_parasolid", unicode, "part.x_b"],
       ];
-      const needles = [homedir(), userInfo().username, join(output, "exports"), ".plasticity-"];
+      const needles = [homedir(), userInfo().username, plain, unicode, ".plasticity-"];
       const results: Record<string, unknown> = {};
-      for (const [tool, name] of files) {
+      for (const [tool, dir, name] of files) {
         const current = await status(client);
-        const path = join(output, "exports", name);
+        const path = join(dir, name);
         await call(client, tool, { ids: [id], path, revision: current.revision });
-        const text = (await readFile(path)).toString("latin1");
-        // IGES wraps the header at column 72: test the unwrapped Global text too.
-        const unwrapped = text.split("\n").map((line) => line.slice(0, 72)).join("");
-        const leaked = needles.filter((needle) => text.includes(needle) || unwrapped.includes(needle));
-        requireCondition(leaked.length === 0, `${name} still contains ${leaked.join(", ")}`);
-        results[name] = { bytes: text.length, leaks: 0 };
+        const bytes = await readFile(path);
+        const text = bytes.toString("latin1");
+        // IGES wraps the header at column 72: test the unwrapped Global text too, in UTF-8 and in latin1.
+        const unwrapped = Buffer.from(text.split(/\r?\n/u).map((line) => line.slice(0, 72)).join(""), "latin1");
+        const leaked = needles.filter((needle) => [Buffer.from(needle, "utf8"), Buffer.from(needle, "latin1")].some((form) => bytes.includes(form) || unwrapped.includes(form)));
+        requireCondition(leaked.length === 0, `${path} still contains ${leaked.join(", ")}`);
+        const key = `${dir === unicode ? "unicode/" : ""}${name.length > 40 ? `${name.length}-character name` : name}`;
+        results[key] = { bytes: bytes.length, leaks: 0 };
+        if (name.endsWith(".igs")) {
+          const rules = checkIgesGlobalRules(text);
+          requireCondition(rules.violations.length === 0, `${key} breaks the IGES 5.3 line rules: ${rules.violations.join("; ")}`);
+          const igesName = name.replace(/[^\x20-\x7e]/gu, "_");
+          requireCondition(rules.parameters[3] === `${igesName.length}H${igesName}`, `${key}: Global parameter 4 is ${rules.parameters[3]}`);
+          results[key] = { bytes: bytes.length, leaks: 0, igesRuleViolations: 0, globalLines: rules.counts.G, parameter4: rules.parameters[3]!.slice(0, 40) };
+        }
       }
-      const step = (await readFile(join(output, "exports", "part.step"), "utf8"));
+      const step = (await readFile(join(plain, "part.step"), "utf8"));
       requireCondition(/FILE_NAME\('part\.step',\s*'[^']*',\s*\(''\),\s*\(''\),/.test(step), "STEP FILE_NAME does not name part.step with empty author and organisation");
-      const iges = (await readFile(join(output, "exports", "part.igs"), "latin1")).split("\n");
-      requireCondition(iges.join("").includes("8Hpart.igs") || iges.map((line) => line.slice(0, 72)).join("").includes("8Hpart.igs"), "IGES Global section does not name part.igs");
       g4.files = results;
       g4.stepHeader = step.slice(step.indexOf("FILE_NAME("), step.indexOf("FILE_SCHEMA")).trim();
       await undoTo(client, baseline.undoDepth);
     }
     checks.g4 = g4;
 
-    // ---- G5: chamfer larger than the corner radius
+    // ---- G5: the chamfer matrix
     const g5: Record<string, unknown> = {};
     {
       const R = 7;
       const A0 = 36 * 22 - (4 - Math.PI) * R * R;
-      const section = (t: number) => t <= R ? (36 - 2 * t) * (22 - 2 * t) - (4 - Math.PI) * (R - t) ** 2 : (36 - 2 * t) * (22 - 2 * t);
-      // Removed volume of an ideal equal-distance chamfer: integral over 0..d of (A0 - A(t)) dt, A(t) the section eroded by t.
-      const idealVolume = (d: number): number => { const n = 200000; let removed = 0; for (let i = 0; i < n; i += 1) removed += (A0 - section((i + 0.5) * d / n)) * d / n; return 48 * A0 - removed; };
+      const sectionArea = (t: number) => t <= R ? (36 - 2 * t) * (22 - 2 * t) - (4 - Math.PI) * (R - t) ** 2 : (36 - 2 * t) * (22 - 2 * t);
+      // Equal-distance chamfer of the end loop: at depth s below the end face the section is the end section eroded by d - s
+      // (a rounded rectangle; corners go sharp once d - s > R), so the removed volume is the integral of A0 - A(t) over 0..d.
+      const loopVolume = (d: number): number => { const n = 200000; let removed = 0; for (let i = 0; i < n; i += 1) removed += (A0 - sectionArea((i + 0.5) * d / n)) * d / n; return 48 * A0 - removed; };
+      // A rim chamfer of a hole of radius r: a cone from radius r + d at the face down to depth min(d, available), minus the hole.
+      const rimRemoved = (r: number, d: number, depth: number) => Math.PI * ((r + d) ** 3 - (r + d - depth) ** 3) / 3 - Math.PI * r * r * depth;
+      const faceIds = async (id: number): Promise<string[]> => {
+        const current = await status(client);
+        const found = await call(client, "plasticity_find_faces", { revision: current.revision, query: { bodyIds: [id] }, limit: 500 });
+        return (found.matches as Array<{ id: string }>).map((match) => match.id).sort();
+      };
+      const rows: unknown[] = [];
+      // One row: the raw native chamfer (no tool check) decides whether Plasticity's result is right, by its volume against the
+      // hand value; it is undone; then the tool must return OK with that volume, or fail with the document as before.
+      const row = async (label: string, id: number, selection: Record<string, unknown>, distanceMm: number, handMm3: number) => {
+        const before = await status(client);
+        const facesBefore = await faceIds(id);
+        const volumeBefore = await volume(id);
+        const edgeIds = selection.edgeIds as string[] | undefined;
+        let kernel: { volumeMm3?: number; error?: string } = {};
+        if (edgeIds) {
+          try {
+            await native!.mutate(CHAMFER_SOURCE, ["FilletShellFactory"], [{ id, edgeIds, distance: -distanceMm / 1000 }]);
+            kernel = { volumeMm3: await volume(id) };
+            const done = await status(client);
+            await call(client, "plasticity_undo", { intent: "undo the raw native chamfer", revision: done.revision });
+          } catch (error) {
+            kernel = { error: (error instanceof Error ? error.message : String(error)).slice(0, 120) };
+          }
+          const back = await status(client);
+          requireCondition(back.undoDepth === before.undoDepth && JSON.stringify(await faceIds(id)) === JSON.stringify(facesBefore), `${label}: the raw native chamfer was not undone`);
+        }
+        const right = kernel.volumeMm3 !== undefined && Math.abs(kernel.volumeMm3 - handMm3) <= 0.01;
+        const current = await status(client);
+        const reply = await callRaw(client, "plasticity_chamfer", { id, ...selection, distanceMm, revision: current.revision });
+        const after = await status(client);
+        const entry: Record<string, unknown> = { label, distanceMm, handMm3: round3(handMm3), kernelMm3: kernel.volumeMm3 === undefined ? null : round3(kernel.volumeMm3), ...(kernel.error ? { kernelError: kernel.error } : {}), geometricallyRight: edgeIds ? right : "judged by the tool row", tool: reply.isError ? "refused" : "OK" };
+        if (!reply.isError) {
+          const measured = await volume(id);
+          entry.toolMm3 = round3(measured);
+          requireNear(measured, handMm3, `${label}: the tool returned OK; its volume`, 0.01);
+          if (edgeIds) requireCondition(right, `${label}: the tool returned OK for a chamfer the raw kernel made wrong (${kernel.volumeMm3} against ${handMm3})`);
+        } else {
+          if (edgeIds) requireCondition(!right, `${label}: the tool refused a right chamfer: ${reply.text.slice(0, 300)}`);
+          requireCondition(after.undoDepth === before.undoDepth, `${label}: the Undo depth changed (${before.undoDepth} -> ${after.undoDepth})`);
+          requireCondition(JSON.stringify(await faceIds(id)) === JSON.stringify(facesBefore), `${label}: the body's faces changed`);
+          requireNear(await volume(id), volumeBefore, `${label}: the body's volume after the refusal`, 1e-9);
+          requireCondition(sameBodies(after, before), `${label}: the bodies differ after the refusal`);
+          if (kernel.error === undefined) requireCondition(/The tool undid its own step: the document is as it was before this call/.test(reply.text) && /No undo is needed for this call/.test(reply.text), `${label}: the refusal does not say the document is as before: ${reply.text.slice(0, 400)}`);
+          entry.message = reply.text.slice(0, 220);
+          entry.documentUnchanged = true;
+        }
+        rows.push(entry);
+        return { reply, entry };
+      };
       const build = async () => {
         const id = await box([X, 0, 0], [48, 36, 22]);
         let current = await status(client);
@@ -327,35 +529,110 @@ async function main(): Promise<void> {
         const endFace = faces.matches.sort((a: any, b: any) => b.centerMm[0] - a.centerMm[0])[0];
         const loop = await call(client, "plasticity_find_edges", { revision: current.revision, query: { bodyIds: [id], adjacentFaceIds: [endFace.id] } });
         requireCondition(loop.count === 8 && loop.matches.filter((match: any) => match.curveType === "Circle").length === 4, "the end loop is not 4 lines + 4 arcs");
-        return { id, loopIds: loop.matches.map((match: { id: string }) => match.id) };
+        requireNear(await volume(id), 48 * A0, "filleted box volume", 1e-3);
+        return { id, endFaceId: endFace.id as string, lines: loop.matches.filter((m: any) => m.curveType === "Line").map((m: any) => m.id as string), arcs: loop.matches.filter((m: any) => m.curveType === "Circle").map((m: any) => m.id as string) };
       };
-      const faceCount = async (id: number) => (await status(client)).bodies.find((body: { id: number }) => body.id === id).faceCount;
-      const validity = async (id: number) => { const current = await status(client); const read = await call(client, "plasticity_validate_bodies", { ids: [id], revision: current.revision }); return read.bodies[0]; };
-      const rows: Record<string, unknown> = {};
-      for (const distance of [5, 7]) {
-        const { id, loopIds } = await build();
-        const filleted = await volume(id);
-        requireNear(filleted, 48 * A0, "filleted box volume", 1e-3);
+      const selections: Array<[string, (f: { lines: string[]; arcs: string[] }) => string[]]> = [
+        ["all 8", (f) => [...f.lines, ...f.arcs]], ["4 arcs", (f) => f.arcs], ["1 arc", (f) => f.arcs.slice(0, 1)],
+        ["1 line + 1 arc", (f) => [f.lines[0]!, f.arcs[0]!]], ["4 lines", (f) => f.lines], ["1 line", (f) => f.lines.slice(0, 1)],
+      ];
+      for (const d of [5, 7, 7.41, 9]) {
+        for (const [name, pick] of selections) {
+          const f = await build();
+          await row(`R7 box end loop d=${d}, ${name}`, f.id, { edgeIds: pick(f) }, d, loopVolume(d));
+          await undoTo(client, baseline.undoDepth);
+        }
+      }
+      // edgeQuery: the loop by its end face, through the tool only (the selection is resolved by the server).
+      for (const d of [5, 7.41]) {
+        const f = await build();
+        const { reply } = await row(`R7 box end loop d=${d}, edgeQuery adjacentFaceIds`, f.id, { edgeQuery: { adjacentFaceIds: [f.endFaceId] } }, d, loopVolume(d));
+        requireCondition(reply.isError === (d > R), `edgeQuery d=${d}: expected ${d > R ? "a refusal" : "OK"}`);
+        await undoTo(client, baseline.undoDepth);
+      }
+      const holed = async (thick: number, r: number) => {
+        const id = await box([X, 0, 0], [40, 40, thick]);
         const current = await status(client);
-        await call(client, "plasticity_chamfer", { id, edgeIds: loopIds, distanceMm: distance, revision: current.revision });
-        const measured = await volume(id);
-        requireNear(measured, idealVolume(distance), `${distance} mm chamfer volume`, 1e-3);
-        const valid = await validity(id);
-        requireCondition(valid.closed && valid.nativeValid && valid.printableSolid, `${distance} mm chamfer is not a valid closed solid`);
-        rows[`d${distance}`] = { volumeMm3: measured, idealMm3: idealVolume(distance), faces: await faceCount(id), tool: "ok" };
+        await call(client, "plasticity_create_cylinder", { centerMm: [X + 20, 20, -5], radiusMm: r, heightMm: thick + 10, revision: current.revision });
+        const withTool = await status(client);
+        const cylinder = withTool.bodies.find((body: { id: number }) => !current.bodies.some((old: { id: number }) => old.id === body.id)).id;
+        await call(client, "plasticity_boolean", { targetIds: [id], toolIds: [cylinder], operation: "difference", revision: withTool.revision });
+        const rims = (await call(client, "plasticity_find_edges", { revision: (await status(client)).revision, query: { bodyIds: [id], circle: true } })).matches;
+        return { id, top: rims.filter((m: any) => Math.abs(m.centerMm[2] - thick) < 1e-6).map((m: any) => m.id), bottom: rims.filter((m: any) => Math.abs(m.centerMm[2]) < 1e-6).map((m: any) => m.id) };
+      };
+      for (const [thick, r, d, both] of [[4, 3, 5, false], [6, 1.6, 3, true], [20, 3, 2, false], [20, 3, 5, false], [8, 3, 5, true]] as const) {
+        const f = await holed(thick, r);
+        const depth = Math.min(d, both ? thick / 2 : thick);
+        const hand = 1600 * thick - Math.PI * r * r * thick - (both ? 2 : 1) * rimRemoved(r, d, depth);
+        await row(`hole R${r} in a ${thick} mm plate, ${both ? "both rims" : "top rim"} d=${d}`, f.id, { edgeIds: both ? [...f.top, ...f.bottom] : f.top }, d, hand);
+        await undoTo(client, baseline.undoDepth);
+      }
+      for (const [r, d] of [[10, 3], [5, 5], [5, 5.5]] as const) {
+        const before = await status(client);
+        await call(client, "plasticity_create_cylinder", { centerMm: [X, 0, 0], radiusMm: r, heightMm: 20, revision: before.revision });
+        const now = await status(client);
+        const id = now.bodies.find((body: { id: number }) => !before.bodies.some((old: { id: number }) => old.id === body.id)).id;
+        const top = (await call(client, "plasticity_find_edges", { revision: now.revision, query: { bodyIds: [id], circle: true } })).matches.filter((m: any) => Math.abs(m.centerMm[2] - 20) < 1e-6).map((m: any) => m.id);
+        // Removed: the integral over depth s in 0..d of pi (r^2 - (r - d + s)^2). No chamfer exists for d > r.
+        const hand = d <= r ? Math.PI * r * r * 20 - Math.PI * (r * r * d - (r ** 3 - (r - d) ** 3) / 3) : Number.NaN;
+        await row(`cylinder R${r} top rim d=${d}`, id, { edgeIds: top }, d, hand);
         await undoTo(client, baseline.undoDepth);
       }
       {
-        const { id, loopIds } = await build();
-        const facesBefore = await faceCount(id);
-        const current = await status(client);
-        const refused = await callRaw(client, "plasticity_chamfer", { id, edgeIds: loopIds, distanceMm: 7.41, revision: current.revision });
-        requireCondition(refused.isError && /larger than the radius of arc edge/.test(refused.text) && /Undo step/.test(refused.text), `7.41 mm chamfer was not refused honestly: ${refused.text.slice(0, 200)}`);
-        const measured = await volume(id);
-        const ideal = idealVolume(7.41);
-        const valid = await validity(id);
-        requireCondition(valid.closed && valid.nativeValid, "the kernel's 7.41 mm result is not closed and valid (the finding says it is)");
-        rows.d7_41 = { toolRefused: true, measuredMm3: measured, idealMm3: ideal, differenceMm3: measured - ideal, faces: await faceCount(id), facesBeforeChamfer: facesBefore, expectedFacesForFullChamfer: facesBefore + 8, closed: valid.closed, nativeValid: valid.nativeValid, message: refused.text.slice(0, 400) };
+        const plate = await box([X, 0, 0], [40, 40, 5]);
+        const before = await status(client);
+        await call(client, "plasticity_create_cylinder", { centerMm: [X + 20, 20, 5], radiusMm: 2, heightMm: 10, revision: before.revision });
+        const now = await status(client);
+        const boss = now.bodies.find((body: { id: number }) => !before.bodies.some((old: { id: number }) => old.id === body.id)).id;
+        await call(client, "plasticity_boolean", { targetIds: [plate], toolIds: [boss], operation: "union", revision: now.revision });
+        const base = (await call(client, "plasticity_find_edges", { revision: (await status(client)).revision, query: { bodyIds: [plate], circle: true } })).matches.filter((m: any) => Math.abs(m.centerMm[2] - 5) < 1e-6).map((m: any) => m.id);
+        // Added: a 3 x 3 triangle (area 4.5, centroid at r = 3) swept around the boss axis.
+        await row("concave boss base R2 d=3", plate, { edgeIds: base }, 3, 8000 + Math.PI * 4 * 10 + 2 * Math.PI * 3 * 4.5);
+        await undoTo(client, baseline.undoDepth);
+      }
+      {
+        const id = await box([X, 0, 0], [60, 50, 20]);
+        const tool = await box([X + 15, 12, 8], [30, 26, 20]);
+        let current = await status(client);
+        await call(client, "plasticity_boolean", { targetIds: [id], toolIds: [tool], operation: "difference", revision: current.revision });
+        current = await status(client);
+        const vertical = (await call(client, "plasticity_find_edges", { revision: current.revision, query: { bodyIds: [id], line: true, direction: { vector: [0, 0, 1], toleranceDeg: 0.1 } } })).matches
+          .filter((m: any) => m.centerMm[0] > X + 1 && m.centerMm[0] < X + 59 && m.centerMm[1] > 1 && m.centerMm[1] < 49);
+        await call(client, "plasticity_fillet", { id, edgeIds: vertical.map((m: any) => m.id), radiusMm: 2, revision: current.revision });
+        current = await status(client);
+        const loop = (await call(client, "plasticity_find_edges", { revision: current.revision, query: { bodyIds: [id] }, limit: 500 })).matches
+          .filter((m: any) => Math.abs(m.centerMm[2] - 20) < 1e-6 && m.boundsMm.min[0] > X + 10 && m.boundsMm.max[0] < X + 50 && m.boundsMm.min[1] > 5 && m.boundsMm.max[1] < 45);
+        requireCondition(loop.length === 8, `the pocket loop has ${loop.length} edges`);
+        // Removed: the 4.5 mm2 triangle along 96 mm of straight rim, plus four quarter turns of it around the R2 corner axes.
+        const pocket = (30 * 26 - (4 - Math.PI) * 4) * 12;
+        await row("pocket loop with R2 concave arcs d=3", id, { edgeIds: loop.map((m: any) => m.id) }, 3, 60000 - pocket - (96 * 4.5 + 4 * (Math.PI / 2) * 3 * 4.5));
+        await undoTo(client, baseline.undoDepth);
+      }
+      // plasticity_batch with undoOnError: a box, then the 7.41 mm chamfer. The chamfer undoes itself; the batch undoes the box.
+      {
+        const f = await build();
+        const before = await status(client);
+        const reply = await callRaw(client, "plasticity_batch", { undoOnError: true, steps: [
+          { toolName: "plasticity_create_box", arguments: { originMm: [X + 200, 0, 0], sizeMm: [5, 5, 5] } },
+          { toolName: "plasticity_chamfer", arguments: { id: f.id, edgeIds: f.lines.slice(0, 1), distanceMm: 7.41 } },
+        ] });
+        const after = await status(client);
+        requireCondition(reply.isError, "the batch did not fail");
+        const failure = JSON.parse(reply.text);
+        requireCondition(failure.failedStep === 1 && failure.undoneSteps === 1, `batch: failedStep ${failure.failedStep}, undoneSteps ${failure.undoneSteps}`);
+        requireCondition(/No undo is needed for this call/.test(failure.error) && !/plasticity_undo restores/.test(failure.error), "the batch error tells the caller to undo");
+        requireCondition(after.undoDepth === before.undoDepth && sameBodies(after, before), "the batch did not end with the document as before");
+        rows.push({ label: "plasticity_batch undoOnError: create_box, then the d=7.41 chamfer on 1 line", tool: "refused", undoneSteps: failure.undoneSteps, documentUnchanged: true });
+        await undoTo(client, baseline.undoDepth);
+      }
+      // Two bodies in one call: plasticity_chamfer takes one body id, so the schema refuses it before any edit.
+      {
+        const a = await build();
+        const before = await status(client);
+        const reply = await callRaw(client, "plasticity_chamfer", { id: [a.id, a.id], edgeIds: a.lines, distanceMm: 3, revision: before.revision });
+        const after = await status(client);
+        requireCondition(reply.isError && after.undoDepth === before.undoDepth && after.revision === before.revision, "a two-body chamfer call was not refused before any edit");
+        rows.push({ label: "two bodies in one call", tool: "refused by the schema (one body id per call)", documentUnchanged: true });
         await undoTo(client, baseline.undoDepth);
       }
       g5.rows = rows;
@@ -455,6 +732,11 @@ async function recover(client: Client, initial: any): Promise<Record<string, unk
   return { restored: false, reason: "undo-limit" };
 }
 
+function sameBodies(a: any, b: any): boolean {
+  const key = (body: any) => JSON.stringify([body.id, body.versionId, body.faceCount, body.edgeCount, body.boundsMm]);
+  return a.bodies.length === b.bodies.length && a.bodies.map(key).sort().join() === b.bodies.map(key).sort().join();
+}
+function round3(value: number): number { return Math.round(value * 1000) / 1000; }
 function bodyIds(state: any): number[] { return state.bodies.map((body: { id: number }) => body.id).sort((a: number, b: number) => a - b); }
 function summary(state: any): Record<string, unknown> { return { documentToken: state.documentToken, revision: state.revision, undoDepth: state.undoDepth, redoDepth: state.redoDepth, bodyCount: state.bodies.length }; }
 function requireCondition(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(message); }

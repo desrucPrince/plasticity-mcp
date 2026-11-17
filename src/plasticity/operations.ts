@@ -430,6 +430,30 @@ const commandEnd = `
   await this.exec(command);
   if (failure) throw failure;`;
 
+// Equal-distance chamfer (FilletShellFactory with a negative distance). Besides committing it returns what
+// chamferFaceCheck needs: the edges the factory chamfers (extendedEdges: the selection plus its tangent chain, read
+// before commit) and every face's topology identity (entityId) before and after. A face keeps its entityId when the
+// chamfer only trims it, so an entityId the body did not have before marks a face the chamfer made.
+export const CHAMFER_SOURCE = nativeFunction`async function (Factory, args) {
+  ${findView}
+  const faceIdentity = item => { const faces = item.high.faces; return Array.from(faces.versionIds, (faceId, index) => [String(faceId), Number(faces.get(index)?.entityId)]); };
+  const evidence = { chain: null, chainError: null, facesBefore: faceIdentity(find(args.id)), facesAfter: [] };
+  ${commandStart("FilletShellCommand")}
+      const view = find(args.id);
+      const edges = view.high.edges;
+      factory.shell = view;
+      factory.edges = args.edgeIds.map(id => {
+        const index = edges.versionIds.indexOf(id);
+        if (index < 0) throw new Error('Stale or unknown edge: ' + id);
+        return edges.get(index);
+      });
+      factory.distance = args.distance;
+      try { evidence.chain = Array.from(factory.extendedEdges ?? [], edge => String(edge.versionId)); } catch (error) { evidence.chainError = String(error?.message ?? error); }
+  ${commandEnd}
+  evidence.facesAfter = faceIdentity(find(args.id));
+  return evidence;
+}`;
+
 // ExtensionShape members the MCP exposes (probes-2026-11 FINDINGS gap 3). Arc fails on NURBS sheets and
 // bias, Bbox have no measurable effect, so they stay out.
 export const SHEET_EXTENSION_SHAPES = { linear: "Linear", soft: "Soft", reflective: "Reflective", natural: "Natural" } as const;
@@ -6050,36 +6074,55 @@ export class PlasticityOperations {
   }
 
   async boolean(targetIds: number[], toolIds: number[], operation: "union" | "difference" | "intersection", keepTools: boolean, revision: string): Promise<RuntimeState> {
-    await this.assertRevision(revision);
+    const before = await this.assertRevision(revision);
     if (targetIds.some((id) => toolIds.includes(id))) throw new Error("Target and tool IDs must not overlap");
     if (operation === "intersection" && new Set(toolIds).size > 1) {
-      // The kernel's intersection takes target AND (tool 1 OR tool 2 ...) when given several tools, so each tool
-      // is intersected in turn inside one native command: the result is target AND tool 1 AND tool 2 ...
-      await this.runtime.mutate(nativeFunction`async function (Factory, args) {
-        ${findView}
-        if (this.executor.isBusy) throw new Error('Plasticity is busy');
-        const editor = this;
-        let failure;
-        const command = new this.commands.BooleanCommand(this);
-        command.remember = false;
-        command.execute = async function () {
-          try {
-            for (const toolId of args.toolIds) {
-              const factory = new Factory(editor).resource(this);
-              factory.targets = args.targetIds.map(find);
-              factory.tools = [find(toolId)];
-              factory.operationType = 15901;
-              factory.keepTools = args.keepTools;
-              await factory.commit();
+      // The kernel's intersection takes target AND (tool 1 OR tool 2 ...) when given several tools, so each tool is
+      // intersected in turn inside one native command: the result is target AND tool 1 AND tool 2 ... A native
+      // intersection with several targets does not keep the target IDs, so each target gets its own one-target
+      // passes. Every tool is kept until the last target's pass with it, then keepTools decides.
+      try {
+        await this.runtime.mutate(nativeFunction`async function (Factory, args) {
+          ${findView}
+          if (this.executor.isBusy) throw new Error('Plasticity is busy');
+          const editor = this;
+          let failure;
+          const command = new this.commands.BooleanCommand(this);
+          command.remember = false;
+          command.execute = async function () {
+            for (const [targetIndex, targetId] of args.targetIds.entries()) {
+              for (const toolId of args.toolIds) {
+                try {
+                  const factory = new Factory(editor).resource(this);
+                  factory.targets = [find(targetId)];
+                  factory.tools = [find(toolId)];
+                  factory.operationType = 15901;
+                  factory.keepTools = args.keepTools || targetIndex < args.targetIds.length - 1;
+                  await factory.commit();
+                } catch (error) {
+                  failure = new Error('Intersection of target ' + targetId + ' with tool ' + toolId + ' failed: ' + String(error?.message ?? error));
+                  throw failure;
+                }
+              }
             }
-          } catch (error) {
-            failure = error;
-            throw error;
-          }
-        };
-        await this.exec(command);
-        if (failure) throw failure;
-      }`, ["BooleanFactory"], [{ targetIds, toolIds: [...new Set(toolIds)], keepTools }]);
+          };
+          await this.exec(command);
+          if (failure) throw failure;
+        }`, ["BooleanFactory"], [{ targetIds: [...new Set(targetIds)], toolIds: [...new Set(toolIds)], keepTools }]);
+      } catch (error) {
+        if (this.runtime.isUncertain?.() === true) throw error;
+        let now: RuntimeState;
+        try {
+          now = await this.state();
+        } catch {
+          throw error;
+        }
+        const message = (error instanceof Error ? error.message : String(error)).replace(/\.\s*$/u, "");
+        const back = now.undoDepth === before.undoDepth && sameBodies(before, now);
+        throw new Error(`${message}. ${back
+          ? `Plasticity rolled the command back: the document reads back as before this call (Undo depth ${now.undoDepth}, every body at its earlier version)`
+          : `The document does not read back as before this call (Undo depth ${now.undoDepth}, was ${before.undoDepth}); read the bodies before you continue`}; the current revision is ${now.revision}.`);
+      }
       return await this.state();
     }
     await this.runtime.mutate(nativeFunction`async function (Factory, args) {
@@ -6294,40 +6337,52 @@ export class PlasticityOperations {
     return await this.state();
   }
 
+  // Plasticity can answer OK for a chamfer it made only in part: 7.41 mm on the end loop of a box whose long edges are
+  // R7 left the four arcs without a chamfer face (14 faces, 33,639.98 mm3; the equal-distance chamfer is 18 faces and
+  // 33,568.38 mm3). The factory also chamfers the tangent chain of every selected edge, so selecting one line of that
+  // loop gives the same body. The native call returns the chain the factory chamfered (FilletShellFactory.extendedEdges)
+  // and the topology identity (entityId) of every face before and after; chamferFaceCheck then needs one new face for
+  // every chained edge. When it finds edges without one, the tool undoes its own step and reports that.
   async chamfer(id: number, edgeIds: string[], distanceMm: number, revision: string): Promise<RuntimeState> {
     const before = await this.assertRevision(revision);
-    // An arc edge whose radius is smaller than the distance: the chamfer there has no exact offset. Plasticity answers OK
-    // but can drop the chamfer face of that arc (live: 7.41 mm on a loop of 4 lines and 4 R7 arcs gave 4 new faces for
-    // 8 edges and 71.6 mm3 more volume than the hand calculation). The result is read back below for exactly this case.
-    const beforeBody = before.bodies.find((body) => body.id === id);
-    const collapsing = beforeBody === undefined ? [] : [...new Set(edgeIds)].flatMap((edgeId) => {
-      const radiusMm = beforeBody.edges.find((edge) => edge.id === edgeId)?.circleGeometry?.radiusMm;
-      return radiusMm !== undefined && radiusMm < distanceMm - 1e-9 ? [{ edgeId, radiusMm }] : [];
-    });
-    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
-      ${findView}
-      ${commandStart("FilletShellCommand")}
-      const view = find(args.id);
-      const edges = view.high.edges;
-      factory.shell = view;
-      factory.edges = args.edgeIds.map(id => {
-        const index = edges.versionIds.indexOf(id);
-        if (index < 0) throw new Error('Stale or unknown edge: ' + id);
-        return edges.get(index);
-      });
-      factory.distance = args.distance;
-      ${commandEnd}
-    }`, ["FilletShellFactory"], [{ id, edgeIds, distance: -millimetersToMeters(distanceMm) }]);
+    const evidence = await this.runtime.mutate<ChamferNativeEvidence | undefined>(CHAMFER_SOURCE, ["FilletShellFactory"], [{ id, edgeIds, distance: -millimetersToMeters(distanceMm) }]);
     const after = await this.state();
-    if (collapsing.length > 0 && beforeBody) {
-      const afterBody = after.bodies.find((body) => body.id === id);
-      const wanted = new Set(edgeIds).size;
-      const added = afterBody === undefined ? 0 : afterBody.faceIds.length - beforeBody.faceIds.length;
-      if (added < wanted) {
-        throw new Error(`Chamfer ${distanceMm} mm is larger than the radius of arc edge ${collapsing.map((entry) => `${entry.edgeId} (R${Number(entry.radiusMm.toFixed(6))} mm)`).join(", ")}. Plasticity reported OK but made ${added} chamfer face${added === 1 ? "" : "s"} for ${wanted} edge${wanted === 1 ? "" : "s"}: the arcs were not chamfered by the requested distance. The result is committed as one Undo step at revision ${after.revision}; plasticity_undo restores the body. Use a distance of at most the smallest arc radius (${Math.min(...collapsing.map((entry) => entry.radiusMm))} mm).`);
-      }
+    const beforeBody = before.bodies.find((body) => body.id === id);
+    const afterBody = after.bodies.find((body) => body.id === id);
+    // No evidence (an older fake or renderer) or no body to compare: nothing is claimed either way.
+    if (!evidence || !beforeBody || !afterBody) return after;
+    const check = chamferFaceCheck(beforeBody, afterBody, evidence, edgeIds);
+    if (check.missing.length === 0) return after;
+    throw new Error(await this.rollBackChamfer(id, distanceMm, before, after, check));
+  }
+
+  // Undoes the chamfer step this call made and says whether the document is back where it was.
+  private async rollBackChamfer(id: number, distanceMm: number, before: RuntimeState, after: RuntimeState, check: ChamferFaceCheck): Promise<string> {
+    const beforeBody = before.bodies.find((body) => body.id === id)!;
+    const describe = (edgeId: string) => {
+      const edge = beforeBody.edges.find((candidate) => candidate.id === edgeId);
+      const radius = edge?.circleGeometry?.radiusMm;
+      return `${edgeId} (${edge?.curveType ?? "edge"}${radius === undefined ? "" : ` R${Number(radius.toFixed(6))} mm`})`;
+    };
+    const chained = check.chained.length - check.selected.length;
+    const smallArcs = check.chained.flatMap((edgeId) => {
+      const radius = beforeBody.edges.find((edge) => edge.id === edgeId)?.circleGeometry?.radiusMm;
+      return radius !== undefined && radius < distanceMm ? [radius] : [];
+    });
+    const finding = `Chamfer ${distanceMm} mm on body ${id} was not made on every edge: Plasticity reported OK, but ${check.missing.length} of the ${check.chained.length} edge${check.chained.length === 1 ? "" : "s"} it chamfered (${check.selected.length} selected${chained > 0 ? `, ${chained} more along their tangent chain` : ""}) got no chamfer face: ${check.missing.map(describe).join(", ")}.${smallArcs.length > 0 ? ` A chained arc has radius ${Number(Math.min(...smallArcs).toFixed(6))} mm, below the distance; a distance of at most that radius may succeed.` : ""}`;
+    if (after.undoDepth !== before.undoDepth + 1) {
+      return `${finding} The call left the Undo depth at ${after.undoDepth} (was ${before.undoDepth}), so the tool did not undo anything: revision ${after.revision} holds this result; inspect it before you undo.`;
     }
-    return after;
+    let restored: RuntimeState;
+    try {
+      await this.stepHistory("undo");
+      restored = await this.state();
+    } catch (error) {
+      return `${finding} The tool's own undo of this step failed (${error instanceof Error ? error.message : String(error)}): the chamfer may remain at revision ${after.revision}; call plasticity_reconcile and read the body before you undo.`;
+    }
+    const unchanged = restored.undoDepth === before.undoDepth && sameBodies(before, restored);
+    if (unchanged) return `${finding} The tool undid its own step: the document is as it was before this call (Undo depth ${restored.undoDepth}, every body at its earlier version, body ${id} with its ${beforeBody.faceIds.length} faces); the revision is now ${restored.revision}. No undo is needed for this call. Redo would bring the partial chamfer back, and Redo entries from before this call are gone.`;
+    return `${finding} The tool undid one step, but the document does not read back as before (Undo depth ${restored.undoDepth}, was ${before.undoDepth}; bodies ${sameBodies(before, restored) ? "as before" : "differ"}); revision ${restored.revision}. Read the body before you continue.`;
   }
 
   async removeFillets(ids: number[], revision: string): Promise<RuntimeState> {
@@ -12605,6 +12660,106 @@ async function readFirstLine(path: string, label: string, format: string): Promi
   }
 }
 
+// ---- Chamfer read-back.
+
+/** What CHAMFER_SOURCE returns: the factory's chamfered edge chain and [faceId, entityId] of every face before and after. */
+export interface ChamferNativeEvidence {
+  chain: string[] | null;
+  chainError?: string | null;
+  facesBefore: Array<[string, number]>;
+  facesAfter: Array<[string, number]>;
+}
+
+export interface ChamferFaceCheck {
+  /** The distinct edge IDs the caller selected. */
+  selected: string[];
+  /** Every edge the factory chamfered: the selection plus its tangent chain (only the selection when the factory gave no chain). */
+  chained: string[];
+  chainSource: "factory" | "selection";
+  /** Faces of the result with a topology identity (entityId) the body did not have before. */
+  newFaces: string[];
+  /** Chained edge -> the distinct new face assigned to it. */
+  matched: Array<{ edgeId: string; faceId: string }>;
+  /** Chained edges no distinct new face could be assigned to. Empty means the check found nothing wrong. */
+  missing: string[];
+  /** Set when the evidence does not cover the bodies' faces; then nothing is claimed and missing is empty. */
+  noClaim?: string;
+}
+
+type CheckedBody = RuntimeState["bodies"][number];
+
+/**
+ * Proves, for a chamfer Plasticity answered OK: every edge the factory chamfered (the selection plus the tangent chain
+ * it adds) has its own new face (a face whose topology identity the body did not have before) that shares an edge with
+ * one of the edge's original faces that survived, or any new face when neither survived. The assignment is a maximum
+ * matching, so N chained edges need N distinct new faces. It does not prove the distance or the shape of a face: a
+ * chamfer whose faces all exist but sit at the wrong distance passes, and so would a missing chamfer face whose place a
+ * face the chamfer split off an old face happened to take (not seen live). A new face on the plane of an older face is
+ * still new (a second chamfer in line with an earlier one is on the same plane).
+ */
+export function chamferFaceCheck(beforeBody: CheckedBody, afterBody: CheckedBody, evidence: ChamferNativeEvidence, selectedIds: string[]): ChamferFaceCheck {
+  const selected = [...new Set(selectedIds)];
+  const factoryChain = Array.isArray(evidence.chain) && evidence.chain.length > 0 ? evidence.chain.map(String) : null;
+  const chained = [...new Set([...selected, ...(factoryChain ?? [])])];
+  const base = { selected, chained, chainSource: factoryChain ? "factory" as const : "selection" as const };
+  const identityBefore = new Map(evidence.facesBefore ?? []);
+  const identityAfter = new Map(evidence.facesAfter ?? []);
+  const uncovered = [...beforeBody.faces.filter((face) => !identityBefore.has(face.id)), ...afterBody.faces.filter((face) => !identityAfter.has(face.id))];
+  if (uncovered.length > 0 || beforeBody.faces.length === 0 || afterBody.faces.length === 0) {
+    return { ...base, newFaces: [], matched: [], missing: [], noClaim: "the native face identities do not cover the bodies' faces" };
+  }
+  const oldEntities = new Set(beforeBody.faces.map((face) => identityBefore.get(face.id)!));
+  const newFaces = afterBody.faces.filter((face) => !oldEntities.has(identityAfter.get(face.id)!));
+  const newIds = new Set(newFaces.map((face) => face.id));
+  const neighbours = new Map<string, Set<string>>();
+  for (const edge of afterBody.edges) {
+    for (const faceId of edge.faceIds) {
+      const set = neighbours.get(faceId) ?? new Set<string>();
+      for (const other of edge.faceIds) if (other !== faceId) set.add(other);
+      neighbours.set(faceId, set);
+    }
+  }
+  const afterByEntity = new Map(afterBody.faces.map((face) => [identityAfter.get(face.id)!, face.id]));
+  const candidates = new Map<string, { strong: string[]; weak: string[] }>();
+  for (const edgeId of chained) {
+    const original = beforeBody.edges.find((edge) => edge.id === edgeId)?.faceIds ?? [];
+    const survivors = original.flatMap((faceId) => { const after = afterByEntity.get(identityBefore.get(faceId)!); return after === undefined ? [] : [after]; });
+    const all = newFaces.map((face) => face.id);
+    if (survivors.length === 0) { candidates.set(edgeId, { strong: all, weak: all }); continue; }
+    const touches = (faceId: string, survivor: string) => neighbours.get(faceId)?.has(survivor) === true;
+    candidates.set(edgeId, {
+      strong: all.filter((faceId) => survivors.every((survivor) => touches(faceId, survivor))),
+      weak: all.filter((faceId) => survivors.some((survivor) => touches(faceId, survivor))),
+    });
+  }
+  // Kuhn's augmenting paths: first over faces touching every surviving original face, then over faces touching one.
+  const owner = new Map<string, string>();
+  const assign = (edgeId: string, pool: "strong" | "weak", seen: Set<string>): boolean => {
+    for (const faceId of candidates.get(edgeId)![pool]) {
+      if (seen.has(faceId)) continue;
+      seen.add(faceId);
+      const holder = owner.get(faceId);
+      if (holder === undefined || assign(holder, pool, seen)) { owner.set(faceId, edgeId); return true; }
+    }
+    return false;
+  };
+  const order = [...chained].sort((a, b) => candidates.get(a)!.strong.length - candidates.get(b)!.strong.length);
+  const placed = new Set<string>();
+  for (const pool of ["strong", "weak"] as const) {
+    for (const edgeId of order) if (!placed.has(edgeId) && assign(edgeId, pool, new Set())) placed.add(edgeId);
+  }
+  const matched = [...owner.entries()].map(([faceId, edgeId]) => ({ edgeId, faceId }));
+  return { ...base, newFaces: [...newIds], matched, missing: chained.filter((edgeId) => !placed.has(edgeId)) };
+}
+
+// Same bodies, each at the same native version with the same faces and edges.
+function sameBodies(a: RuntimeState, b: RuntimeState): boolean {
+  if (a.bodies.length !== b.bodies.length) return false;
+  const key = (body: CheckedBody) => JSON.stringify([body.id, body.versionId, [...body.faceIds].sort(), [...body.edgeIds].sort()]);
+  const left = new Set(a.bodies.map(key));
+  return b.bodies.every((body) => left.has(key(body)));
+}
+
 // ---- CAD export header privacy. The native exporters stamp the staging path and the OS user name into the file
 // header. Each rewrite below touches the header only; the model data after it stays byte-identical.
 
@@ -12665,8 +12820,8 @@ export function sanitizeStepHeader(text: string, outputBaseName: string): string
 }
 
 // IGES: the Global section's parameter 4 is the file name Plasticity filled with the staging path. It is replaced by
-// the output file's base name, the Global lines are re-wrapped to 72 columns and the Terminate record's G count is
-// updated. Start, Directory and Parameter lines are returned unchanged.
+// the output file's base name, the Global section is wrapped again by the IGES 5.3 rules (sections 2.2.2 and 2.2.3)
+// and the Terminate record's G count is updated. Start, Directory and Parameter lines are returned unchanged.
 export function sanitizeIgesGlobal(text: string, outputBaseName: string): string {
   const newline = text.includes("\r\n") ? "\r\n" : "\n";
   const lines = text.split(newline);
@@ -12675,50 +12830,77 @@ export function sanitizeIgesGlobal(text: string, outputBaseName: string): string
   const first = globalIndexes[0]!;
   const last = globalIndexes[globalIndexes.length - 1]!;
   if (last - first + 1 !== globalIndexes.length) return text;
-  const stream = globalIndexes.map((index) => lines[index]!.slice(0, 72)).join("");
-  // Parameters 1 and 2 are the delimiters (1H, and 1H; by default); parameter 4 is the file name.
-  const fields: string[] = [];
-  let position = 0;
-  const isTerminator = (char: string | undefined) => char === ";";
-  const readField = (): void => {
-    const hollerith = /^(\d+)H/u.exec(stream.slice(position));
+  // Columns 1-72 of every Global line in order. A string that crosses a line runs to column 72, so joining the data
+  // columns gives the parameter text back; blanks a writer padded a line with only sit between parameters.
+  const stream = globalIndexes.map((index) => lines[index]!.slice(0, 72).padEnd(72, " ")).join("");
+  // Parameters 1 and 2 are the delimiters; Plasticity writes the defaults (1H, and 1H;). Other delimiters are left alone
+  // (the staging-path guard still applies).
+  if (!stream.startsWith("1H,,1H;,")) return text;
+  const fields: Array<{ text: string; string: boolean }> = [{ text: "1H,", string: true }, { text: "1H;", string: true }];
+  let position = "1H,,1H;,".length;
+  for (;;) {
+    while (stream[position] === " ") position += 1; // blanks only count inside strings
+    const hollerith = /^(\d+)H/u.exec(stream.slice(position, position + 16));
     if (hollerith) {
-      const length = Number(hollerith[1]);
-      const end = position + hollerith[0].length + length;
-      fields.push(stream.slice(position, end));
+      const end = position + hollerith[0].length + Number(hollerith[1]);
+      if (end > stream.length) return text;
+      fields.push({ text: stream.slice(position, end), string: true });
       position = end;
+      while (stream[position] === " ") position += 1;
     } else {
       let end = position;
-      while (end < stream.length && stream[end] !== "," && !isTerminator(stream[end])) end += 1;
-      fields.push(stream.slice(position, end));
+      while (end < stream.length && stream[end] !== "," && stream[end] !== ";") end += 1;
+      fields.push({ text: stream.slice(position, end).trim(), string: false });
       position = end;
     }
-  };
-  // The delimiter fields are fixed by the format's defaults; Plasticity writes those.
-  if (!stream.startsWith("1H,,1H;,")) return text; // custom delimiters: left alone, the staging-path guard still applies
-  fields.push("1H,", "1H;");
-  position = "1H,,1H;,".length;
-  while (position < stream.length && !isTerminator(stream[position])) {
-    readField();
-    if (stream[position] === ",") position += 1;
-    else break;
+    if (stream[position] === ",") { position += 1; continue; }
+    if (stream[position] === ";") break;
+    return text; // no record delimiter: not a Global section this can rewrite
   }
-  if (!isTerminator(stream[position]) || fields.length < 4) return text;
+  if (fields.length < 4 || stream.slice(position + 1).trim() !== "") return text;
   const name = outputBaseName.replace(/[^\x20-\x7e]/gu, "_");
-  fields[3] = `${name.length}H${name}`;
-  const rebuilt = `${fields.join(",")};`;
-  const chunks: string[] = [];
-  for (let offset = 0; offset < rebuilt.length; offset += 72) chunks.push(rebuilt.slice(offset, offset + 72));
-  const globalLines = chunks.map((chunk, index) => `${chunk.padEnd(72, " ")}G${String(index + 1).padStart(7, " ")}`);
+  fields[3] = { text: `${name.length}H${name}`, string: true };
+  if (fields.some((field) => !field.string && field.text.length + 1 > 72)) return text; // cannot be laid out by the rules
+  const globalLines = wrapIgesGlobal(fields.map((field, index) => ({ token: `${field.text}${index === fields.length - 1 ? ";" : ","}`, string: field.string })))
+    .map((data, index) => `${data.padEnd(72, " ")}G${String(index + 1).padStart(7, " ")}`);
   const terminate = lines.findIndex((line) => line.length >= 73 && line[72] === "T");
   const result = [...lines.slice(0, first), ...globalLines, ...lines.slice(last + 1)];
   if (terminate >= 0) {
     const shifted = terminate - globalIndexes.length + globalLines.length;
     const record = result[shifted]!;
-    const counts = record.slice(0, 72).replace(/G\s*\d+/u, `G${String(globalLines.length).padStart(7, " ")}`);
-    result[shifted] = `${counts.slice(0, 72).padEnd(72, " ")}${record.slice(72)}`;
+    // The Terminate record is S, G, D and P, each a letter and a 7-column count, in columns 1-32.
+    result[shifted] = record[8] === "G"
+      ? `${record.slice(0, 8)}G${String(globalLines.length).padStart(7, " ")}${record.slice(16)}`
+      : `${record.slice(0, 72).replace(/G\s*\d+/u, `G${String(globalLines.length).padStart(7, " ")}`).slice(0, 72).padEnd(72, " ")}${record.slice(72)}`;
   }
   return result.join(newline);
+}
+
+// Lays parameter tokens (a parameter and its delimiter) on 72-column lines. A numeric or empty parameter and its
+// delimiter never cross a line (2.2.3: a numeric field ends at least one column before the last data column). A string
+// stays whole on one line when it fits on a line; a longer one starts where its count and H fit on the line, runs to
+// column 72 and continues in column 1 (2.2.2), and starts on a new line instead when that keeps its delimiter off a line
+// of its own.
+function wrapIgesGlobal(tokens: Array<{ token: string; string: boolean }>): string[] {
+  const out: string[] = [];
+  let line = "";
+  const flush = () => { out.push(line); line = ""; };
+  for (const { token, string } of tokens) {
+    if (line.length + token.length <= 72) { line += token; continue; }
+    if (!string || token.length <= 72) { flush(); line = token; continue; }
+    const head = /^\d+H/u.exec(token)![0].length;
+    if (72 - line.length < head + 1 || (line.length > 0 && (line.length + token.length) % 72 === 1)) flush();
+    let rest = token;
+    while (line.length + rest.length > 72) {
+      const room = 72 - line.length;
+      line += rest.slice(0, room);
+      rest = rest.slice(room);
+      flush();
+    }
+    line += rest;
+  }
+  if (line.length > 0) flush();
+  return out;
 }
 
 // Parasolid text and binary files carry a text header ending at **END_OF_HEADER. KEY= and FILE= hold the staging
@@ -12749,10 +12931,43 @@ async function sanitizeCadExport(temporary: string, staging: string, format: Cad
   const cleaned = format === "parasolid"
     ? sanitizeParasolidHeader(original, outputBaseName)
     : Buffer.from((format === "step" ? sanitizeStepHeader : sanitizeIgesGlobal)(original.toString("latin1"), outputBaseName), "latin1");
-  // IGES wraps the Global section at column 72, so a path can be split by the line ends: test the unwrapped text too.
-  const unwrapped = format === "iges" ? cleaned.toString("latin1").split(/\r?\n/u).map((line) => line.slice(0, 72)).join("") : "";
-  if (cleaned.includes(Buffer.from(staging, "latin1")) || unwrapped.includes(staging)) throw new Error(`The ${format} export still names its staging folder; the export was not written`);
+  if (cadExportNamesFolder(cleaned, staging, format)) throw new Error(`The ${format} export still names its staging folder; the export was not written`);
   if (!cleaned.equals(original)) await writeFile(temporary, cleaned);
+}
+
+// STEP text with its string escapes decoded (ISO 10303-21: '' and \\, \S\c for a character above 127, \X\hh, \X2\..\X0\
+// and \X4\..\X0\ for UTF-16 and UTF-32 code units) and line breaks removed, so a path reads as the folder name it encodes.
+function decodeStepText(text: string): string {
+  // One left-to-right pass, so an escaped backslash is never read as the start of another escape.
+  return text.replace(/\r?\n/gu, "").replace(/\\\\|''|\\X2\\((?:[0-9A-F]{4})+)\\X0\\|\\X4\\((?:[0-9A-F]{8})+)\\X0\\|\\X\\([0-9A-F]{2})|\\S\\(.)|\\P[A-I]\\/giu,
+    (match: string, x2?: string, x4?: string, x?: string, s?: string) => {
+      if (match === "\\\\") return "\\";
+      if (match === "''") return "'";
+      if (x2) return String.fromCharCode(...x2.match(/.{4}/gu)!.map((unit) => parseInt(unit, 16)));
+      if (x4) return String.fromCodePoint(...x4.match(/.{8}/gu)!.map((unit) => parseInt(unit, 16)));
+      if (x) return String.fromCharCode(parseInt(x, 16));
+      if (s) return String.fromCharCode(s.charCodeAt(0) + 128);
+      return ""; // \P?\ code-page directive
+    });
+}
+
+/**
+ * Whether an export file still names the staging folder, compared as bytes: the folder's UTF-8 bytes anywhere (what
+ * Parasolid writes), and the file's own encoding of it. STEP is compared after its string escapes are decoded (the
+ * exporter writes \S\ and \X2\ escapes); IGES Global text is compared with lines unwrapped at column 72 and every
+ * non-ASCII byte as a blank (the IGES exporter writes each byte of a non-ASCII character as a space).
+ */
+export function cadExportNamesFolder(content: Buffer, folder: string, format: CadExportFormat): boolean {
+  const utf8 = Buffer.from(folder, "utf8");
+  if (content.includes(utf8)) return true;
+  if (format === "step") return decodeStepText(content.toString("latin1")).includes(folder);
+  if (format === "iges") {
+    const blanked = Buffer.from(utf8.map((byte) => (byte >= 0x80 ? 0x20 : byte)));
+    const lines = content.toString("latin1").split(/\r?\n/u);
+    const unwrapped = Buffer.from(lines.map((line) => line.slice(0, 72)).join(""), "latin1");
+    return content.includes(blanked) || unwrapped.includes(utf8) || unwrapped.includes(blanked);
+  }
+  return false;
 }
 
 // IGES fixed-format lines are 80 columns wide; column 73 holds the section letter and the first line is in the Start section.
