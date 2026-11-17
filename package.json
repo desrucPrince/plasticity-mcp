@@ -31,6 +31,7 @@
     "accept:native-extend-sweep-label": "node scripts/verify-native-extend-sweep-label-live.ts",
     "accept:native-patch-polysplines-facepoints": "node scripts/verify-native-patch-polysplines-facepoints-live.ts",
     "accept:native-driving-distance": "node scripts/verify-native-driving-distance-live.ts",
+    "accept:native-selection": "node scripts/verify-native-selection-live.ts",
     "accept:native-rectangle": "node scripts/verify-native-rectangle-live.ts",
     "accept:native-curved-edge-distance": "node scripts/verify-native-curved-edge-distance-live.ts",
     "accept:native-sketch-primitives": "node scripts/verify-native-sketch-primitives-live.ts",

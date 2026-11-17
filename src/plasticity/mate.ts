@@ -15,7 +15,7 @@
 import { CommittedChangeError, type PlasticityOperations } from "./operations.ts";
 import { PlasticityRecipes, type RecipeOperations } from "./recipes.ts";
 import { mutationOutcomeIsUncertain, type RuntimeState } from "./runtime.ts";
-import type { ProbeRay, ProbeRayResult } from "./surfacing.ts";
+import type { ProbeRay, ProbeRayResult, ProbeUnresolvedCode } from "./surfacing.ts";
 
 export type Vector3 = [number, number, number];
 export type Bounds = { min: Vector3; max: Vector3 };
@@ -735,15 +735,30 @@ const normalToAxis = (face: Face | undefined, direction: Vector3) => !!face && f
  * Why the crossings of one ray are not proven up to limitMm from its origin; undefined when they are. A probe ray is
  * complete only without its two flags (plasticity_probe_surface):
  *  - grazing: a face the ray passes within 0.001 mm of without a crossing there. Within the limit it is refused.
- *  - unresolvedCrossings: crossings may be missing. One the probe cannot place (a display-mesh crossing no exact hit
- *    explains) is refused wherever it is. The parity guard (an odd crossing count; it adds one to the count and says
- *    "odd number of crossings" in unresolvedReason) is placed by the crossings themselves: they are proven up to the
- *    limit when they alternate, into the material and out of it, through the first crossing past the limit. A
- *    crossing missing or counted twice before that breaks the alternation. Any other unresolvedReason is refused: only
- *    the parity text is known to mean "one, and it can be placed".
+ *  - unresolvedCrossings: crossings may be missing. The probe says why with stable codes (unresolvedCodes,
+ *    PROBE_SURFACE_UNRESOLVED_CODES); the decision is taken on the codes, never on the text of unresolvedReason:
+ *      parity              the crossings of the line do not alternate entry and exit, the count is odd, or a crossing
+ *                          is tangent or an edge touch. The guard adds one to the count and does not say where. It is
+ *                          placed by the crossings themselves: they are proven up to the limit when they alternate,
+ *                          into the material and out of it, through the first crossing past the limit. A crossing
+ *                          missing, counted twice or of the wrong sense before that breaks the alternation.
+ *      kernel-error, bracket-unresolved, search-limit, missed-crossing
+ *                          a face is not settled for this ray, and the probe cannot say where along the ray its
+ *                          crossings lie: refused.
+ *      mesh-crossing       a display-mesh crossing no exact hit explains. It only adds to the count: a count above
+ *                          what parity accounts for is refused wherever the crossing may be.
+ *    A ray with unresolvedCrossings and a reason but no code (a record of the older probe), or with a code this table
+ *    does not know, is refused: only the code "parity" is known to mean "one, and it can be placed".
  */
-// The whole reason of the probe's parity guard (surfacing.ts) and nothing else: a second reason joined to it is not parity alone.
-const PARITY_REASON = /^odd number of crossings \(\d+\) on a closed Solid from an outside origin: at least one crossing is missing or a tangent touch was counted$/;
+/** What each probe code means for a bore ray: "alternation" = decided by the crossings themselves, "refuse" = not proven. */
+export const UNRESOLVED_CODE_RULE: Readonly<Record<ProbeUnresolvedCode, "alternation" | "refuse">> = Object.freeze({
+  parity: "alternation",
+  "kernel-error": "refuse",
+  "bracket-unresolved": "refuse",
+  "search-limit": "refuse",
+  "missed-crossing": "refuse",
+  "mesh-crossing": "refuse",
+});
 export function unprovenRay(ray: ProbeRayResult, direction: Vector3, limitMm: number): string | undefined {
   for (const graze of ray.grazing ?? []) {
     const along = dot(sub(graze.atMm, ray.originMm), direction);
@@ -751,13 +766,21 @@ export function unprovenRay(ray: ProbeRayResult, direction: Vector3, limitMm: nu
   }
   const unresolved = ray.unresolvedCrossings ?? 0;
   if (unresolved === 0) return undefined;
-  const parity = ray.unresolvedReason !== undefined && PARITY_REASON.test(ray.unresolvedReason) ? 1 : 0;
-  if (ray.unresolvedReason !== undefined && parity === 0) return `its crossings could not be resolved (${ray.unresolvedReason})`;
-  if (unresolved > parity) return `${unresolved - parity} of its crossings could not be resolved (the probe cannot say where)`;
+  const codes: readonly string[] = ray.unresolvedCodes ?? (ray.unresolvedCode !== undefined ? [ray.unresolvedCode] : []);
+  // A face that is not settled for this ray, or a code this table does not know: the probe cannot say where.
+  const unsettled = codes.filter((code) => code !== "mesh-crossing" && (UNRESOLVED_CODE_RULE as Record<string, string | undefined>)[code] !== "alternation");
+  if (unsettled.length > 0) return `its crossings could not be resolved (${ray.unresolvedReason ?? "the probe gave no reason"}) [${unsettled.join(", ")}]`;
+  if (codes.length === 0 && ray.unresolvedReason !== undefined) return `its crossings could not be resolved (${ray.unresolvedReason}) [the probe gave no code]`;
+  // The parity guard accounts for one unresolved crossing. Any more (a display-mesh crossing) cannot be placed.
+  const placed = codes.includes("parity") ? 1 : 0;
+  if (unresolved > placed) return `${unresolved - placed} of its crossings could not be resolved (the probe cannot say where)`;
+  // Parity alone: placed by the crossings. The count is odd for the probe's outside-origin guard and can be even for
+  // its whole-line guard (crossings behind the origin, or a tangent or edge touch), so the wording follows the count.
+  const failed = ray.intersections.length % 2 === 1 ? "it has an odd number of crossings and they do not alternate" : "it fails the probe's parity check and its crossings do not alternate";
   let inside = false;
   for (const hit of entering(ray, direction)) {
     const into = dot(hit.normal, direction) < 0;
-    if (into === inside) return `it has an odd number of crossings and they do not alternate at ${round6([hit.distanceMm, 0, 0])[0]} mm (face ${hit.faceId}): a crossing is missing or a tangent touch was counted`;
+    if (into === inside) return `${failed} at ${round6([hit.distanceMm, 0, 0])[0]} mm (face ${hit.faceId}): a crossing is missing or a tangent touch was counted`;
     inside = into;
     if (hit.distanceMm > limitMm + RAY_AGREE_MM) return undefined;
   }

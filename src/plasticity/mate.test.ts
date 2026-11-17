@@ -6,9 +6,9 @@ import type { RuntimeState } from "./runtime.ts";
 import {
   ANCHOR_POINTS, AxisRefusal, axisRays, boundsAnchor, circleSweepDeg, cylinderRadiiSummary, fullTurnCylinders, GuardedRunError, lineBoxSpan, placeBody, planEntry, planPlacement, planTransfer,
   pointInPlanarFace, quarterTurnMatrix, rotateBounds, runGuarded, selectSourceAxes, transferHoles, type Vector3,
-  CLEARANCE_RING_MM, FLOOR_RIM_INSET_MM, floorProblem, floorRays, RIM_RAYS, RIM_RAYS_LARGE, rimRayCount, unprovenRay,
+  CLEARANCE_RING_MM, FLOOR_RIM_INSET_MM, floorProblem, floorRays, RIM_RAYS, RIM_RAYS_LARGE, rimRayCount, unprovenRay, UNRESOLVED_CODE_RULE,
 } from "./mate.ts";
-import type { ProbeRayResult } from "./surfacing.ts";
+import { PROBE_SURFACE_UNRESOLVED_CODES, probeOddParityReason, type ProbeRayResult } from "./surfacing.ts";
 
 // ---------- a small geometric kernel: boxes, cylinder cutters, holes, quarter-turn rotations, undo ----------
 
@@ -1354,7 +1354,8 @@ const rayOf = (distances: Array<[number, number]>, flags: Partial<ProbeRayResult
   originMm: [0, 0, 10], direction: [0, 0, -1], hits: distances.length,
   intersections: distances.map(([distanceMm, nz], i) => ({ pointMm: [0, 0, 10 - distanceMm] as Vec, faceId: `f${i}`, normal: [0, 0, nz] as Vec, distanceMm, residualMm: 0 })), ...flags,
 });
-const PARITY = { unresolvedCrossings: 1, unresolvedReason: "odd number of crossings (3) on a closed Solid from an outside origin: at least one crossing is missing or a tangent touch was counted" };
+// The parity flag as the probe reports it: the reason text, and the stable code the transfer decides on.
+const PARITY = { unresolvedCrossings: 1, unresolvedReason: "odd number of crossings (3) on a closed Solid from an outside origin: at least one crossing is missing or a tangent touch was counted", unresolvedCode: "parity" as const, unresolvedCodes: ["parity" as const] };
 
 test("T1 guard 3: a ray with unresolvedCrossings or grazing is complete only where the flag cannot matter", () => {
   const down: Vec = [0, 0, -1];
@@ -1366,7 +1367,7 @@ test("T1 guard 3: a ray with unresolvedCrossings or grazing is complete only whe
   assert.equal(unprovenRay(graze, down, 6.9), undefined);
   // A crossing the probe cannot place (a display-mesh crossing no exact hit explains): refused wherever the limit is.
   assert.match(unprovenRay(rayOf([[5, 1], [10, -1]], { unresolvedCrossings: 1 }), down, 0)!, /1 of its crossings could not be resolved \(the probe cannot say where\)/);
-  assert.match(unprovenRay(rayOf([[5, 1], [10, -1], [20, 1]], { unresolvedCrossings: 2, unresolvedReason: PARITY.unresolvedReason }), down, 0)!, /1 of its crossings could not be resolved/);
+  assert.match(unprovenRay(rayOf([[5, 1], [10, -1], [20, 1]], { ...PARITY, unresolvedCrossings: 2, unresolvedCodes: ["parity", "mesh-crossing"] }), down, 0)!, /1 of its crossings could not be resolved/);
   // The parity guard alone (an odd count): placed by the crossings. Into the material at 5, out at 10, into it again at
   // 20 with no way out: the anomaly lies past 10, so a cut that reaches 7.05 mm is proven and a through cut is not.
   const odd = rayOf([[5, 1], [10, -1], [20, 1]], PARITY);
@@ -1378,13 +1379,63 @@ test("T1 guard 3: a ray with unresolvedCrossings or grazing is complete only whe
   assert.match(unprovenRay(twice, down, 5.5)!, /do not alternate at 9\.48 mm/, "the way out between 5 and 9.48 may lie within 5.5");
   assert.equal(unprovenRay(twice, down, 4.9), undefined, "nothing is decided past the first crossing");
   // A ray that starts on a face and leaves the body there (one crossing, at 0) is complete.
-  assert.equal(unprovenRay(rayOf([[0, -1]], { unresolvedCrossings: 1, unresolvedReason: PARITY.unresolvedReason }), down, 0), undefined);
+  assert.equal(unprovenRay(rayOf([[0, -1]], PARITY), down, 0), undefined);
   // Only the parity guard's own reason is placed this way: any other reason is refused, and so is a second reason
   // joined to it (the probe joins reasons with "; ").
-  assert.match(unprovenRay(rayOf([[5, 1], [10, -1], [20, 1]], { unresolvedCrossings: 1, unresolvedReason: "a face could not be evaluated" }), down, 7.05)!, /its crossings could not be resolved \(a face could not be evaluated\)/);
-  assert.match(unprovenRay(rayOf([[5, 1], [10, -1], [20, 1]], { unresolvedCrossings: 1, unresolvedReason: `${PARITY.unresolvedReason}; a face could not be evaluated` }), down, 7.05)!, /its crossings could not be resolved \(odd number of crossings .*; a face could not be evaluated\)/);
+  assert.match(unprovenRay(rayOf([[5, 1], [10, -1], [20, 1]], { unresolvedCrossings: 1, unresolvedReason: "a face could not be evaluated", unresolvedCode: "kernel-error", unresolvedCodes: ["kernel-error"] }), down, 7.05)!, /its crossings could not be resolved \(a face could not be evaluated\)/);
+  assert.match(unprovenRay(rayOf([[5, 1], [10, -1], [20, 1]], { unresolvedCrossings: 2, unresolvedReason: `${PARITY.unresolvedReason}; a face could not be evaluated`, unresolvedCode: "kernel-error", unresolvedCodes: ["parity", "kernel-error"] }), down, 7.05)!, /its crossings could not be resolved \(odd number of crossings .*; a face could not be evaluated\)/);
   // An exit first (the entry is missing) is refused even with the limit at the origin.
   assert.match(unprovenRay(rayOf([[4, -1], [10, 1], [13, -1]], PARITY), down, 0)!, /do not alternate at 4 mm/);
+});
+
+test("the ray rule decides on the probe's codes, not on the text of unresolvedReason", () => {
+  const down: Vec = [0, 0, -1];
+  const hits: Array<[number, number]> = [[5, 1], [10, -1], [20, 1]];
+  // Every code the probe exports has a rule; only parity is placed by the crossings.
+  assert.deepEqual(Object.keys(UNRESOLVED_CODE_RULE).sort(), [...PROBE_SURFACE_UNRESOLVED_CODES].sort());
+  assert.deepEqual(PROBE_SURFACE_UNRESOLVED_CODES.filter((code) => UNRESOLVED_CODE_RULE[code] === "alternation"), ["parity"]);
+  // The probe's newer parity texts carry the same code and get the same rule: proven where the crossings alternate
+  // through the first crossing past the reach, refused where they do not.
+  const texts = [
+    probeOddParityReason(3),
+    "parity ambiguous on a closed Solid: a crossing is tangent or an edge touch (behind the origin | ahead: none | in out in)",
+    "the crossings of this line with a closed Solid do not alternate entry and exit (behind the origin | ahead: out | in out in): at least one crossing is missing, or a tangent touch was counted",
+  ];
+  for (const unresolvedReason of texts) {
+    const ray = rayOf(hits, { unresolvedCrossings: 1, unresolvedReason, unresolvedCode: "parity", unresolvedCodes: ["parity"] });
+    assert.equal(unprovenRay(ray, down, 7.05), undefined, unresolvedReason);
+    assert.match(unprovenRay(ray, down, Infinity)!, /ends inside the material: a crossing is missing/, unresolvedReason);
+  }
+  // An even count that fails the whole-line parity check: the alternation still places it, and the words follow the count.
+  const even = rayOf([[5, 1], [9, 1], [12, -1], [20, -1]], { unresolvedCrossings: 1, unresolvedReason: texts[2]!, unresolvedCode: "parity", unresolvedCodes: ["parity"] });
+  assert.equal(unprovenRay(even, down, 4.9), undefined);
+  assert.match(unprovenRay(even, down, 6)!, /it fails the probe's parity check and its crossings do not alternate at 9 mm \(face f1\)/);
+  // The same parity text under another code is refused: the code decides. So is every code but parity, with or without parity beside it.
+  for (const code of PROBE_SURFACE_UNRESOLVED_CODES.filter((value) => value !== "parity" && value !== "mesh-crossing")) {
+    assert.match(unprovenRay(rayOf(hits, { unresolvedCrossings: 1, unresolvedReason: probeOddParityReason(3), unresolvedCode: code, unresolvedCodes: [code] }), down, 7.05)!, new RegExp(`its crossings could not be resolved \\(odd number of crossings .*\\) \\[${code}\\]`), code);
+    assert.match(unprovenRay(rayOf(hits, { unresolvedCrossings: 2, unresolvedReason: `${probeOddParityReason(3)}; face f9 is not settled for this ray: x`, unresolvedCode: code, unresolvedCodes: ["parity", code] }), down, 7.05)!, new RegExp(`\\[${code}\\]$`), code);
+  }
+  // A display-mesh crossing only adds to the count: one more than parity accounts for cannot be placed.
+  assert.match(unprovenRay(rayOf(hits, { unresolvedCrossings: 2, unresolvedReason: probeOddParityReason(3), unresolvedCode: "parity", unresolvedCodes: ["parity", "mesh-crossing"] }), down, 7.05)!, /1 of its crossings could not be resolved \(the probe cannot say where\)/);
+  // unresolvedCode alone (no list) is read the same way.
+  assert.equal(unprovenRay(rayOf(hits, { unresolvedCrossings: 1, unresolvedReason: texts[1]!, unresolvedCode: "parity" }), down, 7.05), undefined);
+  // A reason without a code (a record of the older probe) is refused even when its text is the parity text, and so is a code this table does not know.
+  assert.match(unprovenRay(rayOf(hits, { unresolvedCrossings: 1, unresolvedReason: probeOddParityReason(3) }), down, 7.05)!, /its crossings could not be resolved \(odd number of crossings .*\) \[the probe gave no code\]/);
+  assert.match(unprovenRay(rayOf(hits, { unresolvedCrossings: 1, unresolvedReason: probeOddParityReason(3), unresolvedCodes: ["new-code" as never] }), down, 7.05)!, /\[new-code\]$/);
+});
+
+test("a transfer accepts a ray whose only flag is the parity code, whatever its text, and refuses the same ray under another code", async () => {
+  const pocket = () => polyBody(2, pocketSpecs());
+  // A blind hole 1 mm deep from the pocket floor; ray 3 (bore ring, 90 degrees) carries the flag.
+  const blind = { sourceId: 1, targetId: 2, axesMm: AX([30, 20, 50]), hole: { diameterMm: 3, depthMm: 1 }, revision: "r1" };
+  const flagged = (flags: Partial<ProbeRayResult>) => flagProbe(polyOps(sourceStub(), pocket()), (index) => (index === 3 ? flags : undefined));
+  const text = "the crossings of this line with a closed Solid do not alternate entry and exit (behind the origin | ahead: out | in out): at least one crossing is missing, or a tangent touch was counted";
+  // Parity by code: the crossings of that ray alternate (into the floor, out of the bottom), so the cut goes ahead.
+  await assert.rejects(transferHoles(flagged({ unresolvedCrossings: 1, unresolvedReason: text, unresolvedCode: "parity", unresolvedCodes: ["parity"] }).operations, blind), /reached the cut/);
+  // The same ray and text under a face-not-settled code: refused before the edit.
+  const refused = flagged({ unresolvedCrossings: 1, unresolvedReason: text, unresolvedCode: "search-limit", unresolvedCodes: ["search-limit"] });
+  await assert.rejects(transferHoles(refused.operations, blind), unprovenRefusal(/the ray at radius 1\.5 mm, 90 degrees is not complete: its crossings could not be resolved \(.*\) \[search-limit\]/));
+  assert.deepEqual(refused.calls, []);
 });
 
 // The probe of polyOps with flags added to chosen rays of the flat ray list (plus rays first, then minus, per axis).

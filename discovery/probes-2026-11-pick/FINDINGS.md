@@ -47,7 +47,7 @@ Scripts and raw JSON: `discovery/probes-2026-11-pick/`. Isolated instance 127.0.
 
 ## Other observations
 - `executor.isBusy` is **false** while a command is Awaiting its dialog. Guard on `executor.active` (`.command`) instead (seen in stdout).
-- After commit, the faces stay selected. The executor then chains the default selection commands (`PushFaceCommand`, then `OffsetFaceCommand`), and `ed.exec()` stays pending. Clearing the selection in a `finally` around `execute()` stops this (verified: `settled:true, active:null` in every trial).
+- (Generalised in "Selection and default commands" below: this holds for every command, not only this one.) After commit, the faces stay selected. The executor then chains the default selection commands (`PushFaceCommand`, then `OffsetFaceCommand`), and `ed.exec()` stays pending. Clearing the selection in a `finally` around `execute()` stops this (verified: `settled:true, active:null` in every trial).
 - The generic `editor.commands.DimensionCommand` re-execs a fresh DDC with `'interrupt'` and loses the seeded hit, so it gives "no effect". Call the `DimensionDistanceCommand` binding directly.
 - **Which face moves: selection order decides; the last selected face moves. The hit location does not decide.** Follow-up probe 2026-11-16 (`../probes-2026-11-followups/probe-driving.json`, box 20 x 10 x 5):
   - Selection [−x, +x] (+x last), hit on −x: +x moved (max x 2420 → 2430).
@@ -140,3 +140,70 @@ Scripts and raw JSON: `discovery/probes-2026-11-followups/`. Isolated instance 1
 - **Same-direction pair** (stepped block, +z faces at z 10 and z 5): Plasticity dimensions it. Reference lower, moving upper, 8 mm: the upper face goes to z 13 (refDistance 0.005, `containsRefEntity` true). The tool allows it.
 - **Dialog reference point:** `params.to` lies on the reference plane in both modes (single face +z: to z 0). The tool uses it for the post-commit plane check in single-face mode.
 - Face version IDs keep their suffix across the edit (`16f920` → `17f920`); the tool finds the moved face by plane, not by ID.
+
+## Selection and default commands (2026-11-16, Plasticity 26.1.3, isolated instance 127.0.0.1:57291)
+Scratch probes over CDP (`Runtime.callFunctionOn` on the editor); not in the repository. Plasticity hides its function
+sources (`toString()` returns zero-width characters), so everything here is measured behaviour, not read code.
+
+### The defect
+`plasticity_select_faces` on a face of body 1, then `plasticity_move` of another body, on the code before the guard:
+the move committed, the call ended after 10,074 ms with "CDP request timed out: Runtime.callFunctionOn", and
+`OffsetFaceCommand` stayed `Awaiting`. With the guard the same call took 46 ms, the face stayed selected and no
+command was active.
+
+### What the executor does
+| observation | measured |
+|---|---|
+| A selection alone | starts no command: 200 ms after `selection.selected.add` nothing is active. |
+| After a command that FINISHED, with a face selected | `PushFaceCommand` (state `None`), then `OffsetFaceCommand` or, on a fillet face, `RefilletFaceCommand`, `Awaiting` 30 to 80 ms later. The `exec()` that ran the command stays pending. |
+| The same with an edge selected | `FilletShellCommand`, `Awaiting` (190 ms). |
+| The same with a whole Solid, a Sheet or a curve selected | no default command; `exec()` resolved in 23 to 31 ms. |
+| What tells a default command apart | `command.agent === 'automatic'`. A command built with `new editor.commands.X(editor)` has `agent === 'user'`. Both have `trigger: 'unknown'`. |
+| Its resources while idle | `OffsetFaceFactory` (`_state.value` "none") and `CancellablePromise` objects. |
+| `executor.cancelActiveCommand()` on it | the command reads `Cancelled` at once and leaves `executor.active` 12 microtask turns later (6 to 36 ms in all). The selection is kept. No other default command starts. The pending `exec()` resolves about 15 ms later. |
+| A command that FAILS (its `execute()` throws) | no default command starts, even with a face selected. The selection goes back to the selection of the last history step (a selection made by script after that step is lost). |
+| `exec()` while a default command awaits | the awaiting command is interrupted, the new command runs, and ITS `exec()` resolves when it has ended (54 ms for a 30 ms command). The first `exec()` owns the chain and starts the default command again. So the hang needs a selection with NO default command active: a selection made by a tool, or a gizmo that was cancelled. |
+| `exec()` while a command of the user awaits its dialog (`FilletShellCommand`, agent `user`) | the user's command is `Cancelled`, the new command runs, its `exec()` resolves (23 ms). |
+| `editor.undo()` / `redo()` | restores the selection the history state holds. With a face in it the default command chains (`OffsetFaceCommand` `Awaiting` 56 ms after the call) and the promise stays pending until that command ends (it resolved 20 ms after the cancel). Without such a selection the promise settles when the step is complete (17.6 ms for the Undo of a move). The step installs a NEW `geo.geometryModel` Map: a reference taken before the step is stale (a guard that kept one judged the old body version alive and lost a whole-body selection). |
+| `executor.isBusy` | read `false` in every sample here, also while a command executed. `executor.active` is the reliable signal. |
+
+### Selection internals
+- `selection.selected.saveToMemento()` returns a `SelectionMemento { ids: Set<string>, parentsWithSelectedChildren: RefCounter }`; `new SelectionMemento(ids, parents)` works.
+- An id is `<kind>:<versionId>`: `0:` edge (`0:1e113`), `1:` curve segment (`1:4s335`), `2:` face (`2:1f245`), `4:` Solid (`4:1`), `5:` Sheet (`5:2`), `7:` curve (`7:3`), `8:` curve vertex (`8:4v330`), `9:` curve control point (`9:4c1`). The number is the VERSION id, also for a whole body: a moved Solid gets a new id.
+- `RefCounter` is `{ counts: Map<parentVersion, n>, values: Map<parentVersion, childIds[]>, cb }`: one entry per body with selected topology.
+- `restoreFromMemento(m)` sends one `selectionChanged`. It accepts stale ids, and then `validate()`, `faces`, `solids` and `all` throw "invalid precondition: object N missing from geometry model". `removeAll()` still works on such a selection.
+- `selection.selected.itemIds` lists the version ids of the selected whole bodies; `solidIds`, `sheetIds`, `curveIds`, `faceIds`, `edgeIds` are the ids without the kind prefix.
+- `addById` is not `addById('<kind>:<id>')`: that call stored `2:1f244:undefined`. Not used.
+
+### The guard (`src/plasticity/runtime.ts`, `SELECTION_GUARD_SOURCE`)
+Every `runtime.mutate()` source runs inside it: entry = save the memento, cancel a default command that idles in
+`Awaiting` (agent `automatic`, no factory at work), empty the selection; exit = cancel a default command a history
+step chained, put the memento back without the ids whose body version is gone (a whole body follows its stable id).
+While the source is pending, an idle default command seen on two checks 50 ms apart is cancelled. Nothing else is ever
+cancelled; with another command active at entry the guard stands aside (the source runs as before; afterwards the
+saved selection is put back only when nothing is selected and nothing is active).
+
+Live matrix and timing: `scripts/verify-native-selection-live.ts` (`npm run accept:native-selection`).
+
+### Still true on a person's own window
+- The gizmo does not come back. After an edit the selection is back and no command is active; the default command is
+  not started again (calling `executor.enqueueDefaultCommand()` on a selection made by script ran `PushFaceCommand`,
+  which ended and left the selection EMPTY). Click the item again.
+- The selection that is put back is not in Plasticity's history. The edit's own history step holds an empty selection.
+  So a later command that is cancelled or fails (Escape on a gizmo, a refused edit in the UI) sends the selection back
+  to that empty state, and Undo of the edit in the UI restores the document without the earlier selection.
+- The click points (`selection.hits`) are not saved or put back; the Dimension command clears them.
+- A command of the person that awaits its dialog is still interrupted by an edit (Plasticity does that in `exec()`,
+  as before the guard): live, a `FilletShellCommand` (agent `user`) awaiting its dialog read `Cancelled` after a
+  `plasticity_move`, and what was typed into the dialog is lost. The guard does not cancel it. The interrupt sends the
+  selection back to that of the last history step; when that leaves nothing selected the guard puts the saved
+  selection back, otherwise Plasticity's own selection (and the gizmo it starts for it) stays.
+- The edits that run no command (exports, section analyses, save a copy) are guarded too: the selection is empty while
+  they run and an idle gizmo is cancelled. Only the label refresh of a state read runs outside the guard.
+- A command of the server that is still running when its call returns (a pick command that could not be cancelled;
+  the session is uncertain then) keeps the selection empty until it ends; the guard puts it back then (watched for
+  15 s).
+- A click in the window while an edit runs is a command of its own: Plasticity's executor interrupts whatever runs.
+  Not measured.
+- Window state: all probes ran with `document.visibilityState` "visible" and `document.hasFocus()` false. Timers of 2
+  ms fired after 3 to 6 ms. A hidden window throttles timers; the guard waits without timers first (microtask turns).

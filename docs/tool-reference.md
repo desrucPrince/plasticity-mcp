@@ -617,10 +617,20 @@ or membrane thinner than 0.05 mm, or that the rays cannot prove:
 3. Complete rays only. A probe ray is complete when it carries neither
    `unresolvedCrossings` nor `grazing` (see `plasticity_probe_surface`). A
    `grazing` entry within the cut's reach, a crossing the probe cannot place
-   (a display-mesh crossing no exact hit explains), or an odd crossing count
+   (a display-mesh crossing no exact hit explains), or a parity flag
    whose crossings do not alternate (into the material, out of it) through
    the first one past the cut's reach refuses the call before the edit: "the
-   entry could not be proven", with the ray and the reason. On the side away
+   entry could not be proven", with the ray and the reason. The decision is
+   taken on the probe's codes (`unresolvedCodes`), never on the reason text:
+
+   | code | rule for a bore ray |
+   |---|---|
+   | `parity` | Placed by the crossings themselves: proven where they alternate through the first crossing past the reach. This covers the three parity texts (odd count from outside, crossings that do not alternate, a tangent or edge touch). |
+   | `kernel-error`, `bracket-unresolved`, `search-limit`, `missed-crossing` | Refused: a face is not settled for this ray and the probe cannot say where its crossings lie. The message ends with the code in brackets. |
+   | `mesh-crossing` | Adds to the count only; one crossing more than parity accounts for is refused ("the probe cannot say where"). |
+   | no code, or a code not in this table | Refused. |
+
+   On the side away
    from the drill the rays must be complete up to the entry distance, and an
    axis with no crossing at all is a miss (which `onMiss: "skip"` may pass)
    only when every one of its rays is complete. Before this round the two
@@ -937,6 +947,76 @@ Files are never overwritten. After a command timeout or lost connection, the
 server marks the mutation outcome uncertain and blocks further edits until
 `plasticity_reconcile` reads the document. It never retries the command or
 automatically undoes it.
+
+### Selection and edits
+
+Every edit keeps the selection of the person at the window. The mechanism is
+one guard around every native command the server runs (direct calls,
+`plasticity_batch` steps, `plasticity_undo` and `plasticity_redo`, the
+Dimension and Align commands):
+
+- Before the command, the selection is saved and emptied. After it, on success
+  and on failure, the saved selection is put back.
+- Items that no longer exist are left out: a face or an edge of a body the
+  edit rebuilt (its IDs change), and everything of a deleted body. A whole
+  body that the edit changed stays selected (the same body ID).
+- A default command that idles for the selection (the gizmo Plasticity shows
+  for a selected face or edge) is cancelled before the command. It is not
+  started again: after the call the selection is back and no command is
+  active. Click the item again to get the gizmo.
+- The guard cancels nothing else. With a command of your own active (a dialog
+  that waits for input, a gizmo you are dragging), the edit runs as it did
+  before this guard: Plasticity interrupts your command and the call returns
+  its normal result. That interrupt sends the selection back to the one of the
+  last history step; when this leaves nothing selected, the guard puts your
+  selection back.
+- A state read (`plasticity_status` and every other read) does not touch the
+  selection or a gizmo. The refresh of the distance-measurement labels that a
+  read can trigger runs outside the guard: it runs no command.
+- A problem inside the guard never replaces a call's result. It is written to
+  the server log as `[plasticity-mcp] selection guard: ...`.
+- The selection tools (`plasticity_select_*`, `plasticity_clear_selection`) are
+  not edits and are not guarded: what they select stays selected.
+
+Why: after a command that finished, Plasticity starts the default command for
+the current selection, which waits for the user. An edit with a face of an
+untouched body selected therefore never returned (10 s timeout, session
+uncertain). Measured behaviour and limits:
+`discovery/probes-2026-11-pick/FINDINGS.md`, "Selection and default commands".
+Live check (isolated instance only):
+
+```sh
+PLASTICITY_CDP_URL=http://127.0.0.1:PORT npm run accept:native-selection -- \
+  --target ID --allow-disposable-mutations --output NEW_DIRECTORY \
+  --baseline-root DIRECTORY
+```
+
+It runs 13 edit tools against 8 selection states, 20 edits in a row with a
+face of an untouched body selected, the entry states (a default command
+awaiting; a command of the user awaiting), a refused edit, an Undo over a
+history step that holds a face selection, and `plasticity_reconcile` (also on
+the leftover of a real timed-out call of the `--baseline-root` server). The
+speed check, nothing selected: `plasticity_move` against the server of
+`--baseline-root` (a copy of the commit before the guard, with `node_modules`),
+calls interleaved, and the five native calls of a 5-step batch with the guard
+on and off in one process; each median may rise by 5 ms. The whole batch call
+through both servers is reported but not judged: its median moves by 10 to 30
+ms between two servers of the same tree when the renderer's garbage
+collections take seconds. `--skip-speed` leaves the section out. A call that a
+renderer garbage collection stalls past its limit is run once more, and both
+times are in `evidence.json`.
+
+`plasticity_reconcile` also clears that state when an older call left it
+behind: an idle default command is cancelled, and the reply says so in
+`recovery`:
+
+| Field | Meaning |
+|---|---|
+| `recovery.cancelledDefaultCommands` | Names of the idle default commands that were cancelled (for example `OffsetFaceCommand`). No edit was undone or repeated; the selection was kept. |
+| `recovery.activeCommand` | `{ name, state, default }` of a command that is still active. It was not touched: finish or cancel it in Plasticity. |
+| `recovery.note` | The same in words. |
+
+Without a leftover the reply has no `recovery` field.
 
 The strength workflow is documented in
 [`docs/strength-operations.md`](./strength-operations.md). It is available
@@ -1690,12 +1770,9 @@ enough: a cancel goes out only when the command is `Awaiting`, its factory is
 not in progress (`updating`) and `finish()` has not started a commit. Otherwise
 the command is left to finish and the call returns undetermined (reconcile).
 Your selection is put back afterwards, on success and on failure (items of the
-rebuilt Sheet are left out, because they no longer exist). Known limit, not
-specific to this tool: while a face stays selected, Plasticity starts its
-default face command after the next edit of any kind, and that edit call does
-not return (10 s timeout, session uncertain). Call `plasticity_clear_selection`
-before the next edit. See `discovery/probes-2026-11-surfacing/FINDINGS.md`,
-"Selected faces and the next edit".
+rebuilt Sheet are left out, because they no longer exist). The earlier limit
+(an edit after this one did not return while a face stayed selected) is gone:
+see "Selection and edits".
 `plasticity_surface_align` moves the boundary edge of one Sheet (`moving`) onto
 the boundary edge of another Sheet (`reference`) with `g0`, `g1` or `g2`
 continuity, as Plasticity's Align (Edge Align) does: the moving Sheet is
@@ -1937,7 +2014,8 @@ tilted 30 degrees), for `side` positive, negative and centered: every
 as before; `false` deletes it in a fourth Undo step (`steps` then ends with
 `delete-construction-profile`, the reply adds `profileDeleted: true`, and the
 batch `added` list no longer names the Wire). The delete clears the current
-selection. If it fails after the geometry is complete, the reply is still
+selection while it runs; your selection is put back afterwards ("Selection and
+edits"). If it fails after the geometry is complete, the reply is still
 `completed` with `warning: "construction wire not removed: <reason>"`, and
 `undoSteps` counts only the steps that happened. `plasticity_create_countersink`
 and `plasticity_create_countersink_pattern` take the same `keepProfile` (one
@@ -2288,7 +2366,9 @@ delta instead. Verified on Plasticity 26.1.3 only.
   named in `warning` after a verified commit, and after `finish()` it makes any
   other outcome undetermined. A plain "no effect" rejection is never reported as
   "interrupted", even when a user command starts afterwards.
-- The tool clears the current Plasticity selection. Works as a
+- The tool clears the current Plasticity selection while it runs and puts it
+  back afterwards; faces of the edited body are left out, because their IDs
+  change ("Selection and edits"). Works as a
   `plasticity_batch` step (for example after `plasticity_create_box` and
   `plasticity_find_faces`). Live check: `npm run accept:native-driving-distance`.
 - Plasticity 26.2.x: the store binding route now binds
@@ -2332,7 +2412,8 @@ radius measurement even when a downstream table presents its derived diameter.
 `plasticity_move_measurement_label` moves the dimension line and label of one
 distance measurement. `offsetMm` is `[along, perpendicular]` in the same frame
 that `plasticity_list_measurements` reports. The measurement keeps its name.
-The move clears the current selection; select again afterwards if you need it.
+The move clears the current selection while it runs and puts it back afterwards
+("Selection and edits").
 `plasticity_delete_measurement` selects that native measurement and delegates
 removal to Plasticity's own removal command, also as one Undo step. Body topology
 and measurement IDs are valid only for the current document revision; use the

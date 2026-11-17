@@ -24,6 +24,370 @@ interface CallResult {
   exceptionDetails?: { text?: string; exception?: RemoteObject };
 }
 
+// ---- Selection guard (discovery/probes-2026-11-pick/FINDINGS.md, "Selection and default commands")
+// After a command that FINISHED, Plasticity's executor starts the default command for the current selection (a face:
+// PushFace, then OffsetFace or RefilletFace; an edge: FilletShell; a whole body or a curve: none). That command awaits
+// the user (a gizmo), so the exec() call that owns the chain never resolves and the CDP call times out. undo()/redo()
+// chain the same way when the history state they restore holds a selection. A default command carries agent
+// "automatic"; a command the server builds carries "user".
+//
+// Every mutate() source therefore runs inside this guard:
+//  entry  the user's selection is saved (Plasticity's own selection memento); a default command that idles in Awaiting
+//         is cancelled (it keeps the selection and does not chain again); the selection is emptied, so the server's
+//         command starts, and ends, with the selection its own source sets.
+//  exit   (success or failure) a default command chained by a history step is cancelled the same way; the saved
+//         selection is put back, without the items whose body version is gone (a whole body follows its stable id).
+// The guard only ever cancels a command that is a default command (agent "automatic"), in state Awaiting, with no
+// factory at work. With any other command active at entry (a command of the user that awaits its dialog, a gizmo
+// that is being dragged) it stands aside: the source runs as it did before the guard, where Plasticity's exec()
+// interrupts that command, runs the source's command and resolves; the chain then belongs to the exec() that was
+// active first, so the call cannot hang on it. That interrupt sends the selection back to that of the last history
+// step, so afterwards the saved selection is put back when nothing is selected and nothing is active.
+// It never throws: a failure inside it leaves the source's own result or error untouched.
+//
+// A source that runs no command at all can opt out with mutate(..., { selectionGuard: false }) (the measurement
+// overlay refresh of a state read: a read must not touch the selection). selection-safe-sites.test.ts fails when a
+// source that runs a command opts out.
+
+// Renderer helpers shared by the guard and by the recovery step of reconcile(). `executor` is editor.executor.
+const EXECUTOR_TOOLS_SOURCE = `function (executor) {
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const stateTag = value => value === null || value === undefined ? null : typeof value === 'string' ? value : (value.tag ?? value.constructor?.name ?? null);
+  // 26.1.3: executor.active is { command, finished }. A build that keeps the command itself there is read the same way.
+  const active = () => { const entry = executor.active; return entry ? (entry.command ?? entry) : null; };
+  const nameOf = command => command?.constructor?.name ?? 'unknown';
+  const isDefault = command => command?.agent === 'automatic';
+  // A factory of the command that is updating or committing: the command reads Awaiting meanwhile (FINDINGS surfacing 8.2).
+  const computing = command => {
+    try {
+      for (const resource of command.resources ?? []) {
+        const state = resource?._state;
+        const tag = stateTag(state !== null && typeof state === 'object' && 'value' in state ? state.value : state);
+        if (typeof tag === 'string' && tag !== 'Awaiting' && /ing$/.test(tag)) return true;
+      }
+      return false;
+    } catch { return true; }
+  };
+  const idleDefault = command => isDefault(command) && stateTag(command._state) === 'Awaiting' && !computing(command);
+  // A cancel settles within a few microtask turns (measured: 12); timers are the fallback (a hidden page throttles them).
+  const untilIdle = async budgetMs => {
+    for (let turn = 0; turn < 256 && executor.active; turn += 1) await Promise.resolve();
+    const deadline = Date.now() + budgetMs;
+    while (executor.active && Date.now() < deadline) await sleep(4);
+    return !executor.active;
+  };
+  // Cancels the active command while it is an idle default command, and returns the names it cancelled. A default
+  // command that is still starting (PushFace before OffsetFace) is waited for; nothing else is ever cancelled.
+  const cancelIdleDefaults = async budgetMs => {
+    const cancelled = [];
+    const deadline = Date.now() + budgetMs;
+    for (let round = 0; round < 4; round += 1) {
+      let command = active();
+      while (command && isDefault(command) && stateTag(command._state) !== 'Awaiting' && Date.now() < deadline) { await sleep(4); command = active(); }
+      if (!command || !idleDefault(command)) break;
+      executor.cancelActiveCommand();
+      cancelled.push(nameOf(command));
+      if (!(await untilIdle(Math.max(0, deadline - Date.now())))) break;
+    }
+    return cancelled;
+  };
+  return { stateTag, active, nameOf, isDefault, idleDefault, untilIdle, cancelIdleDefaults };
+}`;
+
+/** How long the guard waits for a default command to reach Awaiting, or to end after its cancel. */
+export const SELECTION_GUARD_SETTLE_MS = 1_500;
+
+/** While the wrapped source is pending, an idle default command is cancelled once it is seen on two checks this far apart. */
+export const SELECTION_GUARD_WATCH_MS = 50;
+/** The key of the envelope the guarded source returns: { [key]: report, value: <the source's own result> }. */
+export const SELECTION_GUARD_KEY = "plasticityMcpSelectionGuard";
+
+/** What the guard did in one mutate() call. */
+export interface SelectionGuardReport {
+  /** "guarded": selection saved, emptied and put back. "pass-through": the source ran as it would without the guard. */
+  mode: "guarded" | "pass-through";
+  /** Why the guard stood aside (another command was active, or this build lacks the selection API). */
+  passThrough?: string;
+  /** Default commands cancelled before the source ran, while it ran, and after it. */
+  cancelledAtEntry: string[];
+  cancelledWhileRunning: string[];
+  cancelledAtExit: string[];
+  /** Selection ids at entry, and how many are selected again (dropped: their entities are gone). */
+  saved: number;
+  restored: number;
+  dropped: number;
+  /** How the selection was put back: Plasticity's memento, one id at a time, or by adding the items again. */
+  restoredBy?: "memento" | "per-id" | "items" | "nothing-to-restore" | "left" | "deferred";
+  /** A failure inside the guard. The source's own result or error is never replaced by it. */
+  problems: string[];
+  /** Guard problems of an earlier call whose source threw, reported now. */
+  earlierProblems?: string[];
+}
+
+// The guard itself: `this` is the editor, `run` starts the wrapped source. It returns { [SELECTION_GUARD_KEY]: report,
+// value } and rethrows the source's own error; nothing it does itself can throw past it.
+// It is not a nativeFunction source: the two things it needs from the document (the geometry model and the stable id
+// of a body version) are read here for both editor layouts, which keeps the 16 KB nativeApi prelude out of every call.
+export const SELECTION_GUARD_SOURCE = `async function (run) {
+  const report = { mode: 'pass-through', cancelledAtEntry: [], cancelledWhileRunning: [], cancelledAtExit: [], saved: 0, restored: 0, dropped: 0, problems: [] };
+  // Problems of an earlier call whose source threw (it had no envelope to carry them) are reported by this one.
+  const pendingKey = Symbol.for('plasticity-mcp.selection-guard-problems');
+  try { if (Array.isArray(globalThis[pendingKey])) { report.earlierProblems = globalThis[pendingKey]; delete globalThis[pendingKey]; } } catch {}
+  const envelope = value => ({ ${SELECTION_GUARD_KEY}: report, value });
+  const message = error => String(error?.message ?? error);
+  const executor = this.executor;
+  const selected = this.selection?.selected;
+  if (!executor || !selected || typeof selected.saveToMemento !== 'function' || typeof selected.restoreFromMemento !== 'function' || typeof selected.removeAll !== 'function') {
+    report.passThrough = 'this Plasticity build has no executor or selection memento';
+    return envelope(await run());
+  }
+  const tools = (${EXECUTOR_TOOLS_SOURCE})(executor);
+  // 26.1 keeps the model and the stable ids on editor.geo / editor.db; 26.2 on editor.geo.read / editor.geo (as nativeFunction's prelude).
+  const legacy = !this.geo?.read?.geometryModel || !!this.geo.geometryModel;
+  // Read anew every time: a history step replaces the geometry model object (measured live: Undo of a move).
+  const geometry = () => legacy ? this.geo?.geometryModel : this.geo.read.geometryModel;
+  const alive = version => typeof geometry()?.has === 'function' && geometry().has(version);
+  const bodyOfStableId = stableId => {
+    const model = geometry();
+    if (!Number.isInteger(stableId) || typeof model?.[Symbol.iterator] !== 'function') return null;
+    for (const [version, item] of model) if (stableOf(version) === stableId) return { version, view: item?.view, type: item?.view?.constructor?.name ?? null };
+    return null;
+  };
+  const idsOf = memento => memento?.ids instanceof Map ? [...memento.ids.keys()].map(String) : Array.from(memento?.ids ?? [], String);
+  const currentIds = () => idsOf(selected.saveToMemento());
+  const count = () => typeof selected.size === 'number' ? selected.size : currentIds().length;
+  const stableOf = version => { try { return legacy ? this.db.lookupStableId(version) : this.geo.lookupStableId(version); } catch { return undefined; } };
+  const typeOf = version => geometry()?.get?.(version)?.view?.constructor?.name ?? null;
+  let saved;
+  // Whole bodies of the selection, by memento id: the stable id and the body type they had at entry.
+  const bodies = new Map();
+  // The selected items themselves, for the last fallback of restore().
+  const items = [];
+  try {
+    saved = selected.saveToMemento();
+    const savedIds = idsOf(saved);
+    report.saved = savedIds.length;
+    if (savedIds.length > 0) {
+      const numeric = new Map();
+      for (const id of savedIds) {
+        const match = /^[^:]+:([0-9]+)$/.exec(id);
+        if (match) numeric.set(Number(match[1]), [...(numeric.get(Number(match[1])) ?? []), id]);
+      }
+      for (const version of selected.itemIds ?? []) {
+        const ids = numeric.get(Number(version));
+        // One numeric id with this number: it is the body. Two (a body and a group with the same number) are left as they are.
+        if (ids?.length === 1) bodies.set(ids[0], { stableId: stableOf(version), type: typeOf(version) });
+      }
+      try {
+        for (const key of ['solids', 'sheets', 'curves']) for (const item of selected[key] ?? []) items.push({ item, body: { stableId: stableOf(item.versionId), type: item.constructor?.name ?? null } });
+        for (const key of ['faces', 'edges', 'segments', 'regions', 'curveVertices', 'curveCVs', 'shellCVs', 'groups', 'empties', 'measurements', 'planes']) for (const item of selected[key] ?? []) items.push({ item });
+      } catch { items.length = 0; }
+    }
+    if (executor.active) report.cancelledAtEntry = await tools.cancelIdleDefaults(${SELECTION_GUARD_SETTLE_MS});
+    // Another command is active (the user's own, or a default command that is computing): change nothing.
+    const other = tools.active();
+    if (other) report.passThrough = tools.nameOf(other) + ' is active (state ' + String(tools.stateTag(other._state)) + ')';
+    else {
+      if (count() > 0) selected.removeAll();
+      report.mode = 'guarded';
+    }
+  } catch (error) {
+    report.problems.push('entry: ' + message(error));
+    // The selection may already be empty: put it back before the source runs without the guard.
+    if (saved !== undefined && report.mode !== 'guarded') { try { if (idsOf(saved).length > 0 && count() === 0) selected.restoreFromMemento(saved); } catch {} }
+    if (report.mode !== 'guarded') saved = undefined;
+  }
+  const stash = problems => { try { globalThis[pendingKey] = [...(Array.isArray(globalThis[pendingKey]) ? globalThis[pendingKey] : []), ...problems].slice(-20); } catch {} };
+  const currentId = id => {
+    const split = id.indexOf(':');
+    if (split < 0) return id;
+    const rest = id.slice(split + 1);
+    // Topology of a body version ("1f234", "4v330", "54c10"): it exists as long as that version does.
+    const topology = /^([0-9]+)[A-Za-z]+[0-9]+$/.exec(rest);
+    if (topology) return alive(Number(topology[1])) ? id : null;
+    const body = bodies.get(id);
+    if (!body || alive(Number(rest))) return id;
+    // The edit replaced the body version: the same body (stable id, same type) stays selected.
+    const now = bodyOfStableId(body.stableId);
+    return now && now.type === body.type ? id.slice(0, split + 1) + now.version : null;
+  };
+  const mementoOf = ids => {
+    const keep = new Set(ids);
+    const memento = Object.create(Object.getPrototypeOf(saved));
+    Object.assign(memento, saved, { ids: saved.ids instanceof Map ? new Map(ids.map(id => [id, saved.ids.get(id)])) : keep });
+    const parents = saved.parentsWithSelectedChildren;
+    if (parents && parents.counts instanceof Map && parents.values instanceof Map) {
+      const copy = Object.create(Object.getPrototypeOf(parents));
+      Object.assign(copy, parents, { counts: new Map(), values: new Map() });
+      for (const [parent, children] of parents.values) {
+        const rest = Array.from(children ?? []).filter(child => keep.has(String(child)));
+        if (rest.length === 0) continue;
+        copy.values.set(parent, children instanceof Set ? new Set(rest) : rest);
+        copy.counts.set(parent, rest.length);
+      }
+      memento.parentsWithSelectedChildren = copy;
+    }
+    return memento;
+  };
+  // A stale id makes every typed getter of the selection throw, so a restored selection is read once before it is kept.
+  const verify = () => {
+    if (typeof selected.validate === 'function') selected.validate();
+    for (const key of ['solids', 'sheets', 'faces', 'edges', 'segments', 'regions', 'curves', 'curveVertices', 'curveCVs', 'shellCVs', 'groups', 'empties', 'measurements', 'planes']) {
+      const value = selected[key];
+      if (value && typeof value[Symbol.iterator] === 'function') for (const item of value) void item;
+    }
+  };
+  const sameIds = (left, right) => left.length === right.length && left.every(id => right.includes(id));
+  // The item as it is now: the same object while its body version exists, the current view of a replaced whole body.
+  const currentItem = entry => {
+    const versionId = entry.item?.versionId;
+    const version = Number((/^[0-9]+/.exec(String(versionId)) ?? [])[0]);
+    if (!entry.body) return typeof versionId === 'string' && !alive(version) ? null : entry.item;
+    if (alive(version)) return entry.item;
+    const now = bodyOfStableId(entry.body.stableId);
+    return now && now.type === entry.body.type ? now.view : null;
+  };
+  // Puts the saved selection back. Three ways, in order; the selection is left empty only when none of them works.
+  const restore = () => {
+    const ids = idsOf(saved);
+    if (ids.length === 0) { if (count() > 0) selected.removeAll(); report.restoredBy = 'nothing-to-restore'; return; }
+    const kept = ids.map(currentId).filter(id => id !== null);
+    report.dropped = ids.length - kept.length;
+    if (kept.length === 0) { if (count() > 0) selected.removeAll(); report.restoredBy = 'nothing-to-restore'; return; }
+    const unchanged = kept.length === ids.length && kept.every((id, index) => id === ids[index]);
+    // 1. Plasticity's own memento (one selectionChanged, the order kept).
+    try {
+      try { selected.restoreFromMemento(unchanged ? saved : mementoOf(kept)); }
+      catch (error) {
+        // A listener of selectionChanged can throw after the selection is already back.
+        if (!sameIds(currentIds(), kept)) throw error;
+        report.problems.push('restore: restoreFromMemento threw after the selection was put back: ' + message(error));
+      }
+      verify();
+      report.restored = kept.length; report.restoredBy = 'memento';
+      return;
+    } catch (error) { report.problems.push('restore: the selection memento was not accepted: ' + message(error)); }
+    // 2. An id of a kind the rule above does not know is stale: keep the ids Plasticity accepts one by one.
+    try {
+      const valid = [];
+      for (const id of kept) { try { selected.restoreFromMemento(mementoOf([id])); verify(); valid.push(id); } catch {} }
+      if (valid.length > 0) {
+        selected.restoreFromMemento(mementoOf(valid)); verify();
+        report.restored = valid.length; report.dropped = ids.length - valid.length; report.restoredBy = 'per-id';
+        return;
+      }
+    } catch (error) { report.problems.push('restore: the ids were not accepted one by one: ' + message(error)); }
+    // 3. Add the items again, as a selection tool does.
+    let added = 0;
+    try {
+      selected.removeAll();
+      for (const entry of items) {
+        try { const item = currentItem(entry); if (item) { selected.add(item); added += 1; } } catch {}
+      }
+      verify();
+    } catch (error) {
+      report.problems.push('restore: adding the items again failed: ' + message(error));
+      added = 0;
+      try { selected.removeAll(); } catch {}
+    }
+    report.restored = added; report.dropped = ids.length - added; report.restoredBy = added > 0 ? 'items' : 'left';
+    if (added === 0) report.problems.push('restore: the selection could not be put back and is empty (' + kept.length + ' of its ' + ids.length + ' items still exist)');
+  };
+  // While the source is pending, a default command that idles in Awaiting keeps an exec() of the source pending (a
+  // selection made during the call, or a command of the user that ended between the entry check and the source's
+  // exec()). It is cancelled once it has been seen idle on two checks.
+  let seen = null;
+  const watch = setInterval(() => {
+    try {
+      const command = tools.active();
+      if (!command || !tools.idleDefault(command)) { seen = null; return; }
+      if (seen !== command) { seen = command; return; }
+      seen = null;
+      executor.cancelActiveCommand();
+      report.cancelledWhileRunning.push(tools.nameOf(command));
+    } catch (error) { if (report.problems.length < 10) report.problems.push('watch: ' + message(error)); }
+  }, ${SELECTION_GUARD_WATCH_MS});
+  let returned = false;
+  try {
+    const value = await run();
+    returned = true;
+    return envelope(value);
+  } finally {
+    clearInterval(watch);
+    if (saved !== undefined && report.mode === 'guarded') {
+      try {
+        if (executor.active) report.cancelledAtExit = await tools.cancelIdleDefaults(${SELECTION_GUARD_SETTLE_MS});
+        // A command that is not an idle default command is still active (a pick command left to finish): the selection is its own.
+        if (executor.active && !tools.isDefault(tools.active())) await tools.untilIdle(250);
+        if (!executor.active) restore();
+        else {
+          // The selection is put back when that command has ended (watched for 15 s), unless something is selected by then.
+          report.restoredBy = 'deferred';
+          report.problems.push('exit: ' + tools.nameOf(tools.active()) + ' is still active; the selection is put back when it ends');
+          const until = Date.now() + 15000;
+          const later = setInterval(() => {
+            try {
+              if (executor.active) { if (Date.now() > until) { clearInterval(later); stash(['exit: the command was still active after 15 s; the selection was not put back']); } return; }
+              clearInterval(later);
+              const known = report.problems.length;
+              if (count() === 0) restore();
+              if (report.problems.length > known) stash(report.problems.slice(known));
+            } catch (error) { clearInterval(later); stash(['exit: ' + message(error)]); }
+          }, 100);
+        }
+      } catch (error) { report.problems.push('exit: ' + message(error)); }
+    } else if (saved !== undefined) {
+      // Pass-through: exec() interrupted the other command, which sends the selection back to that of the last history
+      // step. When that left nothing selected and nothing is active, the saved selection is put back; otherwise the
+      // selection is Plasticity's own (the chain of the first exec() may show its gizmo again) and is left alone.
+      try {
+        if (!executor.active && count() === 0 && idsOf(saved).length > 0) restore();
+        else report.restoredBy = 'left';
+      } catch (error) { report.problems.push('exit: ' + message(error)); }
+    }
+    // A source that throws has no envelope: its guard problems wait for the next guarded call or reconcile().
+    if (!returned && report.problems.length > 0) stash(report.problems);
+  }
+}`;
+
+/** Wraps a mutate() source so that it runs inside the selection guard. The wrapped source keeps its `this` and arguments. */
+export function selectionSafeSource(functionDeclaration: string): string {
+  return `async function (...mcpArguments) {
+  const mcpSource = (
+${functionDeclaration}
+  );
+  return await (${SELECTION_GUARD_SOURCE}).call(this, () => mcpSource.apply(this, mcpArguments));
+}`;
+}
+
+/** What reconcile() found in the executor and did about it. */
+export interface ReconcileRecovery {
+  /** The idle default command(s) that a timed-out call left awaiting input, and that reconcile cancelled. */
+  cancelledDefaultCommands?: string[];
+  /** A command that is still active after reconcile; it was not touched. */
+  activeCommand?: { name: string; state: string | null; default: boolean };
+  note: string;
+}
+
+// The recovery step of reconcile(): cancels a default command that idles in Awaiting (what a timed-out call leaves
+// behind when the chain described above ran), and reports any other active command without touching it. It leaves the
+// selection as Plasticity keeps it and never undoes or repeats an edit.
+export const DEFAULT_COMMAND_RECOVERY_SOURCE = `async function () {
+  const pendingKey = Symbol.for('plasticity-mcp.selection-guard-problems');
+  let problems = [];
+  try { if (Array.isArray(globalThis[pendingKey])) { problems = globalThis[pendingKey]; delete globalThis[pendingKey]; } } catch {}
+  const executor = this.executor;
+  if (!executor || !executor.active) return problems.length > 0 ? { cancelled: [], active: null, problems } : null;
+  const tools = (${EXECUTOR_TOOLS_SOURCE})(executor);
+  const cancelled = await tools.cancelIdleDefaults(${SELECTION_GUARD_SETTLE_MS});
+  const command = tools.active();
+  return {
+    cancelled,
+    active: command ? { name: tools.nameOf(command), state: tools.stateTag(command._state), default: tools.isDefault(command) } : null,
+    problems,
+  };
+}`;
+
 export function mutationOutcomeIsUncertain(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   return /^(?:CDP request timed out:|CDP connection (?:is closed|closed before the request completed))/i.test(error.message);
@@ -207,6 +571,8 @@ export class PlasticityRuntime {
   // Counts mutate() calls, bumped before each one starts. A state read taken at one count is known to predate no
   // mutation of this process while the count is unchanged (the batch state reuse in PlasticityOperations).
   private mutations = 0;
+  private lastGuard: SelectionGuardReport | undefined;
+  private guardLog: (line: string) => void = (line) => { process.stderr.write(`${line}\n`); };
   private readonly connectClient: (url: string) => Promise<CdpClient>;
 
   private constructor(client: CdpClient, target: PlasticityTarget, editorId: string, connectClient = CdpClient.connect) {
@@ -286,12 +652,16 @@ export class PlasticityRuntime {
     bindingNames: string[],
     values: unknown[] = [],
     timeoutMs?: number,
+    // selectionGuard false: only for a source that runs no command (selection-safe-sites.test.ts checks every such site).
+    options: { selectionGuard?: boolean } = {},
   ): Promise<T> {
     this.mutations += 1;
     return await this.enqueue(async () => {
       if (this.uncertain) throw new Error("Previous mutation outcome is uncertain; call reconcile before another mutation");
       try {
-        return await this.call<T>(functionDeclaration, bindingNames, values, timeoutMs);
+        // Every command the server runs goes through here, inside the selection guard (see SELECTION_GUARD_SOURCE).
+        if (options.selectionGuard === false) return await this.call<T>(functionDeclaration, bindingNames, values, timeoutMs);
+        return this.unwrapGuarded<T>(await this.call<unknown>(selectionSafeSource(functionDeclaration), bindingNames, values, timeoutMs));
       } catch (error) {
         if (mutationOutcomeIsUncertain(error)) this.uncertain = true;
         throw error;
@@ -299,10 +669,65 @@ export class PlasticityRuntime {
     });
   }
 
-  async reconcile(timeoutMs = NATIVE_STATE_READ_TIMEOUT_MS): Promise<RuntimeState> {
+  /** What the selection guard did in the last mutate() that returned (undefined before the first one). */
+  selectionGuardReport(): SelectionGuardReport | undefined {
+    return this.lastGuard;
+  }
+
+  /** Where guard problems are written (one line each); the default is the server's stderr. */
+  setSelectionGuardLog(log: (line: string) => void): void {
+    this.guardLog = log;
+  }
+
+  // The guarded source returns { [SELECTION_GUARD_KEY]: report, value }. A problem inside the guard (a selection that
+  // could not be put back) never replaces the source's result: it is logged, and the result is returned as it is.
+  private unwrapGuarded<T>(raw: unknown): T {
+    if (raw === null || typeof raw !== "object" || !(SELECTION_GUARD_KEY in raw)) return raw as T;
+    const envelope = raw as { [SELECTION_GUARD_KEY]?: SelectionGuardReport; value?: unknown };
+    const report = envelope[SELECTION_GUARD_KEY];
+    if (report && typeof report === "object") {
+      this.lastGuard = report;
+      this.logGuardProblems([...(report.earlierProblems ?? []), ...(report.problems ?? [])]);
+    }
+    return envelope.value as T;
+  }
+
+  private logGuardProblems(problems: readonly unknown[]): void {
+    for (const problem of problems) {
+      try { this.guardLog(`[plasticity-mcp] selection guard: ${String(problem)}`); } catch { /* a failing log never fails the call */ }
+    }
+  }
+
+  // Reads the document after a timeout or disconnect and allows later mutations. Before the read it clears the one
+  // leftover that is known to be harmless: a default command idling in Awaiting (the gizmo of the selection), which
+  // keeps a timed-out exec() pending. Nothing is undone or repeated; any other active command is reported, not touched.
+  async reconcile(timeoutMs = NATIVE_STATE_READ_TIMEOUT_MS): Promise<RuntimeState & { recovery?: ReconcileRecovery }> {
+    const recovery = await this.recoverIdleDefaultCommand();
     const state = await this.getState(timeoutMs);
     this.uncertain = false;
-    return state;
+    return recovery ? { ...state, recovery } : state;
+  }
+
+  private async recoverIdleDefaultCommand(): Promise<ReconcileRecovery | undefined> {
+    let found: { cancelled?: unknown; active?: { name?: unknown; state?: unknown; default?: unknown } | null; problems?: unknown } | null;
+    try {
+      found = await this.read<typeof found>(DEFAULT_COMMAND_RECOVERY_SOURCE, [], 10_000);
+    } catch (error) {
+      // A closed or timed-out connection fails the state read that follows as well; anything else must not block it.
+      if (mutationOutcomeIsUncertain(error)) throw error;
+      return undefined;
+    }
+    if (!found || typeof found !== "object") return undefined;
+    if (Array.isArray(found.problems)) this.logGuardProblems(found.problems);
+    const cancelled = Array.isArray(found.cancelled) ? found.cancelled.map(String) : [];
+    const active = found.active && typeof found.active === "object"
+      ? { name: String(found.active.name), state: found.active.state === null || found.active.state === undefined ? null : String(found.active.state), default: found.active.default === true }
+      : undefined;
+    if (cancelled.length === 0 && !active) return undefined;
+    const notes: string[] = [];
+    if (cancelled.length > 0) notes.push(`Cancelled ${cancelled.join(", ")}: an idle default command for the current selection (its gizmo) that was left awaiting input. No edit was undone or repeated, and the selection was kept.`);
+    if (active) notes.push(`${active.name} is still active (state ${active.state ?? "unknown"}) and was not touched; finish or cancel it in Plasticity before the next edit.`);
+    return { ...(cancelled.length > 0 ? { cancelledDefaultCommands: cancelled } : {}), ...(active ? { activeCommand: active } : {}), note: notes.join(" ") };
   }
 
   mutationCount(): number {

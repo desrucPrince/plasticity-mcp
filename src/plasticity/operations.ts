@@ -2004,7 +2004,9 @@ export class PlasticityOperations {
             distanceMm: measurement.distanceMm!,
           })),
         bodyBoundsMm: state.bodies.flatMap(body => body.boundsMm ? [{ bodyIds: [body.id], boundsMm: body.boundsMm }] : []),
-      }]);
+        // Labels and helper lines only, no command: a state read must not empty and restore the user's selection or
+        // cancel the gizmo of that selection, so this source runs outside the selection guard.
+      }], undefined, { selectionGuard: false });
       this.measurementOverlaySignature = signature;
     }
     return state;
@@ -11150,9 +11152,15 @@ export class PlasticityOperations {
     return await this.state();
   }
 
-  // Plasticity's undo()/redo() promise can stay pending after the history step has already been
-  // applied (seen live, with the window focused or hidden). Treat the step as done once the stack
-  // shrinks and the executor is idle, instead of waiting on the promise.
+  // Plasticity's undo()/redo() promise can stay pending after the history step has already been applied (seen live,
+  // with the window focused or hidden). Measured on 26.1.3 (probes-2026-11-pick FINDINGS, "Selection and default
+  // commands"): the step restores the selection its history state holds, and with a face or an edge in it the
+  // executor chains the default command of that selection, which awaits the user; the promise settles only when that
+  // command ends. Without such a selection the promise settles when the step is complete (18 ms for the Undo of a
+  // move). So the step is done when the promise settles, or when the stack has shrunk and that default command awaits:
+  // the selection guard of runtime.mutate cancels it after this source returns and puts the caller's selection back.
+  // A promise that stays pending for another reason is given settleMs after the stack shrank, so that a default
+  // command still on its way is not missed; the step then counts as applied, as before.
   private async stepHistory(direction: "undo" | "redo"): Promise<void> {
     await this.runtime.mutate(`async function (args) {
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
@@ -11162,15 +11170,21 @@ export class PlasticityOperations {
       let settled = false;
       let failure = null;
       this[args.direction]().then(() => { settled = true; }, (error) => { failure = error; });
+      const stateTag = value => value === null || value === undefined ? null : typeof value === 'string' ? value : (value.tag ?? value.constructor?.name ?? null);
+      const defaultAwaits = () => { const command = this.executor.active?.command; return command?.agent === 'automatic' && stateTag(command._state) === 'Awaiting'; };
       const deadline = Date.now() + args.timeoutMs;
+      let shrunkAt = null;
       while (Date.now() < deadline) {
         if (failure) throw failure;
         if (settled) return 'resolved';
-        if (stack().length < before && !this.executor.isBusy) return 'applied';
-        await new Promise(resolve => setTimeout(resolve, 25));
+        if (stack().length < before && !this.executor.isBusy) {
+          if (shrunkAt === null) shrunkAt = Date.now();
+          if (defaultAwaits() || Date.now() - shrunkAt >= args.settleMs) return 'applied';
+        }
+        await new Promise(resolve => setTimeout(resolve, shrunkAt === null ? 25 : 5));
       }
       throw new Error(args.direction + ' did not complete within ' + args.timeoutMs + ' ms');
-    }`, [], [{ direction, timeoutMs: 10_000 }]);
+    }`, [], [{ direction, timeoutMs: 10_000, settleMs: 250 }]);
   }
 
   async undo(revision?: string): Promise<RuntimeState> {
