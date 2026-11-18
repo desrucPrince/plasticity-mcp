@@ -50,6 +50,7 @@
     "accept:native-3mf-export": "node scripts/verify-native-3mf-export-live.ts",
     "accept:native-bracket-mate": "node scripts/verify-native-bracket-mate-live.ts",
     "accept:native-gaps": "node scripts/verify-native-gaps-live.ts",
+    "accept:native-tools-2026-11": "node scripts/verify-native-tools-2026-11-live.ts",
     "accept:creality-print": "node workbench/scripts/verify-creality-print-live.ts",
     "accept:workbench-creality-mcp": "node workbench/scripts/verify-workbench-creality-mcp-live.ts",
     "accept:workbench-slicer-mcp": "node workbench/scripts/verify-workbench-creality-mcp-live.ts",

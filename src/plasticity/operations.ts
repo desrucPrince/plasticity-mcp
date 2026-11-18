@@ -1,14 +1,14 @@
 import { requireWholeHelixTurns } from "./helix-turns.ts";
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { copyFile, mkdir, mkdtemp, open, readFile, realpath, rm, rmdir, stat, writeFile } from "node:fs/promises";
+import { copyFile, lstat, mkdir, mkdtemp, open, readFile, realpath, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 
 import { NATIVE_VIEWPORT_CAPTURE } from "./viewport-capture.ts";
 import { boundsExactness, CAMERA_RESTORE_TOLERANCE, PENDING_VIEW_SAME_POSE, PROBE_SURFACE_COLLECT_ABOVE_MB, PROBE_SURFACE_HEAP_CHECK_EVERY_RAYS, exactBounds, explainXNurbsError, probeSurface, SCREENSHOT_VIEW_SOURCE, type ScreenshotViewRestored, SQUARE_ENDS_SOURCE, squareClosureProblem, SURFACE_ALIGN_CONTINUITY, SURFACE_ALIGN_COINCIDENCE_MM, SURFACE_ALIGN_DRIVE, SURFACE_ALIGN_FALLBACK_WAIT_MS, SURFACE_ALIGN_READBACK_SOURCE, SURFACE_ALIGN_READY_MS, SURFACE_ALIGN_TIMEOUTS, type AlignReadBackNative, type SurfaceAlignContinuity, readSupportBounds, supportBounds, validateScreenshotView, withScreenshotView, type ExactBoundsEvidence, type ProbeSurfaceEvidence, type ProbeSurfaceRequest, type ScreenshotViewOptions } from "./surfacing.ts";
 import { nativeFunction } from "./native-function.ts";
 import { classifyPickOutcome, type PickCancelResult, type PickOutcome, type PickOutcomeFacts } from "./pick-command-outcome.ts";
-import { LONG_NATIVE_IMPORT_TIMEOUT_MS, NATIVE_STATE_READ_TIMEOUT_MS, PlasticityRuntime, type RevisionProbe, type RuntimeState } from "./runtime.ts";
+import { LONG_NATIVE_IMPORT_TIMEOUT_MS, NATIVE_STATE_READ_TIMEOUT_MS, mutationOutcomeIsUncertain, PlasticityRuntime, type RevisionProbe, type RuntimeState } from "./runtime.ts";
 import { add, ConstructionGeometry, cross, dot, frameFromOriginNormalX, localPointToWorld, normalize, scale, subtract } from "./construction.ts";
 import {
   DatumRegistry,
@@ -453,6 +453,94 @@ export const CHAMFER_SOURCE = nativeFunction`async function (Factory, args) {
   evidence.facesAfter = faceIdentity(find(args.id));
   return evidence;
 }`;
+
+// One history step (Undo or Redo). `this` is the editor. It keeps a record of itself on globalThis, so that after a CDP
+// time-out a read (HISTORY_STEP_FATE_SOURCE) can tell whether this step has ended and what it did.
+const HISTORY_STEP_SOURCE = `async function (args) {
+  const stack = () => args.direction === 'undo' ? this.history.undoStack : this.history.redoStack;
+  const depths = () => ({ undoDepth: this.history.undoStack.length, redoDepth: this.history.redoStack.length });
+  let finish = () => {};
+  const record = { token: args.token ?? null, direction: args.direction, before: stack().length, started: false, settled: false, rejected: null, outcome: null, running: true, done: null };
+  record.done = new Promise(resolve => { finish = resolve; });
+  if (args.token) globalThis[Symbol.for('plasticity-mcp.history-step')] = record;
+  try {
+    if (this.executor.isBusy) throw new Error('Plasticity is busy');
+    const before = record.before;
+    if (before === 0) { record.outcome = 'empty'; return { outcome: 'empty', ...depths() }; }
+    let settled = false;
+    let failure = null;
+    let wake = () => {};
+    const woken = new Promise(resolve => { wake = resolve; });
+    record.started = true;
+    this[args.direction]().then(() => { settled = true; record.settled = true; wake(); }, (error) => { failure = error; record.rejected = String(error?.message ?? error); wake(); });
+    const stateTag = value => value === null || value === undefined ? null : typeof value === 'string' ? value : (value.tag ?? value.constructor?.name ?? null);
+    const defaultAwaits = () => { const command = this.executor.active?.command; return command?.agent === 'automatic' && stateTag(command._state) === 'Awaiting'; };
+    const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+    // One turn of the event loop that no timer throttling delays.
+    const turn = () => new Promise(resolve => {
+      if (typeof MessageChannel !== 'function') { setTimeout(resolve, 0); return; }
+      const channel = new MessageChannel();
+      channel.port1.onmessage = () => { channel.port1.close(); resolve(); };
+      channel.port2.postMessage(0);
+    });
+    const deadline = Date.now() + args.timeoutMs;
+    let shrunkAt = null;
+    let settledAt = null;
+    while (Date.now() < deadline) {
+      if (failure) throw failure;
+      if (settled) {
+        // The step is complete. A default command it chained after settling gets one turn to show, then up to settleMs to idle.
+        if (settledAt === null) { settledAt = Date.now(); await turn(); }
+        if (!this.executor.isBusy || defaultAwaits() || Date.now() - settledAt >= args.settleMs) { record.outcome = 'resolved'; return { outcome: 'resolved', ...depths() }; }
+        await pause(5);
+        continue;
+      }
+      if (stack().length < before && !this.executor.isBusy) {
+        if (shrunkAt === null) shrunkAt = Date.now();
+        if (defaultAwaits() || Date.now() - shrunkAt >= args.settleMs) { record.outcome = 'applied'; return { outcome: 'applied', ...depths() }; }
+      }
+      // The promise settling ends this wait at once; the timer only paces the checks of a step whose promise stays pending.
+      await Promise.race([woken, pause(shrunkAt === null ? 25 : 5)]);
+    }
+    throw new Error(args.direction + ' did not complete within ' + args.timeoutMs + ' ms');
+  } finally {
+    record.running = false;
+    finish();
+  }
+}`;
+
+// Read after a history step's CDP request timed out: waits (up to waitMs) for that step to end, then reports its fate.
+const HISTORY_STEP_FATE_SOURCE = `async function (args) {
+  const record = globalThis[Symbol.for('plasticity-mcp.history-step')];
+  const depths = () => ({ undoDepth: this.history.undoStack.length, redoDepth: this.history.redoStack.length });
+  if (!record || record.token !== args.token) return { known: false, ...depths() };
+  if (record.running) await Promise.race([record.done, new Promise(resolve => setTimeout(resolve, args.waitMs))]);
+  const stack = record.direction === 'undo' ? this.history.undoStack : this.history.redoStack;
+  return { known: true, running: record.running, started: record.started, settled: record.settled, rejected: record.rejected, outcome: record.outcome, moved: stack.length < record.before, busy: !!this.executor.isBusy, ...depths() };
+}`;
+const HISTORY_STEP_FATE_WAIT_MS = 5_000;
+const HISTORY_STEP_FATE_TIMEOUT_MS = 10_000;
+
+interface HistoryStepResult { outcome: "empty" | "resolved" | "applied"; undoDepth: number; redoDepth: number }
+interface HistoryStepFate { known: boolean; running?: boolean; started?: boolean; settled?: boolean; rejected?: string | null; outcome?: string | null; moved?: boolean; busy?: boolean; undoDepth: number; redoDepth: number }
+function isHistoryStepResult(value: unknown): value is HistoryStepResult {
+  if (typeof value !== "object" || value === null) return false;
+  const step = value as Partial<HistoryStepResult>;
+  return (step.outcome === "empty" || step.outcome === "resolved" || step.outcome === "applied") && Number.isInteger(step.undoDepth) && Number.isInteger(step.redoDepth);
+}
+
+/** What plasticity_undo / plasticity_redo did: the document as read afterwards and a definite step count. */
+export interface HistoryRun {
+  state: RuntimeState;
+  direction: "undo" | "redo";
+  stepsRequested: number;
+  stepsDone: number;
+  stepsRemaining: number;
+  /** Why fewer steps than requested were done: the history ran out, or a CDP request timed out and the count was then proven. */
+  stopped?: "history-empty" | "timed-out";
+  /** The time-out's own message, with stopped "timed-out". */
+  timeout?: string;
+}
 
 // The intersection passes of booleanDetailed: one kernel intersection per target and tool inside one command. The kernel
 // decides first. Only when it refuses a pass with "Operation has no effect" does its clash test (Eval.Collisions,
@@ -11206,35 +11294,16 @@ export class PlasticityOperations {
   // with the window focused or hidden). Measured on 26.1.3 (probes-2026-11-pick FINDINGS, "Selection and default
   // commands"): the step restores the selection its history state holds, and with a face or an edge in it the
   // executor chains the default command of that selection, which awaits the user; the promise settles only when that
-  // command ends. Without such a selection the promise settles when the step is complete (18 ms for the Undo of a
-  // move). So the step is done when the promise settles, or when the stack has shrunk and that default command awaits:
-  // the selection guard of runtime.mutate cancels it after this source returns and puts the caller's selection back.
-  // A promise that stays pending for another reason is given settleMs after the stack shrank, so that a default
-  // command still on its way is not missed; the step then counts as applied, as before.
-  private async stepHistory(direction: "undo" | "redo"): Promise<void> {
-    await this.runtime.mutate(`async function (args) {
-      if (this.executor.isBusy) throw new Error('Plasticity is busy');
-      const stack = () => args.direction === 'undo' ? this.history.undoStack : this.history.redoStack;
-      const before = stack().length;
-      if (before === 0) return 'empty';
-      let settled = false;
-      let failure = null;
-      this[args.direction]().then(() => { settled = true; }, (error) => { failure = error; });
-      const stateTag = value => value === null || value === undefined ? null : typeof value === 'string' ? value : (value.tag ?? value.constructor?.name ?? null);
-      const defaultAwaits = () => { const command = this.executor.active?.command; return command?.agent === 'automatic' && stateTag(command._state) === 'Awaiting'; };
-      const deadline = Date.now() + args.timeoutMs;
-      let shrunkAt = null;
-      while (Date.now() < deadline) {
-        if (failure) throw failure;
-        if (settled) return 'resolved';
-        if (stack().length < before && !this.executor.isBusy) {
-          if (shrunkAt === null) shrunkAt = Date.now();
-          if (defaultAwaits() || Date.now() - shrunkAt >= args.settleMs) return 'applied';
-        }
-        await new Promise(resolve => setTimeout(resolve, shrunkAt === null ? 25 : 5));
-      }
-      throw new Error(args.direction + ' did not complete within ' + args.timeoutMs + ' ms');
-    }`, [], [{ direction, timeoutMs: 10_000, settleMs: 250 }]);
+  // command ends. Without such a selection the promise settles when the step is complete (0.6 ms median for the Undo
+  // of a move, discovery/tools-2026-11). So the step is done when the promise settles, or when the stack has shrunk and
+  // that default command awaits: the selection guard of runtime.mutate cancels it after this source returns and puts
+  // the caller's selection back. A promise that stays pending for another reason is given settleMs after the stack
+  // shrank, so that a default command still on its way is not missed; the step then counts as applied, as before.
+  // One history step is one CDP request (HISTORY_STEP_SOURCE): it ends the moment the promise settles, without waiting
+  // for a timer, and returns the depths it left.
+  private async stepHistory(direction: "undo" | "redo", token?: string): Promise<HistoryStepResult | undefined> {
+    const result = await this.runtime.mutate<unknown>(HISTORY_STEP_SOURCE, [], [{ direction, timeoutMs: 10_000, settleMs: 250, ...(token ? { token } : {}) }]);
+    return isHistoryStepResult(result) ? result : undefined;
   }
 
   async undo(revision?: string): Promise<RuntimeState> {
@@ -11249,11 +11318,85 @@ export class PlasticityOperations {
     return await this.state();
   }
 
-  async exportStep(ids: number[], outputPath: string, revision?: string): Promise<{ path: string; bytes: number }> {
+  // plasticity_undo / plasticity_redo with steps: n. Every history step is its own CDP request, so no request carries
+  // more than one step (about a millisecond of work against the 10 s request limit), and the document is read once at
+  // the end, not after every step. It stops when the history runs out.
+  // A request that times out is not retried and the run does not go on. The page keeps a record of the step it was
+  // running (HISTORY_STEP_SOURCE); once that step has ended, its fate is known: applied (the promise settled, or the
+  // step itself counted it as applied) or not applied (it never started, or the native promise was rejected with the
+  // stack unmoved). Then the session is reconciled here (the same read plasticity_reconcile does) and the caller gets a
+  // definite count. A step that is still running, a native promise that is still pending without a decision, depths
+  // that do not match the count, or a read that fails: the outcome stays uncertain, as for every other edit.
+  async stepHistoryMany(direction: "undo" | "redo", steps: number, revision?: string): Promise<HistoryRun> {
+    if (!Number.isInteger(steps) || steps < 1) throw new Error("History steps must be a positive integer");
+    const start = revision ? await this.assertRevision(revision) : await this.state();
+    const sign = direction === "undo" ? -1 : 1;
+    let depths = { undoDepth: start.undoDepth, redoDepth: start.redoDepth };
+    let done = 0;
+    let stopped: HistoryRun["stopped"];
+    let timeout: string | undefined;
+    while (done < steps) {
+      const token = randomUUID();
+      let step: HistoryStepResult | undefined;
+      try {
+        step = await this.stepHistory(direction, token);
+      } catch (error) {
+        if (!mutationOutcomeIsUncertain(error)) throw error;
+        const applied = await this.settleTimedOutHistoryStep(direction, token, depths, error);
+        done += applied;
+        stopped = "timed-out";
+        timeout = (error as Error).message;
+        break;
+      }
+      if (step?.outcome === "empty") {
+        stopped = "history-empty";
+        break;
+      }
+      done += 1;
+      depths = step ?? { undoDepth: depths.undoDepth + sign, redoDepth: depths.redoDepth - sign };
+    }
+    const state = await this.state();
+    return { state, direction, stepsRequested: steps, stepsDone: done, stepsRemaining: steps - done, ...(stopped ? { stopped } : {}), ...(timeout ? { timeout } : {}) };
+  }
+
+  /** How many steps (0 or 1) the timed-out request applied. Rethrows the time-out, with the session still uncertain, when that is not provable. */
+  private async settleTimedOutHistoryStep(direction: "undo" | "redo", token: string, before: { undoDepth: number; redoDepth: number }, timeout: unknown): Promise<0 | 1> {
+    let fate: HistoryStepFate | undefined;
+    try {
+      fate = await this.runtime.read<HistoryStepFate>(HISTORY_STEP_FATE_SOURCE, [{ token, waitMs: HISTORY_STEP_FATE_WAIT_MS }], HISTORY_STEP_FATE_TIMEOUT_MS);
+    } catch {
+      throw timeout;
+    }
+    if (!fate || fate.known !== true || fate.running !== false) throw timeout;
+    let applied: 0 | 1;
+    if (fate.started !== true) applied = 0;
+    else if (fate.settled === true || fate.outcome === "applied") {
+      if (fate.moved !== true) throw timeout;
+      applied = 1;
+    } else if (typeof fate.rejected === "string" && fate.moved === false) applied = 0;
+    else throw timeout;
+    const sign = direction === "undo" ? -1 : 1;
+    const expected = { undoDepth: before.undoDepth + sign * applied, redoDepth: before.redoDepth - sign * applied };
+    if (fate.undoDepth !== expected.undoDepth || fate.redoDepth !== expected.redoDepth) throw timeout;
+    let state: RuntimeState;
+    try {
+      state = await this.runtime.reconcile();
+    } catch {
+      throw timeout;
+    }
+    if (state.undoDepth !== expected.undoDepth || state.redoDepth !== expected.redoDepth) {
+      // The document moved between the two reads: nothing here can count the steps any more.
+      this.runtime.markUncertain();
+      throw timeout;
+    }
+    return applied;
+  }
+
+  async exportStep(ids: number[], outputPath: string, revision?: string, options: OutputFileOptions = {}): Promise<{ path: string; bytes: number }> {
     if (revision) await this.assertRevision(revision);
     const output = resolve(outputPath);
     if (![".step", ".stp"].includes(extname(output).toLowerCase())) throw new Error("STEP output must end in .step or .stp");
-    await assertAbsent(output);
+    await assertWritableOutput(output, options.overwrite === true);
     await mkdir(dirname(output), { recursive: true });
     const staging = await mkdtemp(join(dirname(output), ".plasticity-step-"));
     const temporary = join(staging, "geometry.step");
@@ -11269,7 +11412,7 @@ export class PlasticityOperations {
       await sanitizeCadExport(temporary, staging, "step", basename(output));
       const text = await readFile(temporary, "utf8");
       if (!text.startsWith("ISO-10303-21;") || !text.includes("END-ISO-10303-21;")) throw new Error("Plasticity produced an invalid STEP file");
-      await copyFile(temporary, output, constants.COPYFILE_EXCL);
+      await commitOutputFile(temporary, output, options.overwrite === true);
       return { path: output, bytes: (await stat(output)).size };
     } finally {
       if (!this.runtime.isUncertain()) {
@@ -11283,13 +11426,14 @@ export class PlasticityOperations {
     ids: number[],
     outputPath: string,
     revision: string,
+    options: OutputFileOptions = {},
   ): Promise<{ path: string; bytes: number; format: "parasolid-text" | "parasolid-binary" }> {
     const state = await this.assertRevision(revision);
     requireCadExportBodies(state, ids, "Parasolid");
     const output = resolve(outputPath);
     const extension = extname(output).toLowerCase();
     if (extension !== ".x_t" && extension !== ".x_b") throw new Error("Parasolid output must end in .x_t or .x_b");
-    await assertAbsent(output);
+    await assertWritableOutput(output, options.overwrite === true);
     await mkdir(dirname(output), { recursive: true });
     const staging = await mkdtemp(join(dirname(output), ".plasticity-parasolid-"));
     const temporary = join(staging, `geometry${extension}`);
@@ -11304,7 +11448,7 @@ export class PlasticityOperations {
       }`, ["ExportCadFactory"], [{ ids, path: temporary }]);
       await sanitizeCadExport(temporary, staging, "parasolid", basename(output));
       const bytes = await validateParasolidPath(temporary, "Plasticity Parasolid output");
-      await copyFile(temporary, output, constants.COPYFILE_EXCL);
+      await commitOutputFile(temporary, output, options.overwrite === true);
       return {
         path: output,
         bytes,
@@ -11318,13 +11462,13 @@ export class PlasticityOperations {
     }
   }
 
-  async exportIges(ids: number[], outputPath: string, revision: string): Promise<{ path: string; bytes: number }> {
+  async exportIges(ids: number[], outputPath: string, revision: string, options: OutputFileOptions = {}): Promise<{ path: string; bytes: number }> {
     const state = await this.assertRevision(revision);
     requireCadExportBodies(state, ids, "IGES");
     const output = resolve(outputPath);
     const extension = extname(output).toLowerCase();
     if (extension !== ".igs" && extension !== ".iges") throw new Error("IGES output must end in .igs or .iges");
-    await assertAbsent(output);
+    await assertWritableOutput(output, options.overwrite === true);
     await mkdir(dirname(output), { recursive: true });
     const staging = await mkdtemp(join(dirname(output), ".plasticity-iges-"));
     const temporary = join(staging, "geometry.igs");
@@ -11339,7 +11483,7 @@ export class PlasticityOperations {
       }`, ["ExportCadFactory"], [{ ids, path: temporary }]);
       await sanitizeCadExport(temporary, staging, "iges", basename(output));
       const bytes = await validateIgesPath(temporary, "Plasticity IGES output");
-      await copyFile(temporary, output, constants.COPYFILE_EXCL);
+      await commitOutputFile(temporary, output, options.overwrite === true);
       return { path: output, bytes };
     } finally {
       if (!this.runtime.isUncertain()) {
@@ -11349,13 +11493,13 @@ export class PlasticityOperations {
     }
   }
 
-  async exportSat(ids: number[], outputPath: string, revision: string): Promise<{ path: string; bytes: number }> {
+  async exportSat(ids: number[], outputPath: string, revision: string, options: OutputFileOptions = {}): Promise<{ path: string; bytes: number }> {
     const state = await this.assertRevision(revision);
     requireCadExportBodies(state, ids, "SAT");
     const output = resolve(outputPath);
     const extension = extname(output).toLowerCase();
     if (extension !== ".sat") throw new Error("SAT output must end in .sat");
-    await assertAbsent(output);
+    await assertWritableOutput(output, options.overwrite === true);
     await mkdir(dirname(output), { recursive: true });
     const staging = await mkdtemp(join(dirname(output), ".plasticity-sat-"));
     const temporary = join(staging, `geometry${extension}`);
@@ -11369,7 +11513,7 @@ export class PlasticityOperations {
         await factory.commit();
       }`, ["ExportCadFactory"], [{ ids, path: temporary }]);
       const bytes = await validateSatPath(temporary, "Plasticity SAT output");
-      await copyFile(temporary, output, constants.COPYFILE_EXCL);
+      await commitOutputFile(temporary, output, options.overwrite === true);
       return { path: output, bytes };
     } finally {
       if (!this.runtime.isUncertain()) {
@@ -11385,11 +11529,12 @@ export class PlasticityOperations {
     revision: string,
     chordToleranceMm: number,
     angleToleranceDegrees: number,
+    options: OutputFileOptions = {},
   ): Promise<{ path: string; bytes: number; triangles: number; chordToleranceMm: number; angleToleranceDegrees: number }> {
     await this.assertRevision(revision);
     const output = resolve(outputPath);
     if (extname(output).toLowerCase() !== ".stl") throw new Error("STL output must end in .stl");
-    await assertAbsent(output);
+    await assertWritableOutput(output, options.overwrite === true);
     await mkdir(dirname(output), { recursive: true });
     const staging = await mkdtemp(join(dirname(output), ".plasticity-stl-"));
     const temporary = join(staging, "geometry.stl");
@@ -11416,7 +11561,7 @@ export class PlasticityOperations {
       if (temporarySize === 0 || temporarySize > MAX_THREE_MF_ARCHIVE_BYTES) throw new Error("Plasticity produced an empty or excessively large 3MF archive");
       const data = await readFile(temporary);
       const triangles = validateBinaryStl(data);
-      await copyFile(temporary, output, constants.COPYFILE_EXCL);
+      await commitOutputFile(temporary, output, options.overwrite === true);
       return { path: output, bytes: data.length, triangles, chordToleranceMm, angleToleranceDegrees };
     } finally {
       if (!this.runtime.isUncertain()) {
@@ -11432,6 +11577,7 @@ export class PlasticityOperations {
     revision: string,
     chordToleranceMm: number,
     angleToleranceDegrees: number,
+    options: OutputFileOptions = {},
   ): Promise<ThreeMfValidation & {
     path: string;
     bytes: number;
@@ -11445,7 +11591,7 @@ export class PlasticityOperations {
     if (!Number.isFinite(angleToleranceDegrees) || angleToleranceDegrees <= 0 || angleToleranceDegrees > 90) throw new Error("3MF angle tolerance must be within (0, 90] degrees");
     const output = resolve(outputPath);
     if (extname(output).toLowerCase() !== ".3mf") throw new Error("3MF output must end in .3mf");
-    await assertAbsent(output);
+    await assertWritableOutput(output, options.overwrite === true);
     await mkdir(dirname(output), { recursive: true });
     const staging = await mkdtemp(join(dirname(output), ".plasticity-3mf-"));
     const temporary = join(staging, "geometry.3mf");
@@ -11471,7 +11617,7 @@ export class PlasticityOperations {
       }]);
       const data = await readFile(temporary);
       const validation = validateThreeMfArchive(data);
-      await copyFile(temporary, output, constants.COPYFILE_EXCL);
+      await commitOutputFile(temporary, output, options.overwrite === true);
       return {
         path: output,
         bytes: data.length,
@@ -11494,6 +11640,7 @@ export class PlasticityOperations {
     revision: string,
     chordToleranceMm: number,
     angleToleranceDegrees: number,
+    options: OutputFileOptions = {},
   ): Promise<ObjValidation & {
     path: string;
     bytes: number;
@@ -11508,7 +11655,7 @@ export class PlasticityOperations {
     if (!Number.isFinite(angleToleranceDegrees) || angleToleranceDegrees <= 0 || angleToleranceDegrees > 90) throw new Error("OBJ angle tolerance must be within (0, 90] degrees");
     const output = resolve(outputPath);
     if (extname(output).toLowerCase() !== ".obj") throw new Error("OBJ output must end in .obj");
-    await assertAbsent(output);
+    await assertWritableOutput(output, options.overwrite === true);
     await mkdir(dirname(output), { recursive: true });
     const staging = await mkdtemp(join(dirname(output), ".plasticity-obj-"));
     const temporary = join(staging, "geometry.obj");
@@ -11539,7 +11686,7 @@ export class PlasticityOperations {
       if (temporarySize === 0 || temporarySize > MAX_OBJ_BYTES) throw new Error("Plasticity produced an empty or excessively large OBJ file");
       const data = await readFile(temporary);
       const validation = validateObj(data);
-      await copyFile(temporary, output, constants.COPYFILE_EXCL);
+      await commitOutputFile(temporary, output, options.overwrite === true);
       return {
         path: output,
         bytes: data.length,
@@ -11557,7 +11704,7 @@ export class PlasticityOperations {
     }
   }
 
-  async exportSvg(ids: number[], outputPath: string, revision: string, curveChordToleranceMm = 0.05, curveChordAngleDegrees = 5): Promise<{
+  async exportSvg(ids: number[], outputPath: string, revision: string, curveChordToleranceMm = 0.05, curveChordAngleDegrees = 5, options: OutputFileOptions = {}): Promise<{
     path: string;
     bytes: number;
     bodies: number;
@@ -11585,7 +11732,7 @@ export class PlasticityOperations {
     }
     const output = resolve(outputPath);
     if (extname(output).toLowerCase() !== ".svg") throw new Error("SVG output must end in .svg");
-    await assertAbsent(output);
+    await assertWritableOutput(output, options.overwrite === true);
     const curves = await this.runtime.readNative<Array<{
       id: number;
       closed: boolean;
@@ -12060,7 +12207,7 @@ export class PlasticityOperations {
     const temporary = join(staging, "geometry.svg");
     try {
       await writeFile(temporary, svg, { flag: "wx" });
-      await copyFile(temporary, output, constants.COPYFILE_EXCL);
+      await commitOutputFile(temporary, output, options.overwrite === true);
       return { path: output, bytes: Buffer.byteLength(svg), bodies: curves.length, lineSegments, circularSegments, fullCircles, fullEllipses, ellipticalArcs, cubicBezierSegments, approximatedSegments, maxChordDeviationMm, curveChordToleranceMm, curveChordAngleDegrees, sourceUnits: "millimeter", boundsMm: { min, max, size }, pageSizeMm };
     } finally {
       await rm(temporary, { force: true }).catch(() => undefined);
@@ -12075,6 +12222,7 @@ export class PlasticityOperations {
     curveChordToleranceMm = 0.05,
     curveChordAngleDegrees = 5,
     marginMm = 1,
+    options: OutputFileOptions = {},
   ): Promise<{
     path: string;
     bytes: number;
@@ -12101,7 +12249,7 @@ export class PlasticityOperations {
     }
     const output = resolve(outputPath);
     if (extname(output).toLowerCase() !== ".svg") throw new Error("Hidden-line SVG output must end in .svg");
-    await assertAbsent(output);
+    await assertWritableOutput(output, options.overwrite === true);
 
     const projection = await this.runtime.readNative<{
       positions: number[];
@@ -12202,7 +12350,7 @@ export class PlasticityOperations {
     const temporary = join(staging, "projection.svg");
     try {
       await writeFile(temporary, svg, { flag: "wx" });
-      await copyFile(temporary, output, constants.COPYFILE_EXCL);
+      await commitOutputFile(temporary, output, options.overwrite === true);
       return {
         path: output,
         bytes: Buffer.byteLength(svg),
@@ -12389,10 +12537,10 @@ export class PlasticityOperations {
     return await this.state(LONG_NATIVE_IMPORT_TIMEOUT_MS);
   }
 
-  async saveCopy(outputPath: string): Promise<{ path: string; bytes: number }> {
+  async saveCopy(outputPath: string, options: OutputFileOptions = {}): Promise<{ path: string; bytes: number }> {
     const output = resolve(outputPath);
     if (extname(output).toLowerCase() !== ".plasticity") throw new Error("Output must end in .plasticity");
-    await assertAbsent(output);
+    await assertWritableOutput(output, options.overwrite === true);
     await mkdir(dirname(output), { recursive: true });
     const staging = await mkdtemp(join(dirname(output), ".plasticity-save-"));
     const temporary = join(staging, "document.plasticity");
@@ -12400,7 +12548,7 @@ export class PlasticityOperations {
       await this.runtime.mutate(`async function (path) { if (this.executor.isBusy) throw new Error('Plasticity is busy'); await this.saver.save(path); }`, [], [temporary]);
       const header = await readFile(temporary);
       if (header.length < 24 || header.subarray(0, 10).toString() !== "plasticity") throw new Error("Plasticity produced an invalid document");
-      await copyFile(temporary, output, constants.COPYFILE_EXCL);
+      await commitOutputFile(temporary, output, options.overwrite === true);
       return { path: output, bytes: header.length };
     } finally {
       if (!this.runtime.isUncertain()) {
@@ -12434,11 +12582,11 @@ export class PlasticityOperations {
     return await this.state(LONG_NATIVE_IMPORT_TIMEOUT_MS);
   }
 
-  async screenshot(outputPath: string, captureMode: "window" | "viewport" = "window"): Promise<{ path: string; bytes: number; captureMode?: "viewport"; freshFrame?: boolean; rendererHidden?: boolean; width?: number; height?: number }> {
+  async screenshot(outputPath: string, captureMode: "window" | "viewport" = "window", options: OutputFileOptions = {}): Promise<{ path: string; bytes: number; captureMode?: "viewport"; freshFrame?: boolean; rendererHidden?: boolean; width?: number; height?: number }> {
     if (captureMode !== "window" && captureMode !== "viewport") throw new Error("Unsupported screenshot capture mode");
     const output = resolve(outputPath);
     if (extname(output).toLowerCase() !== ".png") throw new Error("Screenshot output must end in .png");
-    await assertAbsent(output);
+    await assertWritableOutput(output, options.overwrite === true);
     await mkdir(dirname(output), { recursive: true });
     let viewport: { data: string; width: number; height: number; rendererHidden: boolean; freshFrame: boolean } | undefined;
     let frame: string;
@@ -12463,7 +12611,7 @@ export class PlasticityOperations {
     if (viewport && (data.readUInt32BE(16) !== viewport.width || data.readUInt32BE(20) !== viewport.height)) {
       throw new Error("Native viewport PNG dimensions do not match the rendered canvas");
     }
-    await writeFile(output, data, { flag: "wx" });
+    await writeOutputFile(output, data, options.overwrite === true);
     return { path: output, bytes: data.length, ...(viewport ? { captureMode: "viewport" as const, freshFrame: true, rendererHidden: viewport.rendererHidden, width: viewport.width, height: viewport.height } : {}) };
   }
 
@@ -13271,14 +13419,60 @@ function vectorsNear(left: Vector3, right: Vector3, tolerance = 1e-12): boolean 
   return left.every((value, index) => Math.abs(value - right[index]!) <= tolerance);
 }
 
-async function assertAbsent(path: string): Promise<void> {
+/** overwrite: true lets a tool that writes a file at a caller-given path replace an existing regular file. */
+export interface OutputFileOptions { overwrite?: boolean }
+
+// Checked before the native export starts and again just before the file is put in place. Without overwrite any
+// existing entry is refused (a dangling symbolic link too). With overwrite a regular file is the only entry that may
+// be replaced: a directory, a symbolic link (its target is never written through) and any other kind are refused.
+async function assertWritableOutput(path: string, overwrite: boolean): Promise<void> {
+  let entry;
   try {
-    await stat(path);
+    entry = await lstat(path);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
     throw error;
   }
-  throw new Error(`Refusing to overwrite existing file: ${path}`);
+  if (!overwrite) throw new Error(`Refusing to overwrite existing file: ${path} (pass overwrite: true to replace an existing regular file)`);
+  if (entry.isSymbolicLink()) throw new Error(`Refusing to overwrite: ${path} is a symbolic link; overwrite: true replaces a regular file only`);
+  if (entry.isDirectory()) throw new Error(`Refusing to overwrite: ${path} is a directory; overwrite: true replaces a regular file only`);
+  if (!entry.isFile()) throw new Error(`Refusing to overwrite: ${path} is not a regular file; overwrite: true replaces a regular file only`);
+}
+
+// Puts a finished, validated file in place. Without overwrite: an exclusive copy, as before. With overwrite: a
+// temporary file in the output's own folder, then one rename over the target, so the old file is whole until the new
+// one is complete; on failure the old file is untouched and the temporary file is removed.
+async function commitOutputFile(temporary: string, output: string, overwrite: boolean): Promise<void> {
+  if (!overwrite) {
+    await copyFile(temporary, output, constants.COPYFILE_EXCL);
+    return;
+  }
+  const sibling = join(dirname(output), `.${basename(output)}.${randomUUID()}.tmp`);
+  try {
+    await copyFile(temporary, sibling, constants.COPYFILE_EXCL);
+    await assertWritableOutput(output, true);
+    await rename(sibling, output);
+  } catch (error) {
+    await rm(sibling, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+/** The same rule for a file the server writes from memory (a screenshot). */
+async function writeOutputFile(output: string, data: Buffer, overwrite: boolean): Promise<void> {
+  if (!overwrite) {
+    await writeFile(output, data, { flag: "wx" });
+    return;
+  }
+  const sibling = join(dirname(output), `.${basename(output)}.${randomUUID()}.tmp`);
+  try {
+    await writeFile(sibling, data, { flag: "wx" });
+    await assertWritableOutput(output, true);
+    await rename(sibling, output);
+  } catch (error) {
+    await rm(sibling, { force: true }).catch(() => undefined);
+    throw error;
+  }
 }
 
 function validateBinaryStl(data: Buffer): number {

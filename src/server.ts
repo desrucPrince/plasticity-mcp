@@ -368,6 +368,11 @@ const fastenerGripLayer = z.object({ id: z.string().trim().min(1).max(120), firs
 );
 const revision = z.string().min(1);
 const intent = z.string().trim().min(1).max(1000).optional();
+// Every tool that writes a file at a caller-given path takes overwrite. It reaches PlasticityOperations as a trailing
+// { overwrite: true } argument only when set, so a call without it is the call it always was.
+const outputOverwrite = z.boolean().default(false).describe("Replace an existing regular file at path (default false: an existing path is refused)");
+const OUTPUT_OVERWRITE_RULE = " An existing path is refused unless overwrite: true, which replaces a regular file only (never a directory or a symbolic link): the new file is written beside it and renamed over it, so a failed call leaves the old file intact.";
+const overwriteArguments = (overwrite: boolean): [] | [{ overwrite: true }] => (overwrite ? [{ overwrite: true }] : []);
 /** True when PLASTICITY_EXPERIMENTAL_TOOLS (comma-separated, read when the server is built) names this experimental tool. */
 export function experimentalToolEnabled(name: string, environment: NodeJS.ProcessEnv = process.env): boolean {
   return (environment.PLASTICITY_EXPERIMENTAL_TOOLS ?? "").split(",").map((entry) => entry.trim()).includes(name);
@@ -2445,6 +2450,8 @@ function pickFacesByQuery(state: RuntimeState, id: number, rawQuery: unknown, so
 }
 const DESCRIBE_ALL_BODIES = 8;
 const DIRECT_FIND_REPLY_BYTES = 8_000;
+/** The most history steps one plasticity_undo / plasticity_redo call takes (each is one request of about a millisecond). */
+const MAX_HISTORY_STEPS = 5_000;
 const DIRECT_FIND_HINT = "add limit (sortBy picks which matches) or narrow the query";
 const BODY_INFO_HINT_BYTES = 20_000;
 const COORDINATE_AXIS: Record<string, number> = { x: 0, y: 1, z: 2 };
@@ -2597,6 +2604,10 @@ function createServerWithCatalog(
     });
   });
   let toolTail: Promise<void> = Promise.resolve();
+  // What the last plasticity_undo / plasticity_redo call did; plasticity_batch's undoOnError reads it.
+  type HistorySummary = { stepsRequested: number; stepsDone: number; stepsRemaining: number; stopped?: "history-empty" | "timed-out"; timeout?: string };
+  let lastHistoryRun: HistorySummary | undefined;
+  const historyRunOfLastUndo = () => lastHistoryRun;
   // Reentrant so plasticity_batch can run routed tools while it already holds the lock.
   const lockHeld = new AsyncLocalStorage<true>();
   const exclusive = async <T>(operation: () => Promise<T>): Promise<T> => {
@@ -3097,6 +3108,12 @@ function createServerWithCatalog(
             try {
               for (let remaining = (await session.get().state()).undoDepth - start.undoDepth; undo && remaining > 0; remaining -= 1) {
                 await undo.callback(await undo.inputSchema.parseAsync({ revision: (await session.get().state()).revision, intent: "plasticity_batch undoOnError" }), extra);
+                // An undo whose request timed out now returns a definite count instead of failing: the rollback stops there, as it did.
+                const run = historyRunOfLastUndo();
+                if (run?.stopped === "timed-out") {
+                  undone += run.stepsDone;
+                  throw new Error(`${run.timeout ?? "CDP request timed out"} (the document was read afterwards: that undo step was ${run.stepsDone === 1 ? "applied" : "not applied"}, and the session is not uncertain)`);
+                }
                 undone += 1;
               }
             } catch (undoError) {
@@ -3211,7 +3228,7 @@ function createServerWithCatalog(
     await journaled("align-vertices", purpose, { bodyIds, sourceVertex, targetVertex, offsetMm }, () => session.get().alignVertices(bodyIds, sourceVertex, targetVertex, offsetMm, current)));
   tool("plasticity_align_linear_edges", "Rigidly align one exact native Line edge from a moving body set to a fixed Line edge in one Undo step. Source and target edge midpoints are aligned with an optional signed axial offset along the fixed target tangent; same/opposed controls tangent direction, and rotationAroundAxisDeg controls roll around the fixed target line. Re-read the exact edges after placement because native edge parameter direction is topological, not a semantic assembly direction.", linearEdgeAlignmentInputSchema, async ({ ids: bodyIds, sourceEdge, targetEdge, relation, axialOffsetMm, rotationAroundAxisDeg, intent: purpose, revision: current }) =>
     await journaled("align-linear-edges", purpose, { bodyIds, sourceEdge, targetEdge, relation, axialOffsetMm, rotationAroundAxisDeg }, () => session.get().alignLinearEdges(bodyIds, sourceEdge, targetEdge, relation, axialOffsetMm, rotationAroundAxisDeg, current)));
-  tool("plasticity_check_interference", "Check explicit pairs of current Solid bodies for exact volumetric interference by intersecting native B-Rep clones in a temporary database. The check does not change the document or Undo history. A no-volumetric-interference result does not distinguish touching from separation and is not a minimum-clearance measurement.", bodyInterferenceInputSchema, async ({ pairs, revision: current }) =>
+  tool("plasticity_check_interference", "Check explicit pairs of current Solid bodies for exact volumetric interference by intersecting native B-Rep clones in a temporary database. Read-only: the check does not change the document, its revision or its Undo and Redo history, and no temporary body enters the document (the result is discarded if the document changed while it ran). status is interfere, no-volumetric-interference or unsupported. interfere adds overlapVolumeMm3 (the exact volume of the intersection from the kernel's mass properties, summed over intersectionBodies, each with its own volumeMm3) and overlapBoundsMm; a body that lies wholly inside the other interferes with its whole volume, in either order. no-volumetric-interference has overlapVolumeMm3 0 and is given only when the kernel proves it: the intersection changes nothing and its clash test finds no contact, or contact by abutment only (reasons then include contact-without-volume: touching on a face, an edge or a point), also when the intersection fails in one body order and the other order decides. Anything not proven is unsupported; kernelEvidence shows what the kernel answered. The no-volumetric-interference status does not distinguish touching from separation and is not a minimum-clearance measurement.", bodyInterferenceInputSchema, async ({ pairs, revision: current }) =>
     await session.get().checkInterference(pairs, current), true);
   tool("plasticity_measure_solid_properties", "Measure exact native B-Rep volume, surface area, and volume centroid for one or more current Solid bodies without changing the document or Undo history. Totals include the volume-weighted centroid. This is geometric evidence; physical mass still requires an explicit qualified density.", solidPropertiesInputSchema, async ({ ids: bodyIds, revision: current }) =>
     await session.get().measureSolidProperties(bodyIds, current), true);
@@ -4898,20 +4915,39 @@ function createServerWithCatalog(
     const chosen = keep === "larger" ? ranked[0]! : ranked[ranked.length - 1]!;
     return await session.get().remove(parts.filter((body) => body !== chosen).map((body) => body.id), after.revision);
   };
-  // steps > 1 checks revision once, then repeats; it stops early when the history runs out.
-  const stepHistory = async (direction: "undo" | "redo", steps: number, current: string) => {
-    let state = await session.get()[direction](current);
-    for (let step = 1; step < steps; step += 1) {
-      if ((direction === "undo" ? state.undoDepth : state.redoDepth) === 0) break;
-      state = await session.get()[direction]();
+  // steps > 1 checks the revision once, then repeats; it stops early when the history runs out. Each step is its own
+  // CDP request and the document is read once at the end (PlasticityOperations.stepHistoryMany). A session without
+  // that method (a test fake) gets one undo()/redo() call per step, as before.
+  const stepHistory = async (direction: "undo" | "redo", steps: number, current: string): Promise<RuntimeState> => {
+    lastHistoryRun = undefined;
+    const operations = session.get() as PlasticityOperations & Partial<Pick<PlasticityOperations, "stepHistoryMany">>;
+    if (typeof operations.stepHistoryMany === "function") {
+      const { state, direction: _direction, ...summary } = await operations.stepHistoryMany(direction, steps, current);
+      lastHistoryRun = summary;
+      return state;
     }
+    const depth = (value: RuntimeState) => (direction === "undo" ? value.undoDepth : value.redoDepth);
+    const before = await session.get().state();
+    let state = await session.get()[direction](current);
+    let done = depth(before) === 0 ? 0 : 1;
+    for (; done < steps && depth(state) > 0; done += 1) state = await session.get()[direction]();
+    lastHistoryRun = { stepsRequested: steps, stepsDone: done, stepsRemaining: steps - done, ...(done < steps ? { stopped: "history-empty" as const } : {}) };
     return state;
   };
-  const historySteps = z.number().int().min(1).max(500).default(1);
-  tool("plasticity_undo", "Undo the most recent document edit, or the last `steps` edits in one call. When the history state a step restores holds a selected face or edge, Plasticity starts the gizmo of that selection; the call waits until it idles (up to 0.25 s per step), cancels it and puts your own selection back.", z.object({ steps: historySteps, intent, revision }), async ({ steps, intent: purpose, revision: current }) =>
-    await journaled("undo", purpose, { steps }, () => stepHistory("undo", steps, current)));
-  tool("plasticity_redo", "Redo the most recent undone document edit, or the next `steps` in one call. As with plasticity_undo, a step whose state holds a selected face or edge takes up to 0.25 s longer.", z.object({ steps: historySteps, intent, revision }), async ({ steps, intent: purpose, revision: current }) =>
-    await journaled("redo", purpose, { steps }, () => stepHistory("redo", steps, current)));
+  const historyReply = (output: unknown, direction: "undo" | "redo") => {
+    const run = lastHistoryRun;
+    if (!run || typeof output !== "object" || output === null) return output;
+    const note = run.stopped === "timed-out"
+      ? { note: `A CDP request timed out after ${run.stepsDone} of ${run.stepsRequested} ${direction} steps (${run.timeout ?? "time-out"}). The step that was running has ended and the document was read afterwards: this reply holds its revision and Undo and Redo depths, and the session needs no plasticity_reconcile. Nothing was retried and the run did not go on; call plasticity_${direction} again for the ${run.stepsRemaining} remaining steps if you want them.` }
+      : run.stopped === "history-empty" ? { note: `The ${direction} history ran out after ${run.stepsDone} of ${run.stepsRequested} steps.` } : {};
+    return { ...output, stepsRequested: run.stepsRequested, stepsDone: run.stepsDone, stepsRemaining: run.stepsRemaining, ...(run.stopped ? { stopped: run.stopped } : {}), ...note };
+  };
+  const historySteps = z.number().int().min(1).max(MAX_HISTORY_STEPS).default(1);
+  const HISTORY_RESULT = " Each step is its own short request to Plasticity and the document is read once at the end, so several hundred steps fit in one call (at most " + MAX_HISTORY_STEPS + "). The reply has stepsRequested, stepsDone and stepsRemaining; stopped says why fewer were done: history-empty, or timed-out when a request to Plasticity timed out part-way. After a time-out the tool waits for the step that was running to end, reads the document and returns the definite count with the current revision and depths; it does not retry or go on, and the session needs no plasticity_reconcile. Only when that read is not possible does the call fail and the session stay uncertain.";
+  tool("plasticity_undo", "Undo the most recent document edit, or the last `steps` edits in one call. When the history state a step restores holds a selected face or edge, Plasticity starts the gizmo of that selection; the call waits until it idles (up to 0.25 s per step), cancels it and puts your own selection back." + HISTORY_RESULT, z.object({ steps: historySteps, intent, revision }), async ({ steps, intent: purpose, revision: current }) =>
+    historyReply(await journaled("undo", purpose, { steps }, () => stepHistory("undo", steps, current)), "undo"));
+  tool("plasticity_redo", "Redo the most recent undone document edit, or the next `steps` in one call. As with plasticity_undo, a step whose state holds a selected face or edge takes up to 0.25 s longer." + HISTORY_RESULT, z.object({ steps: historySteps, intent, revision }), async ({ steps, intent: purpose, revision: current }) =>
+    historyReply(await journaled("redo", purpose, { steps }, () => stepHistory("redo", steps, current)), "redo"));
 
   tool("plasticity_set_camera", "Point the viewport camera from eyeMm toward targetMm and frame a sphere of frameRadiusMm around the target (millimetres, world space). View only: no document or Undo change. Use for custom angles that plasticity_set_view's named views do not cover.", z.object({ eyeMm: vector, targetMm: vector, frameRadiusMm: z.number().finite().positive() }).strict(), async ({ eyeMm, targetMm, frameRadiusMm }) =>
     await session.get().setCamera(eyeMm, targetMm, frameRadiusMm), true);
@@ -4924,21 +4960,23 @@ function createServerWithCatalog(
     const pending = await operations.restorePendingScreenshotView();
     return { restored: pending.restored, discarded: pending.pendingViewDiscarded === true };
   };
-  tool("plasticity_screenshot", "Screenshot Plasticity. Without path it returns a scaled JPEG of the visible renderer in the response (maxWidth, default 1024) and refuses hidden windows to avoid stale frames. With path it saves a PNG to a new file without overwriting. captureMode=window (default) captures the visible full renderer with HTML panels/labels and rejects hidden windows. captureMode=viewport (requires path) explicitly renders and captures the native WebGL canvas, including when occluded; requires verified frame advancement and a live context. Viewport mode excludes HTML panels and labels and reports rendererHidden/freshFrame provenance. shader (isophotes, draft, faceDirection, zebraVertical, zebraHorizontal, topo) shows surface quality: it sets Plasticity's analysis shader, captures, and restores the previous shader in the same call, also when the capture fails. frame: { bodyIds } aims the camera at those bodies (keeping the view direction) and puts the camera back afterwards: a camera still moving (just after plasticity_set_view or plasticity_set_camera) is first waited for, up to 2 s, until it holds still, and that pose is the one restored. view.frame reports cameraSettled (false: it was still moving after 2 s), cameraSettleWaitMs, cameraRestored (true when the camera came back within 1e-9) and cameraDeviation; a camera that did not come back exactly is reported with cameraRestored false, never an error, since the image is already written. Both are view only (no Undo step; checked) and the reply adds view. Every capture, with or without them, first undoes a shader or camera change that an interrupted earlier call left behind (restoredPendingView: true). Its camera is put back only while the camera still is where that call left it: a camera moved since (plasticity_set_camera, plasticity_set_view, the mouse) stays where it is, the stale record is dropped and the reply says pendingViewDiscarded: true; the shader is restored either way.", z.object({
+  tool("plasticity_screenshot", "Screenshot Plasticity. Without path it returns a scaled JPEG of the visible renderer in the response (maxWidth, default 1024) and refuses hidden windows to avoid stale frames. With path it saves a PNG to a new file; an existing path is refused unless overwrite: true, which replaces a regular file only (never a directory or a symbolic link) by writing the new file beside it and renaming it over it, so a failed capture leaves the old file intact. captureMode=window (default) captures the visible full renderer with HTML panels/labels and rejects hidden windows. captureMode=viewport (requires path) explicitly renders and captures the native WebGL canvas, including when occluded; requires verified frame advancement and a live context. Viewport mode excludes HTML panels and labels and reports rendererHidden/freshFrame provenance. shader (isophotes, draft, faceDirection, zebraVertical, zebraHorizontal, topo) shows surface quality: it sets Plasticity's analysis shader, captures, and restores the previous shader in the same call, also when the capture fails. frame: { bodyIds } aims the camera at those bodies (keeping the view direction) and puts the camera back afterwards: a camera still moving (just after plasticity_set_view or plasticity_set_camera) is first waited for, up to 2 s, until it holds still, and that pose is the one restored. view.frame reports cameraSettled (false: it was still moving after 2 s), cameraSettleWaitMs, cameraRestored (true when the camera came back within 1e-9) and cameraDeviation; a camera that did not come back exactly is reported with cameraRestored false, never an error, since the image is already written. Both are view only (no Undo step; checked) and the reply adds view. Every capture, with or without them, first undoes a shader or camera change that an interrupted earlier call left behind (restoredPendingView: true). Its camera is put back only while the camera still is where that call left it: a camera moved since (plasticity_set_camera, plasticity_set_view, the mouse) stays where it is, the stale record is dropped and the reply says pendingViewDiscarded: true; the shader is restored either way.", z.object({
     path: z.string().min(1).optional(),
+    overwrite: outputOverwrite,
     captureMode: z.enum(["window", "viewport"]).default("window"),
     maxWidth: z.number().int().min(128).max(4096).default(1024),
     quality: z.number().int().min(30).max(95).default(70),
     shader: z.enum(["isophotes", "draft", "faceDirection", "zebraVertical", "zebraHorizontal", "topo"]).optional(),
     frame: z.object({ bodyIds: z.array(z.number().int().positive()).min(1).max(64).refine((values) => new Set(values).size === values.length, "frame.bodyIds must be unique") }).strict().optional(),
-  }).strict(), async ({ path, captureMode, maxWidth, quality, shader, frame }) => {
+  }).strict(), async ({ path, overwrite, captureMode, maxWidth, quality, shader, frame }) => {
+    if (overwrite && path === undefined) throw new Error("overwrite: true needs path: an inline screenshot writes no file");
     const view = shader !== undefined || frame !== undefined ? { ...(shader !== undefined ? { shader } : {}), ...(frame !== undefined ? { frame } : {}) } : undefined;
     // A shader or camera change left by an interrupted earlier call is undone before a plain capture too.
     const pending = view === undefined ? await restorePendingScreenshotView() : { restored: false, discarded: false };
     const note = { ...(pending.restored ? { restoredPendingView: true } : {}), ...(pending.discarded ? { pendingViewDiscarded: true } : {}) };
     if (path !== undefined) {
-      if (view === undefined) return { ...(await session.get().screenshot(path, captureMode)), ...note };
-      return await session.get().screenshotView(view, async () => await session.get().screenshot(path, captureMode));
+      if (view === undefined) return { ...(await session.get().screenshot(path, captureMode, ...overwriteArguments(overwrite))), ...note };
+      return await session.get().screenshotView(view, async () => await session.get().screenshot(path, captureMode, ...overwriteArguments(overwrite)));
     }
     if (captureMode !== "window") throw new Error("captureMode=viewport saves a PNG file; pass path, or omit captureMode for an inline JPEG");
     if (view === undefined) {
@@ -4948,59 +4986,64 @@ function createServerWithCatalog(
     const image = await session.get().screenshotView(view, async () => await session.get().screenshotImage(maxWidth, quality));
     return { [INLINE_IMAGE]: { data: image.data, mimeType: image.mimeType }, width: image.width, height: image.height, bytes: image.bytes, view: image.view, ...(image.pendingViewDiscarded ? { pendingViewDiscarded: true } : {}) };
   }, false, { destructiveHint: false });
-  tool("plasticity_save_copy", "Save the current document to a new .plasticity file without overwriting.", z.object({ path: z.string().min(1) }), async ({ path }) =>
-    await session.get().saveCopy(path), false, { destructiveHint: false });
+  tool("plasticity_save_copy", "Save the current document to a new .plasticity file." + OUTPUT_OVERWRITE_RULE, z.object({ path: z.string().min(1), overwrite: outputOverwrite }), async ({ path, overwrite }) =>
+    await session.get().saveCopy(path, ...overwriteArguments(overwrite)), false, { destructiveHint: false });
   tool("plasticity_open_document", "Open a .plasticity document after saving the current scene as a new backup file. If opening fails after the save, the current document remains associated with the backup.", z.object({ path: z.string().min(1), backupPath: z.string().min(1), intent, revision }), async ({ path, backupPath, intent: purpose, revision: current }) =>
     await journaled("open-document", purpose, { path, backupPath }, () => session.get().openDocument(path, backupPath, current)));
-  tool("plasticity_export_step", "Export exact B-Rep bodies to a new STEP file without overwriting. The header's FILE_NAME names the output file, with empty author and organisation; a file that still names the staging folder is refused.", z.object({ ids, path: z.string().min(1), revision }), async ({ ids: bodyIds, path, revision: current }) =>
-    await session.get().exportStep(bodyIds, path, current), false, { destructiveHint: false });
-  tool("plasticity_export_parasolid", "Export exact native B-Rep bodies to a new Parasolid text (.x_t) or binary (.x_b) file without overwriting. Use this for high-fidelity exchange with software that supports the Parasolid kernel format. The header's KEY and FILE name the output file; a file that still names the staging folder is refused.", z.object({ ids, path: z.string().min(1), revision }), async ({ ids: bodyIds, path, revision: current }) =>
-    await session.get().exportParasolid(bodyIds, path, current), false, { destructiveHint: false });
-  tool("plasticity_export_iges", "Export exact native B-Rep bodies to a new IGES (.igs or .iges) file without overwriting. The staged file is checked for the IGES Start section before it is copied. Global parameter 4 names the output file (non-ASCII characters as _), wrapped by the IGES 5.3 line rules; a file that still names the staging folder is refused.", z.object({ ids, path: z.string().min(1), revision }), async ({ ids: bodyIds, path, revision: current }) =>
-    await session.get().exportIges(bodyIds, path, current), false, { destructiveHint: false });
-  tool("plasticity_export_sat", "Export exact native B-Rep bodies to a new ACIS SAT (.sat) file without overwriting. The staged file is checked for the ACIS SAT header before it is copied.", z.object({ ids, path: z.string().min(1), revision }), async ({ ids: bodyIds, path, revision: current }) =>
-    await session.get().exportSat(bodyIds, path, current), false, { destructiveHint: false });
-  tool("plasticity_export_stl", "Tessellate exact B-Rep bodies to a new millimeter-scaled binary STL for slicing. The result is a derived mesh, while STEP remains the editable source.", z.object({
+  tool("plasticity_export_step", "Export exact B-Rep bodies to a new STEP file. The header's FILE_NAME names the output file, with empty author and organisation; a file that still names the staging folder is refused." + OUTPUT_OVERWRITE_RULE, z.object({ ids, path: z.string().min(1), overwrite: outputOverwrite, revision }), async ({ ids: bodyIds, path, overwrite, revision: current }) =>
+    await session.get().exportStep(bodyIds, path, current, ...overwriteArguments(overwrite)), false, { destructiveHint: false });
+  tool("plasticity_export_parasolid", "Export exact native B-Rep bodies to a new Parasolid text (.x_t) or binary (.x_b) file. Use this for high-fidelity exchange with software that supports the Parasolid kernel format. The header's KEY and FILE name the output file; a file that still names the staging folder is refused." + OUTPUT_OVERWRITE_RULE, z.object({ ids, path: z.string().min(1), overwrite: outputOverwrite, revision }), async ({ ids: bodyIds, path, overwrite, revision: current }) =>
+    await session.get().exportParasolid(bodyIds, path, current, ...overwriteArguments(overwrite)), false, { destructiveHint: false });
+  tool("plasticity_export_iges", "Export exact native B-Rep bodies to a new IGES (.igs or .iges) file. The staged file is checked for the IGES Start section before it is copied. Global parameter 4 names the output file (non-ASCII characters as _), wrapped by the IGES 5.3 line rules; a file that still names the staging folder is refused." + OUTPUT_OVERWRITE_RULE, z.object({ ids, path: z.string().min(1), overwrite: outputOverwrite, revision }), async ({ ids: bodyIds, path, overwrite, revision: current }) =>
+    await session.get().exportIges(bodyIds, path, current, ...overwriteArguments(overwrite)), false, { destructiveHint: false });
+  tool("plasticity_export_sat", "Export exact native B-Rep bodies to a new ACIS SAT (.sat) file. The staged file is checked for the ACIS SAT header before it is copied." + OUTPUT_OVERWRITE_RULE, z.object({ ids, path: z.string().min(1), overwrite: outputOverwrite, revision }), async ({ ids: bodyIds, path, overwrite, revision: current }) =>
+    await session.get().exportSat(bodyIds, path, current, ...overwriteArguments(overwrite)), false, { destructiveHint: false });
+  tool("plasticity_export_stl", "Tessellate exact B-Rep bodies to a new millimeter-scaled binary STL for slicing. The result is a derived mesh, while STEP remains the editable source." + OUTPUT_OVERWRITE_RULE, z.object({
     ids,
     path: z.string().min(1),
+    overwrite: outputOverwrite,
     chordToleranceMm: z.number().finite().positive().max(10).default(0.05),
     angleToleranceDegrees: z.number().finite().positive().max(90).default(15),
     revision,
-  }).strict(), async ({ ids: bodyIds, path, chordToleranceMm, angleToleranceDegrees, revision: current }) =>
-    await session.get().exportStl(bodyIds, path, current, chordToleranceMm, angleToleranceDegrees), false, { destructiveHint: false });
-  tool("plasticity_export_3mf", "Tessellate current exact Solid or Sheet bodies to a new validated 3MF for slicers. Plasticity 26.1.3 declares meters, so the adapter applies its verified 0.001 scale to preserve millimeter dimensions and reports mesh bounds from the saved package. The result is a derived mesh; keep .plasticity or STEP as the editable source.", z.object({
+  }).strict(), async ({ ids: bodyIds, path, overwrite, chordToleranceMm, angleToleranceDegrees, revision: current }) =>
+    await session.get().exportStl(bodyIds, path, current, chordToleranceMm, angleToleranceDegrees, ...overwriteArguments(overwrite)), false, { destructiveHint: false });
+  tool("plasticity_export_3mf", "Tessellate current exact Solid or Sheet bodies to a new validated 3MF for slicers. Plasticity 26.1.3 declares meters, so the adapter applies its verified 0.001 scale to preserve millimeter dimensions and reports mesh bounds from the saved package. The result is a derived mesh; keep .plasticity or STEP as the editable source." + OUTPUT_OVERWRITE_RULE, z.object({
     ids,
     path: z.string().min(1),
+    overwrite: outputOverwrite,
     chordToleranceMm: z.number().finite().positive().max(10).default(0.05),
     angleToleranceDegrees: z.number().finite().positive().max(90).default(15),
     revision,
-  }).strict(), async ({ ids: bodyIds, path, chordToleranceMm, angleToleranceDegrees, revision: current }) =>
-    await session.get().export3mf(bodyIds, path, current, chordToleranceMm, angleToleranceDegrees), false, { destructiveHint: false });
-  tool("plasticity_export_obj", "Tessellate current exact Solid or Sheet bodies to a new validated Wavefront OBJ without overwriting. Coordinates are written in millimeters with Z up; the result reports counts and bounds parsed from the saved file. OBJ is a derived mesh for interchange or rendering, so retain .plasticity, STEP, or Parasolid as the editable source.", z.object({
+  }).strict(), async ({ ids: bodyIds, path, overwrite, chordToleranceMm, angleToleranceDegrees, revision: current }) =>
+    await session.get().export3mf(bodyIds, path, current, chordToleranceMm, angleToleranceDegrees, ...overwriteArguments(overwrite)), false, { destructiveHint: false });
+  tool("plasticity_export_obj", "Tessellate current exact Solid or Sheet bodies to a new validated Wavefront OBJ. Coordinates are written in millimeters with Z up; the result reports counts and bounds parsed from the saved file. OBJ is a derived mesh for interchange or rendering, so retain .plasticity, STEP, or Parasolid as the editable source." + OUTPUT_OVERWRITE_RULE, z.object({
     ids,
     path: z.string().min(1),
+    overwrite: outputOverwrite,
     chordToleranceMm: z.number().finite().positive().max(10).default(0.05),
     angleToleranceDegrees: z.number().finite().positive().max(90).default(15),
     revision,
-  }).strict(), async ({ ids: bodyIds, path, chordToleranceMm, angleToleranceDegrees, revision: current }) =>
-    await session.get().exportObj(bodyIds, path, current, chordToleranceMm, angleToleranceDegrees), false, { destructiveHint: false });
-  tool("plasticity_export_svg", "Export coplanar native Wire profiles as a new millimeter-scaled SVG without overwriting. B-Rep Lines, full circles, trimmed circular arcs, and native Ellipse segments remain exact when Plasticity exposes their analytic carrier data; non-rational polynomial BCurves of integer degree 1 through 3, including periodic curves, are exported span-by-span as cubic Bezier commands only after additional exact B-Rep validation samples pass. Degree-1 and degree-2 non-rational fixtures have live production stdio verification with independent B-Rep samples on Plasticity 26.1.3. Rational BCurves that fit a conic and agree with 65 dense exact B-Rep samples are represented by an SVG ellipse/arc and marked with sampled-validation metadata; this does not prove global equality, and anything that fails validation uses the approximation path. Other planar B-Rep curves use an adaptive polyline checked at quarter samples against curveChordToleranceMm and curveChordAngleDegrees and are explicitly marked as approximations in SVG metadata. Returned deviation is the maximum tested chord deviation, not a proof of global error. Noncoplanar Wires are rejected; for Solid drawings use plasticity_export_hiddenline_svg. Keep the .plasticity or STEP file as the editable source.", z.object({
+  }).strict(), async ({ ids: bodyIds, path, overwrite, chordToleranceMm, angleToleranceDegrees, revision: current }) =>
+    await session.get().exportObj(bodyIds, path, current, chordToleranceMm, angleToleranceDegrees, ...overwriteArguments(overwrite)), false, { destructiveHint: false });
+  tool("plasticity_export_svg", "Export coplanar native Wire profiles as a new millimeter-scaled SVG. B-Rep Lines, full circles, trimmed circular arcs, and native Ellipse segments remain exact when Plasticity exposes their analytic carrier data; non-rational polynomial BCurves of integer degree 1 through 3, including periodic curves, are exported span-by-span as cubic Bezier commands only after additional exact B-Rep validation samples pass. Degree-1 and degree-2 non-rational fixtures have live production stdio verification with independent B-Rep samples on Plasticity 26.1.3. Rational BCurves that fit a conic and agree with 65 dense exact B-Rep samples are represented by an SVG ellipse/arc and marked with sampled-validation metadata; this does not prove global equality, and anything that fails validation uses the approximation path. Other planar B-Rep curves use an adaptive polyline checked at quarter samples against curveChordToleranceMm and curveChordAngleDegrees and are explicitly marked as approximations in SVG metadata. Returned deviation is the maximum tested chord deviation, not a proof of global error. Noncoplanar Wires are rejected; for Solid drawings use plasticity_export_hiddenline_svg. Keep the .plasticity or STEP file as the editable source." + OUTPUT_OVERWRITE_RULE, z.object({
     ids: z.array(z.number().int().positive()).min(1).max(4096).refine((values) => new Set(values).size === values.length, "Wire IDs must be unique"),
     path: z.string().min(1),
+    overwrite: outputOverwrite,
     curveChordToleranceMm: z.number().finite().positive().max(5).default(0.05),
     curveChordAngleDegrees: z.number().finite().positive().max(30).default(5),
     revision,
-  }).strict(), async ({ ids: wireIds, path, revision: current, curveChordToleranceMm, curveChordAngleDegrees }) =>
-    await session.get().exportSvg(wireIds, path, current, curveChordToleranceMm, curveChordAngleDegrees), false, { destructiveHint: false });
-  tool("plasticity_export_hiddenline_svg", "Project current native Solid B-rep geometry through Plasticity's hidden-line generator into a new vector SVG without overwriting. Requires an orthographic current view; output geometry is calibrated to projected model millimeters and includes visible and hidden line styles. Set a named orthographic camera with plasticity_set_view first when needed. This is a derived drawing, not an editable CAD model; retain .plasticity or STEP.", z.object({
+  }).strict(), async ({ ids: wireIds, path, overwrite, revision: current, curveChordToleranceMm, curveChordAngleDegrees }) =>
+    await session.get().exportSvg(wireIds, path, current, curveChordToleranceMm, curveChordAngleDegrees, ...overwriteArguments(overwrite)), false, { destructiveHint: false });
+  tool("plasticity_export_hiddenline_svg", "Project current native Solid B-rep geometry through Plasticity's hidden-line generator into a new vector SVG. Requires an orthographic current view; output geometry is calibrated to projected model millimeters and includes visible and hidden line styles. Set a named orthographic camera with plasticity_set_view first when needed. This is a derived drawing, not an editable CAD model; retain .plasticity or STEP." + OUTPUT_OVERWRITE_RULE, z.object({
     ids: z.array(z.number().int().positive()).min(1).max(128).refine((values) => new Set(values).size === values.length, "Solid IDs must be unique"),
     path: z.string().min(1),
+    overwrite: outputOverwrite,
     curveChordToleranceMm: z.number().finite().positive().max(5).default(0.05),
     curveChordAngleDegrees: z.number().finite().positive().max(30).default(5),
     marginMm: z.number().finite().min(0).max(1_000).default(1),
     revision,
-  }).strict(), async ({ ids: bodyIds, path, curveChordToleranceMm, curveChordAngleDegrees, marginMm, revision: current }) =>
-    await session.get().exportHiddenLineSvg(bodyIds, path, current, curveChordToleranceMm, curveChordAngleDegrees, marginMm), false, { destructiveHint: false });
+  }).strict(), async ({ ids: bodyIds, path, overwrite, curveChordToleranceMm, curveChordAngleDegrees, marginMm, revision: current }) =>
+    await session.get().exportHiddenLineSvg(bodyIds, path, current, curveChordToleranceMm, curveChordAngleDegrees, marginMm, ...overwriteArguments(overwrite)), false, { destructiveHint: false });
   tool("plasticity_import_step", "Import exact STEP geometry into the current document. Returns compact document state, imported body IDs/count, source SHA-256, and a persistent local provenance record with native B-Rep measurements. Optionally provide HTTPS source provenance. The record is historical after further edits; use plasticity_body_info for selected bodies and plasticity_measure_solid_properties for measurements.", z.object({
     path: z.string().min(1),
     source: importedReferenceSourceSchema.optional(),

@@ -975,7 +975,8 @@ npm run accept:native-reference-mesh -- \
   --output /tmp/plasticity-mcp-output
 ```
 
-Files are never overwritten. After a command timeout or lost connection, the
+Files are never overwritten unless the call says `overwrite: true` (see
+"Overwrite, long undo and overlap volume"). After a command timeout or lost connection, the
 server marks the mutation outcome uncertain and blocks further edits until
 `plasticity_reconcile` reads the document. It never retries the command or
 automatically undoes it.
@@ -2586,9 +2587,11 @@ placement rather than a persistent concentric constraint.
 `plasticity_check_interference` then checks explicit Solid pairs by intersecting
 native clones in a temporary geometry database. An `interfere` result includes
 the exact B-Rep bounds, face count, and kernel validation codes for every
-intersection Solid. `no-volumetric-interference` proves only that the
-intersection has no volume: touching and separated bodies deliberately share
-that result, and the tool does not report minimum clearance. Use exact
+intersection Solid, and the exact overlap volume (`overlapVolumeMm3`, see
+"Overlap volume and contact"). `no-volumetric-interference` proves only that the
+intersection has no volume (`overlapVolumeMm3: 0`): touching and separated
+bodies share that status (the reason `contact-without-volume` marks bodies that
+touch), and the tool does not report minimum clearance. Use exact
 face/edge measurements when a known mating gap must be verified. The check is
 revision-bound and rejects its evidence if the persistent document, history,
 or body descriptors change while it runs.
@@ -4351,3 +4354,140 @@ npm run accept:native-solid-split -- --target TARGET_ID --allow-disposable-mutat
   plates, a hole rim, cylinder rims, a concave boss base and a pocket loop with
   R2 concave arcs.
 - Live acceptance: `npm run accept:native-gaps`.
+
+## Overwrite, long undo and overlap volume
+
+Three changes from a real multi-part build (2026-11-18, Plasticity 26.1.3).
+
+### `overwrite: true` on the tools that write a file
+
+Every tool that writes a file at a path the caller gives takes `overwrite`
+(boolean, default `false`): `plasticity_export_step`,
+`plasticity_export_parasolid`, `plasticity_export_iges`,
+`plasticity_export_sat`, `plasticity_export_stl`, `plasticity_export_3mf`,
+`plasticity_export_obj`, `plasticity_export_svg`,
+`plasticity_export_hiddenline_svg`, `plasticity_screenshot` (with `path`) and
+`plasticity_save_copy`.
+
+- Default: as before. An existing path is refused before anything is exported
+  ("Refusing to overwrite existing file: PATH (pass overwrite: true to replace
+  an existing regular file)"). The refusal came from the server, not from
+  Plasticity: an existence check before the export and an exclusive copy after
+  it.
+- `overwrite: true` replaces a regular file only. A directory, a symbolic link
+  (also one that points nowhere) and any other kind of entry are refused, and
+  nothing is written through a link. Every refusal the tool had for another
+  reason stays (the extension, the body list, a stale revision).
+- The new file is validated in the staging folder first, then written to a
+  temporary file in the output's own folder and renamed over the target. The
+  path is checked before the export starts and again just before the rename.
+  When the export fails, the old file is byte-identical and no temporary file
+  or staging folder is left.
+- `plasticity_open_document` keeps its rule: its `backupPath` is never
+  overwritten and takes no option.
+
+### Long undo and redo
+
+`plasticity_undo` and `plasticity_redo` take `steps` from 1 to 5,000 (it was
+500) and return `stepsRequested`, `stepsDone` and `stepsRemaining` next to the
+usual revision and Undo and Redo depths.
+
+- Each history step is its own request to Plasticity. No request carries more
+  than one step: about a millisecond of work (0.6 ms median for the Undo of a
+  move) against the 10 s request limit. The document is read once at the end
+  of the call, not after every step.
+- The step ends the moment Plasticity's own undo promise settles. Before, it
+  looked at that promise only when a 25 ms timer fired, so every step cost at
+  least 25 ms plus a full document read (measured: 41 ms a step with 16 small
+  bodies, 100 steps in 4.1 s), and its page-side deadline (10 s) was equal to
+  the request limit, so a slow step could only end as "CDP request timed out",
+  which left the session uncertain. Chromium also slows timers in a window
+  that is hidden or covered; that case was not measured.
+- `stopped: "history-empty"`: the history ran out after `stepsDone` steps.
+- `stopped: "timed-out"`: a request timed out part-way. The tool does not
+  retry and does not go on. It waits for the step that was running to end
+  (the page keeps a record of it), reads the document and returns the definite
+  count with the current revision and depths, as a normal reply with a `note`.
+  The session then needs no `plasticity_reconcile`. The count is given only
+  when it is proven: the step never started, or its promise settled or was
+  rejected, and the depths read back match. Otherwise (the step is still
+  running, the promise is still pending without a decision, or the document
+  cannot be read) the call fails and the session stays uncertain, as before.
+- Nothing else changed: the recipes' own undo and `plasticity_batch`
+  `undoOnError` take one step at a time and treat a time-out as they did (the
+  batch stops and reports it as `undoError`); the rule for an uncertain
+  mutation is the same for every other tool; the wait for a gizmo that a
+  history step chains (up to 0.25 s) is unchanged.
+
+### Overlap volume and contact
+
+`plasticity_check_interference` stays read-only: the revision token and the
+Undo and Redo depths are the same before and after every call, and no
+temporary body enters the document (the clones live in a temporary geometry
+database and are removed there). The three status values are unchanged; the
+result only gains fields.
+
+| field | when | meaning |
+|---|---|---|
+| `overlapVolumeMm3` | `interfere` | exact volume of the intersection: the kernel's mass properties (`Eval.MassProperties`) of each intersection body, summed. Left out, with the reason `overlap-volume-unavailable`, if the kernel did not evaluate a body. |
+| `overlapVolumeMm3: 0` | `no-volumetric-interference` | proven: see below |
+| `overlapBoundsMm` | `interfere` | exact bounds of the intersection (the union over its bodies) |
+| `intersectionBodies[].volumeMm3` | `interfere` | the volume of that body |
+| `kernelEvidence` | the given order made no intersection body | `givenOrder`, `reversedOrder` (`intersection`, `no-effect`, `error`), `clashTypes`, `reversedClashTypes`, `givenOrderError` |
+
+Measured on 26.1.3: two 10 mm boxes that share 4 x 10 x 10 mm read
+400.0000000000001 mm3; a 10 mm box and half of a cylinder (r 3, h 10) read
+141.37166941154072 mm3 (pi x 9 x 10 / 2 = 141.3716694115407).
+
+What the kernel answers, and what the tool makes of it:
+
+- The intersection of a target with a tool answers "Operation has no effect"
+  in two cases: the two share no volume, or the target lies strictly inside
+  the tool. Before, both read `no-volumetric-interference`, so a body inside
+  another one was reported as free of interference when it came first in the
+  pair (a 3 mm box inside a 10 mm box: `interfere` in one order, no
+  interference in the other). Now the other kernel answers decide.
+- The kernel's clash test (`Eval.Collisions`, Parasolid `PK_TOPOL_clash`, every
+  clashing face pair): nothing for bodies that are apart; `AinB` or `BinA` for
+  strict containment; `Interfere` for every overlap, also for a body inside
+  another that touches it (on a face, along a line, at a tangent point, on a
+  curved wall) and for two equal bodies; `AbutNoClass` only for bodies that
+  touch without overlap (a whole face, part of a face, an edge, a vertex, a
+  tangent point, a board in its pocket, a pin in its hole). The kernel never
+  classified an abutment as inside or outside here, so "abutments only means
+  no shared volume" is what was measured on these cases, not a documented
+  kernel guarantee.
+- `interfere`: the kernel made an intersection body in the given order; or it
+  changed nothing there and made the body in the reversed order (reason
+  `intersection-from-reversed-body-order`); or it changed nothing and the
+  clash test puts the first body inside the second (`first-body-inside-second`,
+  the overlap is that body).
+- `no-volumetric-interference`, `overlapVolumeMm3: 0`: the given order changed
+  nothing and the clash test finds no contact
+  (`native-intersection-has-no-volume`) or abutments only (plus
+  `contact-without-volume`).
+- The given order fails in the kernel (the report from the field:
+  `PK_BODY_boolean_2` error `21653` on bodies in coplanar contact, depending
+  on the body order; it did not reproduce on the test bodies here). Then the
+  reversed order decides: an intersection body there is the overlap; "no
+  effect" there with a clash test that finds no contact or abutments only is
+  `no-volumetric-interference` with `contact-without-volume`. Before, this was
+  `unsupported` / `native-intersection-failed` in that order.
+- Everything else is `unsupported` (`native-intersection-not-proven-empty`,
+  `native-intersection-failed`, `native-evidence-contradictory`).
+
+### No whole-body clearance tool
+
+There is no `plasticity_measure_body_clearance`. Plasticity 26.1.3 exposes no
+minimum distance between two solids to its script side. The one exact range
+read that is reachable (`ProfileCollection.DiagnoseIntersections`, from the
+Loft command) measures a body against a wire body only, and a distance put
+together from it is exact only for bodies with planar faces. An exact tool
+for whole bodies in general cannot be built from what is exposed, and an
+estimate is not shipped. What exists and what was probed is in
+`discovery/tools-2026-11/FINDINGS.md`. For a face pair, use
+`plasticity_measure_parallel_planar_face_clearance` or
+`plasticity_measure_nonparallel_planar_polygon_clearance`.
+
+Live acceptance: `npm run accept:native-tools-2026-11`.
+
