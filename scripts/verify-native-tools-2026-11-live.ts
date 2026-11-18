@@ -52,7 +52,7 @@ const HELP = `Usage:
 
 Cases: overwrite (STEP, STL and screenshot: refused by default, replaced with overwrite: true, a directory and a
 symbolic link refused, a failed call leaves the old file as it was); history (${HISTORY_MOVES} moves, all undone by one
-plasticity_undo call and restored by one plasticity_redo call); overlap (exact overlap volumes against analytic values,
+plasticity_undo call and restored by one plasticity_redo call); overlap (overlap volumes from kernel mass properties against analytic values,
 zero volume for bodies that touch, in both body orders, with the revision and the Undo and Redo depths unchanged by every
 call); clearance (no whole-body clearance tool is registered). The document must be empty at the start (an isolated
 instance, npm run start:plasticity-isolated). The script restores the Undo depth and the body list and writes
