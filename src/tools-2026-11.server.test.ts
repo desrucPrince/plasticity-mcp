@@ -74,6 +74,9 @@ test("every file-writing tool takes overwrite, passes it on only when true, and 
       assert.equal(overwrite?.type, "boolean", `${entry.tool} has overwrite`);
       assert.equal(overwrite?.default, false, `${entry.tool}: overwrite defaults to false`);
       assert.match(tool.description ?? "", /refused unless overwrite: true, which replaces a regular file only \(never a directory or a symbolic link\)/, `${entry.tool} states the overwrite rule`);
+      assert.match(tool.description ?? "", /The tool replaces an existing file only when overwrite is true\./, `${entry.tool} says when it replaces a file`);
+      assert.equal(tool.annotations?.destructiveHint, true, `${entry.tool} can replace a file and is marked destructive`);
+      assert.equal(tool.annotations?.readOnlyHint, false, `${entry.tool} is not read-only`);
       assert.doesNotMatch(tool.description ?? "", /without overwriting/, entry.tool);
 
       calls.length = 0;
@@ -92,6 +95,10 @@ test("every file-writing tool takes overwrite, passes it on only when true, and 
     const inline = await call("plasticity_screenshot", { overwrite: true });
     assert.equal(inline.isError, true);
     assert.match(inline.text, /overwrite: true needs path/);
+    // Every registered tool whose input schema has overwrite can replace a file, so it is marked destructive.
+    const takesOverwrite = [...listed.values()].filter((tool) => "overwrite" in ((tool.inputSchema.properties ?? {}) as Record<string, unknown>));
+    assert.deepEqual(takesOverwrite.map((tool) => tool.name).sort(), FILE_TOOLS.map((entry) => entry.tool).sort());
+    for (const tool of takesOverwrite) assert.equal(tool.annotations?.destructiveHint, true, `${tool.name} accepts overwrite and is registered with destructiveHint: true`);
     // Opening a document keeps its backup rule: the backup path is never overwritten and takes no option.
     const open = listed.get("plasticity_open_document");
     assert.equal("overwrite" in (open!.inputSchema.properties as Record<string, unknown>), false);
@@ -150,6 +157,10 @@ test("plasticity_undo and plasticity_redo take several hundred steps in one call
       const tool = (await client.listTools()).tools.find((item) => item.name === name)!;
       assert.match(tool.description ?? "", /stepsRequested, stepsDone and stepsRemaining/);
       assert.match(tool.description ?? "", /it does not retry or go on, and the session needs no plasticity_reconcile/);
+      assert.doesNotMatch(tool.description ?? "", /Only when that read is not possible/);
+      assert.match(tool.description ?? "", /fails and the session stays uncertain in two cases: the fate of the step that was running is not proven \(it is still running or its promise is still pending without a decision, so one step slower than the 10 s request limit stays uncertain as before\), or the read is not possible or its depths do not match the count/);
+      assert.match(tool.description ?? "", /one call takes up to 5000 steps with no time budget \(about 5 to 6 ms a step on a small document; a heavy document can exceed a client's time limit while the server keeps going\)/);
+      assert.match(tool.description ?? "", /stepsDone is the server's own count, not cross-checked against a change made by a person in the window during the run/);
       assert.equal((tool.inputSchema.properties as Record<string, { maximum?: number }>).steps?.maximum, 5_000);
     }
   } finally {

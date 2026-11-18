@@ -2587,7 +2587,8 @@ placement rather than a persistent concentric constraint.
 `plasticity_check_interference` then checks explicit Solid pairs by intersecting
 native clones in a temporary geometry database. An `interfere` result includes
 the exact B-Rep bounds, face count, and kernel validation codes for every
-intersection Solid, and the exact overlap volume (`overlapVolumeMm3`, see
+intersection Solid, and the overlap volume from the kernel's mass properties
+(`overlapVolumeMm3`; not a proof of an exact value on curved overlaps, see
 "Overlap volume and contact"). `no-volumetric-interference` proves only that the
 intersection has no volume (`overlapVolumeMm3: 0`): touching and separated
 bodies share that status (the reason `contact-without-volume` marks bodies that
@@ -4385,6 +4386,16 @@ Every tool that writes a file at a path the caller gives takes `overwrite`
   or staging folder is left.
 - `plasticity_open_document` keeps its rule: its `backupPath` is never
   overwritten and takes no option.
+- Every tool that takes `overwrite` is registered with `destructiveHint: true`:
+  it replaces an existing file only when `overwrite` is true.
+
+Known limits of the file tools:
+
+- They have no allowed-roots guard and write the path as given, including
+  through a symlinked folder (only a symbolic link at the output path itself
+  is refused).
+- With `overwrite`, the replaced file loses its mode and hard links: the new
+  file is a new entry renamed over the old one.
 
 ### Long undo and redo
 
@@ -4419,6 +4430,18 @@ usual revision and Undo and Redo depths.
   mutation is the same for every other tool; the wait for a gizmo that a
   history step chains (up to 0.25 s) is unchanged.
 
+Known limits of undo and redo:
+
+- The call fails and the session stays uncertain in two cases: the fate of
+  the step that was running is not proven, or the read after it is not
+  possible or its depths do not match the count. One step slower than the
+  10 s request limit stays uncertain, as before.
+- One call takes up to 5,000 steps with no time budget: about 5 to 6 ms a
+  step on a small document. A heavy document can exceed a client's time limit
+  while the server keeps going.
+- `stepsDone` is the server's own count. It is not cross-checked against a
+  change made by a person in the window during the run.
+
 ### Overlap volume and contact
 
 `plasticity_check_interference` stays read-only: the revision token and the
@@ -4429,7 +4452,7 @@ result only gains fields.
 
 | field | when | meaning |
 |---|---|---|
-| `overlapVolumeMm3` | `interfere` | exact volume of the intersection: the kernel's mass properties (`Eval.MassProperties`) of each intersection body, summed. Left out, with the reason `overlap-volume-unavailable`, if the kernel did not evaluate a body. |
+| `overlapVolumeMm3` | `interfere` | volume of the intersection: the kernel's mass properties (`Eval.MassProperties`) of each intersection body, summed; it agreed with analytic values to about 1e-15 relative on overlaps bounded by planar faces and to within 1e-4 relative on overlaps bounded by curved faces (largest measured error 6.2e-5), and it is not a proof of an exact value on curved overlaps. Left out, with the reason `overlap-volume-unavailable`, if the kernel did not evaluate a body. |
 | `overlapVolumeMm3: 0` | `no-volumetric-interference` | proven: see below |
 | `overlapBoundsMm` | `interfere` | exact bounds of the intersection (the union over its bodies) |
 | `intersectionBodies[].volumeMm3` | `interfere` | the volume of that body |
@@ -4438,6 +4461,14 @@ result only gains fields.
 Measured on 26.1.3: two 10 mm boxes that share 4 x 10 x 10 mm read
 400.0000000000001 mm3; a 10 mm box and half of a cylinder (r 3, h 10) read
 141.37166941154072 mm3 (pi x 9 x 10 / 2 = 141.3716694115407).
+
+The volume is the kernel's mass properties, and the kernel integrates curved
+overlaps numerically. It agreed with analytic values to about 1e-15 relative
+on overlaps bounded by planar faces and to within 1e-4 relative on overlaps
+bounded by curved faces: two crossed cylinders read 143.999647 mm3 against 144
+(2.45e-6 relative), and a sphere lens read 108.915344 mm3 against 108.908545
+(6.2e-5 relative, the largest measured error). It is not a proof of an exact
+value on curved overlaps.
 
 What the kernel answers, and what the tool makes of it:
 
@@ -4475,6 +4506,10 @@ What the kernel answers, and what the tool makes of it:
   `unsupported` / `native-intersection-failed` in that order.
 - Everything else is `unsupported` (`native-intersection-not-proven-empty`,
   `native-intersection-failed`, `native-evidence-contradictory`).
+
+Known limit: all pairs of one `plasticity_check_interference` call share one
+10 s request, and a pair that does not interfere costs two intersections and
+two clash tests. Split a long pair list of heavy bodies across calls.
 
 ### No whole-body clearance tool
 

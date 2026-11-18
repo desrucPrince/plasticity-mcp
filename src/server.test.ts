@@ -182,7 +182,7 @@ test("MCP initializes, lists tools, and validates tool input", async () => {
   assert(tools.tools.some((tool) => tool.name === "plasticity_export_stl"));
   assert(tools.tools.some((tool) => tool.name === "plasticity_export_3mf"));
   assert(tools.tools.some((tool) => tool.name === "plasticity_export_obj"));
-  const nonDestructiveOutputs = [
+  const overwritableOutputs = [
     "plasticity_screenshot",
     "plasticity_save_copy",
     "plasticity_export_step",
@@ -193,10 +193,10 @@ test("MCP initializes, lists tools, and validates tool input", async () => {
     "plasticity_export_svg",
     "plasticity_export_hiddenline_svg",
   ];
-  for (const name of nonDestructiveOutputs) {
+  for (const name of overwritableOutputs) {
     const output = tools.tools.find((tool) => tool.name === name);
     assert.equal(output?.annotations?.readOnlyHint, false, `${name} writes a new artifact and is not read-only`);
-    assert.equal(output?.annotations?.destructiveHint, false, `${name} refuses overwrites and must not be marked destructive`);
+    assert.equal(output?.annotations?.destructiveHint, true, `${name} replaces an existing file with overwrite: true and must be marked destructive`);
   }
   const matchFaces = tools.tools.find((tool) => tool.name === "plasticity_match_faces");
   assert.equal(matchFaces?.annotations?.readOnlyHint, false);
@@ -6146,7 +6146,7 @@ test("MCP validates and forwards native IGES export parameters", async () => {
   }, async (client) => {
     const tool = (await client.listTools()).tools.find((entry) => entry.name === "plasticity_export_iges");
     assert.equal(tool?.annotations?.readOnlyHint, false);
-    assert.equal(tool?.annotations?.destructiveHint, false);
+    assert.equal(tool?.annotations?.destructiveHint, true);
     const response = await client.callTool({ name: "plasticity_export_iges", arguments: { ids: [7], path: "/tmp/part.igs", revision: "r1" } });
     assert.equal(response.isError, undefined);
     assert.deepEqual(received, [[7], "/tmp/part.igs", "r1"]);
@@ -6162,7 +6162,7 @@ test("MCP validates and forwards native SAT export parameters", async () => {
   }, async (client) => {
     const tool = (await client.listTools()).tools.find((entry) => entry.name === "plasticity_export_sat");
     assert.equal(tool?.annotations?.readOnlyHint, false);
-    assert.equal(tool?.annotations?.destructiveHint, false);
+    assert.equal(tool?.annotations?.destructiveHint, true);
     const response = await client.callTool({ name: "plasticity_export_sat", arguments: { ids: [7], path: "/tmp/part.sat", revision: "r1" } });
     assert.equal(response.isError, undefined);
     assert.deepEqual(received, [[7], "/tmp/part.sat", "r1"]);

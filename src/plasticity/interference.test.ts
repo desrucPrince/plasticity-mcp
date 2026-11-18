@@ -167,7 +167,7 @@ const solid = (min: [number, number, number], max: [number, number, number], vol
 const noEffect = { outcome: "no-effect" as const, error: "Operation has no effect" };
 const touching = { firstAsTarget: { types: ["AbutNoClass", "AbutNoClass", "AbutNoClass"] }, secondAsTarget: { types: ["AbutNoClass", "AbutNoClass", "AbutNoClass"] } };
 
-test("an interfering pair carries the exact overlap volume and bounds from the kernel", async () => {
+test("an interfering pair carries the overlap volume from the kernel's mass properties and the bounds from the kernel", async () => {
   // Two 10 mm boxes that share 4 x 10 x 10 mm: the kernel's mass properties give 4.000000000000001e-7 m3.
   const one = await inspect([{ firstBodyId: 7, secondBodyId: 8, outcome: "intersection", intersectionBodies: [solid([6, 0, 0], [10, 10, 10], 4.000000000000001e-7)] }]);
   const pair = one.pairs[0]!;
@@ -232,7 +232,7 @@ test("the given order fails in the kernel (coplanar contact, error 21653): the r
   // Reversed order: no effect, no contact.
   const none = await inspect([{ firstBodyId: 7, secondBodyId: 8, ...failure, first, second, ...apart }]);
   assert.deepEqual([none.pairs[0]!.status, none.pairs[0]!.reasons, none.pairs[0]!.overlapVolumeMm3], ["no-volumetric-interference", ["native-intersection-has-no-volume"], 0]);
-  // Reversed order made the intersection body: its exact volume is the overlap.
+  // Reversed order made the intersection body: its volume (kernel mass properties) is the overlap.
   const body = await inspect([{ firstBodyId: 7, secondBodyId: 8, ...failure, first, second, clash: { firstAsTarget: { types: ["Interfere"] }, secondAsTarget: { types: ["Interfere"] } }, reversed: { outcome: "intersection", intersectionBodies: [solid([10, 10, 5], [20, 20, 7], 2e-7)] } }]);
   assert.deepEqual([body.pairs[0]!.status, body.pairs[0]!.reasons], ["interfere", ["intersection-from-reversed-body-order"]]);
   assert.ok(Math.abs(body.pairs[0]!.overlapVolumeMm3! - 200) < 1e-9);

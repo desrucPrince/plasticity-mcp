@@ -13,7 +13,7 @@ export interface NativeIntersectionBody {
   faceCount: number;
   boundsMm: { min: Vector3; max: Vector3 };
   nativeCheckCodes: number[];
-  /** Exact volume from the kernel's mass properties, when it was evaluated without error. */
+  /** Volume from the kernel's mass properties, when it was evaluated without error. Measured against analytic values: about 1e-15 relative on overlaps bounded by planar faces, within 1e-4 relative on curved ones (largest measured error 6.2e-5); not a proof of an exact value on curved overlaps. */
   volumeMm3?: number;
 }
 
@@ -49,7 +49,7 @@ export interface BodyInterferencePairEvidence extends BodyInterferencePair {
   status: "interfere" | "no-volumetric-interference" | "unsupported";
   intersectionBodies?: NativeIntersectionBody[];
   reasons: string[];
-  /** interfere: the exact volume of the intersection (the sum over its bodies). no-volumetric-interference: 0. */
+  /** interfere: the volume of the intersection from the kernel's mass properties (the sum over its bodies); about 1e-15 relative agreement with analytic values on overlaps bounded by planar faces, within 1e-4 relative on curved ones (largest measured error 6.2e-5), not a proof of an exact value on curved overlaps. no-volumetric-interference: 0. */
   overlapVolumeMm3?: number;
   /** interfere: the exact bounds of the intersection. */
   overlapBoundsMm?: { min: Vector3; max: Vector3 };
@@ -136,7 +136,9 @@ async function collectNativeIntersections(
       return matches[0];
     };
     const findModel = id => findEntry(id).item.model;
-    // Exact volume of one kernel body in cubic metres (Eval.MassProperties, density 1), or null when it gave no clean answer.
+    // Volume of one kernel body in cubic metres from the kernel's mass properties (Eval.MassProperties, density 1), or null when it gave no clean answer.
+    // The kernel integrates curved overlaps numerically: about 1e-15 relative agreement with analytic values on overlaps bounded by planar faces,
+    // within 1e-4 relative on curved ones (largest measured error 6.2e-5); not a proof of an exact value on curved overlaps.
     const volumeOf = body => {
       try {
         const mass = new kernel.Eval(kernel.Context.Get()).MassProperties(Int32Array.of(body.Id()), Float64Array.of(1));
