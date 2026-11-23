@@ -4545,11 +4545,12 @@ function createServerWithCatalog(
     face: faceRef,
     direction: z.enum(["u", "v"]),
     count: z.number().int().min(1).max(1000).default(1),
+    parameter: z.number().finite().gt(0).lt(1).optional().describe("Place a single cut (count 1) at this normalized position across the face instead of evenly"),
     intent,
     revision,
-  }).strict(), async ({ face, direction: paramDirection, count, intent: purpose, revision: current }) =>
-    await journaled("insert-isoparam-edges", purpose, { face, direction: paramDirection, count }, () =>
-      session.get().insertIsoparamEdges(face, paramDirection, count, current)));
+  }).strict(), async ({ face, direction: paramDirection, count, parameter, intent: purpose, revision: current }) =>
+    await journaled("insert-isoparam-edges", purpose, { face, direction: paramDirection, count, parameter }, () =>
+      session.get().insertIsoparamEdges(face, paramDirection, count, current, parameter)));
   tool("plasticity_raise_surface_degree", "Raise the U and V degree of every selected current native B-Surface face by one Plasticity step in one history entry. Plasticity 26.1.3 may also change span/control-point counts and exact geometry; inspect the surface structure, bounds, topology, and functional dimensions before and after instead of assuming shape preservation.", z.object({ faces: surfaceFaceRefs, intent, revision }).strict(), async ({ faces, intent: purpose, revision: current }) =>
     await journaled("raise-surface-degree", purpose, { faces }, () => session.get().raiseSurfaceDegree(faces, current)));
   tool("plasticity_untrim_faces", "Restore selected current Solid or Sheet faces to the natural bounds of their carrier surfaces in one native history entry. The selected trim boundaries are discarded, the result can overlap neighboring geometry, and all topology references become stale; inspect surface structure, bounds, validation, and intersections before continuing.", z.object({ faces: surfaceFaceRefs, intent, revision }).strict(), async ({ faces, intent: purpose, revision: current }) =>

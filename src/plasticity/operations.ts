@@ -8089,6 +8089,7 @@ export class PlasticityOperations {
     direction: "u" | "v",
     count: number,
     revision: string,
+    parameter?: number,
   ): Promise<RuntimeState> {
     const state = await this.state();
     if (state.revision !== revision) {
@@ -8100,6 +8101,11 @@ export class PlasticityOperations {
     }
     if (!Number.isInteger(count) || count < 1 || count > 1000) {
       throw new Error("Isoparam count must be an integer between 1 and 1000");
+    }
+    // A single cut at a chosen place (the dialog's drag along the face): IsoparamFactory.paramPoint, a normalized
+    // position across the face's trimmed range (probes-2026-11-organic). Only with count 1.
+    if (parameter !== undefined && (!(Number.isFinite(parameter) && parameter > 0 && parameter < 1) || count !== 1)) {
+      throw new Error("Isoparam parameter must be strictly between 0 and 1 and needs count 1");
     }
     await this.runtime.mutate(nativeFunction`async function (Factory, args) {
       ${findFaceViews}
@@ -8115,12 +8121,13 @@ export class PlasticityOperations {
           factory.face = selectedFaces[0];
           factory.count = args.count;
           if (factory.uOrV !== args.uOrV) factory.toggleUV();
+          if (args.parameter !== undefined) factory.paramPoint = args.parameter;
           return await factory.commit();
         } catch (error) { failure = error; throw error; }
       };
       await editor.exec(command);
       if (failure) throw failure;
-    }`, ["IsoparamFactory"], [{ faces: [face], count, uOrV: direction === "u" }]);
+    }`, ["IsoparamFactory"], [{ faces: [face], count, uOrV: direction === "u", ...(parameter !== undefined ? { parameter } : {}) }]);
     return await this.state();
   }
 
