@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
-import { isAbsolute } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { isAbsolute, join } from "node:path";
 import { promisify } from "node:util";
 
 import { CdpClient } from "../cdp/client.ts";
@@ -118,7 +119,15 @@ export async function ensurePlasticityCdp(options: {
   await assertNodeInspectorEnabled(applicationPath);
   const launchArguments = [`--inspect-brk=127.0.0.1:${inspectorPort}`];
   if (options.userDataDirectory) launchArguments.push(`--user-data-dir=${options.userDataDirectory}`);
-  await execFileAsync("open", ["-na", applicationPath, "--args", ...launchArguments]);
+  // Plasticity writes its crash backup to $TMPDIR/plasticity/backup.production.plasticity, outside the profile, so
+  // without a private TMPDIR an isolated instance overwrites (and on launch restores) the user's backup.
+  const environment: string[] = [];
+  if (options.userDataDirectory) {
+    const temporary = join(options.userDataDirectory, "tmp");
+    await mkdir(temporary, { recursive: true });
+    environment.push("--env", `TMPDIR=${temporary}/`);
+  }
+  await execFileAsync("open", ["-na", applicationPath, ...environment, "--args", ...launchArguments]);
   const inspectorTarget = await waitForInspector(inspectorPort);
   const client = await CdpClient.connect(inspectorTarget.webSocketDebuggerUrl);
   try {
