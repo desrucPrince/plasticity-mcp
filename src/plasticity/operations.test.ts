@@ -5791,10 +5791,30 @@ test("patches a native Sheet boundary loop", async () => {
 
   await operations.patchSheetHole(7, edges.map((edge) => edge.id), state.revision);
 
-  assert.deepEqual(call?.bindings, ["PatchHoleInSheetFactory"]);
+  assert.deepEqual(call?.bindings, ["PatchHoleInSheetFactory", "ContinuityType", "pk_default"]);
   assert.deepEqual(call?.values, [{ id: 7, edgeIds: ["e1", "e2", "e3", "e4"] }]);
   assert.match(call?.source ?? "", /factory\.sheet = view/);
-  assert.match(call?.source ?? "", /factory\.edges = args\.edgeIds\.map/);
+  assert.match(call?.source ?? "", /factory\.edges = edges/);
+});
+
+test("patches a Sheet boundary mixed with Wire curves, with per-edge continuity and topology", async () => {
+  let call: { source: string; bindings: string[]; values: unknown[] } | undefined;
+  const edges = ["e1", "e2"].map((id) => ({ id, curveType: "Line", line: true, circle: false, lengthMm: 10, centerMm: [0, 0, 0] as [number, number, number], tangent: [1, 0, 0] as [number, number, number], boundsMm: { min: [0, 0, 0] as [number, number, number], max: [10, 0, 0] as [number, number, number] }, faceIds: ["f1"], vertexIds: [] }));
+  const sheet = { id: 7, versionId: 17, type: "Sheet", name: null, boundsMm: null, faceIds: ["f1"], edgeIds: edges.map((edge) => edge.id), faces: [], edges };
+  const wire = { id: 9, versionId: 19, type: "Wire", name: null, boundsMm: null, faceIds: [], edgeIds: [], faces: [], edges: [] };
+  const state: RuntimeState = { targetId: "window-1", title: "Untitled - Plasticity", documentToken: "document-1", revision: "current-revision", dbVersion: 1, undoDepth: 0, redoDepth: 0, construction: emptyConstruction, regions: [], bodies: [sheet, wire] };
+  const runtime = { async getState() { return state; }, async mutate(source: string, bindings: string[], values: unknown[]) { call = { source, bindings, values }; return {}; } } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+
+  await operations.patchSheetHole(7, ["e1", "e2"], state.revision, { curveIds: [9], continuity: "g1", edgeContinuity: [{ edgeId: "e2", continuity: "g2" }], faces: "single", smoothness: "smooth" });
+
+  assert.deepEqual(call?.values, [{ id: 7, edgeIds: ["e1", "e2"], curveIds: [9], continuityName: "G1", edgeContinuity: [{ edgeId: "e2", continuityName: "G2" }], topologyName: "Single", smoothnessName: "Smooth" }]);
+  assert.match(call?.source ?? "", /factory\.curves = args\.curveIds\.map\(wire\)/);
+  assert.match(call?.source ?? "", /factory\.setContinuityForEdge/);
+  assert.match(call?.source ?? "", /FillHoleTopologyType/);
+  await assert.rejects(operations.patchSheetHole(7, ["e1"], state.revision, { curveIds: [7] }), /Wire IDs/);
+  await assert.rejects(operations.patchSheetHole(7, ["e1"], state.revision, { edgeContinuity: [{ edgeId: "e2", continuity: "g1" }] }), /must be in edgeIds/);
+  await assert.rejects(operations.patchSheetHole(7, ["e1"], state.revision, { faces: "lots" as never }), /faces must be one of/);
 });
 
 test("caps every open boundary of current native Sheets", async () => {
@@ -5837,7 +5857,7 @@ test("rejects invalid Sheet-hole patch inputs before mutation", async () => {
   const runtime = { async getState() { return state; }, async mutate() { mutations += 1; return {}; } } as unknown as PlasticityRuntime;
   const operations = new PlasticityOperations(runtime);
 
-  await assert.rejects(operations.patchSheetHole(7, ["e1", "e2"], state.revision), /at least three/i);
+  await assert.rejects(operations.patchSheetHole(7, [], state.revision), /at least one/i);
   await assert.rejects(operations.patchSheetHole(7, ["e1", "e1", "e2"], state.revision), /unique/i);
   await assert.rejects(operations.patchSheetHole(7, ["e1", "e2", "missing"], state.revision), /stale or unknown/i);
   await assert.rejects(operations.patchSheetHole(7, ["e1", "e2", "e3"], state.revision), /boundary/i);

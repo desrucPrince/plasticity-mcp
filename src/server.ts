@@ -4782,8 +4782,17 @@ function createServerWithCatalog(
     await journaled("delete-faces", purpose, { faces }, () => session.get().deleteFaces(faces, current)));
   tool("plasticity_dissolve_faces", "Remove selected exact face boundaries by merging the faces into compatible adjacent native surfaces.", z.object({ faces: z.array(faceRef).min(1).max(4096), intent, revision }).strict(), async ({ faces, intent: purpose, revision: current }) =>
     await journaled("dissolve-faces", purpose, { faces }, () => session.get().dissolveFaces(faces, current)));
-  tool("plasticity_patch_sheet_hole", "Fill one closed boundary loop on a native Sheet using exact current edge IDs.", z.object({ id: z.number().int().positive(), edgeIds: z.array(z.string().min(1)).min(3).max(4096), intent, revision }).strict(), async ({ id, edgeIds, intent: purpose, revision: current }) =>
-    await journaled("patch-sheet-hole", purpose, { id, edgeIds }, () => session.get().patchSheetHole(id, edgeIds, current)));
+  tool("plasticity_patch_sheet_hole", "Indie Patch: fill one boundary of a native Sheet (Plasticity's Patch hole dialog, not XNurbs). The boundary is exact current boundary edges of that Sheet (edgeIds), optionally mixed with Wire curves (curveIds) that close the loop. continuity (g0, g1, g2) applies to every edge; edgeContinuity overrides single edges; Wire curves are positional only. guideIds shape the interior. faces is the dialog's Faces option (single, minimal, multiple; default multiple) and smoothness its internal smoothness (sharp, smooth). The patch becomes faces of the same Sheet; read continuity back with plasticity_analyze_surface_continuity.", z.object({
+    id: z.number().int().positive(),
+    edgeIds: z.array(z.string().min(1)).min(1).max(4096),
+    curveIds: z.array(z.number().int().positive()).min(1).max(64).optional(),
+    guideIds: z.array(z.number().int().positive()).min(1).max(64).optional(),
+    continuity: z.enum(["g0", "g1", "g2"]).optional(),
+    edgeContinuity: z.array(z.object({ edgeId: z.string().min(1), continuity: z.enum(["g0", "g1", "g2"]) }).strict()).min(1).max(4096).optional(),
+    faces: z.enum(["single", "minimal", "multiple"]).optional(),
+    smoothness: z.enum(["sharp", "smooth"]).optional(),
+    intent, revision }).strict(), async ({ id, edgeIds, curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, intent: purpose, revision: current }) =>
+    await journaled("patch-sheet-hole", purpose, { id, edgeIds, curveIds, guideIds, continuity, edgeContinuity, faces, smoothness }, () => session.get().patchSheetHole(id, edgeIds, current, { curveIds, guideIds, continuity, edgeContinuity, faces, smoothness })));
   tool("plasticity_cap_sheet_holes", "Cap every planar open boundary of one or more native Sheet bodies in one history step.", z.object({ ids, intent, revision }).strict(), async ({ ids: sheetIds, intent: purpose, revision: current }) =>
     await journaled("cap-sheet-holes", purpose, { ids: sheetIds }, () => session.get().capSheetHoles(sheetIds, current)));
   tool("plasticity_extend_sheet_edges", "Extend selected boundary edges of one native Sheet by a positive millimeter distance, or up to another body with targetId (give exactly one). shape sets the extension curve (linear by default, soft, reflective, natural). merge=false keeps the extension as a separate face instead of one merged surface.", z.object({

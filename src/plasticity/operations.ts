@@ -666,6 +666,16 @@ export const XSIDED_CONTINUITY = { g0: "G0", g1: "G1", g2: "G2" } as const;
 export const XSIDED_QUALITY = { auto: "Automatic", high: "High", max: "Max" } as const;
 export type XSidedContinuity = keyof typeof XSIDED_CONTINUITY;
 
+// Indie Patch (PatchHoleInSheetFactory) options, resolved by name from the bound enums (probes-2026-11-organic/enums.ts):
+// ContinuityType G0/G1/G2, pk FillHoleTopologyType Single/Minimal/Multiple (factory default Multiple) and
+// FillHoleInternalSmoothnessType Sharp/Smooth (factory default Sharp).
+export const PATCH_HOLE_CONTINUITY = { g0: "G0", g1: "G1", g2: "G2" } as const;
+export type PatchHoleContinuity = keyof typeof PATCH_HOLE_CONTINUITY;
+export const PATCH_HOLE_TOPOLOGY = { single: "Single", minimal: "Minimal", multiple: "Multiple" } as const;
+export type PatchHoleTopology = keyof typeof PATCH_HOLE_TOPOLOGY;
+export const PATCH_HOLE_SMOOTHNESS = { sharp: "Sharp", smooth: "Smooth" } as const;
+export type PatchHoleSmoothness = keyof typeof PATCH_HOLE_SMOOTHNESS;
+
 export interface FaceControlPoint {
   /**
    * The ShellCV versionId ("<body version>c<index>", e.g. "54c10"). Plasticity's own per-body index (ShellCV id)
@@ -10315,14 +10325,33 @@ export class PlasticityOperations {
     return await this.state();
   }
 
-  async patchSheetHole(id: number, edgeIds: string[], revision: string): Promise<RuntimeState> {
+  // Indie Patch (PatchHoleInSheetFactory, the "Patch hole" dialog): fills a boundary of one Sheet. The boundary may mix
+  // the Sheet's boundary edges with Wire curves (factory.curves), as the dialog does when edges and curves are
+  // selected together. continuity is the dialog's G0/G1/G2 for every edge; edgeContinuity overrides single edges
+  // (factory.setContinuityForEdge). Wire curves are always positional. faces is FillHoleTopologyType
+  // (Single/Minimal/Multiple), smoothness FillHoleInternalSmoothnessType (Sharp/Smooth). This is not XNurbs: the result
+  // is a face of the same Sheet. Probes: discovery/probes-2026-11-organic.
+  async patchSheetHole(
+    id: number,
+    edgeIds: string[],
+    revision: string,
+    options: {
+      curveIds?: number[] | undefined;
+      guideIds?: number[] | undefined;
+      continuity?: PatchHoleContinuity | undefined;
+      edgeContinuity?: Array<{ edgeId: string; continuity: PatchHoleContinuity }> | undefined;
+      faces?: PatchHoleTopology | undefined;
+      smoothness?: PatchHoleSmoothness | undefined;
+    } = {},
+  ): Promise<RuntimeState> {
     const state = await this.state();
     if (state.revision !== revision) {
       throw new Error(`Stale reference: expected revision ${revision}, current revision is ${state.revision}`);
     }
+    const { curveIds, guideIds, continuity, edgeContinuity, faces, smoothness } = options;
     const sheet = state.bodies.find((body) => body.id === id);
     if (sheet?.type !== "Sheet") throw new Error(`Hole patch requires a current Sheet body: ${id}`);
-    if (edgeIds.length < 3) throw new Error("Sheet-hole patch requires at least three boundary edges");
+    if (edgeIds.length < 1) throw new Error("Sheet-hole patch needs at least one boundary edge (a closed loop may be a single edge)");
     const uniqueIds = [...new Set(edgeIds)];
     if (uniqueIds.length !== edgeIds.length) throw new Error("Sheet-hole edge IDs must be unique");
     const selected = uniqueIds.map((edgeId) => sheet.edges.find((edge) => edge.id === edgeId));
@@ -10330,19 +10359,63 @@ export class PlasticityOperations {
     if (missing.length > 0) throw new Error(`Stale or unknown Sheet edges: ${missing.join(", ")}`);
     const nonBoundary = selected.filter((edge) => edge!.faceIds.length !== 1).map((edge) => edge!.id);
     if (nonBoundary.length > 0) throw new Error(`Hole patch requires boundary edges: ${nonBoundary.join(", ")}`);
-    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
+    const wires = new Set(state.bodies.filter((body) => body.type === "Wire").map((body) => body.id));
+    for (const [label, list] of [["curveIds", curveIds], ["guideIds", guideIds]] as const) {
+      if (list === undefined) continue;
+      if (list.length === 0 || new Set(list).size !== list.length) throw new Error(`Sheet-hole patch ${label} must be a nonempty unique list`);
+      const invalid = list.filter((wireId) => !wires.has(wireId));
+      if (invalid.length > 0) throw new Error(`Sheet-hole patch ${label} must be current Wire IDs: ${invalid.join(", ")}`);
+    }
+    if (curveIds && guideIds && guideIds.some((guide) => curveIds.includes(guide))) throw new Error("A Sheet-hole patch guide must not also be a boundary curve");
+    if (continuity !== undefined && !(continuity in PATCH_HOLE_CONTINUITY)) throw new Error(`Sheet-hole patch continuity must be one of: ${Object.keys(PATCH_HOLE_CONTINUITY).join(", ")}`);
+    if (edgeContinuity !== undefined) {
+      if (edgeContinuity.length === 0) throw new Error("Sheet-hole patch edgeContinuity must not be empty");
+      const ids = edgeContinuity.map((entry) => entry.edgeId);
+      if (new Set(ids).size !== ids.length) throw new Error("Sheet-hole patch edgeContinuity edge IDs must be unique");
+      const outside = ids.filter((edgeId) => !uniqueIds.includes(edgeId));
+      if (outside.length > 0) throw new Error(`Sheet-hole patch edgeContinuity edges must be in edgeIds: ${outside.join(", ")}`);
+      const bad = edgeContinuity.filter((entry) => !(entry.continuity in PATCH_HOLE_CONTINUITY));
+      if (bad.length > 0) throw new Error(`Sheet-hole patch edge continuity must be one of: ${Object.keys(PATCH_HOLE_CONTINUITY).join(", ")}`);
+    }
+    if (faces !== undefined && !(faces in PATCH_HOLE_TOPOLOGY)) throw new Error(`Sheet-hole patch faces must be one of: ${Object.keys(PATCH_HOLE_TOPOLOGY).join(", ")}`);
+    if (smoothness !== undefined && !(smoothness in PATCH_HOLE_SMOOTHNESS)) throw new Error(`Sheet-hole patch smoothness must be one of: ${Object.keys(PATCH_HOLE_SMOOTHNESS).join(", ")}`);
+    await this.runtime.mutate(nativeFunction`async function (Factory, ContinuityType, pk_default, args) {
       ${findView}
+      ${enumMember}
       ${commandStart("PatchCommand")}
       const view = find(args.id);
       if (view.constructor.name !== 'Sheet') throw new Error('Hole patch input must be a Sheet body');
+      const wire = wireId => {
+        const curve = find(wireId);
+        if (curve.constructor.name !== 'Wire') throw new Error('Sheet-hole patch curves must be Wires: ' + wireId);
+        return curve;
+      };
       factory.sheet = view;
-      factory.edges = args.edgeIds.map(id => {
-        const index = view.high.edges.versionIds.indexOf(id);
-        if (index < 0) throw new Error('Stale or unknown Sheet edge: ' + id);
+      const edges = args.edgeIds.map(edgeId => {
+        const index = view.high.edges.versionIds.indexOf(edgeId);
+        if (index < 0) throw new Error('Stale or unknown Sheet edge: ' + edgeId);
         return view.high.edges.get(index);
       });
+      factory.edges = edges;
+      if (args.curveIds) factory.curves = args.curveIds.map(wire);
+      if (args.guideIds) factory.guides = args.guideIds.map(wire);
+      if (args.continuityName !== undefined) factory.continuity = enumMember(ContinuityType, 'ContinuityType', args.continuityName);
+      if (args.edgeContinuity) for (const entry of args.edgeContinuity) {
+        factory.setContinuityForEdge(edges[args.edgeIds.indexOf(entry.edgeId)], enumMember(ContinuityType, 'ContinuityType', entry.continuityName));
+      }
+      if (args.topologyName !== undefined) factory.topology = enumMember(pk_default.a.FillHoleTopologyType, 'FillHoleTopologyType', args.topologyName);
+      if (args.smoothnessName !== undefined) factory.internalSmoothness = enumMember(pk_default.a.FillHoleInternalSmoothnessType, 'FillHoleInternalSmoothnessType', args.smoothnessName);
       ${commandEnd}
-    }`, ["PatchHoleInSheetFactory"], [{ id, edgeIds: uniqueIds }]);
+    }`, ["PatchHoleInSheetFactory", "ContinuityType", "pk_default"], [{
+      id,
+      edgeIds: uniqueIds,
+      ...(curveIds !== undefined ? { curveIds } : {}),
+      ...(guideIds !== undefined ? { guideIds } : {}),
+      ...(continuity !== undefined ? { continuityName: PATCH_HOLE_CONTINUITY[continuity] } : {}),
+      ...(edgeContinuity !== undefined ? { edgeContinuity: edgeContinuity.map((entry) => ({ edgeId: entry.edgeId, continuityName: PATCH_HOLE_CONTINUITY[entry.continuity] })) } : {}),
+      ...(faces !== undefined ? { topologyName: PATCH_HOLE_TOPOLOGY[faces] } : {}),
+      ...(smoothness !== undefined ? { smoothnessName: PATCH_HOLE_SMOOTHNESS[smoothness] } : {}),
+    }]);
     return await this.state();
   }
 

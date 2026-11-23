@@ -1,0 +1,202 @@
+{
+ "PatchHoleInSheetFactory": {
+  "fields": {
+   "editor": "Editor",
+   "changed": "Signal",
+   "updated": "Signal",
+   "refine": "RefineScope",
+   "temps": "Array(0)",
+   "phantoms": "Array(0)",
+   "diagnoses": "Array(0)",
+   "executor": "TransactionExecutor",
+   "_state": "AtomicRef",
+   "partition": "Partition",
+   "phantomPartition": "Partition",
+   "internalSmoothness": 24910,
+   "topology": 22740,
+   "tolerance": 0.00001,
+   "_guides": "Object",
+   "_edge2continuity": "Map",
+   "_continuity": 23156
+  },
+  "proto": [
+   "PatchHoleInSheetFactory: sheet{gs} edges{gs} allEdgesAreFromTheSameBody{g} guides{gs} curves{gs} setContinuityForEdge() edge2continuity{g} getContinuityForEdge() continuity{gs} cycle() calculate() originalItems{g} _sheet() _guides() _curves()",
+   "GeometryFactory: state{gs} embed() update() updateAndIgnoreErrors() calculateForUpdate() calculateForCommit() calculate() phantomArguments{g} calculateDiagnostics() createInitialMark() done{g} continueUpdatingIfMoreWork() notifyOfError() commit() updateAndCommitBehaviorAreIdentical{g} cancel() isPaused{g} pause()",
+   "AbstractGeometryFactory: db{g} materials{g} signals{g} doPhantoms() doDiagnostics() doUpdate() calculateTemps() doCommit() doCancel() zip() calculateForUpdate() calculateForCommit() calculatePhantoms() phantomArguments{g} calculateDiagnostics() shouldRemoveOriginalItemOnCommit{g} shouldHideOriginalItemDuringUpdate{g} collections()",
+   "AbstractFactory: originalItem{g} originalItems{g} cleanupTemps() cleanupPhantoms() cleanupDiagnoses() swapTemps() finalize() dispose() embed() update() commit() cancel() finish() interrupt() pause() resource()"
+  ]
+ },
+ "BridgeCurveFactory": {
+  "fields": {
+   "editor": "Editor",
+   "changed": "Signal",
+   "updated": "Signal",
+   "refine": "RefineScope",
+   "temps": "Array(0)",
+   "phantoms": "Array(0)",
+   "diagnoses": "Array(0)",
+   "executor": "TransactionExecutor",
+   "_state": "AtomicRef",
+   "partition": "Partition",
+   "phantomPartition": "Partition",
+   "startCurvature": 23154,
+   "endCurvature": 23154,
+   "analysis": "Object",
+   "tensions1": "Array(0)",
+   "tensions2": "Array(0)",
+   "_lockDistances": true,
+   "t1": 0,
+   "t2": 0,
+   "sense1": true,
+   "sense2": true,
+   "trim": true,
+   "shouldRefine": false
+  },
+  "proto": [
+   "BridgeCurveFactory: start{s} end{s} startPosition{g} endPosition{g} endpoint() centroid{g} pickClosestSenses() calculate() originalItems{g}",
+   "AbstractBridgeVertexFactory: cycle() lockDistances{gs} refinements{g} toJSON() fromJSON()",
+   "GeometryFactory: state{gs} embed() update() updateAndIgnoreErrors() calculateForUpdate() calculateForCommit() calculate() phantomArguments{g} calculateDiagnostics() createInitialMark() done{g} continueUpdatingIfMoreWork() notifyOfError() commit() updateAndCommitBehaviorAreIdentical{g} cancel() isPaused{g} pause()",
+   "AbstractGeometryFactory: db{g} materials{g} signals{g} doPhantoms() doDiagnostics() doUpdate() calculateTemps() doCommit() doCancel() zip() calculateForUpdate() calculateForCommit() calculatePhantoms() phantomArguments{g} calculateDiagnostics() shouldRemoveOriginalItemOnCommit{g} shouldHideOriginalItemDuringUpdate{g} collections()",
+   "AbstractFactory: originalItem{g} originalItems{g} cleanupTemps() cleanupPhantoms() cleanupDiagnoses() swapTemps() finalize() dispose() embed() update() commit() cancel() finish() interrupt() pause() resource()"
+  ]
+ },
+ "BridgeEdgeFactory": {
+  "fields": {
+   "editor": "Editor",
+   "changed": "Signal",
+   "updated": "Signal",
+   "refine": "RefineScope",
+   "temps": "Array(0)",
+   "phantoms": "Array(0)",
+   "diagnoses": "Array(0)",
+   "executor": "TransactionExecutor",
+   "_state": "AtomicRef",
+   "partition": "Partition",
+   "phantomPartition": "Partition",
+   "startCurvature": 23154,
+   "endCurvature": 23154,
+   "analysis": "Object",
+   "tensions1": "Array(0)",
+   "tensions2": "Array(0)",
+   "_lockDistances": true,
+   "side1": false,
+   "side2": false
+  },
+  "proto": [
+   "BridgeEdgeFactory: edge1{s} edge2{s} pickClosestVertices() centroid{g} vertex1{g} vertex2{g} startPosition{g} endPosition{g} calculate()",
+   "AbstractBridgeVertexFactory: cycle() lockDistances{gs} refinements{g} toJSON() fromJSON()",
+   "GeometryFactory: state{gs} embed() update() updateAndIgnoreErrors() calculateForUpdate() calculateForCommit() calculate() phantomArguments{g} calculateDiagnostics() createInitialMark() done{g} continueUpdatingIfMoreWork() notifyOfError() commit() updateAndCommitBehaviorAreIdentical{g} cancel() isPaused{g} pause()",
+   "AbstractGeometryFactory: db{g} materials{g} signals{g} doPhantoms() doDiagnostics() doUpdate() calculateTemps() doCommit() doCancel() zip() calculateForUpdate() calculateForCommit() calculatePhantoms() phantomArguments{g} calculateDiagnostics() shouldRemoveOriginalItemOnCommit{g} shouldHideOriginalItemDuringUpdate{g} collections()",
+   "AbstractFactory: originalItem{g} originalItems{g} cleanupTemps() cleanupPhantoms() cleanupDiagnoses() swapTemps() finalize() dispose() embed() update() commit() cancel() finish() interrupt() pause() resource()"
+  ]
+ },
+ "IsoparamFactory": {
+  "fields": {
+   "editor": "Editor",
+   "changed": "Signal",
+   "updated": "Signal",
+   "refine": "RefineScope",
+   "temps": "Array(0)",
+   "phantoms": "Array(0)",
+   "diagnoses": "Array(0)",
+   "executor": "TransactionExecutor",
+   "_state": "AtomicRef",
+   "partition": "Partition",
+   "phantomPartition": "Partition",
+   "_count": 1,
+   "paramPoint": 0.5,
+   "paramField": "undefined",
+   "uOrV": true,
+   "subdivide": false,
+   "face2copy": "Map"
+  },
+  "proto": [
+   "IsoparamFactory: count{gs} param{g} toggleUV() toggleSubdivide() face{gs} shell{gs} calculatePhantoms() calculateForUpdate() calculateForCommit() originalItem{g} _shell()",
+   "GeometryFactory: state{gs} embed() update() updateAndIgnoreErrors() calculateForUpdate() calculateForCommit() calculate() phantomArguments{g} calculateDiagnostics() createInitialMark() done{g} continueUpdatingIfMoreWork() notifyOfError() commit() updateAndCommitBehaviorAreIdentical{g} cancel() isPaused{g} pause()",
+   "AbstractGeometryFactory: db{g} materials{g} signals{g} doPhantoms() doDiagnostics() doUpdate() calculateTemps() doCommit() doCancel() zip() calculateForUpdate() calculateForCommit() calculatePhantoms() phantomArguments{g} calculateDiagnostics() shouldRemoveOriginalItemOnCommit{g} shouldHideOriginalItemDuringUpdate{g} collections()",
+   "AbstractFactory: originalItem{g} originalItems{g} cleanupTemps() cleanupPhantoms() cleanupDiagnoses() swapTemps() finalize() dispose() embed() update() commit() cancel() finish() interrupt() pause() resource()"
+  ]
+ },
+ "SplitSegmentFactory": {
+  "fields": {
+   "editor": "Editor",
+   "changed": "Signal",
+   "updated": "Signal",
+   "refine": "RefineScope",
+   "temps": "Array(0)",
+   "phantoms": "Array(0)",
+   "diagnoses": "Array(0)",
+   "executor": "TransactionExecutor",
+   "_state": "AtomicRef",
+   "partition": "Partition",
+   "phantomPartition": "Partition"
+  },
+  "proto": [
+   "SplitSegmentFactory: segment{gs} edge{gs} calculate() parentItem{g} originalItem{g} _segment() _edge()",
+   "GeometryFactory: state{gs} embed() update() updateAndIgnoreErrors() calculateForUpdate() calculateForCommit() calculate() phantomArguments{g} calculateDiagnostics() createInitialMark() done{g} continueUpdatingIfMoreWork() notifyOfError() commit() updateAndCommitBehaviorAreIdentical{g} cancel() isPaused{g} pause()",
+   "AbstractGeometryFactory: db{g} materials{g} signals{g} doPhantoms() doDiagnostics() doUpdate() calculateTemps() doCommit() doCancel() zip() calculateForUpdate() calculateForCommit() calculatePhantoms() phantomArguments{g} calculateDiagnostics() shouldRemoveOriginalItemOnCommit{g} shouldHideOriginalItemDuringUpdate{g} collections()",
+   "AbstractFactory: originalItem{g} originalItems{g} cleanupTemps() cleanupPhantoms() cleanupDiagnoses() swapTemps() finalize() dispose() embed() update() commit() cancel() finish() interrupt() pause() resource()"
+  ]
+ },
+ "LoftFactory": {
+  "fields": "ctor error: no profiles",
+  "proto": [
+   "LoftFactory: "
+  ]
+ },
+ "XSidedFactory": {
+  "fields": {
+   "editor": "Editor",
+   "changed": "Signal",
+   "updated": "Signal",
+   "refine": "RefineScope",
+   "temps": "Array(0)",
+   "phantoms": "Array(0)",
+   "diagnoses": "Array(0)",
+   "executor": "TransactionExecutor",
+   "_state": "AtomicRef",
+   "partition": "Partition",
+   "phantomPartition": "Partition",
+   "continuities": "Array(3)",
+   "isDirty": true,
+   "needsUpdate": "Map",
+   "needsRemove": "Set",
+   "_controlType": 0,
+   "_uDegree": 3,
+   "_vDegree": 3,
+   "_uSpans": 1,
+   "_vSpans": 1,
+   "_weight": 0.5,
+   "_adaptiveTolerance": false,
+   "_preferToProduceSurface": true,
+   "_tolerance": 0.00001,
+   "_angularTolerance": 0.1,
+   "_maxCVs": 4000,
+   "_quadSided": false,
+   "_stretch": 0,
+   "_bending": 0.05,
+   "_changeInBending": 0.95,
+   "_boundaryCondition": 2,
+   "_parameterization": 2,
+   "_enforceTolerance": 5,
+   "analysis": "Object",
+   "_guides": "Object",
+   "_edge2constraint": "Map",
+   "isoparm2refinement": "Map",
+   "_segment2constraint": "Map",
+   "_continuity": 23156,
+   "_blending": 0.5,
+   "vsurf": "XNurbs",
+   "shouldErrorOnImpossibleQuadSided": false,
+   "_edges": "Object",
+   "_curves": "Object"
+  },
+  "proto": [
+   "XSidedFactory: edges{gs} curves{gs}",
+   "XNurbsFactory: controlType{gs} uDegree{gs} vDegree{gs} uSpans{gs} vSpans{gs} weight{gs} adaptiveTolerance{gs} preferToProduceSurface{gs} satisfyPrecisionRequirements{gs} tolerance{gs} angularTolerance{gs} maxCVs{gs} quadSided{gs} flatness{gs} stretch{gs} bending{gs} changeInBending{gs} boundaryCondition{gs} parameterization{gs} enforceTolerance{gs} guides{gs} edge2constraint{g} clearEdgeConstraints() addEdgeConstraint() removeEdgeConstraint() getContinuityForEdge() setContinuityForEdge() edge2continuity{g} segment2constraint{g} clearSegmentConstraints() addSegmentConstraint() getContinuityForSegment() setContinuityForSegment() setContinuityForConstraint() shouldDirtyOnContinuityChange{g} segment2continuity{g} continuity{gs} cycle() blending{gs} solve() calculate() emitWarnings() calculateAnalysis() calculateRefinements() refinements{g} toJSON() fromJSON() dispose()",
+   "GeometryFactory: state{gs} embed() update() updateAndIgnoreErrors() calculateForUpdate() calculateForCommit() calculate() phantomArguments{g} calculateDiagnostics() createInitialMark() done{g} continueUpdatingIfMoreWork() notifyOfError() commit() updateAndCommitBehaviorAreIdentical{g} cancel() isPaused{g} pause()",
+   "AbstractGeometryFactory: db{g} materials{g} signals{g} doPhantoms() doDiagnostics() doUpdate() calculateTemps() doCommit() doCancel() zip() calculateForUpdate() calculateForCommit() calculatePhantoms() phantomArguments{g} calculateDiagnostics() shouldRemoveOriginalItemOnCommit{g} shouldHideOriginalItemDuringUpdate{g} collections()",
+   "AbstractFactory: originalItem{g} originalItems{g} cleanupTemps() cleanupPhantoms() cleanupDiagnoses() swapTemps() finalize() dispose() embed() update() commit() cancel() finish() interrupt() pause() resource()"
+  ]
+ }
+}
