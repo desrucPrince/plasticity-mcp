@@ -1642,7 +1642,9 @@ On the accepted 26.1.3 cylinder case, all four result faces remained analytical
 R5 Cylinders and bounds stayed Ø10 × 20 mm, while the native mass-properties
 integrator changed its volume estimate by about 0.422 mm³ after the periodic
 surface was split; the MCP reports this result and does not claim numerical
-mass-property invariance.
+mass-property invariance. With `count` 1, `parameter` places the single cut at a
+normalized position across the face (IsoparamFactory.paramPoint) instead of the
+middle.
 `plasticity_inspect_surface_structure` reads the exact carrier type, trim state,
 face and natural UV parameter ranges, and compact B-Surface degree, span,
 control-point, and rationality data for current Solid or Sheet faces. UV values
@@ -2181,7 +2183,11 @@ Wire bodies that intersect every profile and shape the loft between them;
 Wires cannot also be used as guides, and the resulting exact B-Rep bounds must
 be inspected because a curved guide can extend beyond every profile.
 `plasticity_loft_curves` creates an independent native Sheet through ordered
-Wire profiles while preserving every profile and guide. Optional Wire guides
+Wire profiles while preserving every profile and guide. `profiles` may mix
+Wires (`{ wireId }`) with boundary edges of Sheets or Solids
+(`{ bodyId, edgeId }`); an edge profile makes the loft continuous with that
+edge's face: `natural` G0, `unconstrained` G1, `clamped` G2 (26.1.3, joined
+read-back: 26.6 deg, 0 deg, G2). Optional Wire guides
 must intersect every profile. Open mode builds a transition surface; closed
 mode needs at least three profiles and closes the loft sequence. Native
 `natural`, `unconstrained`, and `clamped` curvature, profile/guide trimming,
@@ -2717,7 +2723,15 @@ merges the selected faces into adjacent native surfaces. This reverses
 temporary imprint splits without opening the body.
 `plasticity_patch_sheet_hole` fills a closed boundary loop selected by current
 Sheet edge IDs. If the patch closes the shell, Plasticity promotes it back to a
-Solid in the same native history step.
+Solid in the same native history step. It is Plasticity's Indie Patch
+(`PatchHoleInSheetFactory`, the "Patch hole" dialog), not XNurbs. `continuity`
+(`g0`, `g1`, `g2`) applies to every edge and `edgeContinuity` overrides single
+edges (the dialog's per-edge Continuity). `curveIds` adds Wire curves to the
+boundary, so a loop can be part edges and part curves; curves are positional
+only. `guideIds` shapes the interior, `faces` is the dialog's Faces option
+(`single`, `minimal`, `multiple`) and `smoothness` its internal smoothness
+(`sharp`, `smooth`). A closed loop may be one edge. Verified on 26.1.3: an open
+cylinder top patched G0 / G1 / G2 measured 90 deg / 0 deg / 0.04 deg at the rim.
 `plasticity_cap_sheet_holes` fills every planar open boundary on one or more
 current Sheet bodies in one native history step. Use it when all compatible
 openings should be closed; Plasticity promotes a fully closed shell to a Solid.
@@ -3116,6 +3130,12 @@ exact endpoints selected from current Wire segments. Obtain `bodyId`,
 accepts G0 positional, G1 tangent, G2 curvature, or G3 third-order geometric
 continuity. The source Wires are preserved, so inspect the returned bridge and
 use `plasticity_join_curves` separately only when one combined Wire is needed.
+Each end also takes `parameter` (start at a normalized position along the
+segment instead of its start or end, the dialog's Parameter), `flip` (reverse
+the direction at that end, the dialog's arrow) and `tensionG1Mm` /
+`tensionG2Mm` (the dialog's Tension rows: handle offsets in millimetres, 0 by
+default, negative shortens). `plasticity_bridge_shell_edges` takes the two
+tensions per end; its end is chosen by `vertexId`, so it has no flip.
 
 `plasticity_bridge_curve_vertices` provides the same independent transition
 from two exact open Wire vertices. Read the current numeric `vertexId` values

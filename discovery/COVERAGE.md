@@ -458,7 +458,7 @@ Each class appears once. Class codes: E = covered-equivalent, P = partial, G = g
 | F50 | SquareFactory | curves/sketch | covered-equivalent | plasticity_create_rectangle |  |
 | F51 | SweepToolFactory | surfaces | gap | none (closest: plasticity_sweep_regions) | sweep-tool command not driven; purpose not verified Checked: src/plasticity/operations.ts, src/server.ts (no hit). |
 | F52 | TransformFactory | transforms/align | covered-equivalent | plasticity_move / rotate / scale |  |
-| F53 | XSidedFactory | surfaces | partial | plasticity_patch_closed_wires / patch_solid_edge_loops / patch_sheet_hole | n-sided fills exist; X-sided patch with tangency/continuity options absent Checked: src/plasticity/operations.ts, src/server.ts (no hit). |
+| F53 | XSidedFactory | surfaces | covered (XNurbs) + Indie equivalent | plasticity_xsided_patch (XNurbs body); plasticity_patch_sheet_hole with continuity/edgeContinuity/curveIds (Indie PatchHoleInSheetFactory) | Indie patch continuity added 2026-11-23 (probes-2026-11-organic) |
 
 ## Appendix B: the 126 Command classes with no name hit in src/
 
@@ -553,7 +553,7 @@ Each class appears once. Class codes: E = covered-equivalent, P = partial, G = g
 | OutlinerChangeSelectionCommand | selection | n/a (UI-only/internal) | plasticity_select_bodies / select_faces / select_edges / select_curves / select_nodes | mouse-selection wrapper; programmatic selection exists, click semantics pointless |
 | PasteCommand | transforms/align | covered-equivalent | plasticity_duplicate_bodies |  |
 | PasteWithPlacementCommand | transforms/align | covered-equivalent | plasticity_duplicate_bodies (+ plasticity_move) |  |
-| PatchHoleInSheetCommand | surfaces | covered-equivalent | plasticity_patch_sheet_hole | PatchHoleInSheet factory used |
+| PatchHoleInSheetCommand | surfaces | covered | plasticity_patch_sheet_hole | PatchHoleInSheet factory used; continuity, per-edge continuity, curves, guides, topology, smoothness exposed (probes-2026-11-organic) |
 | PatchRegionCommand | surfaces | covered-equivalent | plasticity_patch_regions | PatchRegion factory used |
 | PolySplinesCommand | surfaces | gap | none | no PolySplines/subdivision workflow in src Checked: src/plasticity/operations.ts (no hit). |
 | PopIsolationCommand | view/camera/visibility | covered-equivalent | plasticity_set_visibility | explicit ids; "invert/all/isolate" = list_bodies then set |
