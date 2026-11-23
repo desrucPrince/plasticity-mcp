@@ -4140,6 +4140,7 @@ function createServerWithCatalog(
     revision,
   }).strict().superRefine((input, context) => {
     if (input.mode === "control" && input.points2dMm.length < 3) context.addIssue({ code: "custom", path: ["points2dMm"], message: "mode control needs at least three points" });
+    if (input.closed && input.points2dMm.length < 3) context.addIssue({ code: "custom", path: ["closed"], message: "a closed plane curve needs at least three points" });
   }), async ({ intent: purpose, revision: current, ...request }) => {
     let used: { worldPointsMm: [number, number, number][]; frame: unknown } | undefined;
     const created = await journaled("create-plane-curve", purpose, request, async () => {
@@ -4727,6 +4728,41 @@ function createServerWithCatalog(
   }).strict().refine((value) => value.first.bodyId !== value.second.bodyId, "Surface Bridge requires two different Sheet bodies"), async ({ first, second, widthMm, softness, intent: purpose, revision: current }) =>
     await journaled("bridge-surface", purpose, { first, second, widthMm, softness }, () =>
       session.get().bridgeSurface(first, second, widthMm, softness, current)));
+  tool("plasticity_bridge_sheet_edges", "Native Surface Bridge (G2 face blend) between two boundary edges of ONE Sheet, on two different faces; the Sheet stays one body (plasticity_bridge_surface needs two Sheets). Pick points are the edge midpoints. widthMm is the distance between the blend's two contact lines; the blend lies on the side the two face normals point to and trims both faces back from the edges, so the joins are the new trimmed edges, not the picked edges. One history step. The result adds bridge: { bridgeFaceIds, joins [{ edgeId, faceIds, sourceFaceId, achievedContinuity, maximum deviations }], singleBody, pickPointsMm, undoSteps }, with the joins read back by the surface continuity sampler (0.01 mm, 0.1 deg, 0.05). Native fails when a contact line falls outside its face, the normals point apart, or the blend runs into another face of the Sheet; the error then says what to try.", z.object({
+    bodyId: z.number().int().positive(),
+    firstEdgeId: z.string().trim().min(1),
+    secondEdgeId: z.string().trim().min(1),
+    widthMm: z.number().finite().positive(),
+    softness: z.number().finite().positive().default(1),
+    intent,
+    revision,
+  }).strict().refine((value) => value.firstEdgeId !== value.secondEdgeId, "Sheet edge bridge needs two different edges"), async ({ bodyId, firstEdgeId, secondEdgeId, widthMm, softness, intent: purpose, revision: current }) => {
+    let bridge: unknown;
+    const output = await journaled("bridge-sheet-edges", purpose, { bodyId, firstEdgeId, secondEdgeId, widthMm, softness }, async () => {
+      const result = await session.get().bridgeSheetEdges({ bodyId, firstEdgeId, secondEdgeId, widthMm, softness }, current);
+      bridge = result.bridge;
+      return result;
+    });
+    return output && typeof output === "object" ? { ...output, bridge } : output;
+  });
+  tool("plasticity_split_sheet_edge", "Split one edge of a Sheet or Solid (boundary or shared) into two edges with a new vertex, keeping one body and the face count. Give exactly one of normalizedParameter (0 < t < 1: fraction of the edge LENGTH from the edge start, edgeStartMm in the result) and pointMm (projected onto the edge; projectionDistanceMm is reported). A piece shorter than 0.01 mm is refused. One history step (native Split Segment given the shell edge). The result adds split: { edgeIds (the two edges at the new vertex), vertexId, positionMm, lengthFraction, distanceFromStartMm, nativeParameter, vertexDeviationMm, counts, undoSteps }. A closed edge without a vertex (a full circle) gets one vertex and stays one edge (closedEdge: true); split it again. Wires use plasticity_split_curve_segment.", z.object({
+    bodyId: z.number().int().positive(),
+    edgeId: z.string().trim().min(1),
+    normalizedParameter: z.number().finite().gt(0).lt(1).optional(),
+    pointMm: vector.optional(),
+    intent,
+    revision,
+  }).strict().superRefine((input, context) => {
+    if ((input.normalizedParameter === undefined) === (input.pointMm === undefined)) context.addIssue({ code: "custom", path: ["normalizedParameter"], message: "Give exactly one of normalizedParameter and pointMm" });
+  }), async ({ bodyId, edgeId, normalizedParameter, pointMm, intent: purpose, revision: current }) => {
+    let split: unknown;
+    const output = await journaled("split-sheet-edge", purpose, { bodyId, edgeId, normalizedParameter, pointMm }, async () => {
+      const result = await session.get().splitSheetEdge({ bodyId, edgeId, normalizedParameter, pointMm }, current);
+      split = result.split;
+      return result;
+    });
+    return output && typeof output === "object" ? { ...output, split } : output;
+  });
   tool("plasticity_join_sheets", "Sew two or more native Sheet bodies along coincident edges. The edges must coincide exactly; a closed result becomes a Solid.", z.object({ ids: ids.min(2), intent, revision }).strict(), async ({ ids: sheetIds, intent: purpose, revision: current }) =>
     await journaled("join-sheets", purpose, { ids: sheetIds }, () => session.get().joinSheets(sheetIds, current)));
   tool("plasticity_create_constrained_surface", "Create a native B-Surface constrained by paired 3D points and normal vectors.", z.object({
@@ -4832,7 +4868,7 @@ function createServerWithCatalog(
     await journaled("delete-faces", purpose, { faces }, () => session.get().deleteFaces(faces, current)));
   tool("plasticity_dissolve_faces", "Remove selected exact face boundaries by merging the faces into compatible adjacent native surfaces.", z.object({ faces: z.array(faceRef).min(1).max(4096), intent, revision }).strict(), async ({ faces, intent: purpose, revision: current }) =>
     await journaled("dissolve-faces", purpose, { faces }, () => session.get().dissolveFaces(faces, current)));
-  tool("plasticity_patch_sheet_hole", "Indie Patch: fill one boundary of a native Sheet (Plasticity's Patch hole dialog, not XNurbs). The boundary is exact current boundary edges of that Sheet (edgeIds), optionally mixed with Wire curves (curveIds) that close the loop. continuity (g0, g1, g2) applies to every edge; edgeContinuity overrides single edges; Wire curves are positional only. guideIds shape the interior. faces is the dialog's Faces option (single, minimal, multiple; default multiple) and smoothness its internal smoothness (sharp, smooth). The patch becomes faces of the same Sheet; read continuity back with plasticity_analyze_surface_continuity.", z.object({
+  tool("plasticity_patch_sheet_hole", "Indie Patch: fill one boundary of a native Sheet (Plasticity's Patch hole dialog, not XNurbs). The boundary is exact current boundary edges of that Sheet (edgeIds), optionally mixed with Wire curves (curveIds) that close the loop. continuity (g0, g1, g2) applies to every edge; edgeContinuity overrides single edges (G0 is only a minimum: on 26.1.3 native may come back tangent on a G0 edge where a smooth fill allows it, and never creases on request); Wire curves are positional only. guideIds shape the interior. faces is the dialog's Faces option (single, minimal, multiple; default multiple) and smoothness its internal smoothness (sharp, smooth). The patch becomes faces of the same Sheet; read continuity back with plasticity_analyze_surface_continuity.", z.object({
     id: z.number().int().positive(),
     edgeIds: z.array(z.string().min(1)).min(1).max(4096),
     curveIds: z.array(z.number().int().positive()).min(1).max(64).optional(),
@@ -4848,7 +4884,7 @@ function createServerWithCatalog(
     const patched = await journaled("patch-sheet-hole", purpose, { id, edgeIds, curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm, ...(precheck !== undefined ? { precheck } : {}) }, () => session.get().patchSheetHole(id, edgeIds, current, { curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm, ...(precheck !== undefined ? { precheck, onPrecheck: (report: unknown) => { analysis = report; } } : {}) }));
     return precheck === "warn" && analysis !== undefined && patched && typeof patched === "object" ? { ...patched, precheck: analysis } : patched;
   });
-  tool("plasticity_check_patch_boundary", "Read-only Indie Patch boundary analysis, the same check plasticity_patch_sheet_hole runs before native when an edge is G1 or G2. Same boundary inputs (id, edgeIds, curveIds, continuity, edgeContinuity, plus faces and smoothness). Per corner: the boundary turn, the patch's own corner angle, the angle between the neighbour face normals, the faces at the vertex with their interior angles and the angle sum (the 360 degree budget at a smooth vertex); per edge: its neighbour face and the other edges on that face. problems lists each finding with the corner (vertex id and position in mm) or edge, what was measured, what is needed, advice, and blocking (true: the patch tool refuses by default). Rules measured live on 26.1.3: more than 20 boundary edges fail at G1/G2; disagreeing corner normals fail only with faces single or smoothness smooth (the default patch creases there); a smooth vertex whose angles do not add to 360 degrees fails; two edges on one neighbour face get one continuity (reported only).", z.object({
+  tool("plasticity_check_patch_boundary", "Read-only Indie Patch boundary analysis, the same check plasticity_patch_sheet_hole runs before native when an edge is G1 or G2. Same boundary inputs (id, edgeIds, curveIds, continuity, edgeContinuity, plus faces and smoothness). Per corner: the boundary turn, the patch's own corner angle, the angle between the neighbour face normals, the faces at the vertex with their interior angles and the angle sum (the 360 degree budget at a smooth vertex); per edge: its neighbour face and the other edges on that face. problems lists each finding with the corner (vertex id and position in mm) or edge, what was measured, what is needed, advice, and blocking (true: the patch tool refuses by default). Rules measured live on 26.1.3: disagreeing corner normals fail only with faces single or smoothness smooth (the default patch creases there); a smooth vertex whose angles do not add to 360 degrees fails (skipped, reported as angle-indeterminate, where an angle is within 2 degrees of 0 or 360). Reported only: more than 20 boundary edges at G1/G2 (failed natively in every live test, evidence too narrow to refuse on), and mixed continuity (G0 is only a minimum: native may come back tangent on G0 edges where a smooth fill allows it, also when the edges have their own neighbour faces).", z.object({
     id: z.number().int().positive(),
     edgeIds: z.array(z.string().min(1)).min(1).max(4096),
     curveIds: z.array(z.number().int().positive()).min(1).max(64).optional(),

@@ -1391,13 +1391,20 @@ export function relativeCurvatureDeviation(k1: number, k2: number): number {
 //   faces' angles at the vertex plus the patch's own corner angle must add up to 360 degrees. The tutorial rebuild's first rear
 //   closure met 180 + 180 + 90 + 90 = 540 degrees and failed at every G1 choice (22094, and 22092 after rebuilding the faces);
 //   the second build had 90 + 90 + 90 + 90 = 360 degrees and passed.
-// - Continuity is applied per neighbouring face, so two edges on one face cannot get different continuity (native succeeds,
-//   both edges get the same continuity): reported, not refused.
+// - Mixed continuity: G0 is only a minimum; native may come back tangent on G0 edges where a smooth fill allows it (phase B,
+//   open box and split cylinder rim, with or without a shared neighbour face): reported, not refused.
+// - The count rule (more than 20 edges at G1/G2) is reported, not refused: its evidence is only planar prisms, stars and lenses.
+// - An angle within PATCH_PRECHECK_ANGLE_WRAP_TOLERANCE_DEG of 0 or 360 degrees can wrap to the other end and flip the angle
+//   sum, so the budget rule is skipped at that vertex (reported as indeterminate).
 export const PATCH_PRECHECK_MAX_CONSTRAINED_EDGES = 20;
 /** Neighbour normals closer than this (degrees, unsigned) share a tangent plane. */
 export const PATCH_PRECHECK_NORMAL_TOLERANCE_DEG = 2;
 /** Allowed miss of the 360 degree angle budget at a smooth vertex. */
 export const PATCH_PRECHECK_BUDGET_TOLERANCE_DEG = 10;
+/** An angle at a vertex this close to 0 or 360 degrees is ambiguous (it can wrap), so the budget is not judged there. */
+export const PATCH_PRECHECK_ANGLE_WRAP_TOLERANCE_DEG = 2;
+/** True when an angle (degrees) lies within tolerance of 0 or 360, where atan2 can wrap it to the other end. */
+export const nearAngleWrap = (angleDeg: number, toleranceDeg = PATCH_PRECHECK_ANGLE_WRAP_TOLERANCE_DEG) => angleDeg <= toleranceDeg || angleDeg >= 360 - toleranceDeg;
 /**
  * Whether disagreeing neighbour normals at a corner with G1/G2 on both sides refuse with the default patch options. Live, the
  * default options crease the patch from that corner and succeed, so the default is false: only faces: single or
@@ -1430,7 +1437,7 @@ export interface PatchPrecheckInput {
   faces?: "single" | "minimal" | "multiple" | undefined;
   smoothness?: "sharp" | "smooth" | undefined;
 }
-export type PatchPrecheckProblemKind = "too-many-edges" | "angle-budget" | "normals-disagree" | "shared-face-continuity";
+export type PatchPrecheckProblemKind = "too-many-edges" | "angle-budget" | "angle-indeterminate" | "normals-disagree" | "mixed-continuity";
 export interface PatchPrecheckProblem {
   kind: PatchPrecheckProblemKind;
   cornerVertexId?: number | null;
@@ -1457,6 +1464,8 @@ export interface PatchPrecheckCornerReport {
   faceCount: number;
   faceAngles: Array<{ faceId: string; angleDeg: number | null }>;
   angleSumDeg: number | null;
+  /** Present when an angle at the vertex is within the wrap tolerance of 0 or 360 degrees: the budget rule was skipped. */
+  angleBudget?: "indeterminate";
 }
 export interface PatchPrecheckResult {
   ok: boolean;
@@ -1492,9 +1501,10 @@ export function patchCornerAngleDeg(tA: Vector3, tB: Vector3, inwardA: Vector3, 
  * Pure Indie Patch boundary check from plain numbers (no Plasticity). Blocking problems refuse the patch before native; the
  * rest are reported. See the rules at the top of this section.
  */
-export function checkPatchBoundary(input: PatchPrecheckInput, options: { normalToleranceDeg?: number; budgetToleranceDeg?: number; maxConstrainedEdges?: number; normalsRefuseWithCrease?: boolean } = {}): PatchPrecheckResult {
+export function checkPatchBoundary(input: PatchPrecheckInput, options: { normalToleranceDeg?: number; budgetToleranceDeg?: number; wrapToleranceDeg?: number; maxConstrainedEdges?: number; normalsRefuseWithCrease?: boolean } = {}): PatchPrecheckResult {
   const normalTol = options.normalToleranceDeg ?? PATCH_PRECHECK_NORMAL_TOLERANCE_DEG;
   const budgetTol = options.budgetToleranceDeg ?? PATCH_PRECHECK_BUDGET_TOLERANCE_DEG;
+  const wrapTol = options.wrapToleranceDeg ?? PATCH_PRECHECK_ANGLE_WRAP_TOLERANCE_DEG;
   const maxEdges = options.maxConstrainedEdges ?? PATCH_PRECHECK_MAX_CONSTRAINED_EDGES;
   const normalsRefuseWithCrease = options.normalsRefuseWithCrease ?? PATCH_PRECHECK_NORMALS_REFUSE_WITH_CREASE;
   const noCrease = input.faces === "single" || input.smoothness === "smooth";
@@ -1506,33 +1516,36 @@ export function checkPatchBoundary(input: PatchPrecheckInput, options: { normalT
   // Count rule.
   if (anyConstrained && items.length > maxEdges) {
     const faceCount = new Set(edgeItems.map((item) => item.faceId ?? item.id)).size;
-    const blocking = edgeItems.length > maxEdges && faceCount > maxEdges;
+    // Report-only: the live evidence is planar prisms, stars and lenses only, so the rule is advice (FillHole errors still
+    // attach it), never a refusal.
+    const blocking = false;
     problems.push({
       kind: "too-many-edges", edgeIds: edgeItems.map((item) => item.id), measured: items.length, needed: `at most ${maxEdges} boundary items when any edge is G1 or G2`, blocking,
-      message: `the boundary has ${items.length} items (${edgeItems.length} edges on ${faceCount} faces); Indie Patch G1/G2 fails on more than ${maxEdges} (live: 20 pass, 21 fail with 22093/22094, even with one edge G1)`,
+      message: `the boundary has ${items.length} items (${edgeItems.length} edges on ${faceCount} faces); Indie Patch G1/G2 failed on more than ${maxEdges} in every live test (prisms, stars, lenses: 20 pass, 21 fail with 22093/22094, even with one edge G1)`,
       advice: `merge boundary edges first (plasticity_dissolve_faces or plasticity_delete_edges on the neighbour faces), patch the hole in parts of at most ${maxEdges} edges, or ask G0 on every edge`,
     });
   }
 
-  // Edges sharing one neighbour face.
+  // Edges sharing one neighbour face (reported in edges[].sharesFaceWith).
   const edges = edgeItems.map((item) => ({
     edgeId: item.id, faceId: item.faceId ?? null, continuity: item.continuity,
     sharesFaceWith: edgeItems.filter((other) => other !== item && other.faceId !== undefined && other.faceId !== null && other.faceId === item.faceId).map((other) => other.id),
   }));
-  const reportedPairs = new Set<string>();
-  for (const edge of edges) {
-    if (!constrained(edge.continuity) || edge.faceId === null) continue;
-    const others = edgeItems.filter((other) => other.id !== edge.edgeId && other.faceId === edge.faceId && other.continuity !== edge.continuity);
-    for (const other of others) {
-      const key = [edge.edgeId, other.id].sort().join("|");
-      if (reportedPairs.has(key)) continue;
-      reportedPairs.add(key);
-      problems.push({
-        kind: "shared-face-continuity", edgeId: edge.edgeId, edgeIds: [edge.edgeId, other.id], faceIds: [edge.faceId], measured: 2, needed: "one continuity per neighbouring face", blocking: false,
-        message: `edges ${edge.edgeId} (${edge.continuity.toUpperCase()}) and ${other.id} (${other.continuity.toUpperCase()}) both border face ${edge.faceId}; Indie Patch applies continuity per neighbouring face, so both get the same continuity`,
-        advice: `ask the same continuity on both, or split face ${edge.faceId} (plasticity_insert_isoparam_edges) so each edge has its own neighbour face`,
-      });
-    }
+  // Mixed continuity (organic-tools-2 phase B, 26.1.3): G0 is only a minimum. The factory sends per-edge lists and native
+  // keeps every G1/G2 request, but it may come back tangent on a G0 edge where a smooth fill allows it: an open box with one
+  // wall asked G1 and a cylinder rim split into two arcs (one G1, one G0) came back G1 on every edge, also with the wall face
+  // split so each arc had its own neighbour; on the tutorial rear closure the G0 base edges came back G0 (57 to 70 deg).
+  const levels = [...new Set(edgeItems.map((item) => item.continuity))];
+  if (anyConstrained && levels.length > 1) {
+    const top = (["g2", "g1", "g0"] as const).find((level) => levels.includes(level))!;
+    const lower = edgeItems.filter((item) => item.continuity !== top);
+    const shared = lower.filter((item) => edgeItems.some((other) => other !== item && other.continuity === top && item.faceId && other.faceId === item.faceId));
+    problems.push({
+      kind: "mixed-continuity", edgeIds: lower.map((item) => item.id), faceIds: [...new Set(lower.map((item) => item.faceId).filter((faceId): faceId is string => Boolean(faceId)))],
+      measured: levels.length, needed: "G0 edges may come back tangent; no crease on request", blocking: false,
+      message: `edges ${lower.map((item) => `${item.id} (${item.continuity.toUpperCase()})`).join(", ")} ask less than ${top.toUpperCase()}; on Plasticity 26.1.3 that is only a minimum: Indie Patch keeps the ${top.toUpperCase()} edges and may come back ${top.toUpperCase()} on these too where a smooth fill allows it (live: an open box and a cylinder rim split into two arcs came back G1 on every edge${shared.length > 0 ? `; ${shared.map((item) => item.id).join(", ")} also ${shared.length === 1 ? "shares" : "share"} a neighbour face with a ${top.toUpperCase()} edge, and splitting that face did not change it` : ""}); it never makes a crease on request`,
+      advice: `read the edges back with plasticity_analyze_surface_continuity; to force a crease along some edges, fill that part separately (a smaller patch loop, plasticity_loft_curves or plasticity_bridge_sheet_edges from the tangent edges) and patch the rest`,
+    });
   }
 
   const corners: PatchPrecheckCornerReport[] = [];
@@ -1554,12 +1567,14 @@ export function checkPatchBoundary(input: PatchPrecheckInput, options: { normalT
     const neighbourAngle = nA && nB ? tangentPlaneAngleDeg(nA, nB) : null;
     const anglesKnown = corner.faces.every((face) => face.angleDeg !== null);
     const angleSum = anglesKnown && patchAngle !== null && corner.faces.length > 0 ? corner.faces.reduce((sum, face) => sum + face.angleDeg!, 0) + patchAngle : null;
+    const wrapped = angleSum !== null && [patchAngle!, ...corner.faces.map((face) => face.angleDeg!)].some((angle) => nearAngleWrap(angle, wrapTol));
     corners.push({
       vertexId: corner.vertexId, positionMm: corner.positionMm, itemIds: [a.id, b.id], continuity: [a.continuity, b.continuity],
       boundaryTurnDeg: turn === null ? null : fmt(turn, 3), patchAngleDeg: patchAngle === null ? null : fmt(patchAngle, 3),
       neighbourNormalAngleDeg: neighbourAngle === null ? null : fmt(neighbourAngle, 3), smooth, faceCount: corner.faces.length,
       faceAngles: corner.faces.map((face) => ({ faceId: face.faceId, angleDeg: face.angleDeg === null ? null : fmt(face.angleDeg, 3) })),
       angleSumDeg: angleSum === null ? null : fmt(angleSum, 3),
+      ...(wrapped ? { angleBudget: "indeterminate" as const } : {}),
     });
     const where = `vertex ${corner.vertexId ?? "(curve end)"} ${fmtPoint(corner.positionMm)}`;
     // Normals rule: both sides edges asked G1/G2 on different faces.
@@ -1576,14 +1591,23 @@ export function checkPatchBoundary(input: PatchPrecheckInput, options: { normalT
           : `accept the crease, or ask G0 on edge ${a.id} or ${b.id}, or make faces ${a.faceId} and ${b.faceId} meet tangentially at this vertex`,
       });
     }
-    // Angle budget: a smooth vertex the patch closes, with G1/G2 on either side.
-    if (corner.closedByPatch && smooth === true && (constrained(a.continuity) || constrained(b.continuity)) && angleSum !== null && Math.abs(angleSum - 360) > budgetTol) {
+    // Angle budget: a smooth vertex the patch closes, with G1/G2 on either side. Fails open where an angle can wrap.
+    const budgetApplies = corner.closedByPatch && smooth === true && (constrained(a.continuity) || constrained(b.continuity)) && angleSum !== null;
+    if (budgetApplies && wrapped) {
+      problems.push({
+        kind: "angle-indeterminate", cornerVertexId: corner.vertexId, positionMm: corner.positionMm, edgeIds: [a.id, b.id], faceIds: corner.faces.map((face) => face.faceId),
+        measured: fmt(angleSum!), needed: `every angle at the vertex more than ${wrapTol} degrees from 0 and 360`, blocking: false,
+        message: `the angle budget at ${where} is indeterminate: an angle there is within ${wrapTol}° of 0° or 360° (patch corner ${fmt(patchAngle!)}°, faces ${corner.faces.map((face) => `${face.faceId} ${fmt(face.angleDeg!)}°`).join(", ")}), where it can wrap to the other end, so the 360° rule is not applied`,
+        advice: "read the corner in the viewport; if the patch fails there, check the angles by hand",
+      });
+    }
+    if (budgetApplies && !wrapped && Math.abs(angleSum! - 360) > budgetTol) {
       const parts = corner.faces.map((face) => `${face.faceId} ${fmt(face.angleDeg!)}°`).join(" + ");
       const g1Ids = [a, b].filter((item) => constrained(item.continuity)).map((item) => item.id);
       problems.push({
         kind: "angle-budget", cornerVertexId: corner.vertexId, positionMm: corner.positionMm, edgeIds: [a.id, b.id], faceIds: corner.faces.map((face) => face.faceId),
-        measured: fmt(angleSum), needed: "360 degrees", blocking: true,
-        message: `angles at ${where} sum to ${fmt(angleSum)}° (${corner.faces.length} faces: ${parts}, plus the patch corner ${fmt(patchAngle!)}°); every face there shares one tangent plane, so a smooth patch needs 360°`,
+        measured: fmt(angleSum!), needed: "360 degrees", blocking: true,
+        message: `angles at ${where} sum to ${fmt(angleSum!)}° (${corner.faces.length} faces: ${parts}, plus the patch corner ${fmt(patchAngle!)}°); every face there shares one tangent plane, so a smooth patch needs 360°`,
         advice: `ask G0 on ${g1Ids.length > 1 ? `edges ${g1Ids.join(" and ")}` : `edge ${g1Ids[0]}`}, or rebuild the boundary so the faces meeting at this vertex leave a corner that closes to 360° (swap which curve continues which edge, or re-loft so a face leaves the vertex at a different angle)`,
       });
     }
@@ -1839,7 +1863,21 @@ export function worstFirst<T extends { class: ContinuityReportClass; normalAngle
   return [...edges].sort((a, b) => CLASS_RANK[a.class] - CLASS_RANK[b.class] || b.normalAngleDeg.max - a.normalAngleDeg.max || (b.relativeCurvature.interiorMax ?? 0) - (a.relativeCurvature.interiorMax ?? 0));
 }
 
-export interface WireSegmentInput { entityId: number; startMm: Vector3; endMm: Vector3; startTangent: Vector3; endTangent: Vector3; lengthMm: number }
+/**
+ * Interior maxima (samples 5..94) can only be at most the overall maxima; float noise in separate reductions must not make
+ * interiorClass worse than class. Relative G2 mismatch is at most 1 by definition. Returns clamped copies.
+ */
+export function clampContinuityMaxima<T extends { g0Mm: number; g1Deg: number; g2Rel: number }>(overall: T, interior: T | undefined): { overall: T; interior: T | undefined } {
+  const all = { ...overall, g2Rel: Math.min(overall.g2Rel, 1) };
+  if (!interior) return { overall: all, interior };
+  return { overall: all, interior: { ...interior, g0Mm: Math.min(interior.g0Mm, all.g0Mm), g1Deg: Math.min(interior.g1Deg, all.g1Deg), g2Rel: Math.min(interior.g2Rel, all.g2Rel) } };
+}
+
+/**
+ * One Wire segment. startInnerMm / endInnerMm are the segment's points at t = 0.01 and t = 0.99 (its own direction): they
+ * orient the kernel end tangents (which follow the curve and can run against the segment) and the curvature sample list.
+ */
+export interface WireSegmentInput { entityId: number; startMm: Vector3; endMm: Vector3; startTangent: Vector3; endTangent: Vector3; lengthMm: number; startInnerMm?: Vector3; endInnerMm?: Vector3 }
 export interface CurvatureSampleInput { positionMm: Vector3; vectorPerMm: Vector3 }
 export interface WireJunctionReport {
   atMm: Vector3;
@@ -1871,16 +1909,37 @@ export function countInflections(samples: CurvatureSampleInput[], zeroPerMm = 1e
  */
 export function wireJunctions(segments: WireSegmentInput[], samples: Map<number, CurvatureSampleInput[]>, tolerances: { normalAngleDeg: number; relativeCurvature: number }, meetMm = 1e-3): { junctions: WireJunctionReport[]; segments: WireSegmentReport[] } {
   const dist = (a: Vector3, b: Vector3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-  type End = { seg: WireSegmentInput; at: Vector3; away: Vector3; used: boolean };
-  const ends: End[] = segments.flatMap((seg) => [
-    { seg, at: seg.startMm, away: seg.startTangent, used: false },
-    { seg, at: seg.endMm, away: [-seg.endTangent[0], -seg.endTangent[1], -seg.endTangent[2]] as Vector3, used: false },
-  ]);
-  const curvatureAt = (seg: WireSegmentInput, at: Vector3): Vector3 => {
+  type End = { seg: WireSegmentInput; at: Vector3; away: Vector3; atStart: boolean; used: boolean };
+  const sub = (a: Vector3, b: Vector3): Vector3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const neg = (a: Vector3): Vector3 => [-a[0], -a[1], -a[2]];
+  // Tangents along the segment's own direction: start tangent toward the t = 0.01 point, end tangent from the t = 0.99 point.
+  const along = (tangent: Vector3, step: Vector3 | null): Vector3 => (step && v3len(step) > 0 && v3dot(tangent, step) < 0 ? neg(tangent) : tangent);
+  const ends: End[] = segments.flatMap((seg) => {
+    const startTangent = along(seg.startTangent, seg.startInnerMm ? sub(seg.startInnerMm, seg.startMm) : null);
+    const endTangent = along(seg.endTangent, seg.endInnerMm ? sub(seg.endMm, seg.endInnerMm) : null);
+    return [
+      { seg, at: seg.startMm, away: startTangent, atStart: true, used: false },
+      { seg, at: seg.endMm, away: neg(endTangent), atStart: false, used: false },
+    ];
+  });
+  // The curvature sample at an end is chosen by which end it is (first sample at the start, last at the end), never by
+  // distance: on a closed single segment both ends are the same point. The list is taken as reversed only when the segment's
+  // own inner points (or, for an open segment, its end points) say so.
+  const samplesReversed = (seg: WireSegmentInput, list: CurvatureSampleInput[]): boolean => {
+    if (list.length < 2) return false;
+    const first = list[0]!.positionMm, last = list[list.length - 1]!.positionMm;
+    if (seg.startInnerMm && list.length >= 3) {
+      const second = list[1]!.positionMm, penultimate = list[list.length - 2]!.positionMm;
+      return dist(penultimate, seg.startInnerMm) < dist(second, seg.startInnerMm);
+    }
+    if (dist(seg.startMm, seg.endMm) <= meetMm) return false;
+    return dist(first, seg.endMm) + dist(last, seg.startMm) < dist(first, seg.startMm) + dist(last, seg.endMm);
+  };
+  const curvatureAt = (seg: WireSegmentInput, atStart: boolean): Vector3 => {
     const list = samples.get(seg.entityId) ?? [];
     if (list.length === 0) return [0, 0, 0];
-    const first = list[0]!, last = list[list.length - 1]!;
-    return (dist(first.positionMm, at) <= dist(last.positionMm, at) ? first : last).vectorPerMm;
+    const fromFirst = atStart !== samplesReversed(seg, list);
+    return (fromFirst ? list[0]! : list[list.length - 1]!).vectorPerMm;
   };
   const junctions: WireJunctionReport[] = [];
   for (const end of ends) {
@@ -1889,7 +1948,7 @@ export function wireJunctions(segments: WireSegmentInput[], samples: Map<number,
       ?? ends.find((candidate) => candidate !== end && !candidate.used && candidate.seg === end.seg && segments.length === 1 && dist(candidate.at, end.at) <= meetMm);
     if (!other) continue;
     end.used = true; other.used = true;
-    const k1 = curvatureAt(end.seg, end.at), k2 = curvatureAt(other.seg, other.at);
+    const k1 = curvatureAt(end.seg, end.atStart), k2 = curvatureAt(other.seg, other.atStart);
     const diff: Vector3 = [k1[0] - k2[0], k1[1] - k2[1], k1[2] - k2[2]];
     const sum = v3len(k1) + v3len(k2);
     const mismatch = sum === 0 ? 0 : v3len(diff) / sum;
@@ -1904,3 +1963,98 @@ export function wireJunctions(segments: WireSegmentInput[], samples: Map<number,
   });
   return { junctions, segments: segmentReports };
 }
+
+// ---------------------------------------------------------------- Organic tools 2 phase B: split edge, one-body bridge ----------------------------------------------------------------
+type BodyTopology = Pick<RuntimeState["bodies"][number], "id" | "type" | "faces" | "edges" | "vertices">;
+/** Topology entity number of a face or edge ID such as 110e10060 (version 110, entity 10060); stable across edits. */
+export const topologyEntity = (id: string): string => { const match = /^\d+[a-z](\d+)$/.exec(id); return match ? match[1]! : id; };
+
+/** Shortest edge piece a split may leave (mm), so no near-zero edge (and no sliver) is made. */
+export const SPLIT_EDGE_MIN_PIECE_MM = 0.01;
+/** A split vertex must lie this close (mm) to the point evaluated on the edge before the split. */
+export const SPLIT_EDGE_POSITION_TOLERANCE_MM = 1e-3;
+
+export interface EdgeSplitRequest { normalizedParameter?: number | undefined; pointMm?: Vector3 | undefined }
+/** Exactly one of normalizedParameter (0 < t < 1, fraction of the edge length from its start) and pointMm (finite). */
+export function validateEdgeSplitRequest(request: EdgeSplitRequest): { mode: "parameter"; fraction: number } | { mode: "point"; pointMm: Vector3 } {
+  const hasT = request.normalizedParameter !== undefined, hasP = request.pointMm !== undefined;
+  if (hasT === hasP) throw new Error("Edge split needs exactly one of normalizedParameter and pointMm");
+  if (hasT) {
+    const t = request.normalizedParameter!;
+    if (!(Number.isFinite(t) && t > 0 && t < 1)) throw new Error("Edge split normalizedParameter must be greater than 0 and less than 1");
+    return { mode: "parameter", fraction: t };
+  }
+  const p = request.pointMm!;
+  if (!Array.isArray(p) || p.length !== 3 || !p.every(Number.isFinite)) throw new Error("Edge split pointMm must be three finite millimetre coordinates");
+  return { mode: "point", pointMm: p };
+}
+
+/** Both pieces of an edge split at a length fraction must be at least minPieceMm long. */
+export function checkSplitPieces(lengthMm: number, fraction: number, minPieceMm = SPLIT_EDGE_MIN_PIECE_MM): void {
+  if (!(Number.isFinite(lengthMm) && lengthMm > 0)) throw new Error("Edge split needs an edge of positive length");
+  if (!(fraction > 0 && fraction < 1)) throw new Error(`Edge split point is at an end of the edge (fraction ${fraction}); pick a point inside it`);
+  const first = fraction * lengthMm, second = lengthMm - first;
+  if (Math.min(first, second) < minPieceMm) {
+    throw new Error(`Edge split would leave a piece of ${Number(Math.min(first, second).toPrecision(3))} mm (minimum ${minPieceMm} mm); pick a point farther from the edge ends`);
+  }
+}
+
+/** Plain-number edge check: one edge of a current Solid or Sheet body. */
+export function requireSplitEdge(body: BodyTopology | undefined, bodyId: number, edgeId: string): BodyTopology["edges"][number] {
+  if (!body || (body.type !== "Solid" && body.type !== "Sheet")) throw new Error(`Edge split requires a current Solid or Sheet body: ${bodyId}`);
+  const edge = body.edges.find((candidate) => candidate.id === edgeId);
+  if (!edge) throw new Error(`Stale or unknown edge on body ${bodyId}: ${edgeId}`);
+  return edge;
+}
+
+/**
+ * What a split did, from the body before and after: the new vertex (an ID not in the body before, nearest the expected point)
+ * and the edges that meet there. A closed edge without a vertex (a full circle) gets one vertex and stays one edge.
+ */
+export function splitEdgeOutcome(before: BodyTopology, after: BodyTopology | undefined, expectedMm: Vector3, toleranceMm = SPLIT_EDGE_POSITION_TOLERANCE_MM): { vertexId: number; positionMm: Vector3; deviationMm: number; edgeIds: string[]; closedEdge: boolean; faceCountBefore: number; faceCountAfter: number; edgeCountBefore: number; edgeCountAfter: number; vertexCountBefore: number; vertexCountAfter: number } {
+  if (!after) throw new Error(`Body ${before.id} is gone after the edge split`);
+  const old = new Set((before.vertices ?? []).map((vertex) => vertex.id));
+  const fresh = (after.vertices ?? []).filter((vertex) => !old.has(vertex.id));
+  if (fresh.length === 0) throw new Error("The edge split made no new vertex");
+  const dist = (a: Vector3, b: Vector3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const vertex = fresh.reduce((best, candidate) => (dist(candidate.positionMm, expectedMm) < dist(best.positionMm, expectedMm) ? candidate : best));
+  const deviationMm = dist(vertex.positionMm, expectedMm);
+  if (deviationMm > toleranceMm) throw new Error(`The new vertex lies ${deviationMm} mm from the requested point (tolerance ${toleranceMm} mm)`);
+  const edgeIds = after.edges.filter((edge) => edge.vertexIds.includes(vertex.id)).map((edge) => edge.id);
+  return {
+    vertexId: vertex.id, positionMm: vertex.positionMm, deviationMm, edgeIds, closedEdge: edgeIds.length === 1,
+    faceCountBefore: before.faces.length, faceCountAfter: after.faces.length, edgeCountBefore: before.edges.length, edgeCountAfter: after.edges.length,
+    vertexCountBefore: (before.vertices ?? []).length, vertexCountAfter: (after.vertices ?? []).length,
+  };
+}
+
+/** Two boundary edges of one Sheet on two different faces (the native bridge blends two faces). */
+export function bridgeEdgePair(body: BodyTopology | undefined, bodyId: number, firstEdgeId: string, secondEdgeId: string): { first: { edgeId: string; faceId: string }; second: { edgeId: string; faceId: string } } {
+  if (!body || body.type !== "Sheet") throw new Error(`Sheet edge bridge requires a current Sheet body: ${bodyId}`);
+  if (firstEdgeId === secondEdgeId) throw new Error("Sheet edge bridge needs two different edges");
+  const side = (edgeId: string) => {
+    const edge = body.edges.find((candidate) => candidate.id === edgeId);
+    if (!edge) throw new Error(`Stale or unknown edge on Sheet ${bodyId}: ${edgeId}`);
+    if (edge.faceIds.length !== 1) throw new Error(`Sheet edge bridge needs boundary edges (one face); ${edgeId} has ${edge.faceIds.length}`);
+    return { edgeId, faceId: edge.faceIds[0]! };
+  };
+  const first = side(firstEdgeId), second = side(secondEdgeId);
+  if (first.faceId === second.faceId) throw new Error(`Both edges border face ${first.faceId}; the native bridge blends two different faces`);
+  return { first, second };
+}
+
+/** Faces the bridge made (entities new to the body) and the join edges between a new face and one of the two source faces. */
+export function bridgeOutcome(before: BodyTopology, after: BodyTopology | undefined, sourceFaceIds: string[]): { bridgeFaceIds: string[]; joins: Array<{ edgeId: string; faceIds: string[]; sourceFaceId: string }> } {
+  if (!after) throw new Error(`Sheet ${before.id} is gone after the bridge`);
+  const oldFaces = new Set(before.faces.map((face) => topologyEntity(face.id)));
+  const sources = new Set(sourceFaceIds.map(topologyEntity));
+  const bridgeFaceIds = after.faces.filter((face) => !oldFaces.has(topologyEntity(face.id))).map((face) => face.id);
+  const fresh = new Set(bridgeFaceIds);
+  const joins = after.edges
+    .filter((edge) => edge.faceIds.length === 2 && edge.faceIds.some((faceId) => fresh.has(faceId)) && edge.faceIds.some((faceId) => sources.has(topologyEntity(faceId))))
+    .map((edge) => ({ edgeId: edge.id, faceIds: edge.faceIds, sourceFaceId: edge.faceIds.find((faceId) => sources.has(topologyEntity(faceId)))! }));
+  return { bridgeFaceIds, joins };
+}
+
+/** Advice for a native Surface Bridge (FaceBlend) failure, from the live probes on 26.1.3. */
+export const BRIDGE_FAILURE_ADVICE = "The native bridge is a G2 face blend between the two faces' surfaces: widthMm is the distance between its two contact lines, it lies on the side the face normals point to, and it trims both faces back. It fails (PK_FACE_make_blend 17452/17453, PK_ERROR_fxf_blend_failed 1080) when a contact line falls outside its face (width too small or too large for the angle between the faces), when the faces point away from each other, or when the blend runs into another face of the Sheet; two separate Sheets fail the same way. Try another widthMm, or plasticity_reverse_sheets on a face, or bridge curves and patch instead.";

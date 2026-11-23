@@ -101,7 +101,7 @@ test("pre-check: an angle sum of 540 degrees at a smooth vertex refuses with the
   assert.equal(checkPatchBoundary({ items: twoEdges("g1", "g0", "side"), corners: [creased] }).problems.filter((entry) => entry.kind === "angle-budget").length, 0);
 });
 
-test("pre-check: two requested edges on one neighbour face with different continuity are reported", () => {
+test("pre-check: mixed continuity is reported (G0 is only a minimum; native may come back tangent there), never refused", () => {
   const result = checkPatchBoundary({
     items: [
       { kind: "edge", id: "arc1", faceId: "wall", continuity: "g1" },
@@ -110,24 +110,29 @@ test("pre-check: two requested edges on one neighbour face with different contin
     ],
     corners: [],
   });
-  const problem = result.problems.find((entry) => entry.kind === "shared-face-continuity")!;
+  const problem = result.problems.find((entry) => entry.kind === "mixed-continuity")!;
   assert.ok(problem);
-  assert.deepEqual(problem.edgeIds, ["arc1", "arc2"]);
+  assert.deepEqual(problem.edgeIds, ["arc2"]);
   assert.deepEqual(problem.faceIds, ["wall"]);
-  assert.match(problem.message, /edges arc1 \(G1\) and arc2 \(G0\) both border face wall; Indie Patch applies continuity per neighbouring face/);
-  assert.equal(problem.blocking, false); // native succeeds and gives both edges one continuity (FINDINGS)
+  assert.match(problem.message, /edges arc2 \(G0\) ask less than G1; on Plasticity 26\.1\.3 that is only a minimum: Indie Patch keeps the G1 edges and may come back G1 on these too where a smooth fill allows it .*arc2 also shares a neighbour face with a G1 edge, and splitting that face did not change it\); it never makes a crease on request/);
+  assert.equal(problem.blocking, false); // native succeeds; G0 edges may come back G1 (FINDINGS, phase B)
+  assert.equal(result.ok, true);
   assert.deepEqual(result.edges.find((edge) => edge.edgeId === "arc1")?.sharesFaceWith, ["arc2"]);
+  // Different faces too (an open box with one wall G1 came back G1 on all four rim edges).
+  const box = checkPatchBoundary({ items: ["x0", "y0", "x40", "y40"].map((id, i) => ({ kind: "edge" as const, id, faceId: `w${i}`, continuity: i === 0 ? "g1" as const : "g0" as const })), corners: [] });
+  assert.deepEqual(box.problems.find((entry) => entry.kind === "mixed-continuity")?.edgeIds, ["y0", "x40", "y40"]);
   // Same continuity on both: nothing to report.
   assert.equal(checkPatchBoundary({ items: [{ kind: "edge", id: "a", faceId: "w", continuity: "g1" }, { kind: "edge", id: "b", faceId: "w", continuity: "g1" }], corners: [] }).problems.length, 0);
 });
 
-test("pre-check: more than 20 boundary edges on more than 20 faces refuse once any edge is G1 or G2", () => {
-  const items = (count: number, faces = count) => Array.from({ length: count }, (_, i) => ({ kind: "edge" as const, id: `e${i}`, faceId: `f${i % faces}`, continuity: i === 0 ? "g1" as const : "g0" as const }));
-  assert.equal(checkPatchBoundary({ items: items(20), corners: [] }).ok, true);
-  const refused = checkPatchBoundary({ items: items(21), corners: [] });
-  assert.equal(refused.ok, false);
-  assert.match(refused.problems[0]!.message, /the boundary has 21 items \(21 edges on 21 faces\); Indie Patch G1\/G2 fails on more than 20/);
-  // Many edges on few faces was not measured live: reported only.
+test("pre-check: more than 20 boundary edges with any edge G1 or G2 are reported, never refused (R1)", () => {
+  const items = (count: number, faces = count) => Array.from({ length: count }, (_, i) => ({ kind: "edge" as const, id: `e${i}`, faceId: `f${i % faces}`, continuity: "g1" as const }));
+  assert.equal(checkPatchBoundary({ items: items(20), corners: [] }).problems.length, 0);
+  const many = checkPatchBoundary({ items: items(21), corners: [] });
+  assert.equal(many.ok, true);
+  assert.equal(many.problems[0]!.kind, "too-many-edges");
+  assert.equal(many.problems[0]!.blocking, false);
+  assert.match(many.problems[0]!.message, /the boundary has 21 items \(21 edges on 21 faces\); Indie Patch G1\/G2 failed on more than 20 in every live test/);
   const fewFaces = checkPatchBoundary({ items: items(24, 4), corners: [] });
   assert.equal(fewFaces.ok, true);
   assert.equal(fewFaces.problems[0]!.blocking, false);
