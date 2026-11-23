@@ -152,3 +152,20 @@ kernel option tried forces a crease. The pre-check reports `mixed-continuity` (n
 - R3: an angle within 2 deg of 0 or 360 at a vertex makes the angle budget indeterminate (reported), not a refusal.
 - R5: interior maxima are clamped to the overall maxima, relative curvature to 1.
 - R6: a closed plane curve needs three points.
+
+## Phase C: friction fixes from the product build (organic-tools-2, 2026-11-23, 26.1.3, isolated)
+Scripts and outputs: `~/Desktop/organic-tutorial/work-p2c/` (`verify1.py` ... `verify17.py`, `verify-item*.txt`;
+probe JS in `work-p2c/js/`, run with `mutfile.ts` / `evalfile.ts`).
+
+| Question | Native finding | Tool change |
+|---|---|---|
+| Why does offset_planar_curves refuse a planar face loop? | `OffsetPlanarCurvesFactory.getBasis` finds no plane for SPCurve segments; setting `constructionPlane = new ConstructionPlaneSnap(normal, point, x)` offsets the same Wire (+2 mm went outward on the attempt-1 tilted face: 348.8 to 361.4 mm, i.e. L + 2 pi d) | `plane` option; `plasticity_inset_planar_face` |
+| Imprint of an in-plane loop | a vector imprint along -n from a loop built on a plane point 5e-5 mm off the face missed the face (no split); bidirectional imprint from the face midpoint splits it | the inset uses the face midpoint and a bidirectional imprint |
+| extrude_faces into the Solid | `ExtrudeFactory` (AbstractSweepFactory) has `targets`, `operationType`, `keepTools`; faces + `targets = [solid]` + 15902 at -1.5 mm recessed the face (15 to 16 faces, -7658 mm³, no new body) | `boolean` option |
+| Spike at the stadium corner | the native g1 maximum (90 deg) is not among the 100 samples (every sample below 0.07 deg) on band/side (`organic-product`) and bowl/rear (`attempt1-v2-final`); on bowl/rear it sits between samples 11 and 12 | `source: native-maximum` spikes |
+| EvalBasis directions | `uDirection`/`vDirection` are orthogonal principal directions with `uCurvature`/`vCurvature` the principal curvatures: Euler's formula matched a finite-difference normal derivative at 0, 30, 60, 90 deg to 1e-4 on four B-surface faces; the curvature sign follows the surface (mirrored halves with `orientation` false read opposite signs) | absolute curvature on every edge, signed against the face normal |
+| Sphere edge read as a 40 mm gap (phase B) | reproduced as a closed Sphere/Cylinder rim after `split_sheet_edge` added a vertex: native g0 31.8 mm, its sample points pile up at the vertex; a resample by edge parameter projected on both faces reads 0 mm / 1.7e-6 deg | resample when native G0 fails; `nativeMisread` |
+| G2/G2 side patch 22094 | at (42, -17.46, 107.08) band and flank (both asked G2) curve differently: -0.00675 against 0 per mm along the band edge; band G2 + flank G1 passed. Rear corner where band and side (G2 to each other) meet: no flag | `g2-corner-curvature` (report only) |
+| Loft guide 0.004 mm off | refused ("A guide curve is not touching a profile"); after moving the guide end onto the curve 8e-5 along it (2e-19 m off) still refused; onto the profile end vertex: lofted | snap prefers the end vertex |
+| Split volume drift | 136 mm³ on 777 007 mm³ (1.75e-4) at z = 10 on `organic-product`, two valid Solids | relative tolerance, warning up to 1 % |
+

@@ -2838,8 +2838,9 @@ What is reported only: more than 20 boundary edges once any edge is G1 or G2
 and 21 or 22 failed natively with 22093 or 22094, even with one edge G1, but
 that evidence is too narrow to refuse on), and mixed continuity
 (`mixed-continuity`): G0 is only a minimum. Native keeps every G1/G2 request
-but may come back tangent on a G0 edge where a smooth fill allows it, and never
-makes a crease on request. Live (organic-tools-2 phase B): an open box with one
+but may come back tangent on a G0 edge where a smooth fill allows it. The note
+says it in one line: G0 is a minimum: native may make such an edge G1 where the
+geometry allows; it keeps a crease only where the geometry forces one. Live (organic-tools-2 phase B): an open box with one
 wall asked G1 and three G0 came back G1 on all four rim edges, and a cylinder
 rim split into two arcs (one asked G1, one G0) came back G1 on both, also after
 the wall face was split into two faces so that each arc had its own neighbour
@@ -4049,6 +4050,129 @@ failure allowed; undoes each case with one batched undo; and sends the
 reviewer's bad inputs (each must be refused with the Undo depth, the body count
 and the revision unchanged). Its last line states the Undo depth and the body
 count it leaves.
+
+### Organic tools 2, phase C: friction fixes from the product build
+
+These changes come from the tool friction lists of the organic product build
+(`out3/attempt1-notes.md`, `out3/attempt2-notes.md`). Live checks ran on an
+isolated Plasticity 26.1.3.
+
+**Inward rim on a planar face in one call.** `plasticity_inset_planar_face`
+{ `bodyId`, `faceId` or `faceIds`, `distanceMm` > 0, `depthMm`? } extracts the
+outer loop of the face, offsets it inward in the face plane, imprints it on the
+body and, with `depthMm`, pushes the inner panel into the Solid (positive: a
+recess) or out of it (negative: a raised panel). `faceIds` takes a connected set
+of coplanar faces (for example two mirrored halves with a seam) as one flat
+region. Temporary Wires are removed, so the body count does not change. The
+reply has `rimFaceIds`, `panelFaceIds`, `panelDepthMm`, the plane, the loop
+lengths and `undoSteps` (5 to 7 native steps: extract, offset, imprint,
+recess, cleanup, and 2 more when the first offset sign went outward). Inward is
+decided from the result: the inward offset of a closed loop is the shorter one.
+Live: on `attempt1-D-solid` (tilted face in two halves) one call made a 2 mm rim
+and a panel 1.5000 mm below it by probe; 11 bodies before and after, a valid
+closed Solid. `plasticity_offset_planar_curves` takes an optional
+`plane { originMm, normal, xDirection? }`: a planar Wire whose segments are
+SPCurves (for example extracted from a face) no longer fails with "No basis
+found" when the plane is given.
+
+**`plasticity_extrude_faces` boolean.** `boolean: "none"` (default, as before)
+gives Plasticity's own result: a separate new body, also for a negative distance
+on a Solid face (a slab). `union` fuses into the source Solid, `difference` cuts
+from it, `fuse` picks union for a positive and difference for a negative
+distance. The reply adds `extrude { boolean, operation, sourceBodyId, result:
+new-body | source-modified, newBodyIds, sourceModified }`. Live: -1.5 mm on a
+planar face of `attempt1-D-solid`: default 11 to 12 bodies (slab, source
+unchanged); `fuse` 11 to 11 bodies, source faces 15 to 16, volume 741 346 to
+733 688 mm³.
+
+**`plasticity_split_solid_by_plane` volume check.** The tolerance is 1e-6 of
+the source volume (at least 0.01 mm³). Native volume of curved B-spline Solids
+is an integration with error of about 1e-4 of the volume (live: 4.9 to 136 mm³
+on 777 to 804 cm³), so a split with two valid Solids whose volume moved up to
+1 % completes with `warnings`; more than 1 % is still an error. The same rule is
+in `plasticity_split_solid_by_planes`. Live: z = 10 on `organic-product`
+completed, 136 mm³ (1.75e-4) as a warning.
+
+**One continuity class rule, isolated spikes, absolute curvature.** Both
+`plasticity_analyze_surface_continuity` and `plasticity_continuity_report` use
+`continuitySampleSummary`: the class from every sample and the native maxima
+(`achievedContinuity` / `class`), the class over samples 5..94
+(`interiorContinuity` / `interiorClass`, clamped to the overall maxima), and the
+class ignoring isolated spikes (`achievedContinuityIgnoringIsolatedSpikes` /
+`classIgnoringIsolatedSpikes`) with `spikes [{ level, index, value, positionMm,
+neighbourMax, source }]`. A spike is a sample that fails while every sample
+within 2 indices passes, or a native maximum that is not among the samples and
+fails while the samples next to it pass (`source: "native-maximum"`). Live: the
+90 deg readings at the stadium corner (band/side, a vertex shared with a sharp
+rim; `organic-product`) and on bowl/rear (`attempt1-v2-final`) are native
+maxima off the samples with every sample below 0.07 deg: class G0, ignoring
+spikes G1. `absoluteCurvature` is now on every two-face edge (66 of 66 and 69 of
+69): where no face direction runs across the edge it comes from the face's
+principal curvatures (`Face.EvalBasis` returns the principal directions and
+curvatures; checked against a normal-derivative difference to 1e-4) by Euler's
+formula in the direction n x t (`method: "principal-curvatures"`); `signedSide*`
+are signed against side 1's normal (the kernel sign follows the surface, so a
+face whose sense is against its surface is flipped). It is read at the worst
+interior sample. The report adds `ignoringSpikesCounts` and `spikeEdges`.
+Where native G0 fails, the edge is resampled (100 points by edge parameter,
+projected onto both faces): if every point lies on both faces, the native
+reading was a misread and the resample replaces it (`nativeMisread`). Live: a
+closed Sphere/Cylinder rim with an added vertex read 31.8 mm natively and G1
+after the resample.
+
+**End-constrained plane curves.** `plasticity_create_plane_curve` (mode
+control) takes `startTangent` / `endTangent` { `direction` (2D in the plane or
+3D world in the plane), `lengthMm`? } and `startCurvatureZero` /
+`endCurvatureZero`: the second (and third) control point is moved onto the
+tangent line, so the curve is G1 (with zero curvature: G2 against a plane).
+Live: such a curve swept and sewn to a plane sheet read G2 at the join (first
+three kernel control points collinear to 0); the same curve without the
+options read G0 (26.6 deg).
+
+**Pre-check: G2 to two neighbours at one corner.** `g2-corner-curvature`
+(report only): two edges asked G2 on different faces meet at a corner where the
+faces curve differently (normal curvatures along both tangents and the bisector
+from the principal curvatures; relative difference above 0.05 and absolute
+above 0.001 per mm). Live: the attempt-2 side patch (band G2 + flank G2) was
+flagged at (42, -17.46, 107.08) (-0.00675 against 0 per mm) and failed natively
+with 22094; band G2 + flank G1 passed with no flag. When native fails after a
+clean pre-check, the error says the pre-check found no known cause and what is
+likely. `plasticity_check_patch_boundary` takes every argument of
+`plasticity_patch_sheet_hole` (`guideIds` and `toleranceMm` are validated and
+reported in `acceptedOptions`; they do not change the boundary rules).
+
+**Smaller fixes.**
+- `plasticity_call` catalog: `query` (or `name`), `schema`, `offset`, `limit`
+  also inside `arguments`; any other key there is an error naming the fields.
+- Union input schemas (`plasticity_create_rectangle`, `plasticity_create_polyline`)
+  export `type: object` with the merged branch `properties` next to `anyOf`, in
+  the catalog and in tools/list. `plasticity_list_curve_directions` has no
+  arguments, so its empty `properties` is correct.
+- `plasticity_set_visibility`: the four lists default to empty.
+- `plasticity_batch` `detail: "standard"` ends with the same `summary` as lean.
+- `plasticity_loft_curves` `snapToleranceMm` (default 0.01, 0 off): a guide end
+  that close to a profile is first moved onto the profile's end vertex (or the
+  nearest profile point), one step per end, listed in `guideSnaps`. Live: a guide
+  end 0.004 mm off was refused with 0 and lofted with the default. A guide end
+  on the profile curve 8e-5 of the way along it (2e-19 m off) was still refused
+  natively, so the vertex is preferred.
+- `plasticity_extrude_profile`: with other Wires in the same plane, the region
+  whose bounds are the Wire's own is used; still ambiguous, the error names the
+  regions for `plasticity_extrude_regions`.
+- `plasticity_bridge_curves` / `plasticity_bridge_shell_edges` add `bridge {
+  depthMm, bulge, atFraction, chordMm, farthestPointMm }` (41 points along the
+  new curve; live: half-width 42, the cap bulged 52.5 mm along -y, and +y with
+  `flip`). `plasticity_join_curves` "no effect" now names the likely cause.
+- `plasticity_continuity_report` `curvatureSamples: n` (with `wireIds`) adds per
+  segment `curvatureSamplesPerMm` and `curvatureShape { monotonicRuns,
+  localMaxima, localMinima, unimodal }` (wiggles under 0.1 % of the maximum are
+  ignored).
+- `plasticity_split_sheet_edge` `maxProjectionMm` (default 1): a `pointMm`
+  farther from the edge is refused before any change. Checks that run after a
+  native commit in `plasticity_split_sheet_edge` and
+  `plasticity_bridge_sheet_edges` say the document was changed and how to undo;
+  the bridge warns when it is not one body or finds fewer than 2 joins, and
+  matches read-back rows to joins by edge or face ids only.
 
 ## Development and verification
 

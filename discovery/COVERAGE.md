@@ -612,3 +612,16 @@ Each class appears once. Class codes: E = covered-equivalent, P = partial, G = g
 | MultiCutFactory | Factory | plasticity_cut_with_faces | planar cutter faces only |
 | SpiralFactory | Factory | plasticity_create_helix | constant radius only (operations.ts:3422-3460; commands.json lists spiral:angle/length/radius) |
 | SweepFactory | Factory | plasticity_sweep_regions | closed Regions + one Wire spine only (operations.ts:6412-6485); no open-profile sweep to sheet, rails, or sweeping faces |
+
+## organic-tools-2 phase C (2026-11-23)
+
+| Native entry point | Tool | Change |
+|---|---|---|
+| ExtrudeFactory `targets` + `operationType` (15903 union, 15902 difference) | plasticity_extrude_faces `boolean` | faces extruded into (union) or out of (difference) the source Solid in one step; default `none` unchanged (separate body) |
+| OffsetPlanarCurvesFactory `constructionPlane` (ConstructionPlaneSnap) | plasticity_offset_planar_curves `plane`, plasticity_inset_planar_face | explicit offset plane: SPCurve face loops no longer fail with "No basis found" |
+| CreateCurveFromEdgesFactory + OffsetPlanarCurvesFactory + ImprintCurveBodyFactory + ExtrudeFactory | plasticity_inset_planar_face (new) | inward rim and recessed or raised panel on a planar face (or coplanar face set) in one call |
+| Face.EvalBasis (principal directions and curvatures), Face.GetSurface().orientation | plasticity_analyze_surface_continuity, plasticity_continuity_report, plasticity_check_patch_boundary | absolute curvature across every edge (Euler), isolated-spike classes, edge resample where native G0 misreads, `g2-corner-curvature` pre-check note |
+| MeasureContinuityFactory spike arrays | both continuity tools | one class rule (all, interior 5..94, ignoring isolated spikes) |
+| CurveLoftFactory guides + curve control-point move | plasticity_loft_curves `snapToleranceMm` | guide ends snapped onto profile end vertices before the loft |
+| ExtrudeFactory regions | plasticity_extrude_profile | the region whose bounds are the profile Wire's is chosen among coplanar regions |
+
