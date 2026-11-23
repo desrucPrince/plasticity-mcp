@@ -156,3 +156,16 @@ test("plasticity_inset_planar_face: exactly one of faceId and faceIds, a positiv
     assert.equal((await call({ faceId: "a", distanceMm: 2, depthMm: 0 })).isError, true);
   });
 });
+
+test("C8: extrude_profile reports the region it used and says when other Wires cut holes in it", async () => {
+  let current = state("r1", [{ id: 3, type: "Wire" }]);
+  const ops: Record<string, any> = {
+    async state() { return current; },
+    async extrudeProfile() { ops.lastExtrudeProfileRegion = { regionId: "7r597", holeCount: 1, candidateCount: 2 }; current = state("r2", [{ id: 3, type: "Wire" }, { id: 4, type: "Solid" }]); return current; },
+  };
+  await withClient(ops, async (client) => {
+    const reply = json(await client.callTool({ name: "plasticity_extrude_profile", arguments: { id: 3, distanceMm: 5, revision: "r1" } }));
+    assert.deepEqual([reply.profileRegion.regionId, reply.profileRegion.holeCount, reply.profileRegion.candidateCount], ["7r597", 1, 2]);
+    assert.match(reply.profileRegion.note, /the region has 1 hole: other Wires lying inside the profile cut it out of the extrusion/);
+  });
+});

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { classifyInsetFaces, insetLoops, insetPlane } from "./inset-planar-face.ts";
+import { classifyInsetFaces, InsetPlanarFaceRecipe, insetLoops, insetPlane, insidePolygon, loopPolygon } from "./inset-planar-face.ts";
 import type { RuntimeState } from "./runtime.ts";
 
 type Body = RuntimeState["bodies"][number];
@@ -50,6 +50,55 @@ test("classifyInsetFaces: faces touching the original outer loop are rim, faces 
     [edge("Ll", ["rimL"], [], [-20, 0, 0]), edge("in1", ["rimL", "panel"], [], [-18, 0, 0]), edge("in2", ["panel"], [], [0, 8, 0]), edge("d1", ["deep"], [], [0, 8, -1.5]), edge("Lb", ["wall"], [], [-10, -10, 0])],
   );
   const plane = { originMm: [0, 0, 0] as V, normal: [0, 0, 1] as V };
-  assert.deepEqual(classifyInsetFaces(after, plane, outerPoints, 2), { panel: ["panel"], rim: ["rimL"] });
-  assert.deepEqual(classifyInsetFaces(after, plane, outerPoints, 2, -1.5), { panel: ["deep"], rim: [] });
+  const region: Array<[number, number]> = [[-20, -10], [20, -10], [20, 10], [-20, 10]];
+  assert.deepEqual(classifyInsetFaces(after, plane, outerPoints, 2, 0, region), { panel: ["panel"], rim: ["rimL"] });
+  assert.deepEqual(classifyInsetFaces(after, plane, outerPoints, 2, -1.5, region), { panel: ["deep"], rim: [] });
+});
+
+test("C1: a coplanar face elsewhere on the body (a second prong top) is neither panel nor rim", () => {
+  const outerPoints: V[] = [[-10, -10, 0], [-20, 0, 0], [-10, 10, 0], [10, -10, 0], [20, 0, 0], [10, 10, 0]];
+  const after = body(
+    [face("panel", [0, 0, 0], [0, 0, 1], true, ["in2"]), face("otherProngTop", [100, 0, 0], [0, 0, 1], true, ["far"])],
+    [edge("in2", ["panel"], [], [0, 8, 0]), edge("far", ["otherProngTop"], [], [100, 8, 0])],
+  );
+  const plane = { originMm: [0, 0, 0] as V, normal: [0, 0, 1] as V };
+  const region = loopPolygon(halves, insetLoops(halves, ["L", "R"]).outer, plane);
+  // Before C1 this read panel ["panel", "otherProngTop"].
+  assert.deepEqual(classifyInsetFaces(after, plane, outerPoints, 2, 0, region), { panel: ["panel"], rim: [] });
+});
+
+test("loopPolygon orders the loop through its vertices; insidePolygon tells inside from outside", () => {
+  const withVertices = body(halves.faces, halves.edges, [
+    { id: 1, positionMm: [0, -10, 0], edgeIds: [] }, { id: 2, positionMm: [0, 10, 0], edgeIds: [] }, { id: 3, positionMm: [-20, -10, 0], edgeIds: [] },
+    { id: 4, positionMm: [-20, 10, 0], edgeIds: [] }, { id: 5, positionMm: [20, -10, 0], edgeIds: [] }, { id: 6, positionMm: [20, 10, 0], edgeIds: [] },
+  ] as unknown as Body["vertices"]);
+  const plane = { originMm: [0, 0, 0] as V, normal: [0, 0, 1] as V };
+  const polygon = loopPolygon(withVertices, insetLoops(withVertices, ["L", "R"]).outer, plane);
+  assert.equal(polygon.length, 12);
+  // Plane frame for +Z: u = +X, w = +Y.
+  assert.equal(insidePolygon([0, 0], polygon), true);
+  assert.equal(insidePolygon([19, 9], polygon), true);
+  assert.equal(insidePolygon([100, 0], polygon), false);
+  assert.equal(insidePolygon([0, 11], polygon), false);
+});
+
+test("C2: a failure part-way reports what was committed and the Undo steps measured from the Undo depth", async () => {
+  const sheet: Body = { ...halves, id: 10, type: "Sheet" } as Body;
+  let undoDepth = 3;
+  let revision = 0;
+  const wires: Body[] = [];
+  const stateNow = (): RuntimeState => ({ targetId: "w", title: "t", documentToken: "doc", revision: `r${revision}`, dbVersion: 1, undoDepth, redoDepth: 0, regions: [], construction: { planes: [], activePlaneId: null, planeStateToken: "p", viewStateToken: "v" }, bodies: [sheet, ...wires] } as unknown as RuntimeState);
+  const commit = (wire?: number) => { undoDepth += 1; revision += 1; if (wire) wires.push({ ...sheet, id: wire, type: "Wire", faces: [], edges: [] } as Body); return stateNow(); };
+  const operations = {
+    async state() { return stateNow(); },
+    async extractEdges() { return commit(20); },
+    async listCurveDirections() { return { documentToken: "doc", revision: `r${revision}`, curves: [{ id: 20, closed: true, segments: [{ lengthMm: 120 }] }, { id: 21, closed: true, segments: [{ lengthMm: 108 }] }] }; },
+    async offsetPlanarCurves() { return commit(21); },
+    async imprintCurvesOnBody() { undoDepth += 1; revision += 1; throw new Error("PK_ERROR_bad_imprint"); },
+    async remove(ids: number[]) { for (const id of ids) wires.splice(wires.findIndex((wire) => wire.id === id), 1); return commit(); },
+    async extrudeFaces() { throw new Error("not reached"); },
+  };
+  const recipe = new InsetPlanarFaceRecipe(operations as never);
+  await assert.rejects(recipe.inset({ bodyId: 10, faceIds: ["L", "R"], distanceMm: 2, revision: "r0" }),
+    /Inset failed: PK_ERROR_bad_imprint\. Before the failure it committed: extracted the outer loop \(Wire 20\); offset it by 2 mm \(Wire 21\); removed the temporary Wires 20, 21; the document is 4 Undo steps past revision r0: undo 4 with plasticity_undo to return to it\./);
 });

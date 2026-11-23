@@ -96,15 +96,78 @@ export function insetLoops(body: Body, faceIds: string[]): { outer: Edge[]; hole
   return { outer: loops[0]!, holes: loops.slice(1) };
 }
 
+/** In-plane frame (u, w) for a unit normal. */
+export function planeFrame(normal: Vector3): { u: Vector3; w: Vector3 } {
+  const seed: Vector3 = Math.abs(normal[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+  const along = dot(seed, normal);
+  const u = unit(sub(seed, scale(normal, along)));
+  const w: Vector3 = [normal[1] * u[2] - normal[2] * u[1], normal[2] * u[0] - normal[0] * u[2], normal[0] * u[1] - normal[1] * u[0]];
+  return { u, w };
+}
+
+/**
+ * The original outer loop as a polygon in plane coordinates (C1): its vertices in loop order with each edge's midpoint
+ * between them; a loop with no vertices (one closed edge) uses its circle samples or its edge bounds. Used to keep the
+ * rim/panel scan to faces inside the inset region, not every coplanar face of the body.
+ */
+export function loopPolygon(body: Body, loop: Edge[], plane: { originMm: Vector3; normal: Vector3 }): Array<[number, number]> {
+  const { u, w } = planeFrame(plane.normal);
+  const to2d = (p: readonly number[]): [number, number] => { const r = sub(p, plane.originMm); return [dot(r, u), dot(r, w)]; };
+  const position = new Map((body.vertices ?? []).map((vertex) => [vertex.id, vertex.positionMm as Vector3]));
+  const withVertices = loop.filter((edge) => edge.vertexIds.length === 2 && edge.vertexIds.every((id) => position.has(id)));
+  const points: Array<[number, number]> = [];
+  if (withVertices.length === loop.length && loop.length > 0) {
+    const unused = new Set(loop.map((edge) => edge.id));
+    let at = loop[0]!.vertexIds[0]!;
+    while (unused.size > 0) {
+      const next = loop.find((edge) => unused.has(edge.id) && edge.vertexIds.includes(at));
+      if (!next) break;
+      unused.delete(next.id);
+      points.push(to2d(position.get(at)!), to2d(next.centerMm));
+      at = next.vertexIds[0] === at ? next.vertexIds[1]! : next.vertexIds[0]!;
+    }
+    if (unused.size === 0) return points;
+    points.length = 0;
+  }
+  for (const edge of loop) {
+    const circle = edge.circleGeometry;
+    if (circle && loop.length === 1) {
+      const { u: cu, w: cw } = planeFrame(unit(circle.normal));
+      for (let k = 0; k < 32; k += 1) {
+        const a = (2 * Math.PI * k) / 32;
+        points.push(to2d([0, 1, 2].map((i) => circle.centerMm[i]! + circle.radiusMm * (Math.cos(a) * cu[i]! + Math.sin(a) * cw[i]!))));
+      }
+      return points;
+    }
+  }
+  // Fallback: the bounding rectangle of the loop edges in plane coordinates.
+  const corners = loop.flatMap((edge) => [0, 1].flatMap((i) => [0, 1].flatMap((j) => [0, 1].map((k) => to2d([[edge.boundsMm.min[0], edge.boundsMm.max[0]][i]!, [edge.boundsMm.min[1], edge.boundsMm.max[1]][j]!, [edge.boundsMm.min[2], edge.boundsMm.max[2]][k]!])))));
+  const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]);
+  return [[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)], [Math.min(...xs), Math.max(...ys)]];
+}
+
+export function insidePolygon(point: [number, number], polygon: Array<[number, number]>): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+    const [xi, yi] = polygon[i]!, [xj, yj] = polygon[j]!;
+    if ((yi > point[1]) !== (yj > point[1]) && point[0] < ((xj - xi) * (point[1] - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
 /**
  * After the imprint: coplanar faces split into rim faces (they still carry an edge of the original outer loop, so
  * they touch its points) and panel faces (every edge at least half the inset away from the original outer loop).
  */
-export function classifyInsetFaces(body: Body, plane: { originMm: Vector3; normal: Vector3 }, outerPointsMm: Vector3[], distanceMm: number, planeOffsetMm = 0): { panel: string[]; rim: string[] } {
+export function classifyInsetFaces(body: Body, plane: { originMm: Vector3; normal: Vector3 }, outerPointsMm: Vector3[], distanceMm: number, planeOffsetMm: number, region: Array<[number, number]>): { panel: string[]; rim: string[] } {
   const panel: string[] = [], rim: string[] = [];
+  const { u, w } = planeFrame(plane.normal);
   for (const face of body.faces) {
     if (!face.planar || dot(unit(face.normal), plane.normal) < COPLANAR_NORMAL) continue;
     if (Math.abs(dot(sub(face.centerMm, plane.originMm), plane.normal) - planeOffsetMm) > COPLANAR_OFFSET_MM) continue;
+    // Only faces inside the original outer loop (C1: another coplanar face elsewhere on the body is not part of it).
+    const r = sub(face.centerMm, plane.originMm);
+    if (!insidePolygon([dot(r, u), dot(r, w)], region)) continue;
     const points = face.edgeIds.flatMap((id) => {
       const edge = body.edges.find((candidate) => candidate.id === id);
       if (!edge) return [];
@@ -138,17 +201,18 @@ export class InsetPlanarFaceRecipe {
       ...outer.map((edge) => edge.centerMm),
       ...(body.vertices ?? []).filter((vertex) => outer.some((edge) => edge.vertexIds.includes(vertex.id))).map((vertex) => vertex.positionMm as Vector3),
     ];
+    const region = loopPolygon(body, outer, plane);
     const notes: string[] = [];
     if (holes.length > 0) notes.push(`${holes.length} inner loop(s) (holes) of the face were left as they are; only the outer loop is inset`);
     let current = initial;
-    let steps = 0;
+    const committed: string[] = [];
     const temporary: number[] = [];
     const added = (before: RuntimeState, after: RuntimeState, type: string) => after.bodies.filter((candidate) => candidate.type === type && !before.bodies.some((old) => old.id === candidate.id)).map((candidate) => candidate.id);
     try {
       let before = current;
       current = await this.operations.extractEdges(outer.map((edge) => ({ bodyId: body.id, edgeId: edge.id })), current.revision);
-      steps += 1;
       const loopWires = added(before, current, "Wire");
+      committed.push(`extracted the outer loop (Wire ${loopWires.join(", ") || "none"})`);
       temporary.push(...loopWires);
       if (loopWires.length !== 1) throw new Error(`Extracting the outer loop made ${loopWires.length} Wires, expected 1`);
       const lengths = async () => new Map((await this.operations.listCurveDirections()).curves.map((curve) => [curve.id, { length: curve.segments.reduce((sum, segment) => sum + segment.lengthMm, 0), closed: curve.closed }]));
@@ -162,23 +226,23 @@ export class InsetPlanarFaceRecipe {
       for (const trial of [1, -1] as const) {
         before = current;
         current = await this.operations.offsetPlanarCurves([loopWires[0]!], trial * input.distanceMm, current.revision, plane);
-        steps += 1;
         const made = added(before, current, "Wire");
+        committed.push(`offset it by ${trial * input.distanceMm} mm (Wire ${made.join(", ") || "none"})`);
         temporary.push(...made);
         if (made.length !== 1) throw new Error(`Offsetting the loop made ${made.length} Wires, expected 1 (the inset may be wider than the face)`);
         const measured = (await lengths()).get(made[0]!);
         if (measured && measured.closed && measured.length < loopLength.length) { sign = trial; inner = made[0]; innerLength = measured.length; break; }
         if (trial === -1) throw new Error(`Neither offset sign shortened the loop (${loopLength.length.toFixed(3)} mm); the inset is not inward`);
         current = await this.operations.remove(made, current.revision);
-        steps += 1;
+        committed.push(`removed the outward offset (Wire ${made.join(", ")})`);
         temporary.splice(temporary.indexOf(made[0]!), 1);
         notes.push("the first offset sign went outward; it was removed and the opposite sign used");
       }
       const bodyCountBefore = initial.bodies.length;
       // Bidirectional: the loop lies in the face plane, so a one-sided projection can miss the face by rounding.
       current = await this.operations.imprintCurvesOnBody(body.id, [inner!], scale(normal, -1), { projectionMethod: "vector", bidirectional: true }, current.revision);
-      steps += 1;
-      let split = classifyInsetFaces(current.bodies.find((candidate) => candidate.id === body.id)!, plane, outerPoints, input.distanceMm);
+      committed.push(`imprinted the inner loop on body ${body.id}`);
+      let split = classifyInsetFaces(current.bodies.find((candidate) => candidate.id === body.id)!, plane, outerPoints, input.distanceMm, 0, region);
       if (split.panel.length === 0) {
         const after = current.bodies.find((candidate) => candidate.id === body.id)!;
         const coplanar = after.faces.filter((face) => face.planar && dot(unit(face.normal), normal) >= COPLANAR_NORMAL).map((face) => `${face.id} at ${dot(sub(face.centerMm, plane.originMm), normal).toFixed(4)} mm`);
@@ -189,38 +253,42 @@ export class InsetPlanarFaceRecipe {
       let panelDepthMm: number | null = null;
       if (input.depthMm !== undefined) {
         current = await this.operations.extrudeFaces(body.id, panelFaceIds, -input.depthMm, current.revision, input.depthMm > 0 ? "difference" : "union");
-        steps += 1;
+        committed.push(`${input.depthMm > 0 ? "recessed" : "raised"} the panel by ${Math.abs(input.depthMm)} mm`);
         const after = current.bodies.find((candidate) => candidate.id === body.id);
         if (!after) throw new Error("The recess removed the source body");
-        split = classifyInsetFaces(after, plane, outerPoints, input.distanceMm, -input.depthMm);
+        split = classifyInsetFaces(after, plane, outerPoints, input.distanceMm, -input.depthMm, region);
         panelFaceIds = split.panel;
         if (panelFaceIds.length === 0) throw new Error(`No panel face found ${input.depthMm} mm below the face plane after the recess`);
         const panel = after.faces.find((face) => face.id === panelFaceIds[0]);
         panelDepthMm = panel ? -dot(sub(panel.centerMm, plane.originMm), normal) : null;
       }
       current = await this.operations.remove([...temporary], current.revision);
-      steps += 1;
       temporary.length = 0;
       const finalBody = current.bodies.find((candidate) => candidate.id === body.id)!;
-      const rimAfter = input.depthMm === undefined ? rimFaceIds : classifyInsetFaces(finalBody, plane, outerPoints, input.distanceMm).rim;
+      const rimAfter = input.depthMm === undefined ? rimFaceIds : classifyInsetFaces(finalBody, plane, outerPoints, input.distanceMm, 0, region).rim;
       return {
         recipe: "inset-planar-face", status: "completed", documentToken: current.documentToken,
         beforeRevision: initial.revision, afterRevision: current.revision, bodyId: body.id, sourceFaceIds: input.faceIds,
         plane, outerLoop: { edgeIds: outer.map((edge) => edge.id), lengthMm: loopLength.length }, innerLoopLengthMm: innerLength,
         ignoredHoleLoops: holes.length, offsetSign: sign, rimFaceIds: rimAfter, panelFaceIds, panelDepthMm,
-        depthMm: input.depthMm ?? null, bodyCountBefore, bodyCountAfter: current.bodies.length, undoSteps: steps, notes,
+        depthMm: input.depthMm ?? null, bodyCountBefore, bodyCountAfter: current.bodies.length, undoSteps: current.undoDepth - initial.undoDepth, notes,
       };
     } catch (error) {
+      // C2: say exactly what was committed and how many Undo steps that is (measured, not counted).
       let cleaned = "";
       if (temporary.length > 0) {
         try {
-          current = await this.operations.remove([...temporary], (await this.operations.state()).revision);
-          steps += 1;
-          cleaned = `; its temporary Wires ${temporary.join(", ")} were removed`;
+          await this.operations.remove([...temporary], (await this.operations.state()).revision);
+          committed.push(`removed the temporary Wires ${temporary.join(", ")}`);
+          cleaned = "";
         } catch { cleaned = `; temporary Wires ${temporary.join(", ")} may remain`; }
       }
+      let steps: number | null = null;
+      try { steps = (await this.operations.state()).undoDepth - initial.undoDepth; } catch { steps = null; }
       const detail = error instanceof Error ? error.message : String(error);
-      throw new Error(`Inset failed after ${steps} native step(s)${cleaned}; undo ${steps} step(s) with plasticity_undo to return to revision ${initial.revision}: ${detail}`, { cause: error });
+      const done = committed.length > 0 ? `committed: ${committed.join("; ")}` : "nothing was committed";
+      const undo = steps === null ? "the Undo depth could not be read; read the document before you continue" : steps === 0 ? "the document is unchanged" : `the document is ${steps} Undo step${steps === 1 ? "" : "s"} past revision ${initial.revision}: undo ${steps} with plasticity_undo to return to it`;
+      throw new Error(`Inset failed: ${detail}. Before the failure it ${done}${cleaned}; ${undo}.`, { cause: error });
     }
   }
 }

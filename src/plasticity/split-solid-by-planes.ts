@@ -115,7 +115,8 @@ export class SplitSolidByPlanesRecipe {
       if (resultBodyIds.length !== cuts.length + 1) throw new Error("Split result count does not match the number of completed binary cuts");
       const measured = await this.operations.measureSolidProperties(resultBodyIds, current.revision);
       const resultVolumeMm3 = measured.totals.volumeMm3;
-      const check = checkSplitVolume(inputVolumeMm3, resultVolumeMm3, "Multi-plane split");
+      const sourceBody = initial.bodies.find((body) => body.id === input.targetId);
+      const check = checkSplitVolume(inputVolumeMm3, resultVolumeMm3, "Multi-plane split", !sourceBody || sourceBody.faces.length === 0 || sourceBody.faces.some((face) => !face.planar));
       if (check.status === "error") throw new Error(check.message);
       const volumeDifferenceMm3 = check.differenceMm3;
       const warnings = [...new Set([...cutWarnings, ...(check.status === "warning" ? [check.message!] : [])])];

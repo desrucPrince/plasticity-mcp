@@ -14,77 +14,104 @@ const series = (g0: (i: number) => number, g1: (i: number) => number, g2: (i: nu
 });
 const maxOf = (samples: ContinuitySamples) => ({ g0Mm: Math.max(...samples.g0Mm), g1Deg: Math.max(...samples.g1Deg), g2Rel: Math.max(...samples.g2Rel) });
 
-test("one 90 degree sample with neighbours under 0.1 degree is an isolated spike; the class ignoring it is G1", () => {
-  const samples = series(() => 0, (i) => (i === 40 ? 90 : 0.05), () => 0.3);
-  const summary = continuitySampleSummary(samples, maxOf(samples), tolerances);
+const ENDS: Vector3[] = [[0, 0, 0], [99, 0, 0]];
+
+test("C3: a 90 degree sample next to an edge end, neighbours under 0.1 degree, is a spike; the class ignoring it is G1", () => {
+  const samples = series(() => 0, (i) => (i === 2 ? 90 : 0.05), () => 0.3);
+  const summary = continuitySampleSummary(samples, maxOf(samples), tolerances, ENDS);
   assert.equal(summary.class, "G0");
-  assert.equal(summary.interiorClass, "G0");
+  assert.equal(summary.interiorClass, "G1");
   assert.equal(summary.classIgnoringIsolatedSpikes, "G1");
-  assert.deepEqual(summary.spikes.map((spike) => [spike.level, spike.index, spike.value, spike.source]), [["G1", 40, 90, "sample"]]);
-  assert.deepEqual(summary.spikes[0]!.positionMm, [40, 0, 0]);
+  assert.deepEqual(summary.spikes.map((spike) => [spike.level, spike.index, spike.value, spike.source]), [["G1", 2, 90, "sample"]]);
   assert.ok(summary.spikes[0]!.neighbourMax <= 0.1);
 });
 
-test("a corner spike (index 0 or 99, neighbours on one side) is a spike; interiorClass already leaves it out", () => {
+test("C3: the same single 90 degree sample in the run of the edge is not a spike; the class stands", () => {
+  const samples = series(() => 0, (i) => (i === 40 ? 90 : 0.05), () => 0.3);
+  const summary = continuitySampleSummary(samples, maxOf(samples), tolerances, ENDS);
+  assert.equal(summary.spikes.length, 0);
+  assert.equal(summary.classIgnoringIsolatedSpikes, "G0");
+});
+
+test("C3: 90 degrees at every third sample gives G0 (no spikes at all)", () => {
+  const samples = series(() => 0, (i) => (i % 3 === 0 ? 90 : 0.01), () => 0.01);
+  const summary = continuitySampleSummary(samples, maxOf(samples), tolerances, ENDS);
+  assert.equal(summary.spikes.length, 0);
+  assert.equal(summary.classIgnoringIsolatedSpikes, "G0");
+});
+
+test("C3: a single-sample position gap is never a spike, at the end or mid-edge: the class is none", () => {
+  for (const at of [1, 50]) {
+    const samples = series((i) => (i === at ? 0.5 : 0), () => 0.01, () => 0.01);
+    const summary = continuitySampleSummary(samples, maxOf(samples), tolerances, ENDS);
+    assert.equal(summary.class, "none", String(at));
+    assert.equal(summary.classIgnoringIsolatedSpikes, "none", String(at));
+    assert.equal(summary.spikes.length, 0, String(at));
+  }
+});
+
+test("C3: a corner run of at most 2 samples is a spike, 3 is not, and more than 2 spikes cancel all of them", () => {
   for (const at of [0, 99]) {
     const samples = series(() => 0, (i) => (i === at ? 90 : 0.02), () => 0.01);
-    const summary = continuitySampleSummary(samples, maxOf(samples), tolerances);
-    assert.equal(summary.class, "G0", String(at));
+    const summary = continuitySampleSummary(samples, maxOf(samples), tolerances, ENDS);
     assert.equal(summary.interiorClass, "G2", String(at));
     assert.equal(summary.classIgnoringIsolatedSpikes, "G2", String(at));
     assert.equal(summary.spikes[0]!.index, at);
   }
+  const two = series(() => 0, (i) => (i === 0 || i === 1 ? 90 : 0.02), () => 0.01);
+  assert.equal(continuitySampleSummary(two, maxOf(two), tolerances, ENDS).classIgnoringIsolatedSpikes, "G2");
+  const three = series(() => 0, (i) => (i <= 2 ? 90 : 0.02), () => 0.01);
+  assert.equal(continuitySampleSummary(three, maxOf(three), tolerances, ENDS).classIgnoringIsolatedSpikes, "G0");
+  // A failing neighbour within 2 indices outside the run disqualifies it.
+  const near = series(() => 0, (i) => (i === 0 || i === 2 ? 90 : 0.02), () => 0.01);
+  assert.equal(continuitySampleSummary(near, maxOf(near), tolerances, ENDS).spikes.length, 0);
+  // Three separate spikes (start of G1, end of G1, start of G2 at another sample): none count.
+  const many = series(() => 0, (i) => (i === 0 || i === 99 ? 90 : 0.02), (i) => (i === 4 ? 0.9 : 0.01));
+  const manySummary = continuitySampleSummary(many, maxOf(many), tolerances, ENDS);
+  assert.equal(manySummary.spikes.length, 0);
+  assert.equal(manySummary.classIgnoringIsolatedSpikes, "G0");
 });
 
-test("two adjacent failing samples, or a failing neighbour within 2 indices, are not an isolated spike", () => {
-  for (const second of [41, 42]) {
-    const samples = series(() => 0, (i) => (i === 40 || i === second ? 5 : 0.01), () => 0.01);
-    const summary = continuitySampleSummary(samples, maxOf(samples), tolerances);
-    assert.equal(summary.spikes.length, 0, String(second));
-    assert.equal(summary.classIgnoringIsolatedSpikes, "G0", String(second));
-  }
-  // Three indices apart they are two separate spikes.
-  const apart = series(() => 0, (i) => (i === 40 || i === 43 ? 5 : 0.01), () => 0.01);
-  assert.equal(continuitySampleSummary(apart, maxOf(apart), tolerances).spikes.length, 2);
-});
-
-test("a failing native maximum off the samples (corner vertex) is a native-maximum spike at the nearest sample", () => {
-  // Live band/side: every sample below 0.07 degrees, native maximum 90 degrees at the corner (41.9999, ...).
+test("C3: a failing native maximum off the samples counts within 1 mm of an end vertex (the real corner case), not mid-edge", () => {
+  // Live band/side: every sample below 0.07 degrees, native maximum 90 degrees at the corner vertex.
   const samples = series(() => 0, () => 0.063, () => 0.4);
-  const summary = continuitySampleSummary(samples, { g0Mm: 0, g1Deg: 90, g2Rel: 0.4, g1AtMm: [99.4, 0, 0] }, tolerances);
-  assert.equal(summary.class, "G0");
-  assert.equal(summary.classIgnoringIsolatedSpikes, "G1");
-  assert.equal(summary.spikes.length, 1);
-  assert.deepEqual([summary.spikes[0]!.level, summary.spikes[0]!.index, summary.spikes[0]!.value, summary.spikes[0]!.source], ["G1", 99, 90, "native-maximum"]);
-  assert.deepEqual(summary.spikes[0]!.positionMm, [99.4, 0, 0]);
+  const corner = continuitySampleSummary(samples, { g0Mm: 0, g1Deg: 90, g2Rel: 0.4, g1AtMm: [99.4, 0, 0] }, tolerances, ENDS);
+  assert.equal(corner.class, "G0");
+  assert.equal(corner.classIgnoringIsolatedSpikes, "G1");
+  assert.deepEqual([corner.spikes[0]!.level, corner.spikes[0]!.index, corner.spikes[0]!.value, corner.spikes[0]!.source], ["G1", 99, 90, "native-maximum"]);
+  const mid = continuitySampleSummary(samples, { g0Mm: 0, g1Deg: 30, g2Rel: 0.4, g1AtMm: [50.5, 0, 0] }, tolerances, ENDS);
+  assert.equal(mid.spikes.length, 0);
+  assert.equal(mid.classIgnoringIsolatedSpikes, "G0");
+  // Without known end vertices a native maximum is never a spike.
+  assert.equal(continuitySampleSummary(samples, { g0Mm: 0, g1Deg: 90, g2Rel: 0.4, g1AtMm: [99.4, 0, 0] }, tolerances).spikes.length, 0);
 });
 
 test("a failing native maximum with failing samples is not a spike, and a G2 edge stays G2 in all three classes", () => {
   const failing = series(() => 0, () => 2, () => 0.01);
-  const summary = continuitySampleSummary(failing, { g0Mm: 0, g1Deg: 90, g2Rel: 0.01 }, tolerances);
+  const summary = continuitySampleSummary(failing, { g0Mm: 0, g1Deg: 90, g2Rel: 0.01 }, tolerances, ENDS);
   assert.equal(summary.spikes.length, 0);
   assert.equal(summary.classIgnoringIsolatedSpikes, "G0");
   const smooth = series(() => 1e-6, () => 0.001, () => 0.001);
-  const all = continuitySampleSummary(smooth, maxOf(smooth), tolerances);
+  const all = continuitySampleSummary(smooth, maxOf(smooth), tolerances, ENDS);
   assert.deepEqual([all.class, all.interiorClass, all.classIgnoringIsolatedSpikes, all.spikes.length], ["G2", "G2", "G2", 0]);
 });
 
 test("4c: interiorClass is never worse than class (interior maxima are clamped), and relative G2 is clamped to 1", () => {
   const samples = series(() => 0, () => 0.01, (i) => (i < 5 ? 0.9 : 0.02));
-  // A native maximum a hair under the interior sample maximum (separate reductions) must not make interior worse.
-  const summary = continuitySampleSummary(samples, { g0Mm: 0, g1Deg: 0.01, g2Rel: 1.4 }, tolerances);
+  const summary = continuitySampleSummary(samples, { g0Mm: 0, g1Deg: 0.01, g2Rel: 1.4 }, tolerances, ENDS);
   assert.equal(summary.class, "G1");
   assert.equal(summary.interiorClass, "G2");
   assert.ok(summary.maximaIgnoringIsolatedSpikes.g2Rel <= 1);
 });
 
-test("withContinuitySummary adds interiorContinuity, the class ignoring spikes and spikes, and drops the series", () => {
+test("withContinuitySummary adds interiorContinuity, the class ignoring spikes and spikes, and drops the series and ends", () => {
   const samples = series(() => 0, () => 0.05, () => 0.3);
   const row: Record<string, unknown> = withContinuitySummary<Record<string, unknown>>({
     achievedContinuity: "G0", maximumPositionDeviationMm: 0, maximumNormalAngleDeviationDeg: 90, maximumRelativeCurvatureDeviation: 0.3,
-    maximumNormalAngleDeviationAtMm: [0, 0, 0], samples,
+    maximumNormalAngleDeviationAtMm: [0, 0, 0], samples, edgeEndsMm: ENDS,
   }, tolerances);
   assert.equal("samples" in row, false);
+  assert.equal("edgeEndsMm" in row, false);
   assert.equal(row.interiorContinuity, "G1");
   assert.equal(row.achievedContinuityIgnoringIsolatedSpikes, "G1");
   assert.equal((row.spikes as unknown[]).length, 1);
@@ -236,5 +263,65 @@ test("a FillHole 22094 after a clean pre-check says the pre-check found no known
     async mutate() { throw new Error("Plasticity command failed: Error: Operation FillHole failed with error `22094`."); },
   } as unknown as PlasticityRuntime;
   await assert.rejects(new PlasticityOperations(runtime).patchSheetHole(7, ["e1", "e2"], "r1", { continuity: "g2", precheck: "warn" }),
-    /FillHole error 22094: .*Boundary analysis: the pre-check found no known cause \(corner normals, angle budget, edge count, G2 corner curvature\); likely a geometric G1\/G2 condition it does not model: try G1 instead of G2 on one edge at a time/);
+    /FillHole error 22094: .*Boundary analysis: the pre-check found no known blocking cause \(corner normals, angle budget\); likely a geometric G1\/G2 condition it does not refuse on: try G1 instead of G2 on one edge at a time/);
+  // C5: with only report-only notes (here mixed continuity) the wording is the same, and the notes are listed.
+  await assert.rejects(new PlasticityOperations(runtime).patchSheetHole(7, ["e1", "e2"], "r1", { edgeContinuity: [{ edgeId: "e1", continuity: "g2" }, { edgeId: "e2", continuity: "g0" }], precheck: "warn" }),
+    /no known blocking cause \(corner normals, angle budget\); its notes, which may explain it: 1\. edges e2 \(G0\) ask less than G2.*; likely a geometric G1\/G2 condition/);
+});
+
+test("C7: when a snapped loft fails, the error says which guide end moved and how many Undo steps restore it", async () => {
+  let undoDepth = 2;
+  const wire = (id: number) => ({ id, versionId: id, type: "Wire", name: null, boundsMm: null, faceIds: [], edgeIds: [], faces: [], edges: [], vertices: [] });
+  const stateNow = () => ({ targetId: "w", title: "t", documentToken: "doc", revision: `r${undoDepth}`, dbVersion: 1, undoDepth, redoDepth: 0, regions: [], construction: { planes: [], activePlaneId: null, planeStateToken: "p", viewStateToken: "v" }, bodies: [wire(1), wire(2), wire(3)] }) as unknown as RuntimeState;
+  const runtime = {
+    async getState() { return stateNow(); },
+    async readNative() { return [{ guideId: 3, endMm: [0, 0.004, 0], nearestMm: [0.0016, 0.0008, 0], distanceMm: 0.0036, nearestVertexMm: [0, 0, 0], vertexDistanceMm: 0.004 }]; },
+    async mutate() { throw new Error("Plasticity command failed: Error: Loft failed\n    at stack"); },
+  } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+  const moved: unknown[] = [];
+  Object.assign(operations, {
+    async listCurveControlPoints() { return { documentToken: "doc", revision: `r${undoDepth}`, curves: [{ id: 3, boundaryVertices: [{ reference: { bodyId: 3, kind: "vertex", pointId: 0 }, positionMm: [0, 0.004, 0] }], interiorControlPoints: [] }] }; },
+    async moveCurveControlPoints(points: unknown[], delta: unknown) { moved.push([points, delta]); undoDepth += 1; return stateNow(); },
+  });
+  const error = await operations.loftCurves([1, 2], { guideIds: [3], snapToleranceMm: 0.01 }, "r2").then(() => undefined, (failure: Error) => failure);
+  assert.ok(error);
+  assert.equal(moved.length, 1);
+  assert.match(error!.message, /^Plasticity command failed: Error: Loft failed\. Before the loft, snapToleranceMm moved a guide end onto the profiles \(guide 3 end 0\.0000, 0\.0040, 0\.0000 -> 0\.0000, 0\.0000, 0\.0000 \(0\.00400 mm\)\); the document is 1 Undo step past the call: undo 1 with plasticity_undo to restore the guides\. guideSnaps: /);
+  assert.equal((error as Error & { guideSnaps: unknown[] }).guideSnaps.length, 1);
+});
+
+test("C9: offset_planar_curves with plane refuses a Wire more than 0.01 mm from that plane before any change", async () => {
+  class KV { x: number; y: number; z: number; constructor(x: number, y: number, z: number) { this.x = x; this.y = y; this.z = z; } }
+  const make = (zMm: number) => {
+    const edge = { GetPointAndTangent: (t: number) => ({ position: new KV(0.02 * t, 0, (zMm * t) / 1000), tangent: new KV(1, 0, 0) }) };
+    class Wire {}
+    const editor = {
+      geo: { geometryModel: new Map([[5, { view: new Wire(), model: { GetEdges: () => ({ Size: () => 1, Get: () => edge }) } }]]), automatics: new Set() },
+      db: { lookupStableId: (versionId: number) => (versionId === 5 ? 9 : undefined) },
+      executor: { isBusy: false },
+      commands: { OffsetPlanarCurveCommand: class { remember = true; execute: () => Promise<unknown> = async () => undefined; constructor(_editor: unknown) {} } },
+      committed: 0,
+      async exec(command: { execute: () => Promise<unknown> }) { await command.execute(); },
+    };
+    class Factory { curves: unknown; constructionPlane: unknown; distance1 = 0; constructor(_editor: unknown) {} resource() { return this; } async commit() { editor.committed += 1; return []; } }
+    class Snap { constructor(..._args: unknown[]) {} }
+    class Vector { constructor(..._args: unknown[]) {} }
+    const natives: Record<string, unknown> = { OffsetPlanarCurvesFactory: Factory, ConstructionPlaneSnap: Snap, Vector3: Vector };
+    const state = { targetId: "w", title: "t", documentToken: "doc", revision: "r1", dbVersion: 1, undoDepth: 0, redoDepth: 0, regions: [], construction: { planes: [], activePlaneId: null, planeStateToken: "p", viewStateToken: "v" }, bodies: [{ id: 9, versionId: 5, type: "Wire", name: null, boundsMm: null, faceIds: [], edgeIds: [], faces: [], edges: [] }] } as unknown as RuntimeState;
+    const runtime = {
+      async getState() { return state; },
+      async mutate(source: string, bindings: string[], values: unknown[]) {
+        const execute = new Function(`return (${source})`)() as (...args: unknown[]) => Promise<unknown>;
+        return await execute.apply(editor, [...bindings.map((name) => natives[name]), ...values]);
+      },
+    } as unknown as PlasticityRuntime;
+    return { operations: new PlasticityOperations(runtime), editor };
+  };
+  const off = make(0.5);
+  await assert.rejects(off.operations.offsetPlanarCurves([9], 2, "r1", { originMm: [0, 0, 0], normal: [0, 0, 1] }), /Wire 9 lies up to 0\.5000 mm from the given offset plane \(tolerance 0\.01 mm\); nothing was changed/);
+  assert.equal(off.editor.committed, 0);
+  const on = make(0.005);
+  await on.operations.offsetPlanarCurves([9], 2, "r1", { originMm: [0, 0, 0], normal: [0, 0, 1] });
+  assert.equal(on.editor.committed, 1);
 });

@@ -4089,7 +4089,7 @@ unchanged); `fuse` 11 to 11 bodies, source faces 15 to 16, volume 741 346 to
 the source volume (at least 0.01 mm³). Native volume of curved B-spline Solids
 is an integration with error of about 1e-4 of the volume (live: 4.9 to 136 mm³
 on 777 to 804 cm³), so a split with two valid Solids whose volume moved up to
-1 % completes with `warnings`; more than 1 % is still an error. The same rule is
+0.1 % completes with `warnings`; more than 0.1 % is an error (phase C review). The same rule is
 in `plasticity_split_solid_by_planes`. Live: z = 10 on `organic-product`
 completed, 136 mm³ (1.75e-4) as a warning.
 
@@ -4173,6 +4173,29 @@ reported in `acceptedOptions`; they do not change the boundary rules).
   `plasticity_bridge_sheet_edges` say the document was changed and how to undo;
   the bridge warns when it is not one body or finds fewer than 2 joins, and
   matches read-back rows to joins by edge or face ids only.
+
+#### Phase C review changes
+
+- `plasticity_inset_planar_face` classifies only coplanar faces whose centre lies inside the original outer loop
+  (a second coplanar prong top is left alone; live: a U block, left prong recessed 1.5 mm, right prong top still
+  at z 30.0000). `undoSteps` is measured from the Undo depth (4 to 7), and a failure part-way lists what was
+  committed and the measured Undo steps.
+- Spikes (both continuity tools) are G1/G2 only, at most 2, each a run of at most 2 failing samples in the first or
+  last 5 samples with passing neighbours, or a failing native maximum within 1 mm of an edge end vertex; a G0
+  failure always stands. Live: the band/side corner readings on `organic-product` still read G1 ignoring spikes;
+  the bowl/rear readings on `attempt1-v2-final` (native maximum about 7 mm from the edge end) now stay G0.
+- The edge resample samples t 0.001 to 0.999 and replaces native values only when every point lies on both faces
+  and its G0 passes; such rows say `measurementSource: "resampled"` with `nativeMaxima`, also in
+  `plasticity_continuity_report` (`summary.resampledEdges`).
+- The 22094 "no known cause" wording now applies whenever the pre-check found no blocking problem; its
+  report-only notes are listed. The attempt-2 rear closure that failed with 22085 in the recheck had an open loop
+  (the saved half has no support face); closed with its profile Wire, band G2 + side G2 is not flagged and patches.
+- Split volume: the hard limit is 0.1 %; integration error is named only for a Solid with a non-planar face.
+- `plasticity_loft_curves`: when a guide end was snapped and the loft still fails, the error names the moved ends,
+  the Undo steps to restore them, and carries `guideSnaps`.
+- `plasticity_extrude_profile` reports `profileRegion { regionId, holeCount, candidateCount }` and a note when
+  other Wires inside the profile cut holes in it.
+- `plasticity_offset_planar_curves` with `plane` refuses a Wire more than 0.01 mm from that plane, before any change.
 
 ## Development and verification
 

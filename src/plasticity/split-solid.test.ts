@@ -105,11 +105,17 @@ test("split volume check: relative tolerance, warning band, gross limit (organic
   for (const [input, drift] of [[804_000, 4.87], [804_359, 28.6], [777_000, 136]] as const) {
     const check = checkSplitVolume(input, input - drift);
     assert.equal(check.status, "warning", `${drift} on ${input}`);
-    assert.match(check.message!, /within 1 %/);
+    assert.match(check.message!, /within 0\.1 %; native volume of curved \(B-spline\) Solids is an integration/);
   }
-  const lost = checkSplitVolume(777_000, 777_000 * 0.98);
+  // C6: the gross limit is 0.1 % (0.2 % is an error), and a planar Solid's drift is unexplained.
+  const lost = checkSplitVolume(777_000, 777_000 * 0.998);
   assert.equal(lost.status, "error");
-  assert.match(lost.message!, /limit/);
+  assert.match(lost.message!, /limit is 777 mm³ \(0\.1 %/);
+  assert.equal(checkSplitVolume(777_000, 777_000 * 0.9991).status, "warning");
+  const planar = checkSplitVolume(8_000, 8_000.5, "Split", false);
+  assert.equal(planar.status, "warning");
+  assert.match(planar.message!, /only planar faces, so integration error does not explain it: the drift is unexplained/);
+  assert.doesNotMatch(planar.message!, /B-spline/);
   assert.equal(checkSplitVolume(777_000, Number.NaN).status, "error");
 });
 

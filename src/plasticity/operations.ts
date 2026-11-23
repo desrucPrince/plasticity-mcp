@@ -2679,6 +2679,12 @@ export class PlasticityOperations {
           if (args.extended) {
             const points = Array.from({ length: 100 }, (_, i) => [Number(g1s[6 * i]) * 1000, Number(g1s[6 * i + 1]) * 1000, Number(g1s[6 * i + 2]) * 1000]);
             result.samples = { g0Mm: series[0].map(value => value * 1000), g1Deg: series[1].map(value => value * 180 / Math.PI), g2Rel: series[2].slice(), pointsMm: points };
+            // Edge end vertices: a native-maximum spike counts only within 1 mm of one (C3).
+            try {
+              kernelEdges.has(selectedEdge.item) || kernelEdges.set(selectedEdge.item, selectedEdge.item.model.GetEdges().GetEdges());
+              const ke = kernelEdges.get(selectedEdge.item).find(candidate => Number(candidate.Id()) === selectedEdge.entityId);
+              if (ke) result.edgeEndsMm = [0, 1].map(t => { const p = ke.GetPointAndTangent(t).position; return [Number(p.x) * 1000, Number(p.y) * 1000, Number(p.z) * 1000]; });
+            } catch (error) { /* no ends: native-maximum spikes are not counted */ }
           }
           // Absolute curvature across the edge, from Face.EvalBasis (probe recipe). Where one basis direction runs along the
           // edge and the other across it (within 1 degree) that direction's curvature is used (method parameter-direction).
@@ -2781,8 +2787,10 @@ export class PlasticityOperations {
               const sense = face => { try { return face.GetSurface?.()?.orientation === false ? -1 : 1; } catch (error) { return 1; } };
               const senses = [sense(faceA), sense(faceB)];
               const g0 = [], g1 = [], g2 = [], points = [];
+              let offFace = 0;
               for (let i = 0; i < 100; i += 1) {
-                const at = kernelEdge.GetPointAndTangent((i + 0.5) / 100);
+                // t from 0.001 to 0.999: the first and last samples sit next to the end vertices.
+                const at = kernelEdge.GetPointAndTangent(0.001 + i * 0.998 / 99);
                 const t = unit(read(at.tangent));
                 const sides = [faceA, faceB].map((face, k) => {
                   const near = face.FindPointNear(at.position);
@@ -2795,17 +2803,20 @@ export class PlasticityOperations {
                 });
                 const [a, b] = sides;
                 if (!a.n || !b.n) throw new Error('no normal');
+                const p0 = read(at.position);
+                offFace = Math.max(offFace, Math.hypot(a.q[0] - p0[0], a.q[1] - p0[1], a.q[2] - p0[2]) * 1000, Math.hypot(b.q[0] - p0[0], b.q[1] - p0[1], b.q[2] - p0[2]) * 1000);
                 g0.push(Math.hypot(a.q[0] - b.q[0], a.q[1] - b.q[1], a.q[2] - b.q[2]) * 1000);
                 g1.push(Math.acos(Math.max(-1, Math.min(1, dot3(a.n, b.n)))) * 180 / Math.PI);
                 const kb = dot3(a.n, b.n) < 0 ? -b.kn : b.kn;
                 g2.push(a.kn === null || kb === null ? 1 : Math.abs(a.kn) + Math.abs(kb) > 0 ? Math.min(1, Math.abs(a.kn - kb) / (Math.abs(a.kn) + Math.abs(kb))) : 0);
                 points.push(read(at.position).map(x => x * 1000));
               }
-              resampled = { g0, g1, g2, points };
+              resampled = { g0, g1, g2, points, offFaceMm: offFace, ends: [0, 1].map(t => read(kernelEdge.GetPointAndTangent(t).position).map(x => x * 1000)) };
             }
           } catch (error) { resampled = null; }
         }
-        if (resampled && Math.max(...resampled.g0) <= args.tolerances.positionMm) {
+        // Replace only when every edge point lies on both faces AND the resampled G0 passes (C4).
+        if (resampled && resampled.offFaceMm <= args.tolerances.positionMm && Math.max(...resampled.g0) <= args.tolerances.positionMm) {
           const at = series => resampled.points[series.indexOf(Math.max(...series))];
           const r0 = Math.max(...resampled.g0), r1 = Math.max(...resampled.g1), r2 = Math.max(...resampled.g2);
           const rG0 = true, rG1 = r1 <= args.tolerances.normalAngleDeg, rG2 = rG1 && r2 <= args.tolerances.relativeCurvature;
@@ -2817,7 +2828,7 @@ export class PlasticityOperations {
               { bodyId: selectedEdge.reference.bodyId, faceId: secondFaceId },
             ],
             bodyVersionId: selectedEdge.bodyVersionId,
-            measurementSource: 'edge-resample-100-samples',
+            measurementSource: 'resampled',
             sampleCount: 100,
             maximumPositionDeviationMm: r0,
             maximumPositionDeviationAtMm: at(resampled.g0),
@@ -2831,8 +2842,9 @@ export class PlasticityOperations {
             interior: { g0Mm: interiorOf(resampled.g0), g1Deg: interiorOf(resampled.g1), g2Rel: interiorOf(resampled.g2) },
             worstAt: 'interior',
             ...(extra.absoluteCurvature ? { absoluteCurvature: extra.absoluteCurvature } : {}),
-            samples: { g0Mm: resampled.g0, g1Deg: resampled.g1, g2Rel: resampled.g2, pointsMm: resampled.points },
-            nativeMisread: { g0Mm: maximumPositionDeviationMm, g1Deg: maximumNormalAngleDeviationDeg, g2Rel: maximumRelativeCurvatureDeviation, atMm: vectorMm(view.g0maxBase), note: 'the native sampler read a G0 gap the edge does not have: every resampled point lies on both faces within the position tolerance, so these resampled values replace it' },
+            ...(args.extended ? { samples: { g0Mm: resampled.g0, g1Deg: resampled.g1, g2Rel: resampled.g2, pointsMm: resampled.points }, edgeEndsMm: resampled.ends } : {}),
+            nativeMaxima: { g0Mm: maximumPositionDeviationMm, g0AtMm: vectorMm(view.g0maxBase), g1Deg: maximumNormalAngleDeviationDeg, g1AtMm: vectorMm(view.g1maxBase), g2Rel: maximumRelativeCurvatureDeviation, g2AtMm: vectorMm(view.g2maxBase), passes: { G0, G1, G2 }, achievedContinuity: G2 ? 'G2' : G1 ? 'G1' : G0 ? 'G0' : 'discontinuous' },
+            resample: { offFaceMm: resampled.offFaceMm, note: 'the native sampler read a G0 gap the edge does not have: 100 points along the edge (t 0.001 to 0.999) lie on both faces within the position tolerance and their G0 passes, so the resampled values replace the native ones; the native values are in nativeMaxima' },
           };
         }
         return {
@@ -2948,6 +2960,7 @@ export class PlasticityOperations {
           worstAt: (analysis.worstAt as string | undefined) ?? null,
           ...(analysis.achievedContinuityIgnoringIsolatedSpikes ? { classIgnoringIsolatedSpikes: (analysis.achievedContinuityIgnoringIsolatedSpikes === "discontinuous" ? "none" : analysis.achievedContinuityIgnoringIsolatedSpikes) as ContinuityReportClass } : {}),
           ...(Array.isArray(analysis.spikes) && analysis.spikes.length > 0 ? { spikes: analysis.spikes } : {}),
+          ...(analysis.measurementSource === "resampled" ? { measurementSource: "resampled" as const, nativeMaxima: analysis.nativeMaxima } : {}),
           ...(analysis.absoluteCurvature ? { absoluteCurvature: analysis.absoluteCurvature } : {}),
         };
       });
@@ -2960,7 +2973,7 @@ export class PlasticityOperations {
         bodyId: body.id,
         twoFaceEdgeCount: twoFace.length,
         edgeCount: edges.length,
-        summary: { counts, interiorCounts, ignoringSpikesCounts, spikeEdges: edges.filter((edge) => edge.spikes).map((edge) => edge.edgeId), worst: sorted.slice(0, 10).map((edge) => ({ edgeId: edge.edgeId, class: edge.class, normalAngleDegMax: edge.normalAngleDeg.max, interiorNormalAngleDeg: edge.normalAngleDeg.interiorMax, worstAt: edge.worstAt })) },
+        summary: { counts, interiorCounts, ignoringSpikesCounts, spikeEdges: edges.filter((edge) => edge.spikes).map((edge) => edge.edgeId), resampledEdges: edges.filter((edge) => edge.measurementSource === "resampled").map((edge) => edge.edgeId), worst: sorted.slice(0, 10).map((edge) => ({ edgeId: edge.edgeId, class: edge.class, normalAngleDegMax: edge.normalAngleDeg.max, interiorNormalAngleDeg: edge.normalAngleDeg.interiorMax, worstAt: edge.worstAt })) },
         edges: sorted,
       };
     }
@@ -7184,10 +7197,14 @@ export class PlasticityOperations {
     return await this.state();
   }
 
+  /** The region the last extrudeProfile used (C8), for the tool reply. */
+  lastExtrudeProfileRegion: { regionId: string; holeCount: number | null; candidateCount: number } | undefined;
+
   async extrudeProfile(id: number, distanceMm: number, revision: string, options: ExtrudeOptions = {}): Promise<RuntimeState> {
     await this.assertRevision(revision);
-    await this.runtime.mutate(nativeFunction`async function (Factory, args) {
+    const native = await this.runtime.mutate<{ regionId: string; holeCount: number | null; candidateCount: number } | undefined>(nativeFunction`async function (Factory, args) {
       ${findView}
+      let regionInfo;
       ${commandStart("ExtrudeCommand")}
       const view = find(args.id);
       if (view.constructor.name !== 'Wire') throw new Error('Profile must be a Wire');
@@ -7214,6 +7231,7 @@ export class PlasticityOperations {
       // Several regions in the profile's plane (phase C, friction 13: an unrelated coplanar wire): keep the one region
       // whose bounds are the profile Wire's bounds (its outer region). Still ambiguous: name the regions.
       let chosen = regions;
+      const candidateCount = regions.length;
       if (regions.length > 1) {
         const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
         const edges = profileItem.model.GetEdges();
@@ -7237,10 +7255,15 @@ export class PlasticityOperations {
         }
       }
       if (chosen !== regions) regions.splice(0, regions.length, ...chosen);
+      // C8: which region, and its holes (inner loops of its planar face; only other Wires can cut holes in a profile).
+      const loops = (() => { try { const face = nativeApi.db.lookupTopologyItem(regions[0]); const inner = face?.GetInnerLoops?.(); return Array.isArray(inner) ? inner.length : Number(inner?.Size?.() ?? 0); } catch (error) { return null; } })();
+      regionInfo = { regionId: String(regions[0].versionId), holeCount: loops, candidateCount: candidateCount };
       factory.regions = regions;
       factory.distance1 = args.distance;${applyExtrudeOptions}
       ${commandEnd}
+      return regionInfo;
     }`, ["ExtrudeFactory"], [{ id, distance: millimetersToMeters(distanceMm), options: nativeExtrudeOptions(options) }]);
+    this.lastExtrudeProfileRegion = native && typeof native === "object" && "regionId" in native ? native : undefined;
     return await this.state();
   }
 
@@ -7313,12 +7336,28 @@ export class PlasticityOperations {
             }
             throw new Error('Unknown Wire ID: ' + id);
           };
+          // C9: refuse a Wire that is not in the given plane (within 0.01 mm), before any change.
+          for (const id of args.ids) {
+            let model;
+            for (const [versionId, item] of nativeApi.geo.geometryModel) if (nativeApi.db.lookupStableId(versionId) === id) model = item.model;
+            const edges = model?.GetEdges?.();
+            let worst = 0;
+            for (let index = 0; index < (edges?.Size?.() ?? 0); index += 1) {
+              const edge = edges.Get(index);
+              for (let k = 0; k <= 20; k += 1) {
+                const p = edge.GetPointAndTangent(k / 20).position;
+                const d = Math.abs((p.x - args.origin[0]) * args.normal[0] + (p.y - args.origin[1]) * args.normal[1] + (p.z - args.origin[2]) * args.normal[2]) * 1000;
+                worst = Math.max(worst, d);
+              }
+            }
+            if (worst > args.planeToleranceMm) throw new Error('Wire ' + id + ' lies up to ' + worst.toPrecision(4) + ' mm from the given offset plane (tolerance ' + args.planeToleranceMm + ' mm); nothing was changed. Give the plane the Wire lies in');
+          }
           ${commandStart("OffsetPlanarCurveCommand")}
           factory.curves = args.ids.map(findWire);
           factory.constructionPlane = new Snap(new Vector(...args.normal), new Vector(...args.origin), new Vector(...args.x));
           factory.distance1 = args.distance;
           ${commandEnd}
-        }`, ["OffsetPlanarCurvesFactory", "ConstructionPlaneSnap", "Vector3"], [{ ids: uniqueIds, distance: millimetersToMeters(distanceMm), normal: frame.normal, origin: frame.originMm.map(millimetersToMeters), x: frame.xDirection }]);
+        }`, ["OffsetPlanarCurvesFactory", "ConstructionPlaneSnap", "Vector3"], [{ ids: uniqueIds, distance: millimetersToMeters(distanceMm), normal: frame.normal, origin: frame.originMm.map(millimetersToMeters), x: frame.xDirection, planeToleranceMm: 0.01 }]);
       } catch (error) { throw explainOffsetBasis(error); }
       return await this.state();
     }
@@ -9036,6 +9075,17 @@ export class PlasticityOperations {
       throw new Error("Curve loft start and end magnitudes must be finite and positive");
     }
     const curvature = ({ natural: "Natural", unconstrained: "Unconstrained", clamped: "Clamped" } as const)[options.curvature ?? "unconstrained"];
+    // C7: guide ends this call moved; a later failure says so, with the Undo steps it took and guideSnaps.
+    const snapsMade: LoftGuideSnap[] = [];
+    const undoBeforeSnaps = state.undoDepth;
+    const snapFailure = async (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      if (snapsMade.length === 0) return error instanceof Error ? error : new Error(message);
+      let steps: number | string = "an unknown number of";
+      try { steps = (await this.state()).undoDepth - undoBeforeSnaps; } catch { /* keep unknown */ }
+      const moved = snapsMade.map((snap) => `guide ${snap.guideId} end ${snap.fromMm.map((value) => value.toFixed(4)).join(", ")} -> ${snap.toMm.map((value) => value.toFixed(4)).join(", ")} (${snap.distanceMm.toPrecision(3)} mm)`).join("; ");
+      return Object.assign(new Error(`${message.split("\n")[0]}. Before the loft, snapToleranceMm moved ${snapsMade.length === 1 ? "a guide end" : `${snapsMade.length} guide ends`} onto the profiles (${moved}); the document is ${steps} Undo step${steps === 1 ? "" : "s"} past the call: undo ${steps} with plasticity_undo to restore the guides. guideSnaps: ${JSON.stringify(snapsMade)}`, { cause: error }), { guideSnaps: snapsMade });
+    };
     // Phase C item 10: guide ends a hair off a profile ("A guide curve is not touching a profile") are snapped onto the
     // nearest profile point first, by moving the guide's end vertex (one history step per moved end).
     if (guideIds.length > 0 && options.snapToleranceMm !== undefined && options.snapToleranceMm > 0) {
@@ -9076,16 +9126,30 @@ export class PlasticityOperations {
       let ends: LoftGuideEnd[] = [];
       try { ends = typeof this.runtime.readNative === "function" ? await readEnds() : []; } catch { ends = []; }
       const plan = loftSnapPlan(Array.isArray(ends) ? ends : [], options.snapToleranceMm);
-      for (const snap of plan.snaps) {
-        const controls = await this.listCurveControlPoints([snap.guideId], state.revision);
-        const vertex = controls.curves[0]?.boundaryVertices.find((candidate) => Math.hypot(...candidate.positionMm.map((value, i) => value - snap.fromMm[i]!)) <= 1e-4);
-        if (!vertex) throw new Error(`Guide ${snap.guideId}: no end vertex at ${snap.fromMm.map((value) => value.toFixed(4)).join(", ")} to snap`);
-        state = await this.moveCurveControlPoints([vertex.reference], snap.deltaMm, state.revision);
-      }
-      options.onSnap?.(plan.snaps);
+      try {
+        for (const snap of plan.snaps) {
+          const controls = await this.listCurveControlPoints([snap.guideId], state.revision);
+          const vertex = controls.curves[0]?.boundaryVertices.find((candidate) => Math.hypot(...candidate.positionMm.map((value, i) => value - snap.fromMm[i]!)) <= 1e-4);
+          if (!vertex) throw new Error(`Guide ${snap.guideId}: no end vertex at ${snap.fromMm.map((value) => value.toFixed(4)).join(", ")} to snap`);
+          state = await this.moveCurveControlPoints([vertex.reference], snap.deltaMm, state.revision);
+          snapsMade.push(snap);
+        }
+      } catch (error) { throw await snapFailure(error); }
+      if (snapsMade.length > 0) options.onSnap?.(snapsMade);
       revision = state.revision;
     }
 
+    try {
+      await this.loftCurvesNative(profileIds, items, edgeKeys, guideIds, options, curvature, startMagnitude, endMagnitude);
+    } catch (error) { throw snapsMade.length > 0 ? await snapFailure(error) : error; }
+    return await this.state();
+  }
+
+  private async loftCurvesNative(
+    profileIds: number[], items: LoftProfileItem[], edgeKeys: string[], guideIds: number[],
+    options: { trimGuides?: boolean; trimProfiles?: boolean; closed?: boolean; simplify?: boolean },
+    curvature: string, startMagnitude: number, endMagnitude: number,
+  ): Promise<void> {
     await this.runtime.mutate(nativeFunction`async function (Factory, Command, Curvature, args) {
       ${findView}
       if (this.executor.isBusy) throw new Error('Plasticity is busy');
@@ -9129,7 +9193,6 @@ export class PlasticityOperations {
       startMagnitude,
       endMagnitude,
     }]);
-    return await this.state();
   }
 
   async loftFaces(
@@ -11178,9 +11241,10 @@ export class PlasticityOperations {
       if (!analysis) { try { analysis = await this.patchBoundaryAnalysis(id, uniqueIds, boundary); } catch { analysis = undefined; } }
       const advice = PATCH_HOLE_ERROR_ADVICE[code] ?? "this FillHole code is undecoded on Plasticity 26.1.3.";
       // A clean pre-check is no contradiction: it knows only the measured causes (phase C wording).
+      // C5: no BLOCKING problem (report-only notes allowed) is "no known cause; likely ...", not a contradiction.
       const boundaryText = analysis
-        ? analysis.problems.length === 0
-          ? `the pre-check found no known cause (corner normals, angle budget, edge count, G2 corner curvature); likely a geometric G1/G2 condition it does not model: try G1 instead of G2 on one edge at a time, starting with edges whose neighbour faces meet at a sharp edge`
+        ? analysis.problems.every((problem) => !problem.blocking)
+          ? `the pre-check found no known blocking cause (corner normals, angle budget)${analysis.problems.length > 0 ? `; its notes, which may explain it: ${describePatchPrecheck(analysis, "all").replace(/\.$/, "")}` : ""}; likely a geometric G1/G2 condition it does not refuse on: try G1 instead of G2 on one edge at a time, starting with edges whose neighbour faces meet at a sharp edge or that a g2-corner-curvature note names`
           : describePatchPrecheck(analysis, "all").replace(/\.$/, "")
         : "unavailable";
       const explained = new Error(`${error.message.replace(/\.?\s*$/, "")}. FillHole error ${code}: ${advice} Boundary analysis: ${boundaryText}.`);

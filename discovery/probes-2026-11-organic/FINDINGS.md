@@ -169,3 +169,13 @@ probe JS in `work-p2c/js/`, run with `mutfile.ts` / `evalfile.ts`).
 | Loft guide 0.004 mm off | refused ("A guide curve is not touching a profile"); after moving the guide end onto the curve 8e-5 along it (2e-19 m off) still refused; onto the profile end vertex: lofted | snap prefers the end vertex |
 | Split volume drift | 136 mm³ on 777 007 mm³ (1.75e-4) at z = 10 on `organic-product`, two valid Solids | relative tolerance, warning up to 1 % |
 
+### Phase C review (C1-C9), live on 26.1.3
+- Face.EvalBasis is unchanged; regions: `nativeApi.db.lookupTopologyItem(region)` is a planar kernel Face whose
+  `GetInnerLoops()` length is the region's hole count (a 40 x 20 rectangle around a 10 x 5 one: 1).
+- Joining two sheets whose shared edge is 0 to 0.5 mm apart fails (`PK_BODY_sew_bodies` 1041), so a body edge with a
+  real G0 gap was not built live; the resample's no-replace path is unit-tested (gap along a third of the edge, and
+  only next to a vertex).
+- The attempt-2 rear closure: in the saved half the hole after deleting the rear face is open from (0, 23.37,
+  134.88) to (0, 56, 4) (no support face), which is the 22085; closed with the rebuilt profile Wire, band G2 + side G2
+  passes natively with no g2-corner-curvature note (the side was patched G2 to the band, so they curve alike).
+

@@ -2001,55 +2001,81 @@ export interface ContinuitySampleSummary {
   maximaIgnoringIsolatedSpikes: { g0Mm: number; g1Deg: number; g2Rel: number };
 }
 const SPIKE_NEIGHBOURS = 2;
+const SPIKE_MAX_COUNT = 2;
+const SPIKE_MAX_WIDTH = 2;
+const SPIKE_END_SAMPLES = 5;
+const SPIKE_NATIVE_END_MM = 1;
 /**
  * The continuity class rule used by plasticity_analyze_surface_continuity and plasticity_continuity_report alike.
  * class: the maxima over every sample and the native maxima (a native maximum can sit between or beyond the 100
- * samples, e.g. exactly at a corner vertex). interiorClass: samples 5..94. classIgnoringIsolatedSpikes: a sample is an
- * isolated spike at a level when it fails that level's tolerance while every sample within 2 indices of it passes (a
- * corner sample has neighbours on one side only); a native maximum that fails while the samples nearest its position
- * pass is a spike at that sample index too (source native-maximum). Spike samples are left out of every level, and the
- * class is taken from what remains. Live 26.1.3: band/side at the stadium corner, a vertex shared with a sharp edge,
- * reads 90 degrees as the native maximum with every sample below 0.07 degrees.
+ * samples, e.g. exactly at a corner vertex). interiorClass: samples 5..94, clamped to the overall maxima.
+ * classIgnoringIsolatedSpikes (phase C review, C3): spikes are G1/G2 artefacts at an edge end, never a G0 position
+ * failure, which always stands. A spike is a run of at most 2 failing samples whose neighbours within 2 indices pass,
+ * lying in the first or last 5 samples; or a failing native maximum that is not among the samples (every sample
+ * passes) and lies within 1 mm of an edge end vertex (source native-maximum). With more than 2 spikes, or any failing
+ * sample that is not part of one, there are no spikes and the class stands. Live 26.1.3: band/side at the stadium
+ * corner (a vertex shared with a sharp rim) reads 90 degrees as a native maximum at the vertex while every sample is
+ * below 0.07 degrees.
  */
-export function continuitySampleSummary(samples: ContinuitySamples, nativeMaxima: { g0Mm: number; g1Deg: number; g2Rel: number; g0AtMm?: Vector3 | undefined; g1AtMm?: Vector3 | undefined; g2AtMm?: Vector3 | undefined }, tolerances: { positionMm: number; normalAngleDeg: number; relativeCurvature: number }): ContinuitySampleSummary {
+export function continuitySampleSummary(samples: ContinuitySamples, nativeMaxima: { g0Mm: number; g1Deg: number; g2Rel: number; g0AtMm?: Vector3 | undefined; g1AtMm?: Vector3 | undefined; g2AtMm?: Vector3 | undefined }, tolerances: { positionMm: number; normalAngleDeg: number; relativeCurvature: number }, edgeEndsMm: Vector3[] = []): ContinuitySampleSummary {
   const n = samples.g1Deg.length;
   if (n === 0 || samples.g0Mm.length !== n || samples.g2Rel.length !== n || samples.pointsMm.length !== n) throw new Error("Continuity samples must be equal-length series");
-  const levels: Array<{ level: ContinuityLevel; values: number[]; tolerance: number; native: number; at?: Vector3 | undefined }> = [
-    { level: "G0", values: samples.g0Mm, tolerance: tolerances.positionMm, native: nativeMaxima.g0Mm, at: nativeMaxima.g0AtMm },
+  const levels: Array<{ level: "G1" | "G2"; values: number[]; tolerance: number; native: number; at?: Vector3 | undefined }> = [
     { level: "G1", values: samples.g1Deg, tolerance: tolerances.normalAngleDeg, native: nativeMaxima.g1Deg, at: nativeMaxima.g1AtMm },
     { level: "G2", values: samples.g2Rel.map((value) => Math.min(value, 1)), tolerance: tolerances.relativeCurvature, native: Math.min(nativeMaxima.g2Rel, 1), at: nativeMaxima.g2AtMm },
   ];
-  const spikes: ContinuitySpike[] = [];
-  const neighbourMax = (values: number[], index: number) => {
-    let max = -Infinity;
-    for (let j = Math.max(0, index - SPIKE_NEIGHBOURS); j <= Math.min(n - 1, index + SPIKE_NEIGHBOURS); j += 1) if (j !== index) max = Math.max(max, values[j]!);
-    return max;
-  };
-  for (const { level, values, tolerance, native, at } of levels) {
+  const atStart = (index: number) => index < SPIKE_END_SAMPLES;
+  const atEnd = (index: number) => index >= n - SPIKE_END_SAMPLES;
+  // Per level: its failing runs either all qualify as spikes, or the level has none and its maximum stands.
+  const perLevel = levels.map(({ level, values, tolerance, native, at }) => {
+    const found: ContinuitySpike[] = [];
+    const places = new Set<string>();
+    let disqualified = false;
     for (let index = 0; index < n; index += 1) {
       if (!(values[index]! > tolerance)) continue;
-      const around = neighbourMax(values, index);
-      if (around <= tolerance) spikes.push({ level, index, value: values[index]!, positionMm: samples.pointsMm[index]!, neighbourMax: around, source: "sample" });
+      let end = index;
+      while (end + 1 < n && values[end + 1]! > tolerance) end += 1;
+      let around = -Infinity;
+      for (let j = Math.max(0, index - SPIKE_NEIGHBOURS); j <= Math.min(n - 1, end + SPIKE_NEIGHBOURS); j += 1) if (j < index || j > end) around = Math.max(around, values[j]!);
+      const isolated = end - index + 1 <= SPIKE_MAX_WIDTH && around <= tolerance;
+      const placed = (atStart(index) && atStart(end)) || (atEnd(index) && atEnd(end));
+      if (!isolated || !placed) disqualified = true;
+      else {
+        places.add(`sample:${index}`);
+        for (let k = index; k <= end; k += 1) found.push({ level, index: k, value: values[k]!, positionMm: samples.pointsMm[k]!, neighbourMax: around === -Infinity ? 0 : around, source: "sample" });
+      }
+      index = end;
     }
     const sampledMax = Math.max(...values);
     if (native > tolerance && sampledMax <= tolerance) {
-      // The native maximum is not one of the samples: it is a spike at the sample nearest its position when the
-      // samples there pass (they all do here).
       const position = at ?? samples.pointsMm[values.indexOf(sampledMax)]!;
-      let nearest = 0;
-      for (let index = 1; index < n; index += 1) if (distance(samples.pointsMm[index]!, position) < distance(samples.pointsMm[nearest]!, position)) nearest = index;
-      spikes.push({ level, index: nearest, value: native, positionMm: position, neighbourMax: Math.max(values[nearest]!, neighbourMax(values, nearest)), source: "native-maximum" });
+      const endDistances = edgeEndsMm.map((end) => distance(end, position));
+      const endDistance = endDistances.length > 0 ? Math.min(...endDistances) : Infinity;
+      if (endDistance > SPIKE_NATIVE_END_MM) disqualified = true;
+      else {
+        let nearest = 0;
+        for (let index = 1; index < n; index += 1) if (distance(samples.pointsMm[index]!, position) < distance(samples.pointsMm[nearest]!, position)) nearest = index;
+        places.add(`native:${endDistances.indexOf(endDistance)}`);
+        found.push({ level, index: nearest, value: native, positionMm: position, neighbourMax: sampledMax, source: "native-maximum" });
+      }
     }
-  }
-  const excluded = new Set(spikes.filter((spike) => spike.source === "sample").map((spike) => spike.index));
-  const keptMax = (values: number[]) => values.reduce((max, value, index) => (excluded.has(index) ? max : Math.max(max, value)), 0);
+    return { level, values, spikes: disqualified ? [] : found, places: disqualified ? new Set<string>() : places };
+  });
+  // At most 2 spikes in all (the same place on G1 and G2 is one); more cancel every spike.
+  const allPlaces = new Set(perLevel.flatMap((entry) => [...entry.places]));
+  if (allPlaces.size > SPIKE_MAX_COUNT) for (const entry of perLevel) entry.spikes = [];
+  const spikes = perLevel.flatMap((entry) => entry.spikes);
   const overall = { g0Mm: Math.max(nativeMaxima.g0Mm, ...samples.g0Mm), g1Deg: Math.max(nativeMaxima.g1Deg, ...samples.g1Deg), g2Rel: Math.min(1, Math.max(nativeMaxima.g2Rel, ...samples.g2Rel)) };
-  // A level whose failing native maximum is a spike keeps only its samples; otherwise its native maximum counts.
-  const nativeSpike = (level: ContinuityLevel) => spikes.some((spike) => spike.level === level && spike.source === "native-maximum");
+  const keptFor = (entry: typeof perLevel[number], all: number) => {
+    if (entry.spikes.length === 0) return all;
+    const excluded = new Set(entry.spikes.filter((spike) => spike.source === "sample").map((spike) => spike.index));
+    return entry.values.reduce((max, value, index) => (excluded.has(index) ? max : Math.max(max, value)), 0);
+  };
   const kept = {
-    g0Mm: nativeSpike("G0") ? keptMax(samples.g0Mm) : Math.max(keptMax(samples.g0Mm), excluded.size === 0 ? nativeMaxima.g0Mm : 0),
-    g1Deg: nativeSpike("G1") ? keptMax(samples.g1Deg) : Math.max(keptMax(samples.g1Deg), excluded.size === 0 ? nativeMaxima.g1Deg : 0),
-    g2Rel: Math.min(1, nativeSpike("G2") ? keptMax(samples.g2Rel) : Math.max(keptMax(samples.g2Rel), excluded.size === 0 ? nativeMaxima.g2Rel : 0)),
+    // G0 is never excluded: a position failure always stands.
+    g0Mm: overall.g0Mm,
+    g1Deg: keptFor(perLevel[0]!, overall.g1Deg),
+    g2Rel: Math.min(1, keptFor(perLevel[1]!, overall.g2Rel)),
   };
   const interiorSlice = (values: number[]) => (n === 100 ? Math.max(...values.slice(5, 95)) : null);
   const interior = interiorSlice(samples.g1Deg) === null ? null : {
@@ -2071,11 +2097,11 @@ export function continuitySampleSummary(samples: ContinuitySamples, nativeMaxima
 export function withContinuitySummary<T extends Record<string, unknown>>(row: T, tolerances: { positionMm: number; normalAngleDeg: number; relativeCurvature: number }, keepSamples = false): T {
   const samples = row.samples as ContinuitySamples | undefined;
   if (!samples) return row;
-  const { samples: _dropped, ...rest } = row as T & { samples?: unknown };
+  const { samples: _dropped, edgeEndsMm: _ends, ...rest } = row as T & { samples?: unknown; edgeEndsMm?: unknown };
   const summary = continuitySampleSummary(samples, {
     g0Mm: Number(row.maximumPositionDeviationMm), g1Deg: Number(row.maximumNormalAngleDeviationDeg), g2Rel: Number(row.maximumRelativeCurvatureDeviation),
     g0AtMm: row.maximumPositionDeviationAtMm as Vector3 | undefined, g1AtMm: row.maximumNormalAngleDeviationAtMm as Vector3 | undefined, g2AtMm: row.maximumRelativeCurvatureDeviationAtMm as Vector3 | undefined,
-  }, tolerances);
+  }, tolerances, Array.isArray(row.edgeEndsMm) ? row.edgeEndsMm as Vector3[] : []);
   return {
     ...rest,
     ...(summary.interiorClass ? { interiorContinuity: analyzeClassName(summary.interiorClass) } : {}),

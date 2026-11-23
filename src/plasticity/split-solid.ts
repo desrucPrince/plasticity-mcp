@@ -31,27 +31,32 @@ export interface SplitSolidByPlaneResult {
   warnings?: string[];
 }
 
-/** Relative conservation tolerance (1e-6 of the source volume, at least 0.01 mm³) and the gross limit (1 %). */
+/** Relative conservation tolerance (1e-6 of the source volume, at least 0.01 mm³) and the gross limit (0.1 %). */
 export const SPLIT_VOLUME_RELATIVE_TOLERANCE = 1e-6;
 export const SPLIT_VOLUME_MIN_TOLERANCE_MM3 = 0.01;
-export const SPLIT_VOLUME_GROSS_LIMIT = 0.01;
+export const SPLIT_VOLUME_GROSS_LIMIT = 1e-3;
 
 export interface SplitVolumeCheck { differenceMm3: number; toleranceMm3: number; grossLimitMm3: number; status: "ok" | "warning" | "error"; message?: string }
 
 /**
- * Volume conservation of a native split. Native mass properties of B-spline Solids carry integration error
+ * Volume conservation of a native split. Native mass properties of curved (B-spline) Solids carry integration error
  * (live 26.1.3: 4.9 to 136 mm³ on 777 to 804 cm³ bodies, up to 1.8e-4 relative), so a difference above the tolerance
- * but within the gross limit is a warning on a split that otherwise succeeded; above the gross limit it is an error.
+ * but within the gross limit (0.1 %) is a warning on a split that otherwise succeeded; above it, an error. The
+ * integration error is named only when the source has a non-planar face (curved); a planar Solid's drift is
+ * reported as unexplained.
  */
-export function checkSplitVolume(inputMm3: number, resultMm3: number, label = "Split"): SplitVolumeCheck {
+export function checkSplitVolume(inputMm3: number, resultMm3: number, label = "Split", curved = true): SplitVolumeCheck {
   const differenceMm3 = Math.abs(resultMm3 - inputMm3);
   const toleranceMm3 = Math.max(SPLIT_VOLUME_MIN_TOLERANCE_MM3, Math.abs(inputMm3) * SPLIT_VOLUME_RELATIVE_TOLERANCE);
   const grossLimitMm3 = Math.max(toleranceMm3, Math.abs(inputMm3) * SPLIT_VOLUME_GROSS_LIMIT);
   if (!Number.isFinite(resultMm3) || !Number.isFinite(differenceMm3) || differenceMm3 > grossLimitMm3) {
-    return { differenceMm3, toleranceMm3, grossLimitMm3, status: "error", message: `${label} changed native volume by ${differenceMm3} mm³ (${relative(differenceMm3, inputMm3)}); the limit is ${grossLimitMm3} mm³ (1 % of ${inputMm3} mm³)` };
+    return { differenceMm3, toleranceMm3, grossLimitMm3, status: "error", message: `${label} changed native volume by ${differenceMm3} mm³ (${relative(differenceMm3, inputMm3)}); the limit is ${grossLimitMm3} mm³ (0.1 % of ${inputMm3} mm³)` };
   }
   if (differenceMm3 > toleranceMm3) {
-    return { differenceMm3, toleranceMm3, grossLimitMm3, status: "warning", message: `${label} changed native volume by ${differenceMm3} mm³ (${relative(differenceMm3, inputMm3)}), above the conservation tolerance ${toleranceMm3} mm³ but within 1 %; native volume of curved (B-spline) Solids is an integration with this order of error. The parts are valid; check them if the difference matters` };
+    const why = curved
+      ? "native volume of curved (B-spline) Solids is an integration with this order of error"
+      : "the source has only planar faces, so integration error does not explain it: the drift is unexplained";
+    return { differenceMm3, toleranceMm3, grossLimitMm3, status: "warning", message: `${label} changed native volume by ${differenceMm3} mm³ (${relative(differenceMm3, inputMm3)}), above the conservation tolerance ${toleranceMm3} mm³ but within 0.1 %; ${why}. The parts are valid; check them if the difference matters` };
   }
   return { differenceMm3, toleranceMm3, grossLimitMm3, status: "ok" };
 }
@@ -139,7 +144,8 @@ export class SplitSolidByPlaneRecipe {
       }
       const measured = await this.operations.measureSolidProperties(resultBodyIds, current.revision);
       const resultVolumeMm3 = measured.totals.volumeMm3;
-      const cutCheck = checkSplitVolume(inputVolumeMm3, resultVolumeMm3);
+      const curved = target.faces.length === 0 || target.faces.some((face) => !face.planar);
+      const cutCheck = checkSplitVolume(inputVolumeMm3, resultVolumeMm3, "Split", curved);
       if (cutCheck.status === "error") throw new Error(cutCheck.message);
       assertUnrelatedBodiesPreserved(contextVersions, current);
 
@@ -149,7 +155,7 @@ export class SplitSolidByPlaneRecipe {
       requireBodiesAbsent(current, temporaryBodyIds);
       if (current.regions.length !== initial.regions.length) throw new Error("Removing split tools did not restore the original Region count");
       const afterCleanup = await this.operations.measureSolidProperties(resultBodyIds, current.revision);
-      const cleanupCheck = checkSplitVolume(inputVolumeMm3, afterCleanup.totals.volumeMm3, "Split (after temporary-tool cleanup)");
+      const cleanupCheck = checkSplitVolume(inputVolumeMm3, afterCleanup.totals.volumeMm3, "Split (after temporary-tool cleanup)", curved);
       if (cleanupCheck.status === "error") throw new Error(cleanupCheck.message);
       const cleanupVolumeDifferenceMm3 = cleanupCheck.differenceMm3;
       // A cleanup that moved the volume by more than the cut did is its own finding; otherwise one warning covers both.
