@@ -6517,9 +6517,18 @@ test("bridges exact Wire endpoints with independent native continuity modes", as
   assert.deepEqual(calls[0]?.bindings, ["BridgeCurveFactory", "ContinuityType"]);
   assert.deepEqual(calls[0]?.values, [{ first, second, startContinuity: "G1", endContinuity: "G3" }]);
   assert.match(calls[0]?.source ?? "", /BridgeCurveCommand/);
-  assert.match(calls[0]?.source ?? "", /factory\.t1 = args\.first\.at === 'start' \? 0 : 1/);
+  assert.match(calls[0]?.source ?? "", /factory\.t1 = args\.first\.parameter \?\? \(args\.first\.at === 'start' \? 0 : 1\)/);
   assert.match(calls[0]?.source ?? "", /factory\.trim = false/);
   assert.match(calls[0]?.source ?? "", /factory\.pickClosestSenses\(\)/);
+
+  await operations.bridgeCurves({ ...first, parameter: 0.25, tensionG1Mm: 10, flip: true }, { ...second, tensionG2Mm: -5 }, "G2", "G2", "r1");
+  assert.deepEqual(calls[1]?.values, [{
+    first: { ...first, parameter: 0.25 }, second, startContinuity: "G2", endContinuity: "G2",
+    firstEnd: { tensions: [0.01, 0], flip: true }, secondEnd: { tensions: [0, -0.005] },
+  }]);
+  assert.match(calls[1]?.source ?? "", /factory\.sense1 = !factory\.sense1/);
+  assert.match(calls[1]?.source ?? "", /factory\.tensions2 = args\.secondEnd\?\.tensions/);
+  await assert.rejects(operations.bridgeCurves({ ...first, parameter: 1.5 }, second, "G2", "G2", "r1"), /between 0 and 1/);
 });
 
 test("rejects stale, missing, coincident, and non-Wire Curve Bridge references before mutation", async () => {

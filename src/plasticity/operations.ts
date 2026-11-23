@@ -209,8 +209,19 @@ interface NativeFaceDraftSamples {
   samples: Array<{ positionMm: Vector3; normal: Vector3 }>;
 }
 
-export interface CurveSegmentEndpointReference extends CurveSegmentReference {
+// Bridge end shaping (probes-2026-11-organic/bridge.ts, 26.1.3): tensionG1Mm/tensionG2Mm write the factory's
+// tensions1/tensions2 ([G1, G2] handle offsets in metres, the dialog's Tension G1/G2 rows; empty arrays are 0);
+// flip toggles the end's sense (the dialog's direction arrow).
+export interface BridgeEndShape {
+  tensionG1Mm?: number | undefined;
+  tensionG2Mm?: number | undefined;
+  flip?: boolean | undefined;
+}
+
+export interface CurveSegmentEndpointReference extends CurveSegmentReference, BridgeEndShape {
   at: "start" | "end";
+  /** Normalized position along the segment (0 start, 1 end); overrides at (the dialog's Parameter field, factory t1/t2). */
+  parameter?: number | undefined;
 }
 
 export interface CurveSegmentSampleReference extends CurveSegmentReference {
@@ -226,8 +237,25 @@ export interface CurveSegmentSampleDescriptor {
   tangent: Vector3;
 }
 
-export interface ShellEdgeEndpointReference extends EdgeReference {
+export interface ShellEdgeEndpointReference extends EdgeReference, BridgeEndShape {
   vertexId: number;
+}
+
+// Only shaped ends reach the native call, so unshaped bridges send exactly what they did before.
+const bridgeEndValues = (key: "firstEnd" | "secondEnd", reference: BridgeEndShape) => {
+  const tensions = reference.tensionG1Mm === undefined && reference.tensionG2Mm === undefined
+    ? undefined
+    : [millimetersToMeters(reference.tensionG1Mm ?? 0), millimetersToMeters(reference.tensionG2Mm ?? 0)];
+  if (tensions === undefined && reference.flip !== true) return {};
+  return { [key]: { ...(tensions ? { tensions } : {}), ...(reference.flip === true ? { flip: true } : {}) } };
+};
+
+function checkBridgeEnds(label: string, references: BridgeEndShape[]): void {
+  for (const reference of references) {
+    for (const value of [reference.tensionG1Mm, reference.tensionG2Mm]) {
+      if (value !== undefined && !Number.isFinite(value)) throw new Error(`${label} tension must be a finite number of millimetres`);
+    }
+  }
 }
 
 export interface CurveStructureDescriptor {
@@ -5650,8 +5678,14 @@ export class PlasticityOperations {
     if (invalidBodies.length > 0) {
       throw new Error(`Curve Bridge requires current Wire bodies: ${invalidBodies.map((reference) => reference.bodyId).join(", ")}`);
     }
-    if (first.bodyId === second.bodyId && first.segmentEntityId === second.segmentEntityId && first.at === second.at) {
+    if (first.bodyId === second.bodyId && first.segmentEntityId === second.segmentEntityId && first.at === second.at && first.parameter === second.parameter) {
       throw new Error("Curve Bridge endpoint references must be different");
+    }
+    checkBridgeEnds("Curve Bridge", references);
+    for (const reference of references) {
+      if (reference.parameter !== undefined && !(Number.isFinite(reference.parameter) && reference.parameter >= 0 && reference.parameter <= 1)) {
+        throw new Error("Curve Bridge parameter must be between 0 and 1");
+      }
     }
     const report = await this.listCurveDirections();
     if (report.revision !== revision) {
@@ -5665,7 +5699,7 @@ export class PlasticityOperations {
     };
     const firstPoint = resolve(first);
     const secondPoint = resolve(second);
-    if (dot(subtract(secondPoint, firstPoint), subtract(secondPoint, firstPoint)) <= 1e-18) {
+    if (first.parameter === undefined && second.parameter === undefined && dot(subtract(secondPoint, firstPoint), subtract(secondPoint, firstPoint)) <= 1e-18) {
       throw new Error("Curve Bridge endpoints must be distinct");
     }
     await this.runtime.mutate(nativeFunction`async function (Factory, Continuity, args) {
@@ -5688,13 +5722,17 @@ export class PlasticityOperations {
         try {
           const factory = new Factory(editor).resource(this);
           factory.start = segment(args.first);
-          factory.t1 = args.first.at === 'start' ? 0 : 1;
+          factory.t1 = args.first.parameter ?? (args.first.at === 'start' ? 0 : 1);
           factory.end = segment(args.second);
-          factory.t2 = args.second.at === 'start' ? 0 : 1;
+          factory.t2 = args.second.parameter ?? (args.second.at === 'start' ? 0 : 1);
           factory.startCurvature = Continuity[args.startContinuity];
           factory.endCurvature = Continuity[args.endContinuity];
           factory.trim = false;
           factory.pickClosestSenses();
+          if (args.firstEnd?.flip) factory.sense1 = !factory.sense1;
+          if (args.secondEnd?.flip) factory.sense2 = !factory.sense2;
+          if (args.firstEnd?.tensions) factory.tensions1 = args.firstEnd?.tensions;
+          if (args.secondEnd?.tensions) factory.tensions2 = args.secondEnd?.tensions;
           return await factory.commit();
         } catch (error) {
           failure = error;
@@ -5704,8 +5742,10 @@ export class PlasticityOperations {
       await editor.exec(command);
       if (failure) throw failure;
     }`, ["BridgeCurveFactory", "ContinuityType"], [{
-      first,
-      second,
+      first: { bodyId: first.bodyId, segmentEntityId: first.segmentEntityId, at: first.at, ...(first.parameter !== undefined ? { parameter: first.parameter } : {}) },
+      second: { bodyId: second.bodyId, segmentEntityId: second.segmentEntityId, at: second.at, ...(second.parameter !== undefined ? { parameter: second.parameter } : {}) },
+      ...bridgeEndValues("firstEnd", first),
+      ...bridgeEndValues("secondEnd", second),
       startContinuity,
       endContinuity,
     }]);
@@ -5725,6 +5765,11 @@ export class PlasticityOperations {
       throw new Error("Shell Edge Bridge requires two different source edges");
     }
     requireTopologySelection(state, references, "edge");
+    checkBridgeEnds("Shell Edge Bridge", references);
+    // BridgeEdgeFactory has no sense: its side1/side2 pick the edge's other vertex (live: flipping both moved the
+    // bridge to the opposite corners), which vertexId already chooses. Reverse a direction with an extracted edge
+    // and plasticity_bridge_curves flip instead.
+    if (references.some((reference) => reference.flip === true)) throw new Error("Shell Edge Bridge cannot flip an end: the end is set by vertexId; extract the edge and use plasticity_bridge_curves with flip");
     const resolved = references.map((reference, index) => {
       const body = state.bodies.find((candidate) => candidate.id === reference.bodyId)!;
       if (body.type !== "Solid" && body.type !== "Sheet") {
@@ -5774,14 +5819,18 @@ export class PlasticityOperations {
           factory.startCurvature = Continuity[args.startContinuity];
           factory.endCurvature = Continuity[args.endContinuity];
           factory.lockDistances = true;
+          if (args.firstEnd?.tensions) factory.tensions1 = args.firstEnd?.tensions;
+          if (args.secondEnd?.tensions) factory.tensions2 = args.secondEnd?.tensions;
           return await factory.commit();
         } catch (error) { failure = error; throw error; }
       };
       await editor.exec(command);
       if (failure) throw failure;
     }`, ["BridgeEdgeFactory", "BridgeEdgeCommand", "ContinuityType"], [{
-      first,
-      second,
+      first: { bodyId: first.bodyId, edgeId: first.edgeId, vertexId: first.vertexId },
+      second: { bodyId: second.bodyId, edgeId: second.edgeId, vertexId: second.vertexId },
+      ...bridgeEndValues("firstEnd", first),
+      ...bridgeEndValues("secondEnd", second),
       firstPosition: toMeters(resolved[0]!.vertex.positionMm),
       secondPosition: toMeters(resolved[1]!.vertex.positionMm),
       startContinuity,
@@ -5860,6 +5909,8 @@ export class PlasticityOperations {
           factory.startCurvature = Continuity[args.startContinuity];
           factory.endCurvature = Continuity[args.endContinuity];
           factory.lockDistances = true;
+          if (args.firstEnd?.tensions) factory.tensions1 = args.firstEnd?.tensions;
+          if (args.secondEnd?.tensions) factory.tensions2 = args.secondEnd?.tensions;
           return await factory.commit();
         } catch (error) { failure = error; throw error; }
       };

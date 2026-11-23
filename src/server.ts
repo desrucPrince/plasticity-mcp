@@ -1583,10 +1583,17 @@ const tangentCircleInputSchema = z.union([
   (value) => value.first.bodyId !== value.second.bodyId || value.first.segmentEntityId !== value.second.segmentEntityId,
   "Tangent-circle segment references must be different",
 );
+const bridgeEndShape = {
+  tensionG1Mm: z.number().finite().optional().describe("G1 tension (handle offset) at this end in mm, the dialog's Tension G1; 0 is the default, negative shortens"),
+  tensionG2Mm: z.number().finite().optional().describe("G2 tension at this end in mm, the dialog's Tension G2"),
+  flip: z.boolean().optional().describe("Reverse the bridge direction at this end (the dialog's direction arrow)"),
+};
 const curveSegmentEndpointSchema = z.object({
   bodyId: z.number().int().positive(),
   segmentEntityId: z.number().int().positive(),
   at: z.enum(["start", "end"]),
+  parameter: z.number().finite().min(0).max(1).optional().describe("Start the bridge at this normalized position along the segment instead of its start or end (the dialog's Parameter)"),
+  ...bridgeEndShape,
 }).strict();
 const bridgeCurveInputSchema = z.object({
   first: curveSegmentEndpointSchema,
@@ -1596,7 +1603,7 @@ const bridgeCurveInputSchema = z.object({
   intent,
   revision,
 }).strict().refine(
-  (value) => value.first.bodyId !== value.second.bodyId || value.first.segmentEntityId !== value.second.segmentEntityId || value.first.at !== value.second.at,
+  (value) => value.first.bodyId !== value.second.bodyId || value.first.segmentEntityId !== value.second.segmentEntityId || value.first.at !== value.second.at || value.first.parameter !== value.second.parameter,
   "Curve Bridge endpoint references must be different",
 );
 const bridgeCurveVerticesInputSchema = z.object({
@@ -1612,6 +1619,8 @@ const bridgeCurveVerticesInputSchema = z.object({
 );
 const shellEdgeEndpointSchema = edgeRef.extend({
   vertexId: z.number().int().nonnegative(),
+  tensionG1Mm: bridgeEndShape.tensionG1Mm,
+  tensionG2Mm: bridgeEndShape.tensionG2Mm,
 }).strict();
 const bridgeShellEdgesInputSchema = z.object({
   first: shellEdgeEndpointSchema,
@@ -4162,13 +4171,13 @@ function createServerWithCatalog(
       "normal" in input ? input.normal : [0, 0, 1],
       "plane" in input ? input.plane : undefined,
     )));
-  tool("plasticity_bridge_curves", "Create one independent native B-Spline between two exact current Wire segment endpoints while preserving both source Wires. Use plasticity_list_curve_directions immediately before this call. G0 matches position, G1 adds tangent continuity, G2 adds curvature continuity, and G3 adds third-order geometric continuity at each end. The operation occupies one Plasticity history step.", bridgeCurveInputSchema, async ({ first, second, startContinuity, endContinuity, intent: purpose, revision: current }) =>
+  tool("plasticity_bridge_curves", "Create one independent native B-Spline between two exact current Wire segment endpoints while preserving both source Wires. Use plasticity_list_curve_directions immediately before this call. Each end may start at a normalized parameter along its segment instead of the start or end, reverse its direction (flip), and set its Tension G1/G2 handle offset in mm (tensionG1Mm, tensionG2Mm; 0 default, negative shortens). G0 matches position, G1 adds tangent continuity, G2 adds curvature continuity, and G3 adds third-order geometric continuity at each end. The operation occupies one Plasticity history step.", bridgeCurveInputSchema, async ({ first, second, startContinuity, endContinuity, intent: purpose, revision: current }) =>
     await journaled("bridge-curves", purpose, { first, second, startContinuity, endContinuity }, () =>
       session.get().bridgeCurves(first, second, startContinuity, endContinuity, current)));
   tool("plasticity_bridge_curve_vertices", "Create one independent native B-Spline between two exact current open Wire vertices while preserving both source Wires. Use plasticity_list_curve_vertices immediately before this call and pass its numeric vertexId values. G0 through G3 continuity is selected independently at the two ends; internal or stale vertices are rejected before mutation.", bridgeCurveVerticesInputSchema, async ({ first, second, startContinuity, endContinuity, intent: purpose, revision: current }) =>
     await journaled("bridge-curve-vertices", purpose, { first, second, startContinuity, endContinuity }, () =>
       session.get().bridgeCurveVertices(first, second, startContinuity, endContinuity, current)));
-  tool("plasticity_bridge_shell_edges", "Create one independent native B-Spline between explicitly selected endpoints of two exact current Solid or Sheet edges while preserving both source bodies. Each reference must pair a current edgeId with one of that edge's returned vertexIds. G0 through G3 continuity is selected independently at the two ends; exact endpoint and tangent read-back is required after the one-step operation.", bridgeShellEdgesInputSchema, async ({ first, second, startContinuity, endContinuity, intent: purpose, revision: current }) =>
+  tool("plasticity_bridge_shell_edges", "Create one independent native B-Spline between explicitly selected endpoints of two exact current Solid or Sheet edges while preserving both source bodies. Each reference must pair a current edgeId with one of that edge's returned vertexIds. G0 through G3 continuity is selected independently at the two ends, and each end takes an optional Tension G1/G2 handle offset in mm (tensionG1Mm, tensionG2Mm); exact endpoint and tangent read-back is required after the one-step operation.", bridgeShellEdgesInputSchema, async ({ first, second, startContinuity, endContinuity, intent: purpose, revision: current }) =>
     await journaled("bridge-shell-edges", purpose, { first, second, startContinuity, endContinuity }, () =>
       session.get().bridgeShellEdges(first, second, startContinuity, endContinuity, current)));
   tool("plasticity_create_ellipse", "Create one exact native closed elliptical Wire and Region from explicit major and minor radii. The major axis follows xDirection rotated by angleDegrees in the selected plane. Inputs may use world coordinates or a referenced construction plane.", ellipseInputSchema, async (input) =>
