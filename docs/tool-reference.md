@@ -1678,6 +1678,33 @@ edges of four bodies. On the benchmark's crowned pad and a filleted box, edges
 that read `discontinuous` because of a 1.4-17 mm G0 spike at one end read
 `worstAt: "corner"` with `interior.g0Mm` below 1e-12, and the plane-to-fillet
 edges show `absoluteCurvature` 0 and 0.3333/mm (R3) where relative G2 says 1.
+`plasticity_continuity_report` runs the same native sampler over every edge
+of one body that two faces share, in one native read (a 33-edge Solid reads in
+about 0.15 s). `bodyId` alone takes every such edge; `faceIds` keeps the edges
+between two listed faces, or, with `faceMode: "touching"`, every edge that
+touches a listed face; `edgeIds` keeps only those edges. Tolerances
+(`positionToleranceMm`, `normalAngleToleranceDeg`,
+`relativeCurvatureTolerance`) default as in
+`plasticity_analyze_surface_continuity`. Per edge: `edgeId`, `faceIds`,
+`lengthMm`, `class` (`G2`, `G1`, `G0`, or `none` for a gap; from the maxima
+over all 100 samples, corners included) and `interiorClass` (samples 5..94),
+`normalAngleDeg` and `relativeCurvature` (each `max`, `mean`, `interiorMax`,
+`interiorMean`), `positionMm` (`max`, `interiorMax`), the worst location
+(`worstAtMm` of the first failing level, `worstAt` corner or interior) and
+`absoluteCurvature` where the continuity tool gives it. Edges come worst first;
+`summary` has `counts` and `interiorCounts` per class and the ten worst edges.
+`wireIds` adds, per Wire, every junction between consecutive segments (found by
+coincident ends, in any order or direction) with `curvaturePerMm` on each side,
+`tangentAngleDeg` (0 when smooth), `relativeCurvatureMismatch` of the curvature
+vectors (1 at an S-shaped junction) and a G0/G1/G2 `class` (the normal
+tolerance also classifies the tangent angle), plus per segment the min and max
+curvature and `inflections`, the number of curvature sign changes between
+consecutive samples: the numbers of a curvature comb. Live on 26.1.3: on the
+organic tutorial Solid every one of its 33 two-face edges came back, and the
+33 rows of the earlier per-edge read-back matched in class and interior normal
+angle to 0.000 deg; a filleted polyline reads two G1 junctions with 0 and
+0.2/mm (R5), a plain corner G0 at 90 deg, and a NURBS split at 0.3 one G2
+junction.
 `plasticity_probe_surface` reads exact points on a curved Solid or Sheet. Give
 `rays` (1-64 `{ originMm, direction }`) or `gridMm: { axis, at }`: grid rays
 travel along -axis (default `z`) from 1 mm outside the body's bounds, and each
@@ -2732,6 +2759,47 @@ only. `guideIds` shapes the interior, `faces` is the dialog's Faces option
 (`single`, `minimal`, `multiple`) and `smoothness` its internal smoothness
 (`sharp`, `smooth`). A closed loop may be one edge. Verified on 26.1.3: an open
 cylinder top patched G0 / G1 / G2 measured 90 deg / 0 deg / 0.04 deg at the rim.
+`precheck` (`refuse`, the default; `warn`; `off`) runs a boundary pre-check
+before the native patch whenever an edge is asked G1 or G2 (the factory's own
+default continuity is G0, so a call without G1/G2 is not checked). With
+`refuse`, a blocking problem refuses the patch before any change; the error
+names the corner (vertex id and position in mm) or the edges, what was
+measured, what is needed and what to change. With `warn` the native patch runs
+anyway and the result carries the analysis as `precheck`. With `off` there is
+no check. Whatever the mode, a native FillHole error 22092, 22093 or 22094
+comes back with what the code went with in the live runs and the boundary
+analysis, not the raw error alone. If the analysis itself cannot run, the patch
+runs as before. A call without `precheck` returns exactly what it returned
+before on every boundary the pre-check passes (live: the same reply keys,
+bodies, bounds and continuity read-back as commit 679468e on six boundaries).
+What blocks (each rule was measured live; see
+discovery/probes-2026-11-organic/FINDINGS.md):
+- more than 20 boundary edges on more than 20 neighbour faces once any edge is
+  G1 or G2 (20 pass; 21 and 22 fail natively with 22093 or 22094, even with
+  one edge G1); with fewer distinct faces it is reported only;
+- at a vertex where every face shares one tangent plane, the patch closes the
+  vertex and either side is G1/G2: the faces' interior angles there plus the
+  patch's own corner angle must add up to 360 deg (within 10 deg). The
+  tutorial rebuild's first rear closure read 180 + 180.2 + 90 deg for the
+  faces alone and failed natively at every G1 choice;
+- with `faces: "single"` or `smoothness: "smooth"`, a corner whose two edges
+  are both G1/G2 and whose neighbour normals differ by more than 2 deg. With
+  the default options native creases the patch from such a corner and
+  succeeds (an open box at G1 on all four walls), so there it is reported only.
+What is reported only: two boundary edges on one neighbour face with different
+continuity (Indie Patch applies continuity per neighbouring face, so both get
+the same one).
+`plasticity_check_patch_boundary` is the same analysis alone, read-only, with
+the same boundary inputs (`id`, `edgeIds`, `curveIds`, `continuity`,
+`edgeContinuity`, plus `faces` and `smoothness`, which decide whether a
+disagreeing corner blocks). It returns `ok`, `problems` (`kind`:
+`too-many-edges`, `angle-budget`, `normals-disagree` or
+`shared-face-continuity`; `cornerVertexId` and `positionMm` or `edgeIds`,
+`faceIds`, `measured`, `needed`, `blocking`, `message`, `advice`), `corners`
+(per corner: the two items and their continuity, `boundaryTurnDeg`,
+`patchAngleDeg`, `neighbourNormalAngleDeg`, `smooth`, `faceCount`,
+`faceAngles` and `angleSumDeg`), `edges` (per edge: its neighbour face and
+`sharesFaceWith`) and a one-line `summary`.
 `plasticity_cap_sheet_holes` fills every planar open boundary on one or more
 current Sheet bodies in one native history step. Use it when all compatible
 openings should be closed; Plasticity promotes a fully closed shell to a Solid.
@@ -2780,6 +2848,19 @@ validity, exact bounds and volumes for both forms, exercises one-step Undo/Redo,
 and restores the initial empty scene.
 `plasticity_create_nurbs_curve` creates a native interpolating NURBS Wire
 through three or more 3D millimeter points for smooth outlines and sweep paths.
+`plasticity_create_plane_curve` enters a curve as 2D points on a plane, for
+profiles traced from a photo. `plane` is `xy`, `xz` or `yz` with optional
+`offsetMm` along +Z, +Y or +X (`xz` at `offsetMm` 5 is the plane y = 5; xy maps
+a point (a, b) to x, y, xz to x, z and yz to y, z), or `{ originMm, uAxis,
+vAxis }` (u is normalised, v is made perpendicular to u; `offsetMm` moves along
+u x v). `points2dMm` are scaled by `scale` about the plane origin, then moved by
+`translate2dMm`. `mode: "control"` (default, three or more points) makes them
+the control polygon, the native path of `plasticity_create_control_point_curve`;
+`mode: "interpolate"` (two or more) passes through them, the path of
+`plasticity_create_nurbs_curve`. `closed` closes the curve. The reply adds
+`wireId`, `worldPointsMm` (the 3D points used) and `plane` (origin, axes,
+normal). Live: sampled native points of control and interpolated curves on xz,
+xy, yz and a tilted custom plane lay on the plane within 1.1e-14 mm.
 `plasticity_inspect_curve_structure` reads a compact exact B-Rep description of
 selected Wires, including segment type and length and, for native B-Splines,
 degree, control-point count, spans, normalized knot parameters with

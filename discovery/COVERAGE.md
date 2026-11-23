@@ -128,7 +128,7 @@ Names without the `Factory` suffix are Factory classes. "Checked" lists the file
 
 | Capability | Status | MCP route / what is missing |
 |---|---|---|
-| Spline drawing (interpolated) | covered | `plasticity_create_nurbs_curve`, `create_polyline`, `create_helix` |
+| Spline drawing (interpolated) | covered | `plasticity_create_nurbs_curve`, `create_polyline`, `create_helix`; `plasticity_create_plane_curve` (2D points on xy/xz/yz or a custom plane, control or interpolate) |
 | Control-point curve | gap | see #1 |
 | Curve fillet | partial | `plasticity_fillet_curve_vertices` for vertices of one Wire; curve-to-curve missing (#4) |
 | Curve offset | covered (planar) | `plasticity_offset_planar_curves`; non-planar offset is not driven |
@@ -267,7 +267,7 @@ Matching is by name similarity, then by the closest tool when the route differs 
 | `command:export-screenshot` | plasticity_screenshot |
 | `command:remove-material` | plasticity_set_appearance_material (materialId 0) |
 | `command:dimension` | plasticity_set_block_dimensions / set_radius_dimension / set_rectangle_dimensions / create_*_measurement |
-| `command:measure-continuity` | plasticity_analyze_surface_continuity |
+| `command:measure-continuity` | plasticity_analyze_surface_continuity; plasticity_continuity_report (every two-face edge of a body, plus Wire junctions) |
 | `command:check` | plasticity_validate_bodies / diagnose |
 | `command:create-viewspace-construction-plane` | plasticity_create_construction_plane (explicit, not camera-relative) |
 | `command:create-viewspace-construction-plane-at-origin` | plasticity_create_construction_plane (explicit, not camera-relative) |
@@ -354,7 +354,7 @@ Matching is by name similarity, then by the closest tool when the route differs 
 | `command:offset-face-loop` | plasticity_offset_face_loops |
 | `command:offset-region` | plasticity_offset_regions |
 | `command:offset-vertex` | plasticity_offset_vertices |
-| `command:patch` | plasticity_patch_regions / patch_closed_wires / patch_sheet_hole / patch_solid_edge_loops |
+| `command:patch` | plasticity_patch_regions / patch_closed_wires / patch_sheet_hole / patch_solid_edge_loops; plasticity_check_patch_boundary (read-only Indie Patch pre-check) |
 | `command:match-face` | plasticity_match_faces |
 | `command:join` | plasticity_join_curves |
 | `command:join-curves` | plasticity_join_curves |
@@ -415,7 +415,7 @@ Each class appears once. Class codes: E = covered-equivalent, P = partial, G = g
 | F7 | ConstrainedSurfaceWithPreviewFactory | surfaces | covered-equivalent | plasticity_create_constrained_surface | ConstrainedSurface factory used (operations.ts:6915) |
 | F8 | ConvertMeshToPolySplinesFactory | surfaces | gap | none |  Checked: src/plasticity/operations.ts, src/server.ts (no hit). |
 | F9 | CornerRectangleFactory | curves/sketch | covered-equivalent | plasticity_create_rectangle |  |
-| F10 | CurveWithPreviewFactory | curves/sketch | covered-equivalent | plasticity_create_polyline / plasticity_create_nurbs_curve | Curve factory used; preview variant is UI |
+| F10 | CurveWithPreviewFactory | curves/sketch | covered-equivalent | plasticity_create_polyline / plasticity_create_nurbs_curve / plasticity_create_plane_curve | Curve factory used; preview variant is UI |
 | F11 | CutCurveFactory | curves/sketch | partial | plasticity_trim_curve_fragments / split_curve_segment | see CutCurveCommand Checked: src/plasticity/operations.ts, src/server.ts (no hit). |
 | F12 | DiagonalRectangleFactory | curves/sketch | covered-equivalent | plasticity_create_rectangle |  |
 | F13 | DimensionDistanceFactory | measurement/dimensions | partial | plasticity_create_topology_distance_measurement | see DimensionDistanceCommand Checked: src/plasticity/operations.ts, src/server.ts (no hit). |
@@ -541,7 +541,7 @@ Each class appears once. Class codes: E = covered-equivalent, P = partial, G = g
 | LineCommand | curves/sketch | covered-equivalent | plasticity_create_polyline | CurveFactory Polyline |
 | LockSelectedCommand | view/camera/visibility | covered-equivalent | plasticity_set_locked |  |
 | ManageMySharedDocumentsCommand | other/UI-only | n/a (UI-only/internal) | none | account/sharing UI; pointless |
-| MeasureContinuityCommand | measurement/dimensions | covered-equivalent | plasticity_analyze_surface_continuity | MeasureContinuity factory used |
+| MeasureContinuityCommand | measurement/dimensions | covered-equivalent | plasticity_analyze_surface_continuity, plasticity_continuity_report | MeasureContinuity factory used; the report runs every two-face edge of a body in one read (organic-tools-2) |
 | MeasureMoveFaceCommand | measurement/dimensions | covered-equivalent | plasticity_move_faces | numeric delta |
 | MeasureMoveItemCommand | measurement/dimensions | covered-equivalent | plasticity_move |  |
 | MoveCommand | transforms/align | covered-equivalent | plasticity_move |  |
@@ -553,7 +553,7 @@ Each class appears once. Class codes: E = covered-equivalent, P = partial, G = g
 | OutlinerChangeSelectionCommand | selection | n/a (UI-only/internal) | plasticity_select_bodies / select_faces / select_edges / select_curves / select_nodes | mouse-selection wrapper; programmatic selection exists, click semantics pointless |
 | PasteCommand | transforms/align | covered-equivalent | plasticity_duplicate_bodies |  |
 | PasteWithPlacementCommand | transforms/align | covered-equivalent | plasticity_duplicate_bodies (+ plasticity_move) |  |
-| PatchHoleInSheetCommand | surfaces | covered | plasticity_patch_sheet_hole | PatchHoleInSheet factory used; continuity, per-edge continuity, curves, guides, topology, smoothness exposed (probes-2026-11-organic) |
+| PatchHoleInSheetCommand | surfaces | covered | plasticity_patch_sheet_hole, plasticity_check_patch_boundary | PatchHoleInSheet factory used; continuity, per-edge continuity, curves, guides, topology, smoothness exposed (probes-2026-11-organic); boundary pre-check (`precheck` refuse/warn/off) and FillHole 22092/22093/22094 explanations (organic-tools-2) |
 | PatchRegionCommand | surfaces | covered-equivalent | plasticity_patch_regions | PatchRegion factory used |
 | PolySplinesCommand | surfaces | gap | none | no PolySplines/subdivision workflow in src Checked: src/plasticity/operations.ts (no hit). |
 | PopIsolationCommand | view/camera/visibility | covered-equivalent | plasticity_set_visibility | explicit ids; "invert/all/isolate" = list_bodies then set |
@@ -580,7 +580,7 @@ Each class appears once. Class codes: E = covered-equivalent, P = partial, G = g
 | SquareEdgeCommand | transforms/align | gap | none | purpose not verified Checked: src/plasticity/operations.ts (no hit). |
 | SquareFaceCommand | transforms/align | gap | none | purpose not verified Checked: src/plasticity/operations.ts (no hit). |
 | ThickenCommand | solids/primitives | covered-equivalent | plasticity_thicken_faces / plasticity_thicken_sheets |  |
-| ToggleCurvatureCommand | view/camera/visibility | n/a (UI-only/internal) | plasticity_analyze_edge_curvature (data only) | display toggle; pointless via MCP |
+| ToggleCurvatureCommand | view/camera/visibility | n/a (UI-only/internal) | plasticity_analyze_edge_curvature, plasticity_continuity_report wireIds (data only) | display toggle; pointless via MCP; the report's Wire junctions are the numeric curvature comb |
 | ToggleHiddenCommand | view/camera/visibility | covered-equivalent | plasticity_set_visibility | explicit ids; "invert/all/isolate" = list_bodies then set |
 | ToggleSelectableCommand | view/camera/visibility | covered-equivalent | plasticity_set_locked | approximation |
 | ToggleVisibilityCommand | view/camera/visibility | covered-equivalent | plasticity_set_visibility | explicit ids; "invert/all/isolate" = list_bodies then set |
@@ -595,7 +595,7 @@ Each class appears once. Class codes: E = covered-equivalent, P = partial, G = g
 
 | Class | Kind | MCP tool | What is missing |
 |---|---|---|---|
-| CurveCommand | Command | plasticity_create_polyline / create_nurbs_curve | only CurveType.Polyline and CurveType.NURBS (interpolating); control-point curve missing |
+| CurveCommand | Command | plasticity_create_polyline / create_nurbs_curve / create_plane_curve | only CurveType.Polyline and CurveType.NURBS (interpolating); control-point curve missing |
 | CutCommand | Command | plasticity_cut_with_faces | planar cutter faces only; cutWithFaces throws on non-planar (operations.ts:4656) |
 | ExtendSheetCommand | Command | plasticity_extend_sheet_edges | shape fixed to Linear, type Distance, limit Minimal (operations.ts:7650-7657); no bias1/bias2 (commands.json extend-sheet:bias1/bias2), no tangent/natural shape, no extend-to-target |
 | ExtrudeCommand | Command | plasticity_extrude_faces / extrude_profile / extrude_regions | only factory.distance1 set (operations.ts:4864-4930; commands.json also lists extrude:angle1, extrude:shear, extrude:thickness); no two-sided distance, draft, direction, open-curve-to-sheet |
