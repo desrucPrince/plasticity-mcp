@@ -10424,13 +10424,15 @@ export class PlasticityOperations {
       edgeContinuity?: Array<{ edgeId: string; continuity: PatchHoleContinuity }> | undefined;
       faces?: PatchHoleTopology | undefined;
       smoothness?: PatchHoleSmoothness | undefined;
+      toleranceMm?: number | undefined;
     } = {},
   ): Promise<RuntimeState> {
     const state = await this.state();
     if (state.revision !== revision) {
       throw new Error(`Stale reference: expected revision ${revision}, current revision is ${state.revision}`);
     }
-    const { curveIds, guideIds, continuity, edgeContinuity, faces, smoothness } = options;
+    const { curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm } = options;
+    if (toleranceMm !== undefined && !(Number.isFinite(toleranceMm) && toleranceMm > 0 && toleranceMm <= 1)) throw new Error("Sheet-hole patch toleranceMm must be greater than 0 and at most 1");
     const sheet = state.bodies.find((body) => body.id === id);
     if (sheet?.type !== "Sheet") throw new Error(`Hole patch requires a current Sheet body: ${id}`);
     if (edgeIds.length < 1) throw new Error("Sheet-hole patch needs at least one boundary edge (a closed loop may be a single edge)");
@@ -10487,6 +10489,7 @@ export class PlasticityOperations {
       }
       if (args.topologyName !== undefined) factory.topology = enumMember(pk_default.a.FillHoleTopologyType, 'FillHoleTopologyType', args.topologyName);
       if (args.smoothnessName !== undefined) factory.internalSmoothness = enumMember(pk_default.a.FillHoleInternalSmoothnessType, 'FillHoleInternalSmoothnessType', args.smoothnessName);
+      if (args.tolerance !== undefined) factory.tolerance = args.tolerance;
       ${commandEnd}
     }`, ["PatchHoleInSheetFactory", "ContinuityType", "pk_default"], [{
       id,
@@ -10497,6 +10500,7 @@ export class PlasticityOperations {
       ...(edgeContinuity !== undefined ? { edgeContinuity: edgeContinuity.map((entry) => ({ edgeId: entry.edgeId, continuityName: PATCH_HOLE_CONTINUITY[entry.continuity] })) } : {}),
       ...(faces !== undefined ? { topologyName: PATCH_HOLE_TOPOLOGY[faces] } : {}),
       ...(smoothness !== undefined ? { smoothnessName: PATCH_HOLE_SMOOTHNESS[smoothness] } : {}),
+      ...(toleranceMm !== undefined ? { tolerance: millimetersToMeters(toleranceMm) } : {}),
     }]);
     return await this.state();
   }

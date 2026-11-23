@@ -4802,8 +4802,9 @@ function createServerWithCatalog(
     edgeContinuity: z.array(z.object({ edgeId: z.string().min(1), continuity: z.enum(["g0", "g1", "g2"]) }).strict()).min(1).max(4096).optional(),
     faces: z.enum(["single", "minimal", "multiple"]).optional(),
     smoothness: z.enum(["sharp", "smooth"]).optional(),
-    intent, revision }).strict(), async ({ id, edgeIds, curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, intent: purpose, revision: current }) =>
-    await journaled("patch-sheet-hole", purpose, { id, edgeIds, curveIds, guideIds, continuity, edgeContinuity, faces, smoothness }, () => session.get().patchSheetHole(id, edgeIds, current, { curveIds, guideIds, continuity, edgeContinuity, faces, smoothness })));
+    toleranceMm: z.number().finite().positive().max(1).optional().describe("The dialog's Tolerance in mm (native default 0.01 mm); a looser value lets a G1/G2 patch accept boundary corners whose neighbour faces disagree slightly"),
+    intent, revision }).strict(), async ({ id, edgeIds, curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm, intent: purpose, revision: current }) =>
+    await journaled("patch-sheet-hole", purpose, { id, edgeIds, curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm }, () => session.get().patchSheetHole(id, edgeIds, current, { curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm })));
   tool("plasticity_cap_sheet_holes", "Cap every planar open boundary of one or more native Sheet bodies in one history step.", z.object({ ids, intent, revision }).strict(), async ({ ids: sheetIds, intent: purpose, revision: current }) =>
     await journaled("cap-sheet-holes", purpose, { ids: sheetIds }, () => session.get().capSheetHoles(sheetIds, current)));
   tool("plasticity_extend_sheet_edges", "Extend selected boundary edges of one native Sheet by a positive millimeter distance, or up to another body with targetId (give exactly one). shape sets the extension curve (linear by default, soft, reflective, natural). merge=false keeps the extension as a separate face instead of one merged surface.", z.object({
