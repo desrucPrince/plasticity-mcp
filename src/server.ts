@@ -3534,6 +3534,22 @@ function createServerWithCatalog(
     await session.get().analyzeEdgeCurvature(edges, current), true);
   tool("plasticity_analyze_face_draft", "Sample exact native B-Rep face normals on a finite interior grid and classify each selected Solid or Sheet face as positive, negative, neutral, or mixed draft relative to an explicit pull direction and minimum draft angle. Signed draft is asin(normal dot pull): walls parallel to pull are 0 degrees, outward normals toward pull are positive, and opposite normals are negative. The compact extrema do not prove continuous extrema, mold parting, release paths, or print support requirements.", faceDraftInputSchema, async ({ faces, pullDirection, minimumDraftDeg, samplesPerDirection, revision: current }) =>
     await session.get().analyzeFaceDraft(faces, pullDirection, minimumDraftDeg, samplesPerDirection, current), true);
+  tool("plasticity_continuity_report", "Read-only continuity report for a whole body: every edge shared by two faces of bodyId (or only edges between two listed faceIds, or touching one with faceMode: touching; or just edgeIds) through the same native sampler as plasticity_analyze_surface_continuity, in one native read. Per edge: edgeId, faceIds, lengthMm, class (G2, G1, G0, or none for a gap; from the maxima over all 100 samples, corners included) and interiorClass (samples 5..94), normal deviation in degrees (max, mean, interiorMax, interiorMean), relative G2 curvature mismatch |k1 - k2| / (|k1| + |k2|) (max, mean, interiorMax, interiorMean), position deviation, and the worst location. summary has counts per class and the worst edges first. wireIds adds a curvature-comb style report per Wire: every junction between consecutive segments with the curvature on each side (1/mm), the tangent angle (degrees, 0 when smooth) and a G0/G1/G2 class, plus per segment min/max curvature and the number of curvature sign changes (inflections). Tolerances as in plasticity_analyze_surface_continuity (the normal tolerance also classifies wire tangent angles).", z.object({
+    bodyId: z.number().int().positive().optional(),
+    faceIds: z.array(z.string().min(1)).min(1).max(4096).optional(),
+    faceMode: z.enum(["between", "touching"]).optional(),
+    edgeIds: z.array(z.string().min(1)).min(1).max(4096).optional(),
+    wireIds: z.array(z.number().int().positive()).min(1).max(256).optional(),
+    positionToleranceMm: z.number().finite().positive().default(0.01),
+    normalAngleToleranceDeg: z.number().finite().positive().max(180).default(0.1),
+    relativeCurvatureTolerance: z.number().finite().positive().default(0.05),
+    revision,
+  }).strict().superRefine((input, context) => {
+    if (input.bodyId === undefined && input.wireIds === undefined) context.addIssue({ code: "custom", path: ["bodyId"], message: "Give bodyId, wireIds, or both" });
+    if (input.bodyId === undefined && (input.faceIds !== undefined || input.edgeIds !== undefined)) context.addIssue({ code: "custom", path: ["bodyId"], message: "faceIds and edgeIds need a bodyId" });
+    if (input.faceMode !== undefined && input.faceIds === undefined) context.addIssue({ code: "custom", path: ["faceMode"], message: "faceMode needs faceIds" });
+  }), async ({ revision: current, ...request }) =>
+    await session.get().continuityReport(request, current), true);
   tool("plasticity_analyze_surface_continuity", "Sample Plasticity's native B-Rep continuity evaluator at 100 positions along each selected current Solid or Sheet edge shared by exactly two faces. Returns maximum G0 position deviation in millimeters, G1 normal-angle deviation in degrees, Plasticity's dimensionless relative G2 curvature deviation, their locations, and hierarchical G0/G1/G2 tolerance results. Relative G2 is Plasticity's |k1 - k2| / (|k1| + |k2|) of the curvatures across the edge (live: R5 against R10 reads 0.3333, R5 against R20 0.6), so it reads 1.0 whenever one side is flat (a plane meeting a fillet), however small the other curvature; absoluteCurvature { side1PerMm, side2PerMm } gives the magnitude of the curvature across the edge on each face at the worst G2 sample, when a face parameter direction runs across the edge. They are magnitudes: an S-shaped join (curving opposite ways) and a same-sense join with equal magnitudes look alike there, while relative G2 tells them apart. interior { g0Mm, g1Deg, g2Rel } is the maximum over samples 5..94, leaving out the 5 samples at each end (the corners), and worstAt says whether the first level that fails (G2 when all pass) is worst at a corner or in the run of the edge, so one corner spike does not hide an otherwise G2 edge. This is native surface sampling rather than an exact continuous maximum; it does not use the display mesh and does not change the document.", surfaceContinuityInputSchema, async ({ edges, positionToleranceMm, normalAngleToleranceDeg, relativeCurvatureTolerance, revision: current }) =>
     await session.get().analyzeSurfaceContinuity(edges, current, positionToleranceMm, normalAngleToleranceDeg, relativeCurvatureTolerance), true);
   // ---- Surfacing tools (verify, read and refine curved bodies): one contiguous block. Logic in src/plasticity/surfacing.ts. ----
@@ -4111,6 +4127,29 @@ function createServerWithCatalog(
     await journaled("create-nurbs-curve", purpose, { pointsMm, closed }, () => session.get().createNurbsCurve(pointsMm, closed, current)));
   tool("plasticity_create_control_point_curve", "Create a native NURBS curve whose world-space points (millimeters) are its control points, so the curve is pulled toward them rather than passing through them. Use plasticity_create_nurbs_curve to pass through the points.", z.object({ pointsMm: z.array(vector).min(3).max(1000), closed: z.boolean().default(false), intent, revision }).strict(), async ({ pointsMm, closed, intent: purpose, revision: current }) =>
     await journaled("create-control-point-curve", purpose, { pointsMm, closed }, () => session.get().createControlPointCurve(pointsMm, closed, current)));
+  const planeCurvePoint = z.tuple([z.number().finite(), z.number().finite()]);
+  tool("plasticity_create_plane_curve", "Create a native curve from 2D points on a plane, for entering profile curves traced from a photo. plane is xy, xz or yz (offsetMm moves it along +Z, +Y or +X: xz at offsetMm 5 is y = 5; xy maps (a, b) to x, y; xz to x, z; yz to y, z) or { originMm, uAxis, vAxis } (u is normalised, v is made perpendicular to u, offsetMm moves along u x v). Each 2D point is scaled by scale about the plane origin, then moved by translate2dMm. mode control (default, at least 3 points) uses the points as the control polygon, the native path of plasticity_create_control_point_curve; interpolate (at least 2 points) passes through them, the path of plasticity_create_nurbs_curve. Returns the Wire id, the world points used and the plane frame.", z.object({
+    plane: z.union([z.enum(["xy", "xz", "yz"]), z.object({ originMm: vector, uAxis: vector, vAxis: vector }).strict()]),
+    offsetMm: z.number().finite().optional(),
+    points2dMm: z.array(planeCurvePoint).min(2).max(1000),
+    mode: z.enum(["control", "interpolate"]).default("control"),
+    scale: z.number().finite().positive().optional(),
+    translate2dMm: planeCurvePoint.optional(),
+    closed: z.boolean().default(false),
+    intent,
+    revision,
+  }).strict().superRefine((input, context) => {
+    if (input.mode === "control" && input.points2dMm.length < 3) context.addIssue({ code: "custom", path: ["points2dMm"], message: "mode control needs at least three points" });
+  }), async ({ intent: purpose, revision: current, ...request }) => {
+    let used: { worldPointsMm: [number, number, number][]; frame: unknown } | undefined;
+    const created = await journaled("create-plane-curve", purpose, request, async () => {
+      const outcome = await session.get().createPlaneCurve(request, current);
+      used = { worldPointsMm: outcome.worldPointsMm, frame: outcome.frame };
+      return outcome.state;
+    }) as { change?: { added?: Array<{ id: number; type: string }> } };
+    const wireId = created?.change?.added?.find((body) => body.type === "Wire")?.id ?? null;
+    return { ...created, wireId, worldPointsMm: used?.worldPointsMm, plane: used?.frame };
+  });
   tool("plasticity_create_helix", "Create a constant-radius native helix with a positive whole number of turns around a world-space axis. Fractional turns are rejected before mutation because native spirals can overrun their requested end. Coordinates and radius are millimeters.", z.object({ axisStartMm: vector, axisEndMm: vector, radiusMm: z.number().finite().positive(), turns: z.number().finite().positive().max(10_000), radialDirection: direction.default([1, 0, 0]), handedness: z.enum(["right", "left"]).default("right"), intent, revision }).strict(), async ({ axisStartMm, axisEndMm, radiusMm, turns, radialDirection, handedness, intent: purpose, revision: current }) =>
     await journaled("create-helix", purpose, { axisStartMm, axisEndMm, radiusMm, turns, radialDirection, handedness }, () => session.get().createHelix(axisStartMm, axisEndMm, radiusMm, turns, radialDirection, handedness, current)));
   tool("plasticity_create_circle", "Create a native circle in world coordinates or a referenced construction plane.", circleInputSchema, async (input) =>
@@ -4803,8 +4842,22 @@ function createServerWithCatalog(
     faces: z.enum(["single", "minimal", "multiple"]).optional(),
     smoothness: z.enum(["sharp", "smooth"]).optional(),
     toleranceMm: z.number().finite().positive().max(1).optional().describe("The dialog's Tolerance in mm (native default 0.01 mm); a looser value lets a G1/G2 patch accept boundary corners whose neighbour faces disagree slightly"),
-    intent, revision }).strict(), async ({ id, edgeIds, curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm, intent: purpose, revision: current }) =>
-    await journaled("patch-sheet-hole", purpose, { id, edgeIds, curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm }, () => session.get().patchSheetHole(id, edgeIds, current, { curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm })));
+    precheck: z.enum(["refuse", "warn", "off"]).optional().describe("Boundary pre-check when an edge is G1 or G2 (default refuse: a blocking problem refuses before any change, naming the corner or edge and a fix; warn: run native anyway and attach the analysis as precheck; off: no check). On FillHole errors 22092/22093/22094 the analysis and what the code went with are added to the error"),
+    intent, revision }).strict(), async ({ id, edgeIds, curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm, precheck, intent: purpose, revision: current }) => {
+    let analysis: unknown;
+    const patched = await journaled("patch-sheet-hole", purpose, { id, edgeIds, curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm, ...(precheck !== undefined ? { precheck } : {}) }, () => session.get().patchSheetHole(id, edgeIds, current, { curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm, ...(precheck !== undefined ? { precheck, onPrecheck: (report: unknown) => { analysis = report; } } : {}) }));
+    return precheck === "warn" && analysis !== undefined && patched && typeof patched === "object" ? { ...patched, precheck: analysis } : patched;
+  });
+  tool("plasticity_check_patch_boundary", "Read-only Indie Patch boundary analysis, the same check plasticity_patch_sheet_hole runs before native when an edge is G1 or G2. Same boundary inputs (id, edgeIds, curveIds, continuity, edgeContinuity, plus faces and smoothness). Per corner: the boundary turn, the patch's own corner angle, the angle between the neighbour face normals, the faces at the vertex with their interior angles and the angle sum (the 360 degree budget at a smooth vertex); per edge: its neighbour face and the other edges on that face. problems lists each finding with the corner (vertex id and position in mm) or edge, what was measured, what is needed, advice, and blocking (true: the patch tool refuses by default). Rules measured live on 26.1.3: more than 20 boundary edges fail at G1/G2; disagreeing corner normals fail only with faces single or smoothness smooth (the default patch creases there); a smooth vertex whose angles do not add to 360 degrees fails; two edges on one neighbour face get one continuity (reported only).", z.object({
+    id: z.number().int().positive(),
+    edgeIds: z.array(z.string().min(1)).min(1).max(4096),
+    curveIds: z.array(z.number().int().positive()).min(1).max(64).optional(),
+    continuity: z.enum(["g0", "g1", "g2"]).optional(),
+    edgeContinuity: z.array(z.object({ edgeId: z.string().min(1), continuity: z.enum(["g0", "g1", "g2"]) }).strict()).min(1).max(4096).optional(),
+    faces: z.enum(["single", "minimal", "multiple"]).optional(),
+    smoothness: z.enum(["sharp", "smooth"]).optional(),
+    revision }).strict(), async ({ id, edgeIds, curveIds, continuity, edgeContinuity, faces, smoothness, revision: current }) =>
+    await session.get().checkPatchBoundary(id, edgeIds, current, { curveIds, continuity, edgeContinuity, faces, smoothness }), true);
   tool("plasticity_cap_sheet_holes", "Cap every planar open boundary of one or more native Sheet bodies in one history step.", z.object({ ids, intent, revision }).strict(), async ({ ids: sheetIds, intent: purpose, revision: current }) =>
     await journaled("cap-sheet-holes", purpose, { ids: sheetIds }, () => session.get().capSheetHoles(sheetIds, current)));
   tool("plasticity_extend_sheet_edges", "Extend selected boundary edges of one native Sheet by a positive millimeter distance, or up to another body with targetId (give exactly one). shape sets the extension curve (linear by default, soft, reflective, natural). merge=false keeps the extension as a separate face instead of one merged surface.", z.object({

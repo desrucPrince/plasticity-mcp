@@ -5,6 +5,8 @@ import { copyFile, lstat, mkdir, mkdtemp, open, readFile, realpath, rename, rm, 
 import { basename, dirname, extname, join, resolve } from "node:path";
 
 import { NATIVE_VIEWPORT_CAPTURE } from "./viewport-capture.ts";
+import { continuityClass, planeCurveWorldPoints, resolveCurvePlane, wireJunctions, worstFirst, type ContinuityReportClass, type CurvatureSampleInput, type CurvePlaneName } from "./surfacing.ts";
+import { checkPatchBoundary, describePatchPrecheck, PATCH_BOUNDARY_SOURCE, PATCH_HOLE_ERROR_ADVICE, patchHoleErrorCode, patchPrecheckInputFromNative, type NativePatchBoundary, type PatchPrecheckResult } from "./surfacing.ts";
 import { boundsExactness, CAMERA_RESTORE_TOLERANCE, PENDING_VIEW_SAME_POSE, PROBE_SURFACE_COLLECT_ABOVE_MB, PROBE_SURFACE_HEAP_CHECK_EVERY_RAYS, exactBounds, explainXNurbsError, probeSurface, SCREENSHOT_VIEW_SOURCE, type ScreenshotViewRestored, SQUARE_ENDS_SOURCE, squareClosureProblem, SURFACE_ALIGN_CONTINUITY, SURFACE_ALIGN_COINCIDENCE_MM, SURFACE_ALIGN_DRIVE, SURFACE_ALIGN_FALLBACK_WAIT_MS, SURFACE_ALIGN_READBACK_SOURCE, SURFACE_ALIGN_READY_MS, SURFACE_ALIGN_TIMEOUTS, type AlignReadBackNative, type SurfaceAlignContinuity, readSupportBounds, supportBounds, validateScreenshotView, withScreenshotView, type ExactBoundsEvidence, type ProbeSurfaceEvidence, type ProbeSurfaceRequest, type ScreenshotViewOptions } from "./surfacing.ts";
 import { nativeFunction } from "./native-function.ts";
 import { classifyPickOutcome, type PickCancelResult, type PickOutcome, type PickOutcomeFacts } from "./pick-command-outcome.ts";
@@ -703,6 +705,8 @@ export const PATCH_HOLE_CONTINUITY = { g0: "G0", g1: "G1", g2: "G2" } as const;
 export type PatchHoleContinuity = keyof typeof PATCH_HOLE_CONTINUITY;
 export const PATCH_HOLE_TOPOLOGY = { single: "Single", minimal: "Minimal", multiple: "Multiple" } as const;
 export type PatchHoleTopology = keyof typeof PATCH_HOLE_TOPOLOGY;
+export type PatchHolePrecheckMode = "refuse" | "warn" | "off";
+export type PatchHolePrecheckReport = PatchPrecheckResult & { summary: string };
 export const PATCH_HOLE_SMOOTHNESS = { sharp: "Sharp", smooth: "Smooth" } as const;
 export type PatchHoleSmoothness = keyof typeof PATCH_HOLE_SMOOTHNESS;
 
@@ -2326,7 +2330,7 @@ export class PlasticityOperations {
     return measureFastenerGripStack(await this.state(), layers, axis, revision, angularToleranceDeg);
   }
 
-  async analyzeEdgeCurvature(edges: CurvatureEdgeReference[], revision: string) {
+  async analyzeEdgeCurvature(edges: CurvatureEdgeReference[], revision: string, options: { samples?: boolean } = {}) {
     const state = await this.assertRevision(revision);
     if (edges.length === 0) throw new Error("At least one edge is required for curvature analysis");
     const keys = edges.map((edge) => "edgeId" in edge ? `${edge.bodyId}:shell:${edge.edgeId}` : `${edge.bodyId}:wire:${edge.segmentEntityId}`);
@@ -2438,11 +2442,13 @@ export class PlasticityOperations {
           minimumRadiusOfCurvatureMm: maximum.curvaturePerMm > zeroTolerancePerMm ? 1 / maximum.curvaturePerMm : null,
           maximumFiniteRadiusOfCurvatureMm: Number.isFinite(minimumPositive) ? 1 / minimumPositive : null,
           containsZeroCurvature,
+          ...(args.samples ? { samples: samples.map(sample => ({ positionMm: sample.positionMm, vectorPerMm: sample.vectorPerMm })) } : {}),
         };
       });
     }`, ["evalCurvatureMeasurements", "CurvatureMeasurement", "Target", "TopologyLandmark"], [{
       edges,
       bodyVersions: [...bodyVersions].map(([bodyId, versionId]) => ({ bodyId, versionId })),
+      ...(options.samples ? { samples: true } : {}),
     }]);
     return { documentToken: state.documentToken, revision: state.revision, analyses };
   }
@@ -2559,6 +2565,7 @@ export class PlasticityOperations {
     positionToleranceMm = 0.01,
     normalAngleToleranceDeg = 0.1,
     relativeCurvatureTolerance = 0.05,
+    options: { details?: boolean } = {},
   ) {
     const state = await this.assertRevision(revision);
     if (edges.length === 0) throw new Error("At least one edge is required for surface continuity analysis");
@@ -2662,6 +2669,12 @@ export class PlasticityOperations {
           const governing = series[level];
           const worstAt = Math.max(...governing) > interiorMax(governing) ? 'corner' : 'interior';
           const result = { interior: { g0Mm: interiorMax(series[0]) * 1000, g1Deg: interiorMax(series[1]) * 180 / Math.PI, g2Rel: interiorMax(series[2]) }, worstAt };
+          // plasticity_continuity_report only (details): means over all samples and over the interior.
+          if (args.details) {
+            const mean = values => values.reduce((sum, value) => sum + value, 0) / values.length;
+            result.means = { g0Mm: mean(series[0]) * 1000, g1Deg: mean(series[1]) * 180 / Math.PI, g2Rel: mean(series[2]) };
+            result.interiorMeans = { g0Mm: mean(series[0].slice(5, 95)) * 1000, g1Deg: mean(series[1].slice(5, 95)) * 180 / Math.PI, g2Rel: mean(series[2].slice(5, 95)) };
+          }
           // Absolute curvature across the edge at the worst G2 sample, from Face.EvalBasis (probe recipe), only where one
           // parameter direction runs along the edge and the other across it (within 1 degree), so the reported value is the
           // normal curvature across the edge on that face. Left out otherwise.
@@ -2726,8 +2739,133 @@ export class PlasticityOperations {
       edges,
       tolerances,
       bodyVersions: [...bodyVersions].map(([bodyId, versionId]) => ({ bodyId, versionId })),
+      ...(options.details ? { details: true } : {}),
     }]);
     return { documentToken: state.documentToken, revision: state.revision, analyses };
+  }
+
+  // plasticity_continuity_report: every two-face edge of one body (or a face-filtered subset) through the native continuity
+  // sampler in one read, plus a curvature-comb style junction report for Wires (two more reads for all Wires together).
+  async continuityReport(
+    request: {
+      bodyId?: number | undefined;
+      faceIds?: string[] | undefined;
+      faceMode?: "between" | "touching" | undefined;
+      edgeIds?: string[] | undefined;
+      wireIds?: number[] | undefined;
+      positionToleranceMm?: number | undefined;
+      normalAngleToleranceDeg?: number | undefined;
+      relativeCurvatureTolerance?: number | undefined;
+    },
+    revision: string,
+  ) {
+    const state = await this.assertRevision(revision);
+    const tolerances = {
+      positionMm: request.positionToleranceMm ?? 0.01,
+      normalAngleDeg: request.normalAngleToleranceDeg ?? 0.1,
+      relativeCurvature: request.relativeCurvatureTolerance ?? 0.05,
+    };
+    requirePositiveFinite(tolerances.positionMm, "Position tolerance");
+    requirePositiveFinite(tolerances.normalAngleDeg, "Normal angle tolerance");
+    requirePositiveFinite(tolerances.relativeCurvature, "Relative curvature tolerance");
+    if (request.bodyId === undefined && !(request.wireIds && request.wireIds.length > 0)) throw new Error("Continuity report needs a bodyId, wireIds, or both");
+    if (request.bodyId === undefined && (request.faceIds || request.edgeIds)) throw new Error("Continuity report faceIds and edgeIds need a bodyId");
+    let edgeReport: Record<string, unknown> | undefined;
+    if (request.bodyId !== undefined) {
+      const body = state.bodies.find((candidate) => candidate.id === request.bodyId);
+      if (!body || (body.type !== "Solid" && body.type !== "Sheet")) throw new Error(`Continuity report requires a current Solid or Sheet body: ${request.bodyId}`);
+      const twoFace = body.edges.filter((edge) => edge.faceIds.length === 2);
+      let selected = twoFace;
+      if (request.edgeIds) {
+        const unknown = request.edgeIds.filter((edgeId) => !body.edges.some((edge) => edge.id === edgeId));
+        if (unknown.length > 0) throw new Error(`Unknown current edge IDs on body ${body.id}: ${unknown.join(", ")}`);
+        const oneFace = request.edgeIds.filter((edgeId) => !twoFace.some((edge) => edge.id === edgeId));
+        if (oneFace.length > 0) throw new Error(`Continuity report edges must be shared by two faces: ${oneFace.join(", ")}`);
+        selected = selected.filter((edge) => request.edgeIds!.includes(edge.id));
+      }
+      if (request.faceIds) {
+        const unknown = request.faceIds.filter((faceId) => !body.faces.some((face) => face.id === faceId));
+        if (unknown.length > 0) throw new Error(`Unknown current face IDs on body ${body.id}: ${unknown.join(", ")}`);
+        const listed = new Set(request.faceIds);
+        const mode = request.faceMode ?? "between";
+        selected = selected.filter((edge) => mode === "touching" ? edge.faceIds.some((faceId) => listed.has(faceId)) : edge.faceIds.every((faceId) => listed.has(faceId)));
+      }
+      if (selected.length === 0) throw new Error(`No two-face edges match on body ${body.id}`);
+      const native = await this.analyzeSurfaceContinuity(selected.map((edge) => ({ bodyId: body.id, edgeId: edge.id })), revision, tolerances.positionMm, tolerances.normalAngleDeg, tolerances.relativeCurvature, { details: true });
+      const analyses = native.analyses as Array<Record<string, any>>;
+      if (analyses.length !== selected.length) throw new Error(`Plasticity returned continuity for ${analyses.length} of ${selected.length} edges`);
+      const byId = new Map(analyses.map((analysis) => [String(analysis.edge?.edgeId), analysis]));
+      const edges = selected.map((edge) => {
+        const analysis = byId.get(edge.id);
+        if (!analysis) throw new Error(`Plasticity returned no continuity for edge ${edge.id}`);
+        const interior = analysis.interior as { g0Mm: number; g1Deg: number; g2Rel: number } | undefined;
+        const means = analysis.means as { g0Mm: number; g1Deg: number; g2Rel: number } | undefined;
+        const interiorMeans = analysis.interiorMeans as { g0Mm: number; g1Deg: number; g2Rel: number } | undefined;
+        const cls = continuityClass(analysis.maximumPositionDeviationMm, analysis.maximumNormalAngleDeviationDeg, analysis.maximumRelativeCurvatureDeviation, tolerances);
+        const level = cls === "none" ? "G0" : cls === "G0" ? "G1" : "G2";
+        return {
+          edgeId: edge.id,
+          faceIds: (analysis.adjacentFaces as Array<{ faceId: string }>).map((face) => face.faceId),
+          lengthMm: edge.lengthMm,
+          class: cls as ContinuityReportClass,
+          interiorClass: interior ? continuityClass(interior.g0Mm, interior.g1Deg, interior.g2Rel, tolerances) : null,
+          positionMm: { max: analysis.maximumPositionDeviationMm as number, interiorMax: interior?.g0Mm ?? null },
+          normalAngleDeg: { max: analysis.maximumNormalAngleDeviationDeg as number, mean: means?.g1Deg ?? null, interiorMax: interior?.g1Deg ?? null, interiorMean: interiorMeans?.g1Deg ?? null },
+          relativeCurvature: { max: analysis.maximumRelativeCurvatureDeviation as number, mean: means?.g2Rel ?? null, interiorMax: interior?.g2Rel ?? null, interiorMean: interiorMeans?.g2Rel ?? null },
+          worstLevel: level,
+          worstAtMm: (level === "G0" ? analysis.maximumPositionDeviationAtMm : level === "G1" ? analysis.maximumNormalAngleDeviationAtMm : analysis.maximumRelativeCurvatureDeviationAtMm) as Vector3,
+          worstAt: (analysis.worstAt as string | undefined) ?? null,
+          ...(analysis.absoluteCurvature ? { absoluteCurvature: analysis.absoluteCurvature } : {}),
+        };
+      });
+      const sorted = worstFirst(edges);
+      const counts = { G2: 0, G1: 0, G0: 0, none: 0 } as Record<ContinuityReportClass, number>;
+      const interiorCounts = { G2: 0, G1: 0, G0: 0, none: 0 } as Record<ContinuityReportClass, number>;
+      for (const edge of edges) { counts[edge.class] += 1; if (edge.interiorClass) interiorCounts[edge.interiorClass] += 1; }
+      edgeReport = {
+        bodyId: body.id,
+        twoFaceEdgeCount: twoFace.length,
+        edgeCount: edges.length,
+        summary: { counts, interiorCounts, worst: sorted.slice(0, 10).map((edge) => ({ edgeId: edge.edgeId, class: edge.class, normalAngleDegMax: edge.normalAngleDeg.max, interiorNormalAngleDeg: edge.normalAngleDeg.interiorMax, worstAt: edge.worstAt })) },
+        edges: sorted,
+      };
+    }
+    let wireReport: unknown[] | undefined;
+    if (request.wireIds && request.wireIds.length > 0) {
+      const wireIds = [...new Set(request.wireIds)];
+      if (wireIds.length !== request.wireIds.length) throw new Error("Continuity report wireIds must be unique");
+      const invalid = wireIds.filter((wireId) => state.bodies.find((body) => body.id === wireId)?.type !== "Wire");
+      if (invalid.length > 0) throw new Error(`Continuity report wireIds must be current Wire IDs: ${invalid.join(", ")}`);
+      const directions = await this.listCurveDirections();
+      if (directions.revision !== state.revision) throw new Error("Plasticity document changed during the continuity report");
+      const curves = wireIds.map((wireId) => {
+        const curve = directions.curves.find((candidate) => candidate.id === wireId);
+        if (!curve) throw new Error(`No native segments for Wire ${wireId}`);
+        return curve;
+      });
+      const references = curves.flatMap((curve) => curve.segments.map((segment) => ({ bodyId: curve.id, segmentEntityId: segment.entityId })));
+      const curvature = await this.analyzeEdgeCurvature(references, revision, { samples: true });
+      const sampleMap = new Map<string, CurvatureSampleInput[]>();
+      for (const analysis of curvature.analyses as Array<{ edge: { bodyId: number; segmentEntityId: number }; samples?: CurvatureSampleInput[] }>) {
+        sampleMap.set(`${analysis.edge.bodyId}:${analysis.edge.segmentEntityId}`, analysis.samples ?? []);
+      }
+      wireReport = curves.map((curve) => {
+        const perWire = new Map(curve.segments.map((segment) => [segment.entityId, sampleMap.get(`${curve.id}:${segment.entityId}`) ?? []]));
+        const { junctions, segments } = wireJunctions(curve.segments, perWire, tolerances);
+        const counts = { G2: 0, G1: 0, G0: 0 };
+        for (const junction of junctions) counts[junction.class] += 1;
+        return { wireId: curve.id, closed: curve.closed, segmentCount: curve.segments.length, junctionCounts: counts, junctions, segments };
+      });
+    }
+    return {
+      documentToken: state.documentToken,
+      revision: state.revision,
+      measurementSource: "native-brep-100-samples",
+      tolerances,
+      ...(edgeReport ? edgeReport : {}),
+      ...(wireReport ? { wires: wireReport } : {}),
+      note: "class uses the maxima over all 100 samples (corners included) and interiorClass the maxima over samples 5..94, against the tolerances. Means are over the same sample sets. Wire junctions: curvature on each side is the curvature vector at the segment end; tangentAngleDeg is 0 when the segments continue smoothly; relativeCurvatureMismatch is |k1 - k2| / (|k1| + |k2|) of the curvature vectors (1 at an S-shaped junction); inflections counts curvature sign changes between consecutive samples.",
+    };
   }
 
   // Surfacing reads (src/plasticity/surfacing.ts): exact ray hits on curved faces and exact NURBS extents. Read-only.
@@ -5222,6 +5360,46 @@ export class PlasticityOperations {
       factory.splineThrough = false;
       factory.closed = args.closed;
       factory.points = args.points.map(point => new Vector(...point));
+      ${commandEnd}
+    }`, ["CurveFactory", "Vector3", "CurveType"], [{ points: pointsMm.map(toMeters), closed }]);
+    return await this.state();
+  }
+
+  // plasticity_create_plane_curve: 2D points on a plane mapped to world, then the same native curve path as
+  // plasticity_create_control_point_curve (control) or plasticity_create_nurbs_curve (interpolate, two points or more).
+  async createPlaneCurve(
+    request: {
+      plane: CurvePlaneName | { originMm: Vector3; uAxis: Vector3; vAxis: Vector3 };
+      offsetMm?: number | undefined;
+      points2dMm: Array<[number, number]>;
+      mode?: "control" | "interpolate" | undefined;
+      scale?: number | undefined;
+      translate2dMm?: [number, number] | undefined;
+      closed?: boolean | undefined;
+    },
+    revision?: string,
+  ): Promise<{ state: RuntimeState; worldPointsMm: Vector3[]; frame: ReturnType<typeof resolveCurvePlane> }> {
+    const mode = request.mode ?? "control";
+    const closed = request.closed ?? false;
+    if (mode === "control" && request.points2dMm.length < 3) throw new Error("A control-point plane curve needs at least three points");
+    if (mode === "interpolate" && request.points2dMm.length < 2) throw new Error("An interpolated plane curve needs at least two points");
+    const frame = resolveCurvePlane(request.plane, request.offsetMm ?? 0);
+    const worldPointsMm = planeCurveWorldPoints(frame, request.points2dMm, request.scale ?? 1, request.translate2dMm ?? [0, 0]);
+    if (revision) await this.assertRevision(revision);
+    const state = mode === "control"
+      ? await this.createControlPointCurve(worldPointsMm, closed)
+      : await this.createInterpolatedCurveFrom(worldPointsMm, closed);
+    return { state, worldPointsMm, frame };
+  }
+
+  // createNurbsCurve without its three-point floor (a two-point interpolated curve is a straight NURBS span).
+  private async createInterpolatedCurveFrom(pointsMm: Vector3[], closed: boolean): Promise<RuntimeState> {
+    if (pointsMm.length >= 3) return await this.createNurbsCurve(pointsMm, closed);
+    await this.runtime.mutate(`async function (Factory, Vector, CurveType, args) {
+      ${commandStart("CurveCommand")}
+      factory.points = args.points.map(point => new Vector(...point));
+      factory.type = CurveType.NURBS;
+      factory.closed = args.closed;
       ${commandEnd}
     }`, ["CurveFactory", "Vector3", "CurveType"], [{ points: pointsMm.map(toMeters), closed }]);
     return await this.state();
@@ -10425,6 +10603,8 @@ export class PlasticityOperations {
       faces?: PatchHoleTopology | undefined;
       smoothness?: PatchHoleSmoothness | undefined;
       toleranceMm?: number | undefined;
+      precheck?: PatchHolePrecheckMode | undefined;
+      onPrecheck?: ((analysis: PatchHolePrecheckReport) => void) | undefined;
     } = {},
   ): Promise<RuntimeState> {
     const state = await this.state();
@@ -10432,6 +10612,8 @@ export class PlasticityOperations {
       throw new Error(`Stale reference: expected revision ${revision}, current revision is ${state.revision}`);
     }
     const { curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm } = options;
+    const precheck = options.precheck ?? "refuse";
+    if (!["refuse", "warn", "off"].includes(precheck)) throw new Error("Sheet-hole patch precheck must be one of: refuse, warn, off");
     if (toleranceMm !== undefined && !(Number.isFinite(toleranceMm) && toleranceMm > 0 && toleranceMm <= 1)) throw new Error("Sheet-hole patch toleranceMm must be greater than 0 and at most 1");
     const sheet = state.bodies.find((body) => body.id === id);
     if (sheet?.type !== "Sheet") throw new Error(`Hole patch requires a current Sheet body: ${id}`);
@@ -10463,6 +10645,100 @@ export class PlasticityOperations {
     }
     if (faces !== undefined && !(faces in PATCH_HOLE_TOPOLOGY)) throw new Error(`Sheet-hole patch faces must be one of: ${Object.keys(PATCH_HOLE_TOPOLOGY).join(", ")}`);
     if (smoothness !== undefined && !(smoothness in PATCH_HOLE_SMOOTHNESS)) throw new Error(`Sheet-hole patch smoothness must be one of: ${Object.keys(PATCH_HOLE_SMOOTHNESS).join(", ")}`);
+    // Pre-check (src/plasticity/surfacing.ts checkPatchBoundary): only when an edge is asked G1 or G2 (the factory's own default
+    // continuity is G0, read live). It fails open: if the analysis itself cannot run, native runs as before.
+    const boundary = { curveIds, continuity, edgeContinuity, faces, smoothness };
+    const asksTangency = continuity === "g1" || continuity === "g2" || (edgeContinuity ?? []).some((entry) => entry.continuity === "g1" || entry.continuity === "g2");
+    let analysis: PatchHolePrecheckReport | undefined;
+    if (precheck !== "off" && asksTangency) {
+      try { analysis = await this.patchBoundaryAnalysis(id, uniqueIds, boundary); } catch { analysis = undefined; }
+      if (analysis) options.onPrecheck?.(analysis);
+      if (analysis && precheck === "refuse" && !analysis.ok) {
+        const error = new Error(`Indie Patch pre-check refused the patch before any change: ${describePatchPrecheck(analysis, "blocking")} Pass precheck: "warn" to run native anyway, or "off" to skip the check.`);
+        (error as Error & { precheck?: PatchHolePrecheckReport }).precheck = analysis;
+        throw error;
+      }
+    }
+    try {
+      await this.patchSheetHoleNative(id, uniqueIds, { curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm });
+    } catch (error) {
+      const code = patchHoleErrorCode(error);
+      if (code === undefined || !(error instanceof Error) || !asksTangency) throw error;
+      if (!analysis) { try { analysis = await this.patchBoundaryAnalysis(id, uniqueIds, boundary); } catch { analysis = undefined; } }
+      const advice = PATCH_HOLE_ERROR_ADVICE[code] ?? "this FillHole code is undecoded on Plasticity 26.1.3.";
+      const explained = new Error(`${error.message.replace(/\.?\s*$/, "")}. FillHole error ${code}: ${advice} Boundary analysis: ${analysis ? describePatchPrecheck(analysis, "all").replace(/\.$/, "") : "unavailable"}.`);
+      Object.assign(explained, { fillHoleCode: code, ...(analysis ? { precheck: analysis } : {}) });
+      throw explained;
+    }
+    return await this.state();
+  }
+
+  /** Read-only Indie Patch boundary analysis (plasticity_check_patch_boundary and the patch pre-check). */
+  async checkPatchBoundary(
+    id: number,
+    edgeIds: string[],
+    revision: string,
+    options: {
+      curveIds?: number[] | undefined;
+      continuity?: PatchHoleContinuity | undefined;
+      edgeContinuity?: Array<{ edgeId: string; continuity: PatchHoleContinuity }> | undefined;
+      faces?: PatchHoleTopology | undefined;
+      smoothness?: PatchHoleSmoothness | undefined;
+    } = {},
+  ): Promise<PatchHolePrecheckReport & { documentToken: string; revision: string }> {
+    const state = await this.assertRevision(revision);
+    const sheet = state.bodies.find((body) => body.id === id);
+    if (sheet?.type !== "Sheet") throw new Error(`Patch boundary check requires a current Sheet body: ${id}`);
+    const uniqueIds = [...new Set(edgeIds)];
+    if (uniqueIds.length !== edgeIds.length || uniqueIds.length === 0) throw new Error("Patch boundary edge IDs must be a nonempty unique list");
+    const missing = uniqueIds.filter((edgeId) => !sheet.edges.some((edge) => edge.id === edgeId));
+    if (missing.length > 0) throw new Error(`Stale or unknown Sheet edges: ${missing.join(", ")}`);
+    const nonBoundary = uniqueIds.filter((edgeId) => sheet.edges.find((edge) => edge.id === edgeId)!.faceIds.length !== 1);
+    if (nonBoundary.length > 0) throw new Error(`Patch boundary check requires boundary edges: ${nonBoundary.join(", ")}`);
+    const wires = new Set(state.bodies.filter((body) => body.type === "Wire").map((body) => body.id));
+    const badWires = (options.curveIds ?? []).filter((wireId) => !wires.has(wireId));
+    if (badWires.length > 0) throw new Error(`Patch boundary curveIds must be current Wire IDs: ${badWires.join(", ")}`);
+    const outside = (options.edgeContinuity ?? []).map((entry) => entry.edgeId).filter((edgeId) => !uniqueIds.includes(edgeId));
+    if (outside.length > 0) throw new Error(`Patch boundary edgeContinuity edges must be in edgeIds: ${outside.join(", ")}`);
+    const analysis = await this.patchBoundaryAnalysis(id, uniqueIds, options);
+    return { documentToken: state.documentToken, revision: state.revision, ...analysis };
+  }
+
+  private async patchBoundaryAnalysis(
+    id: number,
+    edgeIds: string[],
+    options: {
+      curveIds?: number[] | undefined;
+      continuity?: PatchHoleContinuity | undefined;
+      edgeContinuity?: Array<{ edgeId: string; continuity: PatchHoleContinuity }> | undefined;
+      faces?: PatchHoleTopology | undefined;
+      smoothness?: PatchHoleSmoothness | undefined;
+    },
+  ): Promise<PatchHolePrecheckReport> {
+    const native = await this.runtime.readNative<NativePatchBoundary>(PATCH_BOUNDARY_SOURCE, ["pk_default"], [{ id, edgeIds, ...(options.curveIds ? { curveIds: options.curveIds } : {}) }]);
+    if (!native || !Array.isArray(native.edges) || native.edges.length !== edgeIds.length) throw new Error("Plasticity returned no patch boundary geometry");
+    // The factory's default continuity is G0 (read live on 26.1.3), so an edge without a setting is G0.
+    const overrides = new Map((options.edgeContinuity ?? []).map((entry) => [entry.edgeId, entry.continuity]));
+    const continuityOf = (edgeId: string): PatchHoleContinuity => overrides.get(edgeId) ?? options.continuity ?? "g0";
+    const result = checkPatchBoundary(patchPrecheckInputFromNative(native, continuityOf, { faces: options.faces, smoothness: options.smoothness }));
+    return { ...result, summary: describePatchPrecheck(result, "all") };
+  }
+
+  // The native Indie Patch commit (unchanged from before the pre-check).
+  private async patchSheetHoleNative(
+    id: number,
+    uniqueIds: string[],
+    options: {
+      curveIds?: number[] | undefined;
+      guideIds?: number[] | undefined;
+      continuity?: PatchHoleContinuity | undefined;
+      edgeContinuity?: Array<{ edgeId: string; continuity: PatchHoleContinuity }> | undefined;
+      faces?: PatchHoleTopology | undefined;
+      smoothness?: PatchHoleSmoothness | undefined;
+      toleranceMm?: number | undefined;
+    },
+  ): Promise<void> {
+    const { curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm } = options;
     await this.runtime.mutate(nativeFunction`async function (Factory, ContinuityType, pk_default, args) {
       ${findView}
       ${enumMember}
@@ -10502,7 +10778,6 @@ export class PlasticityOperations {
       ...(smoothness !== undefined ? { smoothnessName: PATCH_HOLE_SMOOTHNESS[smoothness] } : {}),
       ...(toleranceMm !== undefined ? { tolerance: millimetersToMeters(toleranceMm) } : {}),
     }]);
-    return await this.state();
   }
 
   async capSheetHoles(ids: number[], revision: string): Promise<RuntimeState> {

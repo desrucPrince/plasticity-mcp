@@ -1378,3 +1378,529 @@ export function relativeCurvatureDeviation(k1: number, k2: number): number {
   const sum = Math.abs(k1) + Math.abs(k2);
   return sum === 0 ? 0 : Math.abs(k1 - k2) / sum;
 }
+
+// ---------------------------------------------------------------- Organic tools 2: Indie Patch boundary pre-check ----------------------------------------------------------------
+// What decides whether Plasticity's Indie Patch (PatchHoleInSheetFactory) can meet G1/G2 on a boundary, measured live on 26.1.3
+// (discovery/probes-2026-11-organic/FINDINGS.md, "Indie Patch pre-check"):
+// - More than 20 boundary edges fail as soon as any edge asks G1 or G2 (regular polygons, stars, lenses and filleted loops:
+//   20 edges pass, 21 and 22 fail with 22093 or 22094), even with only one edge asked G1. G0 on 180 edges works.
+// - Corners whose neighbour faces do not share a tangent plane: the default patch (faces multiple or minimal, smoothness sharp)
+//   creases from such a corner and succeeds (an open box at G1 on all four walls, kinks of 0.02 to 25 degrees); faces: single
+//   or smoothness: smooth forbid the crease and fail with 22093.
+// - The angle budget: where every face at a corner vertex shares one tangent plane and the patch is asked G1/G2 there, the
+//   faces' angles at the vertex plus the patch's own corner angle must add up to 360 degrees. The tutorial rebuild's first rear
+//   closure met 180 + 180 + 90 + 90 = 540 degrees and failed at every G1 choice (22094, and 22092 after rebuilding the faces);
+//   the second build had 90 + 90 + 90 + 90 = 360 degrees and passed.
+// - Continuity is applied per neighbouring face, so two edges on one face cannot get different continuity (native succeeds,
+//   both edges get the same continuity): reported, not refused.
+export const PATCH_PRECHECK_MAX_CONSTRAINED_EDGES = 20;
+/** Neighbour normals closer than this (degrees, unsigned) share a tangent plane. */
+export const PATCH_PRECHECK_NORMAL_TOLERANCE_DEG = 2;
+/** Allowed miss of the 360 degree angle budget at a smooth vertex. */
+export const PATCH_PRECHECK_BUDGET_TOLERANCE_DEG = 10;
+/**
+ * Whether disagreeing neighbour normals at a corner with G1/G2 on both sides refuse with the default patch options. Live, the
+ * default options crease the patch from that corner and succeed, so the default is false: only faces: single or
+ * smoothness: smooth (no crease allowed, native fails 22093) refuse; otherwise the corner is reported.
+ */
+export const PATCH_PRECHECK_NORMALS_REFUSE_WITH_CREASE = false;
+
+export type PatchPrecheckContinuity = "g0" | "g1" | "g2";
+export interface PatchPrecheckItem { kind: "edge" | "curve"; id: string; faceId?: string | null; continuity: PatchPrecheckContinuity }
+export interface PatchPrecheckFaceAtVertex { faceId: string; normal: Vector3 | null; angleDeg: number | null }
+export interface PatchPrecheckCorner {
+  vertexId: number | null;
+  positionMm: Vector3;
+  /** Indices into items of the two boundary items that meet here. */
+  items: [number, number];
+  /** Unit tangents leaving the corner along each item. */
+  tangents: [Vector3 | null, Vector3 | null];
+  /** For an edge item: its neighbour face's normal at the corner; null for a curve. */
+  normals: [Vector3 | null, Vector3 | null];
+  /** For an edge item: unit direction in its neighbour face, across the edge near the corner, pointing into that face. */
+  inward: [Vector3 | null, Vector3 | null];
+  /** Every face of the sheet at the vertex, with its interior angle there. Empty for a curve-to-curve corner. */
+  faces: PatchPrecheckFaceAtVertex[];
+  /** True when the patch closes the vertex: its only open boundary edges are the two hole edges that meet here. */
+  closedByPatch: boolean;
+}
+export interface PatchPrecheckInput {
+  items: PatchPrecheckItem[];
+  corners: PatchPrecheckCorner[];
+  faces?: "single" | "minimal" | "multiple" | undefined;
+  smoothness?: "sharp" | "smooth" | undefined;
+}
+export type PatchPrecheckProblemKind = "too-many-edges" | "angle-budget" | "normals-disagree" | "shared-face-continuity";
+export interface PatchPrecheckProblem {
+  kind: PatchPrecheckProblemKind;
+  cornerVertexId?: number | null;
+  positionMm?: Vector3;
+  edgeId?: string;
+  edgeIds?: string[];
+  faceIds?: string[];
+  measured: number;
+  needed: string;
+  /** True when it refuses the patch before native; false when it is only reported. */
+  blocking: boolean;
+  message: string;
+  advice: string;
+}
+export interface PatchPrecheckCornerReport {
+  vertexId: number | null;
+  positionMm: Vector3;
+  itemIds: [string, string];
+  continuity: [PatchPrecheckContinuity, PatchPrecheckContinuity];
+  boundaryTurnDeg: number | null;
+  patchAngleDeg: number | null;
+  neighbourNormalAngleDeg: number | null;
+  smooth: boolean | null;
+  faceCount: number;
+  faceAngles: Array<{ faceId: string; angleDeg: number | null }>;
+  angleSumDeg: number | null;
+}
+export interface PatchPrecheckResult {
+  ok: boolean;
+  problems: PatchPrecheckProblem[];
+  corners: PatchPrecheckCornerReport[];
+  edges: Array<{ edgeId: string; faceId: string | null; continuity: PatchPrecheckContinuity; sharesFaceWith: string[] }>;
+}
+
+const v3dot = (a: Vector3, b: Vector3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const v3cross = (a: Vector3, b: Vector3): Vector3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const v3len = (a: Vector3) => Math.hypot(a[0], a[1], a[2]);
+const degreesBetween = (a: Vector3, b: Vector3) => Math.acos(Math.max(-1, Math.min(1, v3dot(a, b) / (v3len(a) * v3len(b))))) * 180 / Math.PI;
+/** Angle between two tangent planes given their normals (unsigned: 0 to 90 degrees). */
+export const tangentPlaneAngleDeg = (a: Vector3, b: Vector3) => { const d = degreesBetween(a, b); return Math.min(d, 180 - d); };
+const fmt = (value: number, digits = 1) => Number(value.toFixed(digits));
+const fmtPoint = (p: Vector3) => `(${p.map((x) => fmt(x, 2)).join(", ")})`;
+const constrained = (c: PatchPrecheckContinuity) => c === "g1" || c === "g2";
+
+/**
+ * The patch's own corner angle (degrees, 0..360) in the plane with normal n: the patch lies across edge A from A's neighbour
+ * face, so it turns from tA toward the side opposite A's inward direction until it reaches tB. Null without the vectors.
+ */
+export function patchCornerAngleDeg(tA: Vector3, tB: Vector3, inwardA: Vector3, n: Vector3): number | null {
+  if (![tA, tB, inwardA, n].every((v) => v3len(v) > 1e-12)) return null;
+  const patchSide: Vector3 = [-inwardA[0], -inwardA[1], -inwardA[2]];
+  const sigma = Math.sign(v3dot(v3cross(tA, patchSide), n)) || 1;
+  let phi = Math.atan2(v3dot(v3cross(tA, tB), n) / v3len(n), v3dot(tA, tB)) * 180 / Math.PI * sigma;
+  if (phi < 0) phi += 360;
+  return phi;
+}
+
+/**
+ * Pure Indie Patch boundary check from plain numbers (no Plasticity). Blocking problems refuse the patch before native; the
+ * rest are reported. See the rules at the top of this section.
+ */
+export function checkPatchBoundary(input: PatchPrecheckInput, options: { normalToleranceDeg?: number; budgetToleranceDeg?: number; maxConstrainedEdges?: number; normalsRefuseWithCrease?: boolean } = {}): PatchPrecheckResult {
+  const normalTol = options.normalToleranceDeg ?? PATCH_PRECHECK_NORMAL_TOLERANCE_DEG;
+  const budgetTol = options.budgetToleranceDeg ?? PATCH_PRECHECK_BUDGET_TOLERANCE_DEG;
+  const maxEdges = options.maxConstrainedEdges ?? PATCH_PRECHECK_MAX_CONSTRAINED_EDGES;
+  const normalsRefuseWithCrease = options.normalsRefuseWithCrease ?? PATCH_PRECHECK_NORMALS_REFUSE_WITH_CREASE;
+  const noCrease = input.faces === "single" || input.smoothness === "smooth";
+  const problems: PatchPrecheckProblem[] = [];
+  const items = input.items;
+  const anyConstrained = items.some((item) => constrained(item.continuity));
+  const edgeItems = items.filter((item) => item.kind === "edge");
+
+  // Count rule.
+  if (anyConstrained && items.length > maxEdges) {
+    const faceCount = new Set(edgeItems.map((item) => item.faceId ?? item.id)).size;
+    const blocking = edgeItems.length > maxEdges && faceCount > maxEdges;
+    problems.push({
+      kind: "too-many-edges", edgeIds: edgeItems.map((item) => item.id), measured: items.length, needed: `at most ${maxEdges} boundary items when any edge is G1 or G2`, blocking,
+      message: `the boundary has ${items.length} items (${edgeItems.length} edges on ${faceCount} faces); Indie Patch G1/G2 fails on more than ${maxEdges} (live: 20 pass, 21 fail with 22093/22094, even with one edge G1)`,
+      advice: `merge boundary edges first (plasticity_dissolve_faces or plasticity_delete_edges on the neighbour faces), patch the hole in parts of at most ${maxEdges} edges, or ask G0 on every edge`,
+    });
+  }
+
+  // Edges sharing one neighbour face.
+  const edges = edgeItems.map((item) => ({
+    edgeId: item.id, faceId: item.faceId ?? null, continuity: item.continuity,
+    sharesFaceWith: edgeItems.filter((other) => other !== item && other.faceId !== undefined && other.faceId !== null && other.faceId === item.faceId).map((other) => other.id),
+  }));
+  const reportedPairs = new Set<string>();
+  for (const edge of edges) {
+    if (!constrained(edge.continuity) || edge.faceId === null) continue;
+    const others = edgeItems.filter((other) => other.id !== edge.edgeId && other.faceId === edge.faceId && other.continuity !== edge.continuity);
+    for (const other of others) {
+      const key = [edge.edgeId, other.id].sort().join("|");
+      if (reportedPairs.has(key)) continue;
+      reportedPairs.add(key);
+      problems.push({
+        kind: "shared-face-continuity", edgeId: edge.edgeId, edgeIds: [edge.edgeId, other.id], faceIds: [edge.faceId], measured: 2, needed: "one continuity per neighbouring face", blocking: false,
+        message: `edges ${edge.edgeId} (${edge.continuity.toUpperCase()}) and ${other.id} (${other.continuity.toUpperCase()}) both border face ${edge.faceId}; Indie Patch applies continuity per neighbouring face, so both get the same continuity`,
+        advice: `ask the same continuity on both, or split face ${edge.faceId} (plasticity_insert_isoparam_edges) so each edge has its own neighbour face`,
+      });
+    }
+  }
+
+  const corners: PatchPrecheckCornerReport[] = [];
+  for (const corner of input.corners) {
+    const [ia, ib] = corner.items;
+    const a = items[ia]!, b = items[ib]!;
+    const [tA, tB] = corner.tangents;
+    const [nA, nB] = corner.normals;
+    const [wA, wB] = corner.inward;
+    const turn = tA && tB ? 180 - degreesBetween(tA, tB) : null;
+    // Patch corner angle, from whichever item is an edge with an inward direction.
+    let patchAngle: number | null = null;
+    if (tA && tB && wA && nA) patchAngle = patchCornerAngleDeg(tA, tB, wA, nA);
+    else if (tA && tB && wB && nB) patchAngle = patchCornerAngleDeg(tB, tA, wB, nB);
+    const faceNormals = corner.faces.map((face) => face.normal).filter((n): n is Vector3 => n !== null);
+    let maxFaceAngle = 0;
+    for (let i = 0; i < faceNormals.length; i += 1) for (let j = i + 1; j < faceNormals.length; j += 1) maxFaceAngle = Math.max(maxFaceAngle, tangentPlaneAngleDeg(faceNormals[i]!, faceNormals[j]!));
+    const smooth = corner.faces.length === 0 || faceNormals.length !== corner.faces.length ? null : maxFaceAngle <= normalTol;
+    const neighbourAngle = nA && nB ? tangentPlaneAngleDeg(nA, nB) : null;
+    const anglesKnown = corner.faces.every((face) => face.angleDeg !== null);
+    const angleSum = anglesKnown && patchAngle !== null && corner.faces.length > 0 ? corner.faces.reduce((sum, face) => sum + face.angleDeg!, 0) + patchAngle : null;
+    corners.push({
+      vertexId: corner.vertexId, positionMm: corner.positionMm, itemIds: [a.id, b.id], continuity: [a.continuity, b.continuity],
+      boundaryTurnDeg: turn === null ? null : fmt(turn, 3), patchAngleDeg: patchAngle === null ? null : fmt(patchAngle, 3),
+      neighbourNormalAngleDeg: neighbourAngle === null ? null : fmt(neighbourAngle, 3), smooth, faceCount: corner.faces.length,
+      faceAngles: corner.faces.map((face) => ({ faceId: face.faceId, angleDeg: face.angleDeg === null ? null : fmt(face.angleDeg, 3) })),
+      angleSumDeg: angleSum === null ? null : fmt(angleSum, 3),
+    });
+    const where = `vertex ${corner.vertexId ?? "(curve end)"} ${fmtPoint(corner.positionMm)}`;
+    // Normals rule: both sides edges asked G1/G2 on different faces.
+    if (a.kind === "edge" && b.kind === "edge" && constrained(a.continuity) && constrained(b.continuity) && a.faceId !== b.faceId && neighbourAngle !== null && neighbourAngle > normalTol) {
+      const blocking = noCrease || normalsRefuseWithCrease;
+      problems.push({
+        kind: "normals-disagree", cornerVertexId: corner.vertexId, positionMm: corner.positionMm, edgeIds: [a.id, b.id], faceIds: [a.faceId ?? "?", b.faceId ?? "?"],
+        measured: fmt(neighbourAngle, 2), needed: `at most ${normalTol} degrees between the neighbour normals for G1/G2 to both`, blocking,
+        message: blocking
+          ? `neighbour normals disagree by ${fmt(neighbourAngle, 2)}° at ${where}: faces ${a.faceId} and ${b.faceId} do not share a tangent plane, so G1 to both is impossible without a crease, and ${noCrease ? (input.faces === "single" ? "faces: single" : "smoothness: smooth") : "this check"} forbids the crease`
+          : `neighbour normals disagree by ${fmt(neighbourAngle, 2)}° at ${where}: faces ${a.faceId} and ${b.faceId} do not share a tangent plane, so the patch cannot be G1 to both at that point; with these options native creases the patch from this corner`,
+        advice: blocking
+          ? `ask G0 on edge ${a.id} or ${b.id}, use faces: multiple or minimal with smoothness: sharp (the patch then creases from this corner), or make the faces meet tangentially at this vertex`
+          : `accept the crease, or ask G0 on edge ${a.id} or ${b.id}, or make faces ${a.faceId} and ${b.faceId} meet tangentially at this vertex`,
+      });
+    }
+    // Angle budget: a smooth vertex the patch closes, with G1/G2 on either side.
+    if (corner.closedByPatch && smooth === true && (constrained(a.continuity) || constrained(b.continuity)) && angleSum !== null && Math.abs(angleSum - 360) > budgetTol) {
+      const parts = corner.faces.map((face) => `${face.faceId} ${fmt(face.angleDeg!)}°`).join(" + ");
+      const g1Ids = [a, b].filter((item) => constrained(item.continuity)).map((item) => item.id);
+      problems.push({
+        kind: "angle-budget", cornerVertexId: corner.vertexId, positionMm: corner.positionMm, edgeIds: [a.id, b.id], faceIds: corner.faces.map((face) => face.faceId),
+        measured: fmt(angleSum), needed: "360 degrees", blocking: true,
+        message: `angles at ${where} sum to ${fmt(angleSum)}° (${corner.faces.length} faces: ${parts}, plus the patch corner ${fmt(patchAngle!)}°); every face there shares one tangent plane, so a smooth patch needs 360°`,
+        advice: `ask G0 on ${g1Ids.length > 1 ? `edges ${g1Ids.join(" and ")}` : `edge ${g1Ids[0]}`}, or rebuild the boundary so the faces meeting at this vertex leave a corner that closes to 360° (swap which curve continues which edge, or re-loft so a face leaves the vertex at a different angle)`,
+      });
+    }
+  }
+  return { ok: problems.every((problem) => !problem.blocking), problems, corners, edges };
+}
+
+/** Indie Patch (FillHole) native error code in a failure message, or undefined. */
+export function patchHoleErrorCode(error: unknown): number | undefined {
+  const text = error instanceof Error ? error.message : String(error);
+  const match = /FillHole failed with error `?(\d+)`?/.exec(text);
+  return match ? Number(match[1]) : undefined;
+}
+
+// What each FillHole code went with in the live runs (FINDINGS "Indie Patch pre-check"); none is officially decoded.
+export const PATCH_HOLE_ERROR_ADVICE: Readonly<Record<number, string>> = {
+  22092: "the G1/G2 conditions at the boundary could not be met. Seen at a smooth vertex whose face angles do not add to 360°, after its neighbour faces had been rebuilt.",
+  22093: "the G1/G2 conditions at the boundary could not be met. Seen with more than 20 boundary edges and G1, and at corners whose neighbour faces do not share a tangent plane when faces: single or smoothness: smooth forbid a crease.",
+  22094: "the G1/G2 conditions at the boundary could not be met. Seen with more than 20 boundary edges and G2 (or nearly smooth loops), at a smooth vertex whose face angles do not add to 360°, at a small corner crease that faces: single forbade, and for G2 on a rear closure whose G1 worked.",
+};
+
+/** One line per problem, for an error message. */
+export function describePatchPrecheck(result: PatchPrecheckResult, which: "blocking" | "all" = "all"): string {
+  const listed = result.problems.filter((problem) => which === "all" || problem.blocking);
+  if (listed.length === 0) return "pre-check found no corner, edge-count or face problem";
+  // Blocking problems first; at most six in the text (the full list is in the analysis).
+  const ordered = [...listed.filter((problem) => problem.blocking), ...listed.filter((problem) => !problem.blocking)];
+  const shown = ordered.slice(0, 6).map((problem, index) => `${index + 1}. ${problem.message}. Fix: ${problem.advice}.`).join(" ");
+  return ordered.length > 6 ? `${shown} (${ordered.length - 6} more in the analysis.)` : shown;
+}
+
+/** Indie Patch boundary geometry for the pre-check (read-only). Every vector in millimetres or unit length. */
+export const PATCH_BOUNDARY_SOURCE = nativeFunction`function (pk_default, args) {
+  const kernel = pk_default.a;
+  let item;
+  for (const [versionId, candidate] of nativeApi.geo.geometryModel) if (nativeApi.db.lookupStableId(versionId) === args.id) { item = candidate; break; }
+  if (!item || item.view?.constructor?.name !== 'Sheet') throw new Error('Unknown current Sheet body ID: ' + args.id);
+  const view = item.view;
+  const read = v => [Number(v.x), Number(v.y), Number(v.z)];
+  const mm = v => read(v).map(x => x * 1000);
+  const unit = a => { const l = Math.hypot(a[0], a[1], a[2]); return l > 0 && Number.isFinite(l) ? a.map(x => x / l) : null; };
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dotp = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const dist3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const list = c => { if (!c) return []; if (typeof c.Size === 'function') { const out = []; for (let i = 0; i < c.Size(); i += 1) out.push(c.Get(i)); return out; } return Array.from(c); };
+  const faceIdByEntity = new Map(), edgeIdByEntity = new Map();
+  for (let i = 0; i < view.high.faces.versionIds.length; i += 1) faceIdByEntity.set(Number(view.high.faces.get(i).entityId), String(view.high.faces.versionIds[i]));
+  for (let i = 0; i < view.high.edges.versionIds.length; i += 1) edgeIdByEntity.set(Number(view.high.edges.get(i).entityId), String(view.high.edges.versionIds[i]));
+  const kernelEdges = item.model.GetEdges().GetEdges();
+  const facesOf = edge => { const fs = edge.GetFaces(); return typeof fs.GetFaces === 'function' ? fs.GetFaces() : list(fs); };
+  const edgeByEntity = new Map(kernelEdges.map(e => [Number(e.Id()), e]));
+  const edgeById = id => { const i = view.high.edges.versionIds.indexOf(id); if (i < 0) throw new Error('Stale or unknown Sheet edge: ' + id); const e = edgeByEntity.get(Number(view.high.edges.get(i).entityId)); if (!e) throw new Error('Kernel edge not found: ' + id); return e; };
+  const KernelVector = kernelEdges[0].GetPointAndTangent(0.5).position.constructor;
+  const evaluator = kernel.Eval && kernel.Context?.Get ? new kernel.Eval(kernel.Context.Get()) : null;
+  // End points of an edge with the tangent leaving the end along the edge (the kernel tangent follows the curve, which can run
+  // against the edge, so it is oriented by a step inside the edge) and the vertex at that end.
+  const edgeEnds = edge => {
+    const verts = edge.GetVertices();
+    const vs = [verts.left, verts.right].filter(Boolean).map(v => ({ id: Number(v.Id()), p: mm(v.GetPoint()) }));
+    return [[0, 1e-3], [1, 1 - 1e-3]].map(([t, inner]) => {
+      const end = edge.GetPointAndTangent(t);
+      const pointMm = mm(end.position);
+      let tangent = unit(read(end.tangent));
+      const step = read(edge.GetPointAndTangent(inner).position).map((x, i) => x - read(end.position)[i]);
+      if (tangent && dotp(tangent, step) < 0) tangent = tangent.map(x => -x);
+      const v = vs.find(c => dist3(c.p, pointMm) < 1e-3);
+      return { t, pointMm, tangentAway: tangent, vertexId: v ? v.id : null };
+    });
+  };
+  const normalAt = (face, pMm) => {
+    const near = face.FindPointNear(new KernelVector(pMm[0] / 1000, pMm[1] / 1000, pMm[2] / 1000));
+    return unit(read(face.EvalNormal(near.u, near.v).normal));
+  };
+  const distanceToFace = (face, pMm) => {
+    const r = evaluator.DistancesToPoints(Int32Array.from([Number(face.Id())]), Float64Array.from(pMm.map(x => x / 1000)), Int32Array.from([0, 1]));
+    const d = Number(r.distances?.[0]);
+    return Number(r.errors?.[0] ?? 0) === 0 && Number.isFinite(d) ? d * 1000 : null;
+  };
+  // Unit direction in the face, across the edge a little away from the vertex, pointing into the face: of two tiny steps
+  // either way across the edge, the one that lands on the trimmed face is inside. Null when the two cannot be told apart.
+  const inwardAcross = (face, edge, vMm) => {
+    if (!evaluator) return null;
+    const len = Number(edge.FindLength().length) * 1000;
+    const atStart = dist3(mm(edge.GetPointAndTangent(0).position), vMm) <= dist3(mm(edge.GetPointAndTangent(1).position), vMm);
+    const f = Math.min(0.05, 0.5 / len);
+    const q = edge.GetPointAndTangent(atStart ? f : 1 - f);
+    const qMm = mm(q.position);
+    const n = normalAt(face, qMm), t = unit(read(q.tangent));
+    const w = n && t ? unit(cross(n, t)) : null;
+    if (!w) return null;
+    const eps = Math.min(0.01, 0.02 * len);
+    const plus = distanceToFace(face, qMm.map((x, i) => x + eps * w[i]));
+    const minus = distanceToFace(face, qMm.map((x, i) => x - eps * w[i]));
+    if (plus === null || minus === null || Math.abs(plus - minus) <= 0.2 * eps) return null;
+    return plus < minus ? w : w.map(x => -x);
+  };
+  const vertexById = new Map();
+  for (const e of kernelEdges) { const vv = e.GetVertices(); for (const v of [vv.left, vv.right]) if (v) vertexById.set(Number(v.Id()), v); }
+  const edges = args.edgeIds.map(edgeId => {
+    const edge = edgeById(edgeId);
+    const faces = facesOf(edge);
+    if (faces.length !== 1) throw new Error('Hole patch requires boundary edges: ' + edgeId);
+    return { edgeId, faceId: faceIdByEntity.get(Number(faces[0].Id())) ?? null, ends: edgeEnds(edge).map(end => ({ ...end, inward: end.vertexId === null ? null : inwardAcross(faces[0], edge, end.pointMm), normal: normalAt(faces[0], end.pointMm) })) };
+  });
+  const wires = (args.curveIds ?? []).map(wireId => {
+    let wire; for (const [versionId, candidate] of nativeApi.geo.geometryModel) if (nativeApi.db.lookupStableId(versionId) === wireId) { wire = candidate; break; }
+    if (!wire) throw new Error('Unknown Wire: ' + wireId);
+    const all = wire.model.GetEdges().GetEdges().flatMap(edgeEnds);
+    return { wireId, ends: all.filter(p => all.filter(q => dist3(p.pointMm, q.pointMm) <= 1e-6).length % 2 === 1).map(p => ({ pointMm: p.pointMm, tangentAway: p.tangentAway })) };
+  });
+  const vertexIds = [...new Set(edges.flatMap(e => e.ends.map(end => end.vertexId)).filter(v => v !== null))];
+  const vertices = vertexIds.map(vertexId => {
+    const vertex = vertexById.get(vertexId);
+    const pMm = mm(vertex.GetPoint());
+    const atV = [];
+    for (const e of kernelEdges) {
+      const ends = edgeEnds(e).filter(end => end.vertexId === vertexId);
+      if (ends.length === 0) continue;
+      const fs = facesOf(e);
+      for (const end of ends) atV.push({ edge: e, edgeId: edgeIdByEntity.get(Number(e.Id())), faces: fs, faceEntities: fs.map(f => Number(f.Id())), tangentAway: end.tangentAway });
+    }
+    const faceEntities = [...new Set(atV.flatMap(a => a.faceEntities))];
+    const faces = faceEntities.map(entity => {
+      const ends = atV.filter(a => a.faceEntities.includes(entity));
+      const face = ends[0].faces.find(f => Number(f.Id()) === entity);
+      const normal = normalAt(face, pMm);
+      let angleDeg = null;
+      if (ends.length === 2 && ends[0].tangentAway && ends[1].tangentAway && normal) {
+        for (const k of [0, 1]) {
+          const inward = inwardAcross(face, ends[k].edge, pMm);
+          if (!inward) continue;
+          const tk = ends[k].tangentAway, tOther = ends[1 - k].tangentAway;
+          const sigma = Math.sign(dotp(cross(tk, inward), normal)) || 1;
+          let phi = Math.atan2(dotp(cross(tk, tOther), normal), dotp(tk, tOther)) * 180 / Math.PI * sigma;
+          if (phi < 0) phi += 360;
+          angleDeg = phi;
+          break;
+        }
+      }
+      return { faceId: faceIdByEntity.get(entity) ?? String(entity), normal, angleDeg };
+    });
+    return { vertexId, positionMm: pMm, faces, boundaryEdgeIds: atV.filter(a => a.faceEntities.length === 1).map(a => a.edgeId) };
+  });
+  return { edges, wires, vertices };
+}`;
+
+export interface NativePatchBoundary {
+  edges: Array<{ edgeId: string; faceId: string | null; ends: Array<{ t: number; pointMm: Vector3; tangentAway: Vector3 | null; vertexId: number | null; inward: Vector3 | null; normal: Vector3 | null }> }>;
+  wires: Array<{ wireId: number; ends: Array<{ pointMm: Vector3; tangentAway: Vector3 | null }> }>;
+  vertices: Array<{ vertexId: number; positionMm: Vector3; faces: PatchPrecheckFaceAtVertex[]; boundaryEdgeIds: string[] }>;
+}
+
+/** Corner list for checkPatchBoundary from the native boundary read: every pair of item ends that meet. */
+export function patchPrecheckInputFromNative(
+  native: NativePatchBoundary,
+  continuityOf: (edgeId: string) => PatchPrecheckContinuity,
+  options: { faces?: "single" | "minimal" | "multiple" | undefined; smoothness?: "sharp" | "smooth" | undefined } = {},
+  meetMm = 1e-2,
+): PatchPrecheckInput {
+  const items: PatchPrecheckItem[] = [
+    ...native.edges.map((edge) => ({ kind: "edge" as const, id: edge.edgeId, faceId: edge.faceId, continuity: continuityOf(edge.edgeId) })),
+    ...native.wires.map((wire) => ({ kind: "curve" as const, id: `wire:${wire.wireId}`, continuity: "g0" as const })),
+  ];
+  type End = { item: number; pointMm: Vector3; tangent: Vector3 | null; vertexId: number | null; normal: Vector3 | null; inward: Vector3 | null; used: boolean };
+  const ends: End[] = [
+    ...native.edges.flatMap((edge, index) => edge.ends.map((end) => ({ item: index, pointMm: end.pointMm, tangent: end.tangentAway, vertexId: end.vertexId, normal: end.normal, inward: end.inward, used: false }))),
+    ...native.wires.flatMap((wire, index) => wire.ends.map((end) => ({ item: native.edges.length + index, pointMm: end.pointMm, tangent: end.tangentAway, vertexId: null, normal: null, inward: null, used: false }))),
+  ];
+  const dist = (a: Vector3, b: Vector3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const holeEdgeIds = new Set(native.edges.map((edge) => edge.edgeId));
+  const corners: PatchPrecheckCorner[] = [];
+  for (const first of ends) {
+    if (first.used) continue;
+    const partner = ends.find((other) => other !== first && !other.used && (first.vertexId !== null && other.vertexId !== null ? other.vertexId === first.vertexId : dist(other.pointMm, first.pointMm) <= meetMm));
+    if (!partner) continue;
+    first.used = true; partner.used = true;
+    const vertexId = first.vertexId ?? partner.vertexId;
+    const vertex = vertexId === null ? undefined : native.vertices.find((candidate) => candidate.vertexId === vertexId);
+    const bothEdges = first.item < native.edges.length && partner.item < native.edges.length;
+    corners.push({
+      vertexId,
+      positionMm: vertex?.positionMm ?? first.pointMm,
+      items: [first.item, partner.item],
+      tangents: [first.tangent, partner.tangent],
+      normals: [first.normal, partner.normal],
+      inward: [first.inward, partner.inward],
+      faces: vertex?.faces ?? [],
+      closedByPatch: Boolean(vertex) && bothEdges && vertex!.boundaryEdgeIds.every((edgeId) => holeEdgeIds.has(edgeId)),
+    });
+  }
+  return { items, corners, faces: options.faces, smoothness: options.smoothness };
+}
+
+// ---------------------------------------------------------------- Organic tools 2: plane curve ----------------------------------------------------------------
+export type CurvePlaneName = "xy" | "xz" | "yz";
+export interface CurvePlaneFrame { originMm: Vector3; uAxis: Vector3; vAxis: Vector3; normal: Vector3 }
+const PLANE_FRAMES: Record<CurvePlaneName, { u: Vector3; v: Vector3; normal: Vector3 }> = {
+  // The normal is the offset direction: +Z, +Y and +X (for xz, u x v is -Y, but y = offsetMm is what reads back).
+  xy: { u: [1, 0, 0], v: [0, 1, 0], normal: [0, 0, 1] },
+  xz: { u: [1, 0, 0], v: [0, 0, 1], normal: [0, 1, 0] },
+  yz: { u: [0, 1, 0], v: [0, 0, 1], normal: [1, 0, 0] },
+};
+
+/**
+ * The frame of a curve plane: a named world plane offset along its normal (+Z, +Y, +X), or a custom origin with u and v axes.
+ * The custom u is normalised and v is made perpendicular to u in their plane (Gram-Schmidt); u and v must be at least 1 degree
+ * from parallel. The custom normal is u x v, and offsetMm moves the origin along it.
+ */
+export function resolveCurvePlane(plane: CurvePlaneName | { originMm: Vector3; uAxis: Vector3; vAxis: Vector3 }, offsetMm = 0): CurvePlaneFrame {
+  if (!Number.isFinite(offsetMm)) throw new Error("Plane curve offsetMm must be finite");
+  if (typeof plane === "string") {
+    const frame = PLANE_FRAMES[plane];
+    if (!frame) throw new Error("Plane curve plane must be xy, xz, yz or { originMm, uAxis, vAxis }");
+    return { originMm: frame.normal.map((x) => x * offsetMm) as Vector3, uAxis: frame.u, vAxis: frame.v, normal: frame.normal };
+  }
+  const { originMm, uAxis, vAxis } = plane;
+  if (![...originMm, ...uAxis, ...vAxis].every(Number.isFinite)) throw new Error("Plane curve origin and axes must be finite");
+  const ul = v3len(uAxis);
+  if (!(ul > 1e-12)) throw new Error("Plane curve uAxis must be a non-zero vector");
+  const u = uAxis.map((x) => x / ul) as Vector3;
+  const along = v3dot(vAxis, u);
+  const vPerp: Vector3 = [vAxis[0] - along * u[0], vAxis[1] - along * u[1], vAxis[2] - along * u[2]];
+  const vl = v3len(vPerp);
+  if (!(v3len(vAxis) > 1e-12) || vl < Math.sin(Math.PI / 180) * v3len(vAxis)) throw new Error("Plane curve vAxis must be non-zero and at least 1 degree from uAxis");
+  const v = vPerp.map((x) => x / vl) as Vector3;
+  const normal = v3cross(u, v);
+  return { originMm: [originMm[0] + normal[0] * offsetMm, originMm[1] + normal[1] * offsetMm, originMm[2] + normal[2] * offsetMm], uAxis: u, vAxis: v, normal };
+}
+
+/** World points (mm) for 2D plane points: each point is scaled about the plane origin, then translated in the plane. */
+export function planeCurveWorldPoints(frame: CurvePlaneFrame, points2dMm: Array<[number, number]>, scaleFactor = 1, translate2dMm: [number, number] = [0, 0]): Vector3[] {
+  if (!Number.isFinite(scaleFactor) || scaleFactor <= 0) throw new Error("Plane curve scale must be a positive finite number");
+  if (!translate2dMm.every(Number.isFinite)) throw new Error("Plane curve translate2dMm must be finite");
+  return points2dMm.map(([x, y]) => {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error("Plane curve points must be finite");
+    const a = x * scaleFactor + translate2dMm[0], b = y * scaleFactor + translate2dMm[1];
+    return [0, 1, 2].map((i) => frame.originMm[i]! + a * frame.uAxis[i]! + b * frame.vAxis[i]!) as Vector3;
+  });
+}
+
+// ---------------------------------------------------------------- Organic tools 2: continuity report ----------------------------------------------------------------
+export type ContinuityReportClass = "G2" | "G1" | "G0" | "none";
+const CLASS_RANK: Record<ContinuityReportClass, number> = { none: 0, G0: 1, G1: 2, G2: 3 };
+/** Hierarchical class from deviations and tolerances (G0 position, G1 normal angle, G2 relative curvature); none is a gap. */
+export function continuityClass(g0Mm: number, g1Deg: number, g2Rel: number, tolerances: { positionMm: number; normalAngleDeg: number; relativeCurvature: number }): ContinuityReportClass {
+  if (!(g0Mm <= tolerances.positionMm)) return "none";
+  if (!(g1Deg <= tolerances.normalAngleDeg)) return "G0";
+  if (!(g2Rel <= tolerances.relativeCurvature)) return "G1";
+  return "G2";
+}
+/** Order edges worst first: lowest class, then largest normal deviation, then largest curvature mismatch. */
+export function worstFirst<T extends { class: ContinuityReportClass; normalAngleDeg: { max: number }; relativeCurvature: { interiorMax: number | null } }>(edges: T[]): T[] {
+  return [...edges].sort((a, b) => CLASS_RANK[a.class] - CLASS_RANK[b.class] || b.normalAngleDeg.max - a.normalAngleDeg.max || (b.relativeCurvature.interiorMax ?? 0) - (a.relativeCurvature.interiorMax ?? 0));
+}
+
+export interface WireSegmentInput { entityId: number; startMm: Vector3; endMm: Vector3; startTangent: Vector3; endTangent: Vector3; lengthMm: number }
+export interface CurvatureSampleInput { positionMm: Vector3; vectorPerMm: Vector3 }
+export interface WireJunctionReport {
+  atMm: Vector3;
+  segmentEntityIds: [number, number];
+  curvaturePerMm: [number, number];
+  tangentAngleDeg: number;
+  relativeCurvatureMismatch: number;
+  class: "G0" | "G1" | "G2";
+}
+export interface WireSegmentReport { entityId: number; lengthMm: number; minCurvaturePerMm: number; maxCurvaturePerMm: number; inflections: number }
+
+/** Sign changes of the curvature along a segment: consecutive non-zero curvature vectors pointing opposite ways. */
+export function countInflections(samples: CurvatureSampleInput[], zeroPerMm = 1e-9): number {
+  let count = 0;
+  let last: Vector3 | null = null;
+  for (const sample of samples) {
+    if (v3len(sample.vectorPerMm) <= zeroPerMm) continue;
+    if (last && v3dot(last, sample.vectorPerMm) < 0) count += 1;
+    last = sample.vectorPerMm;
+  }
+  return count;
+}
+
+/**
+ * Junctions between consecutive segments of one Wire (segments meeting end to end within 0.001 mm, in any order or direction)
+ * with the curvature on each side, the tangent angle (0 when smooth) and a G0/G1/G2 class, plus per-segment curvature extremes
+ * and inflection counts. The curvature vector does not depend on the segment direction, so the mismatch is
+ * |k1 - k2| / (|k1| + |k2|) of the vectors: 1 at an S-shaped junction even when the magnitudes agree.
+ */
+export function wireJunctions(segments: WireSegmentInput[], samples: Map<number, CurvatureSampleInput[]>, tolerances: { normalAngleDeg: number; relativeCurvature: number }, meetMm = 1e-3): { junctions: WireJunctionReport[]; segments: WireSegmentReport[] } {
+  const dist = (a: Vector3, b: Vector3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  type End = { seg: WireSegmentInput; at: Vector3; away: Vector3; used: boolean };
+  const ends: End[] = segments.flatMap((seg) => [
+    { seg, at: seg.startMm, away: seg.startTangent, used: false },
+    { seg, at: seg.endMm, away: [-seg.endTangent[0], -seg.endTangent[1], -seg.endTangent[2]] as Vector3, used: false },
+  ]);
+  const curvatureAt = (seg: WireSegmentInput, at: Vector3): Vector3 => {
+    const list = samples.get(seg.entityId) ?? [];
+    if (list.length === 0) return [0, 0, 0];
+    const first = list[0]!, last = list[list.length - 1]!;
+    return (dist(first.positionMm, at) <= dist(last.positionMm, at) ? first : last).vectorPerMm;
+  };
+  const junctions: WireJunctionReport[] = [];
+  for (const end of ends) {
+    if (end.used) continue;
+    const other = ends.find((candidate) => candidate !== end && !candidate.used && candidate.seg !== end.seg && dist(candidate.at, end.at) <= meetMm)
+      ?? ends.find((candidate) => candidate !== end && !candidate.used && candidate.seg === end.seg && segments.length === 1 && dist(candidate.at, end.at) <= meetMm);
+    if (!other) continue;
+    end.used = true; other.used = true;
+    const k1 = curvatureAt(end.seg, end.at), k2 = curvatureAt(other.seg, other.at);
+    const diff: Vector3 = [k1[0] - k2[0], k1[1] - k2[1], k1[2] - k2[2]];
+    const sum = v3len(k1) + v3len(k2);
+    const mismatch = sum === 0 ? 0 : v3len(diff) / sum;
+    const tangentAngle = 180 - degreesBetween(end.away, other.away);
+    const cls = tangentAngle > tolerances.normalAngleDeg ? "G0" : mismatch > tolerances.relativeCurvature ? "G1" : "G2";
+    junctions.push({ atMm: end.at, segmentEntityIds: [end.seg.entityId, other.seg.entityId], curvaturePerMm: [v3len(k1), v3len(k2)], tangentAngleDeg: tangentAngle, relativeCurvatureMismatch: mismatch, class: cls });
+  }
+  const segmentReports = segments.map((seg) => {
+    const list = samples.get(seg.entityId) ?? [];
+    const magnitudes = list.map((sample) => v3len(sample.vectorPerMm));
+    return { entityId: seg.entityId, lengthMm: seg.lengthMm, minCurvaturePerMm: magnitudes.length ? Math.min(...magnitudes) : 0, maxCurvaturePerMm: magnitudes.length ? Math.max(...magnitudes) : 0, inflections: countInflections(list) };
+  });
+  return { junctions, segments: segmentReports };
+}
