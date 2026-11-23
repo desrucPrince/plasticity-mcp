@@ -1699,7 +1699,13 @@ coincident ends, in any order or direction) with `curvaturePerMm` on each side,
 vectors (1 at an S-shaped junction) and a G0/G1/G2 `class` (the normal
 tolerance also classifies the tangent angle), plus per segment the min and max
 curvature and `inflections`, the number of curvature sign changes between
-consecutive samples: the numbers of a curvature comb. Live on 26.1.3: on the
+consecutive samples: the numbers of a curvature comb. The end tangents are
+oriented by the segment's own points at t 0.01 and 0.99 (the kernel tangent
+follows the curve, which can run against the segment), and the curvature on
+each side is the first sample at the segment start and the last at its end, so
+the closure of a closed single-segment Wire compares its two different ends.
+Interior maxima are clamped to the overall maxima and the relative curvature
+mismatch to 1, so `interiorClass` is never worse than `class` from rounding. Live on 26.1.3: on the
 organic tutorial Solid every one of its 33 two-face edges came back, and the
 33 rows of the earlier per-edge read-back matched in class and interior normal
 angle to 0.000 deg; a filleted polyline reads two G1 junctions with 0 and
@@ -2314,6 +2320,47 @@ intended boundary edge; `widthMm` controls the native transition extent and
 two Sheets with one editable Sheet containing a `BSurf` face. Inspect the
 returned B-Rep because infeasible widths are rejected by the native kernel and
 the transition width is not a promise of one final linear dimension.
+`plasticity_bridge_sheet_edges` runs the same native bridge between two
+boundary edges of ONE Sheet (`bodyId`, `firstEdgeId`, `secondEdgeId`,
+`widthMm`, `softness` default 1). The two edges must lie on two different
+faces; the pick points are the edge midpoints. The native factory accepts two
+faces of one Sheet (organic-tools-2 phase B; only `plasticity_bridge_surface`
+asked for two Sheets), so this is one native step and the Sheet stays one body.
+The bridge is a G2 face blend: `widthMm` is the distance between its two
+contact lines, it lies on the side the two face normals point to, and it trims
+both faces back from the picked edges, so the joins are new trimmed edges. The
+reply adds `bridge`: `bridgeFaceIds`, `joins` (per join edge: `faceIds`,
+`sourceFaceId`, `achievedContinuity` and the maximum position, normal and
+relative curvature deviations from the surface continuity sampler at 0.01 mm,
+0.1 deg, 0.05), `singleBody`, `pickPointsMm` and `undoSteps`. Live on 26.1.3: a
+trapezoid channel Sheet (floor plus two walls leaning in to x 10 and x 30 at
+z 20) bridged across its two wall-top edges at width 30 mm became one 4-face
+Sheet whose two joins read G2 (normal deviation 1.2e-6 deg). Native refuses
+(PK_FACE_make_blend 17452/17453 or PK_ERROR_fxf_blend_failed 1080) when a
+contact line falls outside its face (width 10 or 20 on that channel), when the
+normals point apart, or when the blend runs into another face of the Sheet
+(a floor, back wall and side wall Sheet); two separate Sheets fail the same
+way, and unjoining a face first did not rescue it, so there is no composite.
+The error carries this advice.
+`plasticity_split_sheet_edge` splits one edge of a Sheet or Solid (boundary or
+shared by two faces) into two edges with a new vertex; the body stays one body
+with the same faces. Give exactly one of `normalizedParameter` (0 < t < 1, the
+fraction of the edge length from the edge start, which the reply names as
+`edgeStartMm`) and `pointMm` (projected onto the edge; `projectionDistanceMm`
+is reported). A piece shorter than 0.01 mm is refused before any change. One
+native step (Split Segment given the shell edge: `SplitSegmentFactory.edge`
+takes a ShellEdge of a Sheet or Solid). The reply adds `split`: `edgeIds` (the
+edges at the new vertex), `vertexId`, `positionMm`, `lengthFraction`,
+`distanceFromStartMm`, `edgeLengthMm`, `nativeParameter`, `vertexDeviationMm`
+(the vertex against the point evaluated before the split, at most 0.001 mm),
+`closedEdge`, `counts` (faces, edges, vertices before and after) and
+`undoSteps`. A closed edge without a vertex (a full circle) gets one vertex and
+stays one closed edge (`closedEdge: true`); split it again for two edges. Live
+on 26.1.3: a 40 mm rectangle Sheet edge split at t 0.3 put the vertex at 12 mm
+from the edge start (1.8e-12 mm off), 1 face, 4 to 5 edges and vertices; a
+`pointMm` 3 mm off the opposite edge split it at its projection; a box Solid
+edge split at 0.5 kept a valid Solid; an open cylinder rim split twice gave two
+arcs on the wall face.
 `plasticity_cut_with_faces` splits current Solid or Sheet bodies with current
 planar cutter faces and preserves the cutter bodies. For an open-Sheet trim,
 inspect the exact parts returned after Cut and call `plasticity_delete` only on
@@ -2774,9 +2821,6 @@ before on every boundary the pre-check passes (live: the same reply keys,
 bodies, bounds and continuity read-back as commit 679468e on six boundaries).
 What blocks (each rule was measured live; see
 discovery/probes-2026-11-organic/FINDINGS.md):
-- more than 20 boundary edges on more than 20 neighbour faces once any edge is
-  G1 or G2 (20 pass; 21 and 22 fail natively with 22093 or 22094, even with
-  one edge G1); with fewer distinct faces it is reported only;
 - at a vertex where every face shares one tangent plane, the patch closes the
   vertex and either side is G1/G2: the faces' interior angles there plus the
   patch's own corner angle must add up to 360 deg (within 10 deg). The
@@ -2786,19 +2830,34 @@ discovery/probes-2026-11-organic/FINDINGS.md):
   are both G1/G2 and whose neighbour normals differ by more than 2 deg. With
   the default options native creases the patch from such a corner and
   succeeds (an open box at G1 on all four walls), so there it is reported only.
-What is reported only: two boundary edges on one neighbour face with different
-continuity (Indie Patch applies continuity per neighbouring face, so both get
-the same one).
+An angle budget is not judged (reported as `angle-indeterminate`, corner
+`angleBudget: "indeterminate"`) where an angle at the vertex is within 2 deg of
+0 or 360 deg, because such an angle can wrap to the other end and flip the sum.
+What is reported only: more than 20 boundary edges once any edge is G1 or G2
+(`too-many-edges`; in every live test, on prisms, stars and lenses, 20 passed
+and 21 or 22 failed natively with 22093 or 22094, even with one edge G1, but
+that evidence is too narrow to refuse on), and mixed continuity
+(`mixed-continuity`): G0 is only a minimum. Native keeps every G1/G2 request
+but may come back tangent on a G0 edge where a smooth fill allows it, and never
+makes a crease on request. Live (organic-tools-2 phase B): an open box with one
+wall asked G1 and three G0 came back G1 on all four rim edges, and a cylinder
+rim split into two arcs (one asked G1, one G0) came back G1 on both, also after
+the wall face was split into two faces so that each arc had its own neighbour
+face; on the tutorial rear closure (attempt2-E, G1 bowl and necks, G0 base) the
+G0 base edges came back G0 (57 to 70 deg inside the edge). The factory passes
+per-edge lists to the kernel. So there is no opt-in split-the-neighbour
+composite: it does not change the result. Read the edges back; for a forced
+crease, fill that part separately.
 `plasticity_check_patch_boundary` is the same analysis alone, read-only, with
 the same boundary inputs (`id`, `edgeIds`, `curveIds`, `continuity`,
 `edgeContinuity`, plus `faces` and `smoothness`, which decide whether a
 disagreeing corner blocks). It returns `ok`, `problems` (`kind`:
-`too-many-edges`, `angle-budget`, `normals-disagree` or
-`shared-face-continuity`; `cornerVertexId` and `positionMm` or `edgeIds`,
+`too-many-edges`, `angle-budget`, `angle-indeterminate`, `normals-disagree`
+or `mixed-continuity`; `cornerVertexId` and `positionMm` or `edgeIds`,
 `faceIds`, `measured`, `needed`, `blocking`, `message`, `advice`), `corners`
 (per corner: the two items and their continuity, `boundaryTurnDeg`,
 `patchAngleDeg`, `neighbourNormalAngleDeg`, `smooth`, `faceCount`,
-`faceAngles` and `angleSumDeg`), `edges` (per edge: its neighbour face and
+`faceAngles`, `angleSumDeg` and, when skipped, `angleBudget`), `edges` (per edge: its neighbour face and
 `sharesFaceWith`) and a one-line `summary`.
 `plasticity_cap_sheet_holes` fills every planar open boundary on one or more
 current Sheet bodies in one native history step. Use it when all compatible
@@ -2857,7 +2916,8 @@ u x v). `points2dMm` are scaled by `scale` about the plane origin, then moved by
 `translate2dMm`. `mode: "control"` (default, three or more points) makes them
 the control polygon, the native path of `plasticity_create_control_point_curve`;
 `mode: "interpolate"` (two or more) passes through them, the path of
-`plasticity_create_nurbs_curve`. `closed` closes the curve. The reply adds
+`plasticity_create_nurbs_curve`. `closed` closes the curve and needs at least
+three points. The reply adds
 `wireId`, `worldPointsMm` (the 3D points used) and `plane` (origin, axes,
 normal). Live: sampled native points of control and interpolated curves on xz,
 xy, yz and a tilted custom plane lay on the plane within 1.1e-14 mm.
