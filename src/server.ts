@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { createHash, randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { execFile } from "node:child_process";
@@ -12,7 +13,8 @@ import { diffScenes, type SceneDiff, type TrackedDatum } from "./plasticity/chan
 import { ConstructionHistoryStore, type ConstructionHistoryEntry } from "./plasticity/construction-history.ts";
 import { StepImportReferenceStore } from "./plasticity/import-reference-store.ts";
 import { StepReferenceDownloader, type StepReferenceDownloaderLike } from "./plasticity/step-reference-downloader.ts";
-import { PlasticityOperations, type ExtrudeOptions } from "./plasticity/operations.ts";
+import { PlasticityOperations, resolveExtrudeFacesBoolean, type ExtrudeOptions } from "./plasticity/operations.ts";
+import { InsetPlanarFaceRecipe } from "./plasticity/inset-planar-face.ts";
 import { boundsCenter, quaternionFromXyzDegrees, rotateBoundsAroundPivot, unionBounds } from "./plasticity/print-orientation.ts";
 import { PlasticityRecipes } from "./plasticity/recipes.ts";
 import { SplitSolidByPlaneRecipe } from "./plasticity/split-solid.ts";
@@ -43,7 +45,8 @@ import {
   printedThreadQualificationMatchSchema,
 } from "./printing/thread-qualification.ts";
 import { PLASTICITY_MCP_INSTRUCTIONS } from "./server-instructions.ts";
-import { catalogScore, exposeDirectTool, type ToolCatalogMode } from "./tool-catalog.ts";
+import { catalogScore, exposeDirectTool, withMergedUnionProperties, type ToolCatalogMode } from "./tool-catalog.ts";
+import { bridgeDepth } from "./plasticity/surfacing.ts";
 
 const vector = z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]);
 const vector2 = z.tuple([z.number().finite(), z.number().finite()]);
@@ -474,6 +477,13 @@ const groupSelectionFields = {
   instanceIds: optionalInstanceIds,
   referenceMeshIds: optionalReferenceMeshIds,
   groupIds: optionalGroupIds,
+};
+// plasticity_set_visibility (phase C, friction 18): each list defaults to empty, so only the changed kind is needed.
+const defaultedGroupSelectionFields = {
+  bodyIds: optionalBodyIds.default([]),
+  instanceIds: optionalInstanceIds.default([]),
+  referenceMeshIds: optionalReferenceMeshIds.default([]),
+  groupIds: optionalGroupIds.default([]),
 };
 const requireNodeSelection = (input: { bodyIds: number[]; instanceIds: number[]; referenceMeshIds: number[]; groupIds: number[] }, context: z.RefinementCtx) => {
   if (input.bodyIds.length + input.instanceIds.length + input.referenceMeshIds.length + input.groupIds.length === 0) {
@@ -2404,6 +2414,13 @@ function pickReply(kind: "edge" | "face", picked: { ids: string[]; tie: boolean 
   };
 }
 // A native failure after a query pick names what was picked, so the caller can see what the query chose. The error keeps its own class and message.
+/** What plasticity_extrude_faces did, read from the reply's change: a separate body, or the source Solid changed. */
+export function extrudeFacesOutcome(reply: unknown, sourceBodyId: number, boolean: string, operation: string): { boolean: string; operation: string; sourceBodyId: number; result: "new-body" | "source-modified" | "unchanged"; newBodyIds: number[]; sourceModified: boolean } {
+  const change = (reply as { change?: { added?: Array<{ id: number }>; modified?: Array<{ id: number; geometryChanged?: boolean }> } } | undefined)?.change;
+  const newBodyIds = (change?.added ?? []).map((body) => body.id);
+  const sourceModified = (change?.modified ?? []).some((body) => body.id === sourceBodyId && body.geometryChanged !== false);
+  return { boolean, operation, sourceBodyId, result: newBodyIds.length > 0 ? "new-body" : sourceModified ? "source-modified" : "unchanged", newBodyIds, sourceModified };
+}
 async function afterPick<T>(kind: "edge" | "face", picked: { ids: string[] } | undefined, run: () => Promise<T>): Promise<T> {
   try {
     return await run();
@@ -2567,13 +2584,40 @@ function createServerWithCatalog(
     limit: z.number().int().min(1).max(100).default(20),
     schema: z.boolean().default(false),
   }).strict();
+  // The catalog reads query (or name), schema, offset and limit at the top level; inside arguments they are taken too
+  // (phase C, friction 1: a nested query used to be ignored silently and returned the first unfiltered page). Any other
+  // key inside arguments is an error naming the catalog fields.
+  const catalogInput = (input: z.output<typeof plasticityCallSchema>): z.output<typeof plasticityCallSchema> => {
+    const nested = input.arguments ?? {};
+    const keys = Object.keys(nested);
+    if (keys.length === 0) return input;
+    const unknown = keys.filter((key) => !["query", "name", "schema", "offset", "limit"].includes(key));
+    if (unknown.length > 0) throw new Error(`plasticity_call catalog takes query (or name), schema, offset and limit, at the top level or inside arguments; unknown catalog argument ${unknown.join(", ")}. To call an operation, set toolName to its name.`);
+    const nestedQuery = nested.query ?? nested.name;
+    if (nestedQuery !== undefined && (typeof nestedQuery !== "string" || nestedQuery.trim().length === 0 || nestedQuery.length > 200)) throw new Error("plasticity_call catalog query must be a nonempty string of at most 200 characters");
+    if (input.query !== undefined && nestedQuery !== undefined && input.query !== String(nestedQuery).trim()) throw new Error("plasticity_call catalog got two different queries (top level and inside arguments); give one");
+    const pick = <K extends "schema" | "offset" | "limit">(key: K, check: (value: unknown) => boolean): z.output<typeof plasticityCallSchema>[K] => {
+      if (nested[key] === undefined) return input[key];
+      if (!check(nested[key])) throw new Error(`plasticity_call catalog ${key} inside arguments is invalid`);
+      return nested[key] as z.output<typeof plasticityCallSchema>[K];
+    };
+    return {
+      ...input,
+      arguments: {},
+      query: input.query ?? (nestedQuery === undefined ? undefined : String(nestedQuery).trim()),
+      schema: pick("schema", (value) => typeof value === "boolean"),
+      offset: pick("offset", (value) => Number.isInteger(value) && (value as number) >= 0),
+      limit: pick("limit", (value) => Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 100),
+    };
+  };
   rawRegisterTool("plasticity_call", {
     title: "Plasticity tool catalog and dispatcher",
     description: "Find or invoke Plasticity MCP operations. toolName='catalog' with a query lists matching names and one-line summaries; each query word matches on its own and results are ranked with name matches first. An exact tool name as query, or schema=true, also returns JSON input schemas. Then set toolName to the operation and pass its arguments. Only registered operations are callable; the selected operation's original Zod schema and safety checks are applied. This is not JavaScript execution.",
     inputSchema: plasticityCallSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
   }, async (rawInput, extra) => {
-    const input = plasticityCallSchema.parse(rawInput);
+    const parsed = plasticityCallSchema.parse(rawInput);
+    const input = parsed.toolName === "catalog" ? catalogInput(parsed) : parsed;
     if (input.toolName !== "catalog") {
       const selected = routedTools.get(input.toolName);
       if (!selected || input.toolName === "plasticity_call") throw new Error(`Unknown Plasticity MCP operation: ${input.toolName}`);
@@ -2607,7 +2651,7 @@ function createServerWithCatalog(
           name: candidate.name,
           description: candidate.description,
           annotations: candidate.annotations,
-          inputSchema: z.toJSONSchema(candidate.inputSchema, { unrepresentable: "any" }),
+          inputSchema: withMergedUnionProperties(z.toJSONSchema(candidate.inputSchema, { unrepresentable: "any" }) as Record<string, unknown>),
         }
         : { name: candidate.name, summary: catalogSummary(candidate.description), readOnly: candidate.annotations.readOnlyHint }),
     });
@@ -2714,6 +2758,22 @@ function createServerWithCatalog(
       if (progressTimer) clearInterval(progressTimer);
     }
   });
+  // bridge_curves / bridge_shell_edges reply: bridge { depthMm, bulge, atFraction, chordMm, farthestPointMm } read from 41
+  // points along the new Wire (phase C item 12). Left out when the read fails; the bridge itself is already committed.
+  const withBridgeShape = async <T>(reply: T): Promise<T> => {
+    try {
+      const added = (reply as { change?: { added?: Array<{ id: number; type: string }> }; revision?: string }).change?.added?.find((body) => body.type === "Wire");
+      const revisionNow = (reply as { revision?: string }).revision;
+      if (!added || !revisionNow) return reply;
+      const operations = session.get();
+      const curve = (await operations.listCurveDirections()).curves.find((candidate) => candidate.id === added.id);
+      if (!curve || curve.segments.length !== 1) return reply;
+      const entityId = curve.segments[0]!.entityId;
+      const samples = await operations.evaluateCurveSegments(Array.from({ length: 41 }, (_, index) => ({ bodyId: added.id, segmentEntityId: entityId, normalizedParameter: index / 40 })), revisionNow);
+      const shape = bridgeDepth(samples.samples.map((sample) => sample.positionMm));
+      return { ...reply as object, bridge: { wireId: added.id, ...shape, note: "depthMm is the largest distance of the bridge from its chord and bulge the direction it bulges to; if it bulges the wrong way, flip that end (flip: true) and rebuild before joining" } } as T;
+    } catch { return reply; }
+  };
   const journaled = async <T>(
     operation: string,
     intent: string | undefined,
@@ -2991,7 +3051,7 @@ function createServerWithCatalog(
   }).strict();
   rawRegisterTool("plasticity_batch", {
     title: "Run several Plasticity operations in one call",
-    description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all); addedSolids, addedSheets and addedWires filter by type (create_cone adds a Solid and its profile Wire); likewise removed and regionsAdded. Read any step's output with \"$<step>.result.path\" using .key, [i] and [*], e.g. \"$3.result.matches[*].id\" after plasticity_find_edges or \"$2.result.createdEdges[*].edgeId\" after plasticity_boolean. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many. The reply lists what changed (new bodies with bounds); verbose=true adds the full scene summary. A step may carry return: [paths] (e.g. [\"matches[*].id\", \"matches[*].axisOriginMm\"]) to get exactly those values back; without it a read result over 1,500 bytes is cut to ids with truncated: true. detail: \"lean\" leaves out the createdEdges echo (createdEdgeCount stays), bodies a later step consumed and empty lists, a recipe's step journal (its status stays), and the matches of a read a later step references (count, plus ids up to 8, stay); omitted lists the keys it left out, which return can fetch. It ends with one summary of what survives. A return path that does not resolve fails a read step, but a step that changed the document stays completed and carries returnError. roundMm rounds length values (keys ending in Mm or Mm2) in the reply only.",
+    description: "Run up to 50 operations in order under one lock and return one combined change. Steps are {toolName, arguments} using names from plasticity_call's catalog. A step may omit revision; it gets the revision the previous step left. Refer to bodies a previous step created with \"$<step>.added[<i>]\" (or \"$<step>.added\" for all); addedSolids, addedSheets and addedWires filter by type (create_cone adds a Solid and its profile Wire); likewise removed and regionsAdded. Read any step's output with \"$<step>.result.path\" using .key, [i] and [*], e.g. \"$3.result.matches[*].id\" after plasticity_find_edges or \"$2.result.createdEdges[*].edgeId\" after plasticity_boolean. Stops at the first failing step; undoOnError=true undoes the steps that completed. Each step is its own Undo entry; undoSteps reports how many. The reply lists what changed (new bodies with bounds); verbose=true adds the full scene summary. A step may carry return: [paths] (e.g. [\"matches[*].id\", \"matches[*].axisOriginMm\"]) to get exactly those values back; without it a read result over 1,500 bytes is cut to ids with truncated: true. detail: \"lean\" leaves out the createdEdges echo (createdEdgeCount stays), bodies a later step consumed and empty lists, a recipe's step journal (its status stays), and the matches of a read a later step references (count, plus ids up to 8, stay); omitted lists the keys it left out, which return can fetch. It ends with one summary of what survives (summary { revision, undoSteps, bodyCount, added, modified, removed }, the same shape with detail standard). A return path that does not resolve fails a read step, but a step that changed the document stays completed and carries returnError. roundMm rounds length values (keys ending in Mm or Mm2) in the reply only.",
     inputSchema: batchSchema,
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, async (rawInput, extra) => result(await exclusive(async () => await batchRunning.run(true, async () => {
@@ -3139,18 +3199,20 @@ function createServerWithCatalog(
     if (input.verbose) return render({ ...compactMutationResult<Record<string, unknown>>(end, diffScenes(start, end)), steps: renderBatchSteps(completed, input.detail), undoSteps, ...returnErrorsField() });
     // Default reply: what changed, not the whole scene. Use plasticity_status for the rest.
     const change = diffScenes(start, end);
+    // One summary shape for both details (phase C, friction 19), so helpers can read summary.added either way.
+    const summary = {
+      revision: end.revision,
+      undoSteps,
+      bodyCount: end.bodies.length,
+      ...(change.added.length > 0 ? { added: change.added.map(leanBody) } : {}),
+      ...(change.modified.length > 0 ? { modified: change.modified.map((item) => leanBody(item.after)) } : {}),
+      ...(change.removed.length > 0 ? { removed: change.removed.map((body) => body.id) } : {}),
+    };
     if (input.detail === "lean") {
       return render({
         steps: renderBatchSteps(completed, "lean"),
         ...returnErrorsField(),
-        summary: {
-          revision: end.revision,
-          undoSteps,
-          bodyCount: end.bodies.length,
-          ...(change.added.length > 0 ? { added: change.added.map(leanBody) } : {}),
-          ...(change.modified.length > 0 ? { modified: change.modified.map((item) => leanBody(item.after)) } : {}),
-          ...(change.removed.length > 0 ? { removed: change.removed.map((body) => body.id) } : {}),
-        },
+        summary,
       });
     }
     return render({
@@ -3165,6 +3227,7 @@ function createServerWithCatalog(
       },
       steps: renderBatchSteps(completed, "standard"),
       ...returnErrorsField(),
+      summary,
     });
   };
   tool("plasticity_list_windows", "List Plasticity document windows exposed on loopback CDP. If no Plasticity process is running, opens Plasticity with loopback CDP first (disable with PLASTICITY_AUTO_LAUNCH=0); a running instance without CDP is never restarted.", z.object({}), async () =>
@@ -3534,24 +3597,26 @@ function createServerWithCatalog(
     await session.get().analyzeEdgeCurvature(edges, current), true);
   tool("plasticity_analyze_face_draft", "Sample exact native B-Rep face normals on a finite interior grid and classify each selected Solid or Sheet face as positive, negative, neutral, or mixed draft relative to an explicit pull direction and minimum draft angle. Signed draft is asin(normal dot pull): walls parallel to pull are 0 degrees, outward normals toward pull are positive, and opposite normals are negative. The compact extrema do not prove continuous extrema, mold parting, release paths, or print support requirements.", faceDraftInputSchema, async ({ faces, pullDirection, minimumDraftDeg, samplesPerDirection, revision: current }) =>
     await session.get().analyzeFaceDraft(faces, pullDirection, minimumDraftDeg, samplesPerDirection, current), true);
-  tool("plasticity_continuity_report", "Read-only continuity report for a whole body: every edge shared by two faces of bodyId (or only edges between two listed faceIds, or touching one with faceMode: touching; or just edgeIds) through the same native sampler as plasticity_analyze_surface_continuity, in one native read. Per edge: edgeId, faceIds, lengthMm, class (G2, G1, G0, or none for a gap; from the maxima over all 100 samples, corners included) and interiorClass (samples 5..94), normal deviation in degrees (max, mean, interiorMax, interiorMean), relative G2 curvature mismatch |k1 - k2| / (|k1| + |k2|) (max, mean, interiorMax, interiorMean), position deviation, and the worst location. summary has counts per class and the worst edges first. wireIds adds a curvature-comb style report per Wire: every junction between consecutive segments with the curvature on each side (1/mm), the tangent angle (degrees, 0 when smooth) and a G0/G1/G2 class, plus per segment min/max curvature and the number of curvature sign changes (inflections). Tolerances as in plasticity_analyze_surface_continuity (the normal tolerance also classifies wire tangent angles).", z.object({
+  tool("plasticity_continuity_report", "Read-only continuity report for a whole body: every edge shared by two faces of bodyId (or only edges between two listed faceIds, or touching one with faceMode: touching; or just edgeIds) through the same native sampler as plasticity_analyze_surface_continuity, in one native read. Per edge: edgeId, faceIds, lengthMm, class (G2, G1, G0, or none for a gap; from the maxima over all 100 samples, corners included) and interiorClass (samples 5..94), normal deviation in degrees (max, mean, interiorMax, interiorMean), relative G2 curvature mismatch |k1 - k2| / (|k1| + |k2|) (max, mean, interiorMax, interiorMean), position deviation, and the worst location. summary has counts per class and the worst edges first. wireIds adds a curvature-comb style report per Wire: every junction between consecutive segments with the curvature on each side (1/mm), the tangent angle (degrees, 0 when smooth) and a G0/G1/G2 class, plus per segment min/max curvature and the number of curvature sign changes (inflections). curvatureSamples n (with wireIds) adds per segment curvatureSamplesPerMm (n magnitudes evenly spaced along the segment, from the native samples) and curvatureShape { monotonicRuns, localMaxima, localMinima, unimodal } from all native samples, ignoring wiggles smaller than 0.1 % of the segment's largest curvature (one broad maximum: localMaxima 1, unimodal true). Tolerances as in plasticity_analyze_surface_continuity (the normal tolerance also classifies wire tangent angles).", z.object({
     bodyId: z.number().int().positive().optional(),
     faceIds: z.array(z.string().min(1)).min(1).max(4096).optional(),
     faceMode: z.enum(["between", "touching"]).optional(),
     edgeIds: z.array(z.string().min(1)).min(1).max(4096).optional(),
     wireIds: z.array(z.number().int().positive()).min(1).max(256).optional(),
+    curvatureSamples: z.number().int().min(2).max(200).optional(),
     positionToleranceMm: z.number().finite().positive().default(0.01),
     normalAngleToleranceDeg: z.number().finite().positive().max(180).default(0.1),
     relativeCurvatureTolerance: z.number().finite().positive().default(0.05),
     revision,
   }).strict().superRefine((input, context) => {
+    if (input.curvatureSamples !== undefined && input.wireIds === undefined) context.addIssue({ code: "custom", path: ["curvatureSamples"], message: "curvatureSamples needs wireIds" });
     if (input.bodyId === undefined && input.wireIds === undefined) context.addIssue({ code: "custom", path: ["bodyId"], message: "Give bodyId, wireIds, or both" });
     if (input.bodyId === undefined && (input.faceIds !== undefined || input.edgeIds !== undefined)) context.addIssue({ code: "custom", path: ["bodyId"], message: "faceIds and edgeIds need a bodyId" });
     if (input.faceMode !== undefined && input.faceIds === undefined) context.addIssue({ code: "custom", path: ["faceMode"], message: "faceMode needs faceIds" });
   }), async ({ revision: current, ...request }) =>
     await session.get().continuityReport(request, current), true);
-  tool("plasticity_analyze_surface_continuity", "Sample Plasticity's native B-Rep continuity evaluator at 100 positions along each selected current Solid or Sheet edge shared by exactly two faces. Returns maximum G0 position deviation in millimeters, G1 normal-angle deviation in degrees, Plasticity's dimensionless relative G2 curvature deviation, their locations, and hierarchical G0/G1/G2 tolerance results. Relative G2 is Plasticity's |k1 - k2| / (|k1| + |k2|) of the curvatures across the edge (live: R5 against R10 reads 0.3333, R5 against R20 0.6), so it reads 1.0 whenever one side is flat (a plane meeting a fillet), however small the other curvature; absoluteCurvature { side1PerMm, side2PerMm } gives the magnitude of the curvature across the edge on each face at the worst G2 sample, when a face parameter direction runs across the edge. They are magnitudes: an S-shaped join (curving opposite ways) and a same-sense join with equal magnitudes look alike there, while relative G2 tells them apart. interior { g0Mm, g1Deg, g2Rel } is the maximum over samples 5..94, leaving out the 5 samples at each end (the corners), and worstAt says whether the first level that fails (G2 when all pass) is worst at a corner or in the run of the edge, so one corner spike does not hide an otherwise G2 edge. This is native surface sampling rather than an exact continuous maximum; it does not use the display mesh and does not change the document.", surfaceContinuityInputSchema, async ({ edges, positionToleranceMm, normalAngleToleranceDeg, relativeCurvatureTolerance, revision: current }) =>
-    await session.get().analyzeSurfaceContinuity(edges, current, positionToleranceMm, normalAngleToleranceDeg, relativeCurvatureTolerance), true);
+  tool("plasticity_analyze_surface_continuity", "Sample Plasticity's native B-Rep continuity evaluator at 100 positions along each selected current Solid or Sheet edge shared by exactly two faces. Returns maximum G0 position deviation in millimeters, G1 normal-angle deviation in degrees, Plasticity's dimensionless relative G2 curvature deviation, their locations, and hierarchical G0/G1/G2 tolerance results. Relative G2 is Plasticity's |k1 - k2| / (|k1| + |k2|) of the curvatures across the edge (live: R5 against R10 reads 0.3333, R5 against R20 0.6), so it reads 1.0 whenever one side is flat (a plane meeting a fillet), however small the other curvature; absoluteCurvature { side1PerMm, side2PerMm, method, sampleIndex, atMm, signedSide1PerMm, signedSide2PerMm } gives the magnitude of the normal curvature across the edge (in the tangent plane, perpendicular to the edge) on each face at the worst interior G2 sample: the kernel's own value where a face parameter direction runs across the edge (method parameter-direction), otherwise from the face's principal curvatures by Euler's formula in the direction n x t (method principal-curvatures; planes read 0); signed* are signed against side 1's normal (equal signs bend the same way). The magnitudes alone: an S-shaped join (curving opposite ways) and a same-sense join with equal magnitudes look alike there, while relative G2 tells them apart. interior { g0Mm, g1Deg, g2Rel } is the maximum over samples 5..94, leaving out the 5 samples at each end (the corners), and worstAt says whether the first level that fails (G2 when all pass) is worst at a corner or in the run of the edge, so one corner spike does not hide an otherwise G2 edge. One class rule, shared with plasticity_continuity_report: achievedContinuity counts every sample and the native maxima; interiorContinuity samples 5..94; achievedContinuityIgnoringIsolatedSpikes leaves out isolated spikes, listed in spikes [{ level, index, value, positionMm, neighbourMax, source }]: a sample that fails while every sample within 2 indices passes, or a native maximum off the samples (source native-maximum; live: 90 degrees exactly at a corner vertex shared with a sharp edge while every sample is below 0.07 degrees). This is native surface sampling rather than an exact continuous maximum; it does not use the display mesh and does not change the document.", surfaceContinuityInputSchema, async ({ edges, positionToleranceMm, normalAngleToleranceDeg, relativeCurvatureTolerance, revision: current }) =>
+    await session.get().analyzeSurfaceContinuity(edges, current, positionToleranceMm, normalAngleToleranceDeg, relativeCurvatureTolerance, { extended: true }), true);
   // ---- Surfacing tools (verify, read and refine curved bodies): one contiguous block. Logic in src/plasticity/surfacing.ts. ----
   const probeVector = z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]);
   const probeSurfaceSchema = z.object({
@@ -3658,7 +3723,7 @@ function createServerWithCatalog(
     await journaled("activate-group", purpose, { id }, () => session.get().activateGroup(id, current)));
   tool("plasticity_dissolve_groups", "Dissolve current non-root Plasticity groups and promote their contents to each parent without deleting the contained geometry.", z.object({ ids: z.array(z.number().int().positive()).min(1).max(4096).refine((values) => new Set(values).size === values.length, "Group IDs must be unique"), intent, revision }).strict(), async ({ ids: currentIds, intent: purpose, revision: current }) =>
     await journaled("dissolve-groups", purpose, { ids: currentIds }, () => session.get().dissolveGroups(currentIds, current)));
-  tool("plasticity_set_visibility", "Set exact native visibility for current bodies, linked instances, approximate reference meshes, or groups. Hidden geometry remains in the document and can be restored with the same tool.", z.object({ ...groupSelectionFields, visible: z.boolean(), intent, revision }).strict().superRefine(requireNodeSelection), async ({ bodyIds, instanceIds: currentInstanceIds, referenceMeshIds: currentReferenceMeshIds, groupIds: currentGroupIds, visible, intent: purpose, revision: current }) =>
+  tool("plasticity_set_visibility", "Set exact native visibility for current bodies, linked instances, approximate reference meshes, or groups (bodyIds, instanceIds, referenceMeshIds, groupIds; each defaults to an empty list, at least one ID in all). Hidden geometry remains in the document and can be restored with the same tool.", z.object({ ...defaultedGroupSelectionFields, visible: z.boolean(), intent, revision }).strict().superRefine(requireNodeSelection), async ({ bodyIds, instanceIds: currentInstanceIds, referenceMeshIds: currentReferenceMeshIds, groupIds: currentGroupIds, visible, intent: purpose, revision: current }) =>
     await journaled("set-visibility", purpose, { bodyIds, instanceIds: currentInstanceIds, referenceMeshIds: currentReferenceMeshIds, groupIds: currentGroupIds, visible }, () => session.get().setNodeVisibility(bodyIds, currentInstanceIds, currentReferenceMeshIds, currentGroupIds, visible, current)));
   tool("plasticity_set_locked", "Set the native Plasticity lock state for current bodies, linked instances, approximate reference meshes, or groups. Locked geometry remains readable but resists manual selection and editing.", z.object({ ...groupSelectionFields, locked: z.boolean(), intent, revision }).strict().superRefine(requireNodeSelection), async ({ bodyIds, instanceIds: currentInstanceIds, referenceMeshIds: currentReferenceMeshIds, groupIds: currentGroupIds, locked, intent: purpose, revision: current }) =>
     await journaled("set-locked", purpose, { bodyIds, instanceIds: currentInstanceIds, referenceMeshIds: currentReferenceMeshIds, groupIds: currentGroupIds, locked }, () => session.get().setNodeLocked(bodyIds, currentInstanceIds, currentReferenceMeshIds, currentGroupIds, locked, current)));
@@ -4128,7 +4193,7 @@ function createServerWithCatalog(
   tool("plasticity_create_control_point_curve", "Create a native NURBS curve whose world-space points (millimeters) are its control points, so the curve is pulled toward them rather than passing through them. Use plasticity_create_nurbs_curve to pass through the points.", z.object({ pointsMm: z.array(vector).min(3).max(1000), closed: z.boolean().default(false), intent, revision }).strict(), async ({ pointsMm, closed, intent: purpose, revision: current }) =>
     await journaled("create-control-point-curve", purpose, { pointsMm, closed }, () => session.get().createControlPointCurve(pointsMm, closed, current)));
   const planeCurvePoint = z.tuple([z.number().finite(), z.number().finite()]);
-  tool("plasticity_create_plane_curve", "Create a native curve from 2D points on a plane, for entering profile curves traced from a photo. plane is xy, xz or yz (offsetMm moves it along +Z, +Y or +X: xz at offsetMm 5 is y = 5; xy maps (a, b) to x, y; xz to x, z; yz to y, z) or { originMm, uAxis, vAxis } (u is normalised, v is made perpendicular to u, offsetMm moves along u x v). Each 2D point is scaled by scale about the plane origin, then moved by translate2dMm. mode control (default, at least 3 points) uses the points as the control polygon, the native path of plasticity_create_control_point_curve; interpolate (at least 2 points) passes through them, the path of plasticity_create_nurbs_curve. Returns the Wire id, the world points used and the plane frame.", z.object({
+  tool("plasticity_create_plane_curve", "Create a native curve from 2D points on a plane, for entering profile curves traced from a photo. plane is xy, xz or yz (offsetMm moves it along +Z, +Y or +X: xz at offsetMm 5 is y = 5; xy maps (a, b) to x, y; xz to x, z; yz to y, z) or { originMm, uAxis, vAxis } (u is normalised, v is made perpendicular to u, offsetMm moves along u x v). Each 2D point is scaled by scale about the plane origin, then moved by translate2dMm. mode control (default, at least 3 points) uses the points as the control polygon, the native path of plasticity_create_control_point_curve; interpolate (at least 2 points) passes through them, the path of plasticity_create_nurbs_curve. End conditions (mode control only): startTangent / endTangent { direction, lengthMm? } (direction 2D in plane u, v or 3D world in the plane; the curve leaves the first point, or arrives at the last, along it) move the second (second-to-last) control point onto that tangent line, so the curve is G1 to any face with that tangent there; startCurvatureZero / endCurvatureZero also move the third (third-to-last), so the end has zero curvature (G2 against a plane or a ruled direction). The handle length is lengthMm, else the original point's distance. Only zero end curvature is offered, not a curvature value. Returns the Wire id, the world points used (after the end conditions) and the plane frame.", z.object({
     plane: z.union([z.enum(["xy", "xz", "yz"]), z.object({ originMm: vector, uAxis: vector, vAxis: vector }).strict()]),
     offsetMm: z.number().finite().optional(),
     points2dMm: z.array(planeCurvePoint).min(2).max(1000),
@@ -4136,9 +4201,16 @@ function createServerWithCatalog(
     scale: z.number().finite().positive().optional(),
     translate2dMm: planeCurvePoint.optional(),
     closed: z.boolean().default(false),
+    startTangent: z.object({ direction: z.array(z.number().finite()).min(2).max(3), lengthMm: z.number().finite().positive().optional() }).strict().optional(),
+    endTangent: z.object({ direction: z.array(z.number().finite()).min(2).max(3), lengthMm: z.number().finite().positive().optional() }).strict().optional(),
+    startCurvatureZero: z.boolean().optional(),
+    endCurvatureZero: z.boolean().optional(),
     intent,
     revision,
   }).strict().superRefine((input, context) => {
+    if ((input.startTangent || input.endTangent || input.startCurvatureZero || input.endCurvatureZero) && input.mode !== "control") context.addIssue({ code: "custom", path: ["mode"], message: "startTangent, endTangent and the curvature options need mode control" });
+    if (input.startCurvatureZero && !input.startTangent) context.addIssue({ code: "custom", path: ["startCurvatureZero"], message: "startCurvatureZero needs startTangent" });
+    if (input.endCurvatureZero && !input.endTangent) context.addIssue({ code: "custom", path: ["endCurvatureZero"], message: "endCurvatureZero needs endTangent" });
     if (input.mode === "control" && input.points2dMm.length < 3) context.addIssue({ code: "custom", path: ["points2dMm"], message: "mode control needs at least three points" });
     if (input.closed && input.points2dMm.length < 3) context.addIssue({ code: "custom", path: ["closed"], message: "a closed plane curve needs at least three points" });
   }), async ({ intent: purpose, revision: current, ...request }) => {
@@ -4212,14 +4284,14 @@ function createServerWithCatalog(
       "plane" in input ? input.plane : undefined,
     )));
   tool("plasticity_bridge_curves", "Create one independent native B-Spline between two exact current Wire segment endpoints while preserving both source Wires. Use plasticity_list_curve_directions immediately before this call. Each end may start at a normalized parameter along its segment instead of the start or end, reverse its direction (flip), and set its Tension G1/G2 handle offset in mm (tensionG1Mm, tensionG2Mm; 0 default, negative shortens). G0 matches position, G1 adds tangent continuity, G2 adds curvature continuity, and G3 adds third-order geometric continuity at each end. The operation occupies one Plasticity history step.", bridgeCurveInputSchema, async ({ first, second, startContinuity, endContinuity, intent: purpose, revision: current }) =>
-    await journaled("bridge-curves", purpose, { first, second, startContinuity, endContinuity }, () =>
-      session.get().bridgeCurves(first, second, startContinuity, endContinuity, current)));
+    await withBridgeShape(await journaled("bridge-curves", purpose, { first, second, startContinuity, endContinuity }, () =>
+      session.get().bridgeCurves(first, second, startContinuity, endContinuity, current))));
   tool("plasticity_bridge_curve_vertices", "Create one independent native B-Spline between two exact current open Wire vertices while preserving both source Wires. Use plasticity_list_curve_vertices immediately before this call and pass its numeric vertexId values. G0 through G3 continuity is selected independently at the two ends; internal or stale vertices are rejected before mutation.", bridgeCurveVerticesInputSchema, async ({ first, second, startContinuity, endContinuity, intent: purpose, revision: current }) =>
     await journaled("bridge-curve-vertices", purpose, { first, second, startContinuity, endContinuity }, () =>
       session.get().bridgeCurveVertices(first, second, startContinuity, endContinuity, current)));
   tool("plasticity_bridge_shell_edges", "Create one independent native B-Spline between explicitly selected endpoints of two exact current Solid or Sheet edges while preserving both source bodies. Each reference must pair a current edgeId with one of that edge's returned vertexIds. G0 through G3 continuity is selected independently at the two ends, and each end takes an optional Tension G1/G2 handle offset in mm (tensionG1Mm, tensionG2Mm); exact endpoint and tangent read-back is required after the one-step operation.", bridgeShellEdgesInputSchema, async ({ first, second, startContinuity, endContinuity, intent: purpose, revision: current }) =>
-    await journaled("bridge-shell-edges", purpose, { first, second, startContinuity, endContinuity }, () =>
-      session.get().bridgeShellEdges(first, second, startContinuity, endContinuity, current)));
+    await withBridgeShape(await journaled("bridge-shell-edges", purpose, { first, second, startContinuity, endContinuity }, () =>
+      session.get().bridgeShellEdges(first, second, startContinuity, endContinuity, current))));
   tool("plasticity_create_ellipse", "Create one exact native closed elliptical Wire and Region from explicit major and minor radii. The major axis follows xDirection rotated by angleDegrees in the selected plane. Inputs may use world coordinates or a referenced construction plane.", ellipseInputSchema, async (input) =>
     await journaled("create-ellipse", input.intent, input, () => session.get().createEllipse(
       input.centerMm,
@@ -4358,7 +4430,7 @@ function createServerWithCatalog(
     await journaled("knife-curve", purpose, { targetId, pointsMm, closed, controlPoints }, () => session.get().knifeCurve(targetId, pointsMm, closed, controlPoints, current)));
   tool("plasticity_cut_with_faces", "Split current Solid or Sheet bodies with current planar cutter faces. Cutter bodies are preserved. keep \"larger\" or \"smaller\" (one target only) deletes the other parts by bounding-box volume in a second Undo step; default \"both\". To trim an open Sheet, inspect the returned exact Sheet parts and delete only the unwanted part at the returned revision.", z.object({ targetIds: ids, cutterFaces: z.array(faceRef).min(1).max(4096), keep: cutKeep, intent, revision }).strict(), async ({ targetIds, cutterFaces, keep, intent: purpose, revision: current }) =>
     await journaled("cut-with-faces", purpose, { targetIds, cutterFaces, keep }, () => keepCutParts(targetIds, keep, () => session.get().cutWithFaces(targetIds, cutterFaces, current))));
-  tool("plasticity_split_solid_by_plane", "Split one current Solid into exactly two native Solid parts with one explicit plane that crosses its interior. The tool derives an oversized planar cutter from exact B-Rep bounds, cuts the Solid, verifies both native volumes sum to the original within tolerance, checks unrelated bodies are unchanged, and removes its temporary cutter geometry. It does not add an assembly joint; create a qualified locating-pin or tongue-and-groove joint afterward if required. The plane origin, normal, and in-plane x direction are millimeters/world vectors and the tool occupies four native history steps.", splitSolidByPlaneInputSchema, async (input) =>
+  tool("plasticity_split_solid_by_plane", "Split one current Solid into exactly two native Solid parts with one explicit plane that crosses its interior. The tool derives an oversized planar cutter from exact B-Rep bounds, cuts the Solid, verifies both native volumes sum to the original (tolerance 1e-6 of the volume, at least 0.01 mm³; a larger difference up to 1 % completes with warnings, because native volume of curved B-spline Solids carries integration error of that order; more than 1 % is an error), checks unrelated bodies are unchanged, and removes its temporary cutter geometry. It does not add an assembly joint; create a qualified locating-pin or tongue-and-groove joint afterward if required. The plane origin, normal, and in-plane x direction are millimeters/world vectors and the tool occupies four native history steps.", splitSolidByPlaneInputSchema, async (input) =>
     await journaled("split-solid-by-plane", input.intent, input, () => new SplitSolidByPlaneRecipe(session.get()).split(input)));
   tool("plasticity_split_solid_by_planes", "Split one current Solid into a grid using an ordered list of explicit world-space planes. Each plane is applied only to current Solid parts whose exact B-Rep bounds it crosses; each native cut must produce exactly two valid Solid results and preserve volume, temporary cutters are removed, and the final part volumes are checked against the source. Planes are processed sequentially and partial results remain if a later cut fails; reconcile and inspect before continuing. This tool does not choose planes from a Workbench splitPlan, orient the source, or add joints. Each successful cut uses four native history steps.", splitSolidByPlanesInputSchema, async (input) =>
     await journaled("split-solid-by-planes", input.intent, input, () => new SplitSolidByPlanesRecipe(session.get()).split(input)));
@@ -4386,20 +4458,22 @@ function createServerWithCatalog(
     await journaled("remove-fillets", purpose, { ids: bodyIds }, () => session.get().removeFillets(bodyIds, current)));
   tool("plasticity_refillet_faces", "Change recognized native fillet faces by a signed radius delta in millimeters.", z.object({ faces: z.array(faceRef).min(1).max(4096), deltaMm: nonzeroDistance, intent, revision }).strict(), async ({ faces, deltaMm, intent: purpose, revision: current }) =>
     await journaled("refillet-faces", purpose, { faces, deltaMm }, () => session.get().refilletFaces(faces, deltaMm, current)));
-  tool("plasticity_extrude_faces", "Extrude current faces by a distance in millimeters, by faceIds or faceQuery (a find_faces query on this body; the reply adds faceCount).", z.object({ id: z.number().int().positive(), ...faceSelectionFields, distanceMm: z.number().finite(), intent, revision }).superRefine(requireFaceSelection), async ({ id, faceIds, faceQuery, sortBy, order, limit, distanceMm, intent: purpose, revision: current }) => {
+  tool("plasticity_extrude_faces", "Extrude current faces by a distance in millimeters, by faceIds or faceQuery (a find_faces query on this body; the reply adds faceCount). boolean none (default) keeps Plasticity's own result: the extrusion is a separate new body (on a Solid face a slab, also for a negative distance; the source is unchanged). union fuses it into the source Solid, difference cuts it from the source Solid (a negative distance then recesses the face: a pocket), fuse picks union for a positive and difference for a negative distance; all in one native step. The reply adds extrude { boolean, operation, sourceBodyId, result: new-body | source-modified, newBodyIds, sourceModified }.", z.object({ id: z.number().int().positive(), ...faceSelectionFields, distanceMm: z.number().finite(), boolean: z.enum(["none", "fuse", "union", "difference"]).default("none"), intent, revision }).superRefine(requireFaceSelection), async ({ id, faceIds, faceQuery, sortBy, order, limit, distanceMm, boolean, intent: purpose, revision: current }) => {
     const pick = faceIds === undefined ? pickFacesByQuery(await session.get().state(), id, faceQuery, sortBy, order, limit, current) : undefined;
     const picked = faceIds ?? pick!.ids;
-    const reply = await afterPick("face", pick, () => journaled("extrude-faces", purpose, { id, faceIds: picked, ...(faceQuery ? { faceQuery } : {}), distanceMm }, () => session.get().extrudeFaces(id, picked, distanceMm, current)));
-    return pick ? { ...reply, ...pickReply("face", pick) } : reply;
+    const operation = resolveExtrudeFacesBoolean(boolean, distanceMm);
+    const reply = await afterPick("face", pick, () => journaled("extrude-faces", purpose, { id, faceIds: picked, ...(faceQuery ? { faceQuery } : {}), distanceMm, ...(boolean !== "none" ? { boolean } : {}) }, () => boolean === "none" ? session.get().extrudeFaces(id, picked, distanceMm, current) : session.get().extrudeFaces(id, picked, distanceMm, current, boolean)));
+    const withOutcome = { ...(reply as unknown as Record<string, unknown>), extrude: extrudeFacesOutcome(reply, id, boolean, operation) };
+    return pick ? { ...withOutcome, ...pickReply("face", pick) } : withOutcome;
   });
-  tool("plasticity_extrude_profile", "Extrude one unambiguous closed planar Wire profile into a native Solid. options: reverseDistanceMm (two-sided), draftAngleDeg / reverseDraftAngleDeg, thicknessMm (thin wall).", z.object({ id: z.number().int().positive(), distanceMm: z.number().finite(), options: extrudeOptionsSchema, intent, revision }), async ({ id, distanceMm, options, intent: purpose, revision: current }) =>
+  tool("plasticity_extrude_profile", "Extrude one closed planar Wire profile into a native Solid. When other Wires lie in the same plane, the region whose bounds are this Wire's bounds is used; if that still leaves several (the Wire crosses others), the error names the regions for plasticity_extrude_regions. options: reverseDistanceMm (two-sided), draftAngleDeg / reverseDraftAngleDeg, thicknessMm (thin wall).", z.object({ id: z.number().int().positive(), distanceMm: z.number().finite(), options: extrudeOptionsSchema, intent, revision }), async ({ id, distanceMm, options, intent: purpose, revision: current }) =>
     await journaled("extrude-profile", purpose, { id, distanceMm, options }, () => session.get().extrudeProfile(id, distanceMm, current, compactExtrudeOptions(options))));
   tool("plasticity_extrude_regions", "Extrude one or more explicit revision-bound planar regions into native solids. options: reverseDistanceMm (two-sided), draftAngleDeg / reverseDraftAngleDeg, thicknessMm (thin wall).", z.object({ regionIds, distanceMm: z.number().finite(), options: extrudeOptionsSchema, intent, revision }).strict(), async ({ regionIds: selectedRegions, distanceMm, options, intent: purpose, revision: current }) =>
     await journaled("extrude-regions", purpose, { regionIds: selectedRegions, distanceMm, options }, () => session.get().extrudeRegions(selectedRegions, distanceMm, current, compactExtrudeOptions(options))));
   tool("plasticity_extrude_curves", "Extrude Wire curves along a world direction (default: Plasticity's own choice for the curve). Open Wires become Sheets. options as in plasticity_extrude_profile.", z.object({ ids, distanceMm: z.number().finite(), direction: direction.optional(), options: extrudeOptionsSchema, intent, revision }).strict(), async ({ ids: curveIds, distanceMm, direction: along, options, intent: purpose, revision: current }) =>
     await journaled("extrude-curves", purpose, { ids: curveIds, distanceMm, direction: along, options }, () => session.get().extrudeCurves(curveIds, distanceMm, along, current, compactExtrudeOptions(options))));
-  tool("plasticity_offset_planar_curves", "Create native offsets from planar Wire bodies. Signed distance follows each Wire orientation and is measured in millimeters.", z.object({ ids, distanceMm: nonzeroDistance, intent, revision }).strict(), async ({ ids: wireIds, distanceMm, intent: purpose, revision: current }) =>
-    await journaled("offset-planar-curves", purpose, { ids: wireIds, distanceMm }, () => session.get().offsetPlanarCurves(wireIds, distanceMm, current)));
+  tool("plasticity_offset_planar_curves", "Create native offsets from planar Wire bodies. Signed distance follows each Wire orientation and is measured in millimeters. plane { originMm, normal, xDirection? } (optional) gives the offset plane explicitly: needed for a planar Wire whose segments are SPCurves (edges extracted from a face after a projection or patch), which Plasticity otherwise refuses with No basis found. For an inward rim on a planar face, plasticity_inset_planar_face does extract, offset inward and imprint in one call.", z.object({ ids, distanceMm: nonzeroDistance, plane: z.object({ originMm: vector, normal: direction, xDirection: direction.optional() }).strict().optional(), intent, revision }).strict(), async ({ ids: wireIds, distanceMm, plane, intent: purpose, revision: current }) =>
+    await journaled("offset-planar-curves", purpose, { ids: wireIds, distanceMm, ...(plane ? { plane } : {}) }, () => plane ? session.get().offsetPlanarCurves(wireIds, distanceMm, current, plane) : session.get().offsetPlanarCurves(wireIds, distanceMm, current)));
   tool("plasticity_offset_regions", "Create one or two native signed offsets from explicit Regions in the same sketch, preserving the source curves.", z.object({ regionIds, offsetsMm: regionOffsets, individual: z.boolean().default(true), intent, revision }).strict(), async ({ regionIds: selectedRegions, offsetsMm, individual, intent: purpose, revision: current }) =>
     await journaled("offset-regions", purpose, { regionIds: selectedRegions, offsetsMm, individual }, () => session.get().offsetRegions(selectedRegions, offsetsMm, individual, current)));
   tool("plasticity_trim_curve_fragments", "Remove one or more explicit revision-bound curve fragments using Plasticity's native Trim operation.", z.object({ fragmentIds, intent, revision }).strict(), async ({ fragmentIds: selectedFragments, intent: purpose, revision: current }) =>
@@ -4423,7 +4497,16 @@ function createServerWithCatalog(
   tool("plasticity_create_curves_from_regions", "Create independent exact native Wire copies of the boundaries of explicit current planar Regions while preserving the source Wire geometry. Coincident boundary copies make Plasticity recompute automatic Regions, so all previous Region references become stale; use the returned state or plasticity_list_regions before downstream work.", z.object({ regionIds, intent, revision }).strict(), async ({ regionIds: selectedRegions, intent: purpose, revision: current }) =>
     await journaled("create-curves-from-regions", purpose, { regionIds: selectedRegions }, () => session.get().createCurvesFromRegions(selectedRegions, current)), false, { destructiveHint: false });
   tool("plasticity_join_curves", "Join two or more native Wire bodies into one editable compound curve.", z.object({ ids: ids.min(2), intent, revision }).strict(), async ({ ids: wireIds, intent: purpose, revision: current }) =>
-    await journaled("join-curves", purpose, { ids: wireIds }, () => session.get().joinCurves(wireIds, current)));
+    await journaled("join-curves", purpose, { ids: wireIds }, async () => {
+      try {
+        return await session.get().joinCurves(wireIds, current);
+      } catch (error) {
+        // Phase C item 12: a bare "Operation has no effect" usually means the Wires do not meet end to end, most often a
+        // bridge that left the wrong end or bulged the wrong way.
+        if (error instanceof Error && /no effect/i.test(error.message)) error.message = `Join had no effect. Likely cause: the Wires do not meet end to end. If one is a bridge from plasticity_bridge_curves, check its bridge.bulge and end points: a wrong direction (it bulged the other way or left the other end) needs flip: true on that end; plasticity_list_curve_directions shows each Wire's start and end. Native: ${error.message}`;
+        throw error;
+      }
+    }));
   tool("plasticity_rebuild_curves", "Rebuild current native Wire bodies in one Plasticity history step. tolerance asks Plasticity to fit within an explicit millimeter target; control-points sets the native control-point count; degree-spans sets exact NURBS degree and span count. Read plasticity_inspect_curve_structure before and after, and measure geometric drift because a requested fit setting is not independent proof of deviation.", rebuildCurveInputSchema, async ({ ids: wireIds, intent: purpose, revision: current, ...options }) =>
     await journaled("rebuild-curves", purpose, { ids: wireIds, ...options }, () => session.get().rebuildCurves(wireIds, options, current)));
   tool("plasticity_raise_curve_degree", "Raise the native degree of every B-Spline segment in one or more current Wire bodies by one while preserving its shape. This adds edit freedom without adding shape detail. Inspect native curve structure before and after; each call occupies one Plasticity history step.", z.object({ ids, intent, revision }).strict(), async ({ ids: wireIds, intent: purpose, revision: current }) =>
@@ -4656,7 +4739,7 @@ function createServerWithCatalog(
   }).strict(), async ({ regionIds: selectedRegions, guideIds, trimGuides, closed, simplify, intent: purpose, revision: current }) =>
     await journaled("loft-regions", purpose, { regionIds: selectedRegions, guideIds, trimGuides, closed, simplify }, () =>
       session.get().loftRegions(selectedRegions, { guideIds, trimGuides, closed, simplify }, current)));
-  tool("plasticity_loft_curves", "Create one independent native loft surface through an ordered list of current Wire profiles while preserving every profile and guide. Instead of profileIds, profiles may mix Wires ({ wireId }) and boundary edges of Sheets or Solids ({ bodyId, edgeId }): an edge profile makes the loft continuous with that edge's face, G0 with curvature natural, G1 with unconstrained (default), G2 with clamped; Wire profiles stay positional. Optional Wire guides must intersect every profile. Closed mode requires at least three profiles and closes the loft sequence; positive dimensionless end magnitudes act as tension. The operation never joins the result to source bodies; join with plasticity_join_sheets and verify with plasticity_analyze_surface_continuity.", z.object({
+  tool("plasticity_loft_curves", "Create one independent native loft surface through an ordered list of current Wire profiles while preserving every profile and guide. Instead of profileIds, profiles may mix Wires ({ wireId }) and boundary edges of Sheets or Solids ({ bodyId, edgeId }): an edge profile makes the loft continuous with that edge's face, G0 with curvature natural, G1 with unconstrained (default), G2 with clamped; Wire profiles stay positional. Optional Wire guides must intersect every profile; a guide end within snapToleranceMm (default 0.01 mm, 0 turns it off) of a profile is first moved onto it, onto the profile's end vertex when that is within the tolerance, else the nearest profile point (one history step per moved end, listed in guideSnaps). Closed mode requires at least three profiles and closes the loft sequence; positive dimensionless end magnitudes act as tension. The operation never joins the result to source bodies; join with plasticity_join_sheets and verify with plasticity_analyze_surface_continuity.", z.object({
     profileIds: z.array(z.number().int().positive()).max(32).refine((values) => new Set(values).size === values.length, "Curve loft profile IDs must be unique").default([]),
     profiles: z.array(z.union([z.object({ wireId: z.number().int().positive() }).strict(), z.object({ bodyId: z.number().int().positive(), edgeId: z.string().min(1) }).strict()])).min(2).max(32).optional(),
     guideIds: z.array(z.number().int().positive()).max(64).refine((values) => new Set(values).size === values.length, "Curve loft guide IDs must be unique").default([]),
@@ -4667,11 +4750,15 @@ function createServerWithCatalog(
     curvature: z.enum(["natural", "unconstrained", "clamped"]).default("unconstrained"),
     startMagnitude: z.number().finite().positive().default(1),
     endMagnitude: z.number().finite().positive().default(1),
+    snapToleranceMm: z.number().finite().nonnegative().max(1).default(0.01),
     intent,
     revision,
-  }).strict().refine((value) => (value.profiles === undefined) !== (value.profileIds.length === 0), "Give profileIds (two or more) or profiles, not both"), async ({ profileIds, profiles, guideIds, trimGuides, trimProfiles, closed, simplify, curvature, startMagnitude, endMagnitude, intent: purpose, revision: current }) =>
-    await journaled("loft-curves", purpose, { profileIds, profiles, guideIds, trimGuides, trimProfiles, closed, simplify, curvature, startMagnitude, endMagnitude }, () =>
-      session.get().loftCurves(profileIds, { ...(profiles !== undefined ? { profiles } : {}), guideIds, trimGuides, trimProfiles, closed, simplify, curvature, startMagnitude, endMagnitude }, current)));
+  }).strict().refine((value) => (value.profiles === undefined) !== (value.profileIds.length === 0), "Give profileIds (two or more) or profiles, not both"), async ({ profileIds, profiles, guideIds, trimGuides, trimProfiles, closed, simplify, curvature, startMagnitude, endMagnitude, snapToleranceMm, intent: purpose, revision: current }) => {
+    let snaps: unknown[] | undefined;
+    const reply = await journaled("loft-curves", purpose, { profileIds, profiles, guideIds, trimGuides, trimProfiles, closed, simplify, curvature, startMagnitude, endMagnitude, ...(guideIds.length > 0 ? { snapToleranceMm } : {}) }, () =>
+      session.get().loftCurves(profileIds, { ...(profiles !== undefined ? { profiles } : {}), guideIds, trimGuides, trimProfiles, closed, simplify, curvature, startMagnitude, endMagnitude, ...(guideIds.length > 0 && snapToleranceMm > 0 ? { snapToleranceMm, onSnap: (made: unknown[]) => { snaps = made; } } : {}) }, current));
+    return snaps && snaps.length > 0 && reply && typeof reply === "object" ? { ...reply, guideSnaps: snaps } : reply;
+  });
   tool("plasticity_loft_faces", "Create one independent native capped loft Solid through an ordered list of exact planar faces from different current Solid or Sheet source bodies while preserving every source. Optional current Wire guides must intersect every profile. Natural, unconstrained, or clamped native end conditions and positive magnitudes control the two ends; verify the returned B-Rep rather than treating magnitude as a millimeter distance.", z.object({
     faces: z.array(faceRef).min(2).max(32),
     guideIds: z.array(z.number().int().positive()).max(64).default([]),
@@ -4745,19 +4832,21 @@ function createServerWithCatalog(
     });
     return output && typeof output === "object" ? { ...output, bridge } : output;
   });
-  tool("plasticity_split_sheet_edge", "Split one edge of a Sheet or Solid (boundary or shared) into two edges with a new vertex, keeping one body and the face count. Give exactly one of normalizedParameter (0 < t < 1: fraction of the edge LENGTH from the edge start, edgeStartMm in the result) and pointMm (projected onto the edge; projectionDistanceMm is reported). A piece shorter than 0.01 mm is refused. One history step (native Split Segment given the shell edge). The result adds split: { edgeIds (the two edges at the new vertex), vertexId, positionMm, lengthFraction, distanceFromStartMm, nativeParameter, vertexDeviationMm, counts, undoSteps }. A closed edge without a vertex (a full circle) gets one vertex and stays one edge (closedEdge: true); split it again. Wires use plasticity_split_curve_segment.", z.object({
+  tool("plasticity_split_sheet_edge", "Split one edge of a Sheet or Solid (boundary or shared) into two edges with a new vertex, keeping one body and the face count. Give exactly one of normalizedParameter (0 < t < 1: fraction of the edge LENGTH from the edge start, edgeStartMm in the result) and pointMm (projected onto the edge; projectionDistanceMm is reported; a point farther than maxProjectionMm, default 1 mm, from the edge is refused before any change). A piece shorter than 0.01 mm is refused. One history step (native Split Segment given the shell edge). The result adds split: { edgeIds (the two edges at the new vertex), vertexId, positionMm, lengthFraction, distanceFromStartMm, nativeParameter, vertexDeviationMm, counts, undoSteps }. A closed edge without a vertex (a full circle) gets one vertex and stays one edge (closedEdge: true); split it again. Wires use plasticity_split_curve_segment.", z.object({
     bodyId: z.number().int().positive(),
     edgeId: z.string().trim().min(1),
     normalizedParameter: z.number().finite().gt(0).lt(1).optional(),
     pointMm: vector.optional(),
+    maxProjectionMm: z.number().finite().positive().optional(),
     intent,
     revision,
   }).strict().superRefine((input, context) => {
     if ((input.normalizedParameter === undefined) === (input.pointMm === undefined)) context.addIssue({ code: "custom", path: ["normalizedParameter"], message: "Give exactly one of normalizedParameter and pointMm" });
-  }), async ({ bodyId, edgeId, normalizedParameter, pointMm, intent: purpose, revision: current }) => {
+    if (input.maxProjectionMm !== undefined && input.pointMm === undefined) context.addIssue({ code: "custom", path: ["maxProjectionMm"], message: "maxProjectionMm applies to pointMm" });
+  }), async ({ bodyId, edgeId, normalizedParameter, pointMm, maxProjectionMm, intent: purpose, revision: current }) => {
     let split: unknown;
-    const output = await journaled("split-sheet-edge", purpose, { bodyId, edgeId, normalizedParameter, pointMm }, async () => {
-      const result = await session.get().splitSheetEdge({ bodyId, edgeId, normalizedParameter, pointMm }, current);
+    const output = await journaled("split-sheet-edge", purpose, { bodyId, edgeId, normalizedParameter, pointMm, ...(maxProjectionMm !== undefined ? { maxProjectionMm } : {}) }, async () => {
+      const result = await session.get().splitSheetEdge({ bodyId, edgeId, normalizedParameter, pointMm, ...(maxProjectionMm !== undefined ? { maxProjectionMm } : {}) }, current);
       split = result.split;
       return result;
     });
@@ -4868,7 +4957,7 @@ function createServerWithCatalog(
     await journaled("delete-faces", purpose, { faces }, () => session.get().deleteFaces(faces, current)));
   tool("plasticity_dissolve_faces", "Remove selected exact face boundaries by merging the faces into compatible adjacent native surfaces.", z.object({ faces: z.array(faceRef).min(1).max(4096), intent, revision }).strict(), async ({ faces, intent: purpose, revision: current }) =>
     await journaled("dissolve-faces", purpose, { faces }, () => session.get().dissolveFaces(faces, current)));
-  tool("plasticity_patch_sheet_hole", "Indie Patch: fill one boundary of a native Sheet (Plasticity's Patch hole dialog, not XNurbs). The boundary is exact current boundary edges of that Sheet (edgeIds), optionally mixed with Wire curves (curveIds) that close the loop. continuity (g0, g1, g2) applies to every edge; edgeContinuity overrides single edges (G0 is only a minimum: on 26.1.3 native may come back tangent on a G0 edge where a smooth fill allows it, and never creases on request); Wire curves are positional only. guideIds shape the interior. faces is the dialog's Faces option (single, minimal, multiple; default multiple) and smoothness its internal smoothness (sharp, smooth). The patch becomes faces of the same Sheet; read continuity back with plasticity_analyze_surface_continuity.", z.object({
+  tool("plasticity_patch_sheet_hole", "Indie Patch: fill one boundary of a native Sheet (Plasticity's Patch hole dialog, not XNurbs). The boundary is exact current boundary edges of that Sheet (edgeIds), optionally mixed with Wire curves (curveIds) that close the loop. continuity (g0, g1, g2) applies to every edge; edgeContinuity overrides single edges (G0 is only a minimum: on 26.1.3 native may come back tangent on a G0 edge where a smooth fill allows it, and keeps a crease only where the geometry forces one); Wire curves are positional only. guideIds shape the interior. faces is the dialog's Faces option (single, minimal, multiple; default multiple) and smoothness its internal smoothness (sharp, smooth). The patch becomes faces of the same Sheet; read continuity back with plasticity_analyze_surface_continuity.", z.object({
     id: z.number().int().positive(),
     edgeIds: z.array(z.string().min(1)).min(1).max(4096),
     curveIds: z.array(z.number().int().positive()).min(1).max(64).optional(),
@@ -4884,7 +4973,7 @@ function createServerWithCatalog(
     const patched = await journaled("patch-sheet-hole", purpose, { id, edgeIds, curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm, ...(precheck !== undefined ? { precheck } : {}) }, () => session.get().patchSheetHole(id, edgeIds, current, { curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm, ...(precheck !== undefined ? { precheck, onPrecheck: (report: unknown) => { analysis = report; } } : {}) }));
     return precheck === "warn" && analysis !== undefined && patched && typeof patched === "object" ? { ...patched, precheck: analysis } : patched;
   });
-  tool("plasticity_check_patch_boundary", "Read-only Indie Patch boundary analysis, the same check plasticity_patch_sheet_hole runs before native when an edge is G1 or G2. Same boundary inputs (id, edgeIds, curveIds, continuity, edgeContinuity, plus faces and smoothness). Per corner: the boundary turn, the patch's own corner angle, the angle between the neighbour face normals, the faces at the vertex with their interior angles and the angle sum (the 360 degree budget at a smooth vertex); per edge: its neighbour face and the other edges on that face. problems lists each finding with the corner (vertex id and position in mm) or edge, what was measured, what is needed, advice, and blocking (true: the patch tool refuses by default). Rules measured live on 26.1.3: disagreeing corner normals fail only with faces single or smoothness smooth (the default patch creases there); a smooth vertex whose angles do not add to 360 degrees fails (skipped, reported as angle-indeterminate, where an angle is within 2 degrees of 0 or 360). Reported only: more than 20 boundary edges at G1/G2 (failed natively in every live test, evidence too narrow to refuse on), and mixed continuity (G0 is only a minimum: native may come back tangent on G0 edges where a smooth fill allows it, also when the edges have their own neighbour faces).", z.object({
+  tool("plasticity_check_patch_boundary", "Read-only Indie Patch boundary analysis, the same check plasticity_patch_sheet_hole runs before native when an edge is G1 or G2. Takes every argument of plasticity_patch_sheet_hole (id, edgeIds, curveIds, guideIds, continuity, edgeContinuity, faces, smoothness, toleranceMm, precheck, intent), so the exact call can be checked first; guideIds and toleranceMm are validated but do not change the boundary rules, and precheck and intent are ignored here. Per corner: the boundary turn, the patch's own corner angle, the angle between the neighbour face normals, the faces at the vertex with their interior angles and the angle sum (the 360 degree budget at a smooth vertex); per edge: its neighbour face and the other edges on that face. problems lists each finding with the corner (vertex id and position in mm) or edge, what was measured, what is needed, advice, and blocking (true: the patch tool refuses by default). Rules measured live on 26.1.3: disagreeing corner normals fail only with faces single or smoothness smooth (the default patch creases there); a smooth vertex whose angles do not add to 360 degrees fails (skipped, reported as angle-indeterminate, where an angle is within 2 degrees of 0 or 360). Reported only: more than 20 boundary edges at G1/G2 (failed natively in every live test, evidence too narrow to refuse on), mixed continuity (G0 is a minimum: native may make such an edge G1 where the geometry allows; it keeps a crease only where the geometry forces one), and G2 to two neighbour faces at one corner where those faces curve differently there (g2-corner-curvature: normal curvatures along both boundary tangents and the bisector from the faces' principal curvatures; relative difference above 0.05 and absolute above 0.001 per mm; live: the attempt-2 side patch, band G2 + flank G2, failed natively with 22094 and was flagged, band G2 + flank G1 passed). When native fails after a clean check, the error says the pre-check found no known cause.", z.object({
     id: z.number().int().positive(),
     edgeIds: z.array(z.string().min(1)).min(1).max(4096),
     curveIds: z.array(z.number().int().positive()).min(1).max(64).optional(),
@@ -4892,8 +4981,12 @@ function createServerWithCatalog(
     edgeContinuity: z.array(z.object({ edgeId: z.string().min(1), continuity: z.enum(["g0", "g1", "g2"]) }).strict()).min(1).max(4096).optional(),
     faces: z.enum(["single", "minimal", "multiple"]).optional(),
     smoothness: z.enum(["sharp", "smooth"]).optional(),
-    revision }).strict(), async ({ id, edgeIds, curveIds, continuity, edgeContinuity, faces, smoothness, revision: current }) =>
-    await session.get().checkPatchBoundary(id, edgeIds, current, { curveIds, continuity, edgeContinuity, faces, smoothness }), true);
+    guideIds: z.array(z.number().int().positive()).min(1).max(64).optional(),
+    toleranceMm: z.number().finite().positive().max(1).optional(),
+    precheck: z.enum(["refuse", "warn", "off"]).optional(),
+    intent,
+    revision }).strict(), async ({ id, edgeIds, curveIds, continuity, edgeContinuity, faces, smoothness, guideIds, toleranceMm, revision: current }) =>
+    await session.get().checkPatchBoundary(id, edgeIds, current, { curveIds, continuity, edgeContinuity, faces, smoothness, ...(guideIds ? { guideIds } : {}), ...(toleranceMm !== undefined ? { toleranceMm } : {}) }), true);
   tool("plasticity_cap_sheet_holes", "Cap every planar open boundary of one or more native Sheet bodies in one history step.", z.object({ ids, intent, revision }).strict(), async ({ ids: sheetIds, intent: purpose, revision: current }) =>
     await journaled("cap-sheet-holes", purpose, { ids: sheetIds }, () => session.get().capSheetHoles(sheetIds, current)));
   tool("plasticity_extend_sheet_edges", "Extend selected boundary edges of one native Sheet by a positive millimeter distance, or up to another body with targetId (give exactly one). shape sets the extension curve (linear by default, soft, reflective, natural). merge=false keeps the extension as a separate face instead of one merged surface.", z.object({
@@ -4948,6 +5041,20 @@ function createServerWithCatalog(
     revision,
   }).strict().refine((value) => value.frontMm > 0 || value.backMm > 0, "At least one face-thickening distance must be positive"), async ({ faces, frontMm, backMm, intent: purpose, revision: current }) =>
     await journaled("thicken-faces", purpose, { faces, frontMm, backMm }, () => session.get().thickenFaces(faces, frontMm, backMm, current)));
+  tool("plasticity_inset_planar_face", "Inward rim on a planar face in one call: offsets the outer loop of the face (faceId, or faceIds for a connected set of coplanar faces such as two mirrored halves with a seam, which act as one flat region) inward by distanceMm in the face plane, imprints it on the body, and with depthMm pushes the inner panel into the Solid (positive: a recess depthMm below the rim) or out of it (negative: a raised panel), all on the same body; temporary Wires are removed, so the body count is unchanged. Works where plasticity_offset_face_loops fails inward (PK 5076) and plasticity_offset_planar_curves refuses SPCurve loops (No basis found). Inward is decided from the result (the inward offset is the shorter loop). Holes in the face are left as they are. The reply lists rimFaceIds, panelFaceIds, panelDepthMm (measured from the panel face plane), the plane, the loop lengths, and undoSteps (5 to 7 native history steps: extract, offset, imprint, recess, cleanup, and 2 more when the first offset sign came out outward and was removed).", z.object({
+    bodyId: z.number().int().positive(),
+    faceId: z.string().min(1).max(64).optional(),
+    faceIds: z.array(z.string().min(1).max(64)).min(1).max(64).optional(),
+    distanceMm: z.number().finite().positive(),
+    depthMm: z.number().finite().refine((value) => value !== 0, "depthMm must be nonzero").optional(),
+    intent,
+    revision,
+  }).strict().superRefine((value, context) => {
+    if ((value.faceId === undefined) === (value.faceIds === undefined)) context.addIssue({ code: "custom", path: ["faceId"], message: "Give exactly one of faceId and faceIds" });
+  }), async ({ bodyId, faceId, faceIds, distanceMm, depthMm, intent: purpose, revision: current }) => {
+    const selected = faceIds ?? [faceId!];
+    return await journaled("inset-planar-face", purpose, { bodyId, faceIds: selected, distanceMm, ...(depthMm !== undefined ? { depthMm } : {}) }, () => new InsetPlanarFaceRecipe(session.get()).inset({ bodyId, faceIds: selected, distanceMm, depthMm, revision: current }));
+  });
   tool("plasticity_offset_face_loops", "Insert native offset loops around exact current faces from one Solid or Sheet at a signed millimeter distance. Positive and negative signs follow Plasticity's face and adjacent-surface orientation; they can place the new loop on the selected face or propagate it over adjacent faces. This splits topology without intentionally changing volume. Re-read the exact new faces and edges instead of assuming a world direction.", z.object({ faces: z.array(faceRef).min(1).max(4096), distanceMm: z.number().finite().refine((value) => value !== 0, "Distance must be nonzero"), individual: z.boolean().default(true), intent, revision }).strict(), async ({ faces, distanceMm, individual, intent: purpose, revision: current }) =>
     await journaled("offset-face-loops", purpose, { faces, distanceMm, individual }, () => session.get().offsetFaceLoops(faces, distanceMm, individual, current)));
   tool("plasticity_patch_solid_edge_loops", "Create independent native Sheet patches from exact edge loops selected on one current Solid. The source Solid, including any opening or through-hole, is preserved; this tool constructs covering surfaces and does not claim to heal, fill, or Boolean-close the Solid. Re-read the returned Sheets before thickening, sewing, or other downstream work.", z.object({ edges: z.array(edgeRef).min(1).max(4096), intent, revision }).strict(), async ({ edges, intent: purpose, revision: current }) =>
@@ -5380,6 +5487,28 @@ Intended use: ${intendedUse ?? "not specified"}. Default units: ${defaultUnits}.
   }));
 
   registerStrengthTools(server, strength);
+
+  // tools/list: the SDK lists a union input schema as an empty object; list its merged branch properties instead (item 7).
+  const lowLevel = server.server as unknown as { _requestHandlers?: Map<string, (request: unknown, extra: unknown) => Promise<{ tools?: Array<{ name: string; inputSchema?: Record<string, unknown> }> }>>; setRequestHandler: (schema: unknown, handler: (request: unknown, extra: unknown) => Promise<unknown>) => void };
+  const listTools = lowLevel._requestHandlers?.get("tools/list");
+  if (listTools) {
+    lowLevel.setRequestHandler(ListToolsRequestSchema, async (request, extra) => {
+      const listed = await listTools(request, extra);
+      for (const entry of listed.tools ?? []) {
+        const properties = entry.inputSchema?.properties as Record<string, unknown> | undefined;
+        if (properties && Object.keys(properties).length > 0) continue;
+        const routed = routedTools.get(entry.name);
+        if (!routed) continue;
+        const json = z.toJSONSchema(routed.inputSchema, { unrepresentable: "any", io: "input" }) as Record<string, unknown>;
+        const merged = withMergedUnionProperties(json);
+        if (merged !== json) {
+          const { $schema: _ignored, ...rest } = merged;
+          entry.inputSchema = rest;
+        }
+      }
+      return listed;
+    });
+  }
 
   return server;
 }

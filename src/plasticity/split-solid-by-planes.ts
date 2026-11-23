@@ -1,6 +1,6 @@
 import type { RuntimeState } from "./runtime.ts";
 import type { PlasticityOperations } from "./operations.ts";
-import { SplitSolidByPlaneRecipe, SplitSolidByPlaneRecipeError, type SplitSolidByPlaneInput, type SplitSolidByPlaneResult } from "./split-solid.ts";
+import { SplitSolidByPlaneRecipe, SplitSolidByPlaneRecipeError, checkSplitVolume, type SplitSolidByPlaneInput, type SplitSolidByPlaneResult } from "./split-solid.ts";
 
 type Vector3 = [number, number, number];
 type SplitOperations = Pick<PlasticityOperations, "state" | "measureSolidProperties" | "validateBodies" | "createRectangle" | "patchClosedWires" | "cutWithFaces" | "remove">;
@@ -25,6 +25,7 @@ export interface SplitSolidByPlanesResult {
   resultVolumeMm3: number;
   volumeDifferenceMm3: number;
   cuts: Array<{ targetBodyId: number; planeIndex: number; resultBodyIds: number[]; volumeDifferenceMm3: number }>;
+  warnings?: string[];
 }
 
 export class SplitSolidByPlanesRecipeError extends Error {
@@ -67,6 +68,7 @@ export class SplitSolidByPlanesRecipe {
     let expectedRevision = initial.revision;
     let lastConfirmedRevision = initial.revision;
     const cuts: SplitSolidByPlanesResult["cuts"] = [];
+    const cutWarnings: string[] = [];
     let current = initial;
     try {
       for (let planeIndex = 0; planeIndex < input.planes.length; planeIndex += 1) {
@@ -92,6 +94,7 @@ export class SplitSolidByPlanesRecipe {
           }
           pieces = [...pieces.filter((id) => id !== targetBodyId), ...result.resultBodyIds];
           cuts.push({ targetBodyId, planeIndex, resultBodyIds: result.resultBodyIds, volumeDifferenceMm3: result.volumeDifferenceMm3 });
+          for (const warning of result.warnings ?? []) cutWarnings.push(`plane ${planeIndex}, body ${targetBodyId}: ${warning}`);
           expectedRevision = result.afterRevision;
           lastConfirmedRevision = result.afterRevision;
           current = after;
@@ -112,11 +115,10 @@ export class SplitSolidByPlanesRecipe {
       if (resultBodyIds.length !== cuts.length + 1) throw new Error("Split result count does not match the number of completed binary cuts");
       const measured = await this.operations.measureSolidProperties(resultBodyIds, current.revision);
       const resultVolumeMm3 = measured.totals.volumeMm3;
-      const volumeDifferenceMm3 = Math.abs(resultVolumeMm3 - inputVolumeMm3);
-      const toleranceMm3 = Math.max(0.01, inputVolumeMm3 * 1e-8);
-      if (!Number.isFinite(resultVolumeMm3) || volumeDifferenceMm3 > toleranceMm3) {
-        throw new Error(`Multi-plane split changed native volume by ${volumeDifferenceMm3} mm³; conservation tolerance is ${toleranceMm3} mm³`);
-      }
+      const check = checkSplitVolume(inputVolumeMm3, resultVolumeMm3, "Multi-plane split");
+      if (check.status === "error") throw new Error(check.message);
+      const volumeDifferenceMm3 = check.differenceMm3;
+      const warnings = [...new Set([...cutWarnings, ...(check.status === "warning" ? [check.message!] : [])])];
       return {
         recipe: "split-solid-by-planes",
         status: "completed",
@@ -131,6 +133,7 @@ export class SplitSolidByPlanesRecipe {
         resultVolumeMm3,
         volumeDifferenceMm3,
         cuts,
+        ...(warnings.length > 0 ? { warnings } : {}),
       };
     } catch (error) {
       const failedCutRevision = error instanceof SplitSolidByPlaneRecipeError ? error.lastConfirmedRevision : lastConfirmedRevision;

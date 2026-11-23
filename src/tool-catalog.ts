@@ -111,3 +111,22 @@ export function catalogScore(query: string, candidate: { name: string; descripti
   }, 0);
   return score > 0 && nameWords.every((word) => covered.has(word)) ? score + 1 : score;
 }
+
+/**
+ * Exported JSON input schema of a tool (phase C, friction 4). A union or discriminated union of object schemas exports
+ * as anyOf/oneOf with no top-level properties, and the MCP tools/list falls back to an empty object for it, so callers
+ * saw no argument names. This keeps the anyOf/oneOf branches and adds type object plus the merged properties of every
+ * branch (first branch wins for a shared key); required stays per branch.
+ */
+export function withMergedUnionProperties(json: Record<string, unknown>): Record<string, unknown> {
+  if (json.properties && typeof json.properties === "object" && Object.keys(json.properties as object).length > 0) return json;
+  const branches = (json.anyOf ?? json.oneOf) as Array<Record<string, unknown>> | undefined;
+  if (!Array.isArray(branches) || branches.length === 0) return json;
+  const properties: Record<string, unknown> = {};
+  for (const branch of branches) {
+    const own = branch && typeof branch === "object" ? branch.properties as Record<string, unknown> | undefined : undefined;
+    for (const [key, value] of Object.entries(own ?? {})) if (!(key in properties)) properties[key] = value;
+  }
+  if (Object.keys(properties).length === 0) return json;
+  return { ...json, type: "object", properties };
+}

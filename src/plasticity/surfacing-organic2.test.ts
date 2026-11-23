@@ -114,7 +114,8 @@ test("pre-check: mixed continuity is reported (G0 is only a minimum; native may 
   assert.ok(problem);
   assert.deepEqual(problem.edgeIds, ["arc2"]);
   assert.deepEqual(problem.faceIds, ["wall"]);
-  assert.match(problem.message, /edges arc2 \(G0\) ask less than G1; on Plasticity 26\.1\.3 that is only a minimum: Indie Patch keeps the G1 edges and may come back G1 on these too where a smooth fill allows it .*arc2 also shares a neighbour face with a G1 edge, and splitting that face did not change it\); it never makes a crease on request/);
+  // Phase C (B4): one line, reworded.
+  assert.match(problem.message, /^edges arc2 \(G0\) ask less than G1 \(arc2 shares a neighbour face with a G1 edge\): G0 is a minimum: native may make such an edge G1 where the geometry allows; it keeps a crease only where the geometry forces one$/);
   assert.equal(problem.blocking, false); // native succeeds; G0 edges may come back G1 (FINDINGS, phase B)
   assert.equal(result.ok, true);
   assert.deepEqual(result.edges.find((edge) => edge.edgeId === "arc1")?.sharesFaceWith, ["arc2"]);

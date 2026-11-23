@@ -147,7 +147,12 @@ test("standard detail is the default and keeps today's reply byte for byte", asy
   const defaultReply = await client.callTool({ name: "plasticity_batch", arguments: { steps: STANDARD_STEPS } });
   const defaultText = (defaultReply.content as Array<{ text: string }>)[0]!.text;
   if (process.env.CAPTURE === "1") { console.log(`CAPTURE ${defaultText}`); await close(); return; }
-  assert.equal(defaultText, STANDARD_REPLY_BEFORE);
+  // Phase C item 9: standard also ends with summary (the lean shape); everything before it is today's reply byte for byte.
+  const parsedDefault = JSON.parse(defaultText) as Record<string, unknown>;
+  assert.equal(Object.keys(parsedDefault).at(-1), "summary");
+  assert.deepEqual(parsedDefault.summary, { revision: "r4", undoSteps: 3, bodyCount: 1, modified: [{ id: 1, type: "Solid", name: "plate", boundsMm: { min: [0, 0, 0], max: [40, 30, 10] }, faceCount: 5, edgeCount: 8 }] });
+  const { summary: _summary, ...beforeSummary } = parsedDefault;
+  assert.equal(JSON.stringify(beforeSummary), STANDARD_REPLY_BEFORE);
   const second = fixture();
   const other = await connect(second.fake);
   const explicit = await other.client.callTool({ name: "plasticity_batch", arguments: { detail: "standard", steps: STANDARD_STEPS } });

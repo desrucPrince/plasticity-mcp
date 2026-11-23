@@ -2038,7 +2038,7 @@ test("MCP forwards exact topology measurement requests", async () => {
     { name: "nonparallel-face-clearance", arguments: [{ bodyId: 7, faceId: "bottom" }, { bodyId: 8, faceId: "side" }, "r1"] },
     { name: "edges", arguments: [{ bodyId: 7, edgeId: "left" }, { bodyId: 7, edgeId: "right" }, "r1", 0.1] },
     { name: "grip", arguments: [[{ id: "plate", first: { bodyId: 7, faceId: "bottom" }, second: { bodyId: 7, faceId: "top" } }], [0, 0, 1], "r1", 0.01] },
-    { name: "continuity", arguments: [[{ bodyId: 7, edgeId: "shared" }], "r1", 0.02, 0.2, 0.1] },
+    { name: "continuity", arguments: [[{ bodyId: 7, edgeId: "shared" }], "r1", 0.02, 0.2, 0.1, { extended: true }] },
     { name: "curvature", arguments: [[{ bodyId: 8, edgeId: "circle" }], "r1"] },
     { name: "draft", arguments: [[{ bodyId: 7, faceId: "top" }], [0, 0, 2], 3, 6, "r1"] },
     { name: "list", arguments: [] },

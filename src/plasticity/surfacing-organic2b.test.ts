@@ -238,3 +238,52 @@ test("R6: a closed plane curve needs at least three points, refused before any c
   await assert.rejects(operations.createPlaneCurve({ plane: "xy", points2dMm: [[0, 0], [10, 0]], mode: "interpolate", closed: true }, "r1"), /closed plane curve needs at least three points/);
   assert.equal(calls.length, 0);
 });
+
+// Phase C addendum B1-B3 (review of phase B).
+test("B3: splitSheetEdge pointMm passes maxProjectionMm (default 1 mm) to the native check that refuses before any change", async () => {
+  const native = { t: 0.3, fraction: 0.3, lengthMm: 40, projectionDistanceMm: 0.2, expectedMm: [28, 0, 10], startMm: [40, 0, 10], endMm: [0, 0, 10], periodic: false, splitCalled: true };
+  const { operations, calls } = mockOperations([stateWith("r1", 3, [rectBefore]), stateWith("r2", 4, [rectAfter])], native);
+  await operations.splitSheetEdge({ bodyId: 2, edgeId: "3e262", pointMm: [28, 0.2, 10] }, "r1");
+  assert.equal((calls[0]!.args[0] as { maxProjectionMm: number }).maxProjectionMm, 1);
+  assert.match(calls[0]!.source, /if \(projectionDistanceMm > args\.maxProjectionMm\) throw new Error\('pointMm lies ' \+ projectionDistanceMm\.toPrecision\(4\) \+ ' mm from edge '/);
+  // The check runs before the Split Segment command starts.
+  assert.ok(calls[0]!.source.indexOf("args.maxProjectionMm") < calls[0]!.source.indexOf("SplitSegmentCommand"));
+  const second = mockOperations([stateWith("r1", 3, [rectBefore]), stateWith("r2", 4, [rectAfter])], native);
+  await second.operations.splitSheetEdge({ bodyId: 2, edgeId: "3e262", pointMm: [28, 3, 10], maxProjectionMm: 5 }, "r1");
+  assert.equal((second.calls[0]!.args[0] as { maxProjectionMm: number }).maxProjectionMm, 5);
+  await assert.rejects(second.operations.splitSheetEdge({ bodyId: 2, edgeId: "3e262", pointMm: [28, 3, 10], maxProjectionMm: 0 }, "r2"), /maxProjectionMm must be a positive distance/);
+});
+
+test("B1: a split check that fails after the native commit says the document changed and how to undo it", async () => {
+  const native = { t: 0.3, fraction: 0.3, lengthMm: 40, projectionDistanceMm: null, expectedMm: [28, 0, 10], startMm: [40, 0, 10], endMm: [0, 0, 10], periodic: false };
+  const notSplit = mockOperations([stateWith("r1", 3, [rectBefore]), stateWith("r2", 4, [rectBefore])], { ...native, splitCalled: false });
+  await assert.rejects(notSplit.operations.splitSheetEdge({ bodyId: 2, edgeId: "3e262", normalizedParameter: 0.3 }, "r1"), /committed without splitting the edge; the document was changed \(1 Undo step\): undo with plasticity_undo/);
+  const noVertex = mockOperations([stateWith("r1", 3, [rectBefore]), stateWith("r2", 4, [rectBefore])], native);
+  await assert.rejects(noVertex.operations.splitSheetEdge({ bodyId: 2, edgeId: "3e262", normalizedParameter: 0.3 }, "r1"), /made no new vertex; the document was changed \(1 Undo step\): undo with plasticity_undo/);
+});
+
+test("B1/B2: bridgeSheetEdges matches joins by edge or face ids only, and warns on a failed read-back, a missing join or a new body", async () => {
+  // Read-back rows that match no join (wrong edge ids, no faces): no positional fallback, a warning instead.
+  const stray = ["1e1", "1e2"].map((edgeId) => ({ edge: { bodyId: 29, edgeId }, achievedContinuity: "G2" }));
+  const unmatched = mockOperations([stateWith("r1", 5, [trapBefore]), stateWith("r2", 6, [trapAfter])], [[10, 10, 20], [30, 10, 20]], stray);
+  const result = await unmatched.operations.bridgeSheetEdges({ bodyId: 29, firstEdgeId: "68e5148", secondEdgeId: "68e5451", widthMm: 30 }, "r1");
+  assert.deepEqual(result.bridge.joins.map((join) => join.achievedContinuity), [null, null]);
+  assert.ok(result.bridge.warnings!.some((warning) => /no continuity read-back matched join edge 69e5553/.test(warning)));
+  // Matched by the two face ids when the edge id differs.
+  const byFaces = [{ edge: { bodyId: 29, edgeId: "x" }, adjacentFaces: [{ faceId: "69f5601" }, { faceId: "69f5464" }], achievedContinuity: "G1" }, { edge: { bodyId: 29, edgeId: "69e5528" }, achievedContinuity: "G2" }];
+  const faces = mockOperations([stateWith("r1", 5, [trapBefore]), stateWith("r2", 6, [trapAfter])], [[10, 10, 20], [30, 10, 20]], byFaces);
+  const matched = await faces.operations.bridgeSheetEdges({ bodyId: 29, firstEdgeId: "68e5148", secondEdgeId: "68e5451", widthMm: 30 }, "r1");
+  assert.deepEqual(matched.bridge.joins.map((join) => [join.edgeId, join.achievedContinuity]), [["69e5553", "G1"], ["69e5528", "G2"]]);
+  assert.equal(matched.bridge.warnings, undefined);
+  // One join only, plus a separate new Sheet: two warnings, still a result (the bridge is committed).
+  const oneJoin = { ...trapAfter, edges: trapAfter.edges.filter((edge) => edge.id !== "69e5528") };
+  const extra = { ...trapAfter, id: 30, edges: [], faces: [] };
+  const partial = mockOperations([stateWith("r1", 5, [trapBefore]), stateWith("r2", 6, [oneJoin, extra])], [[10, 10, 20], [30, 10, 20]], []);
+  const warned = await partial.operations.bridgeSheetEdges({ bodyId: 29, firstEdgeId: "68e5148", secondEdgeId: "68e5451", widthMm: 30 }, "r1");
+  assert.equal(warned.bridge.singleBody, false);
+  assert.ok(warned.bridge.warnings!.some((warning) => /did not stay one body: new bodies 30/.test(warning)));
+  assert.ok(warned.bridge.warnings!.some((warning) => /found 1 join .*expected 2/.test(warning)));
+  // The Sheet gone after the commit: an error that says the document changed.
+  const gone = mockOperations([stateWith("r1", 5, [trapBefore]), stateWith("r2", 6, [])], [[10, 10, 20], [30, 10, 20]], []);
+  await assert.rejects(gone.operations.bridgeSheetEdges({ bodyId: 29, firstEdgeId: "68e5148", secondEdgeId: "68e5451", widthMm: 30 }, "r1"), /gone after the bridge; the document was changed \(1 Undo step\): undo with plasticity_undo/);
+});

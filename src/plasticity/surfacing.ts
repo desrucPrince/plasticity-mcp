@@ -1430,6 +1430,43 @@ export interface PatchPrecheckCorner {
   faces: PatchPrecheckFaceAtVertex[];
   /** True when the patch closes the vertex: its only open boundary edges are the two hole edges that meet here. */
   closedByPatch: boolean;
+  /** For an edge item: its neighbour face's principal frame at the corner (curvatures signed against that face's normal). */
+  curvatures?: [PrincipalCurvature | null, PrincipalCurvature | null];
+}
+export interface PrincipalCurvature { u: Vector3; v: Vector3; normal: Vector3; kuPerMm: number; kvPerMm: number }
+/** Normal curvature (1/mm, signed against pc.normal) in direction d (projected into the tangent plane), by Euler's formula. */
+export function normalCurvatureAlong(pc: PrincipalCurvature, d: Vector3): number | null {
+  const along = d[0] * pc.normal[0] + d[1] * pc.normal[1] + d[2] * pc.normal[2];
+  const t = [d[0] - along * pc.normal[0], d[1] - along * pc.normal[1], d[2] - along * pc.normal[2]];
+  const l = Math.hypot(t[0]!, t[1]!, t[2]!);
+  if (!(l > 1e-9)) return null;
+  const c = (t[0]! * pc.u[0] + t[1]! * pc.u[1] + t[2]! * pc.u[2]) / l, s = (t[0]! * pc.v[0] + t[1]! * pc.v[1] + t[2]! * pc.v[2]) / l;
+  return pc.kuPerMm * c * c + pc.kvPerMm * s * s;
+}
+export const PATCH_PRECHECK_G2_CORNER_RELATIVE = 0.05;
+export const PATCH_PRECHECK_G2_CORNER_ABSOLUTE_PER_MM = 1e-3;
+/**
+ * G2 to two neighbour faces at one corner: the patch must take both faces' curvature there, so the two faces must curve
+ * alike at the vertex. Compares their normal curvatures along both boundary tangents and the bisector; the worst
+ * direction is returned. Normals pointing apart flip the second face's sign.
+ */
+export function g2CornerCurvatureMismatch(a: PrincipalCurvature, b: PrincipalCurvature, tangents: Vector3[]): { directionIndex: number; kAPerMm: number; kBPerMm: number; differencePerMm: number; relative: number } | null {
+  const flip = a.normal[0] * b.normal[0] + a.normal[1] * b.normal[1] + a.normal[2] * b.normal[2] < 0 ? -1 : 1;
+  const directions = [...tangents];
+  if (tangents.length === 2) {
+    const sum: Vector3 = [tangents[0]![0] + tangents[1]![0], tangents[0]![1] + tangents[1]![1], tangents[0]![2] + tangents[1]![2]];
+    if (Math.hypot(...sum) > 1e-6) directions.push(sum);
+  }
+  let worst: { directionIndex: number; kAPerMm: number; kBPerMm: number; differencePerMm: number; relative: number } | null = null;
+  directions.forEach((d, directionIndex) => {
+    const kA = normalCurvatureAlong(a, d), kB0 = normalCurvatureAlong(b, d);
+    if (kA === null || kB0 === null) return;
+    const kB = flip * kB0;
+    const differencePerMm = Math.abs(kA - kB);
+    const relative = Math.abs(kA) + Math.abs(kB) > 0 ? differencePerMm / (Math.abs(kA) + Math.abs(kB)) : 0;
+    if (!worst || differencePerMm > worst.differencePerMm) worst = { directionIndex, kAPerMm: kA, kBPerMm: kB, differencePerMm, relative };
+  });
+  return worst;
 }
 export interface PatchPrecheckInput {
   items: PatchPrecheckItem[];
@@ -1437,7 +1474,7 @@ export interface PatchPrecheckInput {
   faces?: "single" | "minimal" | "multiple" | undefined;
   smoothness?: "sharp" | "smooth" | undefined;
 }
-export type PatchPrecheckProblemKind = "too-many-edges" | "angle-budget" | "angle-indeterminate" | "normals-disagree" | "mixed-continuity";
+export type PatchPrecheckProblemKind = "too-many-edges" | "angle-budget" | "angle-indeterminate" | "normals-disagree" | "mixed-continuity" | "g2-corner-curvature";
 export interface PatchPrecheckProblem {
   kind: PatchPrecheckProblemKind;
   cornerVertexId?: number | null;
@@ -1542,9 +1579,9 @@ export function checkPatchBoundary(input: PatchPrecheckInput, options: { normalT
     const shared = lower.filter((item) => edgeItems.some((other) => other !== item && other.continuity === top && item.faceId && other.faceId === item.faceId));
     problems.push({
       kind: "mixed-continuity", edgeIds: lower.map((item) => item.id), faceIds: [...new Set(lower.map((item) => item.faceId).filter((faceId): faceId is string => Boolean(faceId)))],
-      measured: levels.length, needed: "G0 edges may come back tangent; no crease on request", blocking: false,
-      message: `edges ${lower.map((item) => `${item.id} (${item.continuity.toUpperCase()})`).join(", ")} ask less than ${top.toUpperCase()}; on Plasticity 26.1.3 that is only a minimum: Indie Patch keeps the ${top.toUpperCase()} edges and may come back ${top.toUpperCase()} on these too where a smooth fill allows it (live: an open box and a cylinder rim split into two arcs came back G1 on every edge${shared.length > 0 ? `; ${shared.map((item) => item.id).join(", ")} also ${shared.length === 1 ? "shares" : "share"} a neighbour face with a ${top.toUpperCase()} edge, and splitting that face did not change it` : ""}); it never makes a crease on request`,
-      advice: `read the edges back with plasticity_analyze_surface_continuity; to force a crease along some edges, fill that part separately (a smaller patch loop, plasticity_loft_curves or plasticity_bridge_sheet_edges from the tangent edges) and patch the rest`,
+      measured: levels.length, needed: "G0 is a minimum; a crease only where the geometry forces one", blocking: false,
+      message: `edges ${lower.map((item) => `${item.id} (${item.continuity.toUpperCase()})`).join(", ")} ask less than ${top.toUpperCase()}${shared.length > 0 ? ` (${shared.map((item) => item.id).join(", ")} ${shared.length === 1 ? "shares" : "share"} a neighbour face with a ${top.toUpperCase()} edge)` : ""}: G0 is a minimum: native may make such an edge G1 where the geometry allows; it keeps a crease only where the geometry forces one`,
+      advice: `read the edges back with plasticity_analyze_surface_continuity; for a crease the geometry does not force, fill that part separately (a smaller patch loop, plasticity_loft_curves or plasticity_bridge_sheet_edges)`,
     });
   }
 
@@ -1590,6 +1627,21 @@ export function checkPatchBoundary(input: PatchPrecheckInput, options: { normalT
           ? `ask G0 on edge ${a.id} or ${b.id}, use faces: multiple or minimal with smoothness: sharp (the patch then creases from this corner), or make the faces meet tangentially at this vertex`
           : `accept the crease, or ask G0 on edge ${a.id} or ${b.id}, or make faces ${a.faceId} and ${b.faceId} meet tangentially at this vertex`,
       });
+    }
+    // G2 to two neighbours at one corner (phase C, attempt-2 side patch): report only. Native 22094 with the check otherwise
+    // clean when band and flank, both asked G2, curve differently at their shared corner next to a sharp rim.
+    const pcA = corner.curvatures?.[0], pcB = corner.curvatures?.[1];
+    if (a.kind === "edge" && b.kind === "edge" && a.continuity === "g2" && b.continuity === "g2" && a.faceId !== b.faceId && pcA && pcB && tA && tB) {
+      const mismatch = g2CornerCurvatureMismatch(pcA, pcB, [tA, tB]);
+      if (mismatch && mismatch.relative > PATCH_PRECHECK_G2_CORNER_RELATIVE && mismatch.differencePerMm > PATCH_PRECHECK_G2_CORNER_ABSOLUTE_PER_MM) {
+        const along = mismatch.directionIndex === 0 ? `along edge ${a.id}` : mismatch.directionIndex === 1 ? `along edge ${b.id}` : "between the two edges";
+        problems.push({
+          kind: "g2-corner-curvature", cornerVertexId: corner.vertexId, positionMm: corner.positionMm, edgeIds: [a.id, b.id], faceIds: [a.faceId ?? "?", b.faceId ?? "?"],
+          measured: fmt(mismatch.differencePerMm, 5), needed: `the two neighbour faces curving alike at the corner (relative difference at most ${PATCH_PRECHECK_G2_CORNER_RELATIVE})`, blocking: false,
+          message: `G2 to two neighbours at one corner: at ${where} faces ${a.faceId} and ${b.faceId} curve differently ${along} (${fmt(mismatch.kAPerMm, 5)} against ${fmt(mismatch.kBPerMm, 5)} per mm, difference ${fmt(mismatch.differencePerMm, 5)} per mm, relative ${fmt(mismatch.relative, 3)}); a patch G2 to both would need both curvatures at that point, and native may fail with 22094`,
+          advice: `ask G1 on edge ${a.id} or ${b.id} (live: band G2 + flank G1 passed where G2 + G2 failed), or make faces ${a.faceId} and ${b.faceId} meet with matching curvature at this vertex`,
+        });
+      }
     }
     // Angle budget: a smooth vertex the patch closes, with G1/G2 on either side. Fails open where an angle can wrap.
     const budgetApplies = corner.closedByPatch && smooth === true && (constrained(a.continuity) || constrained(b.continuity)) && angleSum !== null;
@@ -1681,6 +1733,18 @@ export const PATCH_BOUNDARY_SOURCE = nativeFunction`function (pk_default, args) 
     const near = face.FindPointNear(new KernelVector(pMm[0] / 1000, pMm[1] / 1000, pMm[2] / 1000));
     return unit(read(face.EvalNormal(near.u, near.v).normal));
   };
+  // Principal directions and curvatures (1/mm) of a face at a point, signed against the face normal (Face.EvalBasis gives
+  // the principal frame; its curvature sign follows the surface, so a face whose sense is against its surface flips it).
+  const principalAt = (face, pMm) => {
+    try {
+      const near = face.FindPointNear(new KernelVector(pMm[0] / 1000, pMm[1] / 1000, pMm[2] / 1000));
+      const b = face.EvalBasis(near.u, near.v);
+      const u = unit(read(b.uDirection)), v = unit(read(b.vDirection)), n = unit(read(b.normal));
+      const sense = face.GetSurface?.()?.orientation === false ? -1 : 1;
+      const ku = sense * Number(b.uCurvature) / 1000, kv = sense * Number(b.vCurvature) / 1000;
+      return u && v && n && Number.isFinite(ku) && Number.isFinite(kv) ? { u, v, normal: n, kuPerMm: ku, kvPerMm: kv } : null;
+    } catch (error) { return null; }
+  };
   const distanceToFace = (face, pMm) => {
     const r = evaluator.DistancesToPoints(Int32Array.from([Number(face.Id())]), Float64Array.from(pMm.map(x => x / 1000)), Int32Array.from([0, 1]));
     const d = Number(r.distances?.[0]);
@@ -1710,7 +1774,7 @@ export const PATCH_BOUNDARY_SOURCE = nativeFunction`function (pk_default, args) 
     const edge = edgeById(edgeId);
     const faces = facesOf(edge);
     if (faces.length !== 1) throw new Error('Hole patch requires boundary edges: ' + edgeId);
-    return { edgeId, faceId: faceIdByEntity.get(Number(faces[0].Id())) ?? null, ends: edgeEnds(edge).map(end => ({ ...end, inward: end.vertexId === null ? null : inwardAcross(faces[0], edge, end.pointMm), normal: normalAt(faces[0], end.pointMm) })) };
+    return { edgeId, faceId: faceIdByEntity.get(Number(faces[0].Id())) ?? null, ends: edgeEnds(edge).map(end => ({ ...end, inward: end.vertexId === null ? null : inwardAcross(faces[0], edge, end.pointMm), normal: normalAt(faces[0], end.pointMm), curvature: principalAt(faces[0], end.pointMm) })) };
   });
   const wires = (args.curveIds ?? []).map(wireId => {
     let wire; for (const [versionId, candidate] of nativeApi.geo.geometryModel) if (nativeApi.db.lookupStableId(versionId) === wireId) { wire = candidate; break; }
@@ -1755,7 +1819,7 @@ export const PATCH_BOUNDARY_SOURCE = nativeFunction`function (pk_default, args) 
 }`;
 
 export interface NativePatchBoundary {
-  edges: Array<{ edgeId: string; faceId: string | null; ends: Array<{ t: number; pointMm: Vector3; tangentAway: Vector3 | null; vertexId: number | null; inward: Vector3 | null; normal: Vector3 | null }> }>;
+  edges: Array<{ edgeId: string; faceId: string | null; ends: Array<{ t: number; pointMm: Vector3; tangentAway: Vector3 | null; vertexId: number | null; inward: Vector3 | null; normal: Vector3 | null; curvature?: PrincipalCurvature | null }> }>;
   wires: Array<{ wireId: number; ends: Array<{ pointMm: Vector3; tangentAway: Vector3 | null }> }>;
   vertices: Array<{ vertexId: number; positionMm: Vector3; faces: PatchPrecheckFaceAtVertex[]; boundaryEdgeIds: string[] }>;
 }
@@ -1771,10 +1835,10 @@ export function patchPrecheckInputFromNative(
     ...native.edges.map((edge) => ({ kind: "edge" as const, id: edge.edgeId, faceId: edge.faceId, continuity: continuityOf(edge.edgeId) })),
     ...native.wires.map((wire) => ({ kind: "curve" as const, id: `wire:${wire.wireId}`, continuity: "g0" as const })),
   ];
-  type End = { item: number; pointMm: Vector3; tangent: Vector3 | null; vertexId: number | null; normal: Vector3 | null; inward: Vector3 | null; used: boolean };
+  type End = { item: number; pointMm: Vector3; tangent: Vector3 | null; vertexId: number | null; normal: Vector3 | null; inward: Vector3 | null; curvature: PrincipalCurvature | null; used: boolean };
   const ends: End[] = [
-    ...native.edges.flatMap((edge, index) => edge.ends.map((end) => ({ item: index, pointMm: end.pointMm, tangent: end.tangentAway, vertexId: end.vertexId, normal: end.normal, inward: end.inward, used: false }))),
-    ...native.wires.flatMap((wire, index) => wire.ends.map((end) => ({ item: native.edges.length + index, pointMm: end.pointMm, tangent: end.tangentAway, vertexId: null, normal: null, inward: null, used: false }))),
+    ...native.edges.flatMap((edge, index) => edge.ends.map((end) => ({ item: index, pointMm: end.pointMm, tangent: end.tangentAway, vertexId: end.vertexId, normal: end.normal, inward: end.inward, curvature: end.curvature ?? null, used: false }))),
+    ...native.wires.flatMap((wire, index) => wire.ends.map((end) => ({ item: native.edges.length + index, pointMm: end.pointMm, tangent: end.tangentAway, vertexId: null, normal: null, inward: null, curvature: null, used: false }))),
   ];
   const dist = (a: Vector3, b: Vector3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
   const holeEdgeIds = new Set(native.edges.map((edge) => edge.edgeId));
@@ -1794,6 +1858,7 @@ export function patchPrecheckInputFromNative(
       tangents: [first.tangent, partner.tangent],
       normals: [first.normal, partner.normal],
       inward: [first.inward, partner.inward],
+      ...(first.curvature || partner.curvature ? { curvatures: [first.curvature, partner.curvature] as [PrincipalCurvature | null, PrincipalCurvature | null] } : {}),
       faces: vertex?.faces ?? [],
       closedByPatch: Boolean(vertex) && bothEdges && vertex!.boundaryEdgeIds.every((edgeId) => holeEdgeIds.has(edgeId)),
     });
@@ -1848,6 +1913,64 @@ export function planeCurveWorldPoints(frame: CurvePlaneFrame, points2dMm: Array<
   });
 }
 
+// ---------------------------------------------------------------- Organic tools 2 phase C: end-constrained plane curves ----------------------------------------------------------------
+export interface CurveEndConstraint { direction: number[]; lengthMm?: number | undefined }
+export interface CurveEndConstraints { startTangent?: CurveEndConstraint | undefined; endTangent?: CurveEndConstraint | undefined; startCurvatureZero?: boolean | undefined; endCurvatureZero?: boolean | undefined }
+/** A tangent may be 2D (plane u, v) or 3D (world, projected into the plane; more than 1e-3 out of the plane is refused). */
+export function planeTangentWorld(frame: CurvePlaneFrame, direction: number[], label: string): Vector3 {
+  let world: Vector3;
+  if (direction.length === 2) world = [0, 1, 2].map((i) => direction[0]! * frame.uAxis[i]! + direction[1]! * frame.vAxis[i]!) as Vector3;
+  else if (direction.length === 3) world = [direction[0]!, direction[1]!, direction[2]!];
+  else throw new Error(`${label} must have 2 (plane u, v) or 3 (world) components`);
+  if (!world.every(Number.isFinite)) throw new Error(`${label} must be finite`);
+  const length = Math.hypot(...world);
+  if (!(length > 1e-12)) throw new Error(`${label} must be nonzero`);
+  const unitWorld = world.map((value) => value / length) as Vector3;
+  const out = unitWorld[0] * frame.normal[0] + unitWorld[1] * frame.normal[1] + unitWorld[2] * frame.normal[2];
+  if (Math.abs(out) > 1e-3) throw new Error(`${label} leaves the curve plane (component ${out.toFixed(4)} along the plane normal); a plane curve can only be tangent to directions in its plane`);
+  const inPlane = unitWorld.map((value, i) => value - out * frame.normal[i]!) as Vector3;
+  const l = Math.hypot(...inPlane);
+  return inPlane.map((value) => value / l) as Vector3;
+}
+/**
+ * End conditions for a control-point curve (control mode): startTangent moves the second control point onto the line
+ * from the first along the tangent (G1 to anything with that tangent there), startCurvatureZero also moves the third onto
+ * it (zero curvature at the end, which matches a flat or ruled neighbour: G2 against a plane). The distance along the
+ * tangent is lengthMm when given, else the original control point's distance (its projection when that is positive).
+ * The end works the same way backwards: the curve arrives along endTangent. Returns new world control points.
+ */
+export function applyCurveEndConstraints(frame: CurvePlaneFrame, pointsMm: Vector3[], constraints: CurveEndConstraints, closed = false): Vector3[] {
+  const startCount = constraints.startTangent ? (constraints.startCurvatureZero ? 3 : 2) : 0;
+  const endCount = constraints.endTangent ? (constraints.endCurvatureZero ? 3 : 2) : 0;
+  if (constraints.startCurvatureZero && !constraints.startTangent) throw new Error("startCurvatureZero needs startTangent");
+  if (constraints.endCurvatureZero && !constraints.endTangent) throw new Error("endCurvatureZero needs endTangent");
+  if (startCount + endCount === 0) return pointsMm.map((point) => [...point] as Vector3);
+  if (closed) throw new Error("End tangents and curvature apply to an open curve; leave closed false");
+  if (pointsMm.length < startCount + endCount) throw new Error(`These end conditions move ${startCount + endCount} control points; give at least ${startCount + endCount} points (the start and end may not share a moved point)`);
+  const out = pointsMm.map((point) => [...point] as Vector3);
+  const place = (from: Vector3, tangent: Vector3, original: Vector3, lengthMm: number | undefined, sign: 1 | -1): Vector3 => {
+    const offset = original.map((value, i) => value - from[i]!) as Vector3;
+    const along = sign * (offset[0] * tangent[0] + offset[1] * tangent[1] + offset[2] * tangent[2]);
+    const distance = lengthMm ?? (along > 1e-9 ? along : Math.hypot(...offset));
+    if (!(Number.isFinite(distance) && distance > 0)) throw new Error("Tangent handle length must be positive (two coincident control points)");
+    return from.map((value, i) => value + sign * distance * tangent[i]!) as Vector3;
+  };
+  if (constraints.startTangent) {
+    if (constraints.startTangent.lengthMm !== undefined && !(constraints.startTangent.lengthMm > 0)) throw new Error("startTangent.lengthMm must be positive");
+    const t = planeTangentWorld(frame, constraints.startTangent.direction, "startTangent");
+    out[1] = place(out[0]!, t, pointsMm[1]!, constraints.startTangent.lengthMm, 1);
+    if (constraints.startCurvatureZero) out[2] = place(out[1]!, t, pointsMm[2]!.map((value, i) => value - pointsMm[1]![i]! + out[1]![i]!) as Vector3, undefined, 1);
+  }
+  if (constraints.endTangent) {
+    if (constraints.endTangent.lengthMm !== undefined && !(constraints.endTangent.lengthMm > 0)) throw new Error("endTangent.lengthMm must be positive");
+    const t = planeTangentWorld(frame, constraints.endTangent.direction, "endTangent");
+    const last = out.length - 1;
+    out[last - 1] = place(out[last]!, t, pointsMm[last - 1]!, constraints.endTangent.lengthMm, -1);
+    if (constraints.endCurvatureZero) out[last - 2] = place(out[last - 1]!, t, pointsMm[last - 2]!.map((value, i) => value - pointsMm[last - 1]![i]! + out[last - 1]![i]!) as Vector3, undefined, -1);
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- Organic tools 2: continuity report ----------------------------------------------------------------
 export type ContinuityReportClass = "G2" | "G1" | "G0" | "none";
 const CLASS_RANK: Record<ContinuityReportClass, number> = { none: 0, G0: 1, G1: 2, G2: 3 };
@@ -1862,6 +1985,108 @@ export function continuityClass(g0Mm: number, g1Deg: number, g2Rel: number, tole
 export function worstFirst<T extends { class: ContinuityReportClass; normalAngleDeg: { max: number }; relativeCurvature: { interiorMax: number | null } }>(edges: T[]): T[] {
   return [...edges].sort((a, b) => CLASS_RANK[a.class] - CLASS_RANK[b.class] || b.normalAngleDeg.max - a.normalAngleDeg.max || (b.relativeCurvature.interiorMax ?? 0) - (a.relativeCurvature.interiorMax ?? 0));
 }
+
+// ---------------------------------------------------------------- Organic tools 2 phase C: one class rule, isolated spikes ----------------------------------------------------------------
+export interface ContinuitySamples { g0Mm: number[]; g1Deg: number[]; g2Rel: number[]; pointsMm: Vector3[] }
+export type ContinuityLevel = "G0" | "G1" | "G2";
+export interface ContinuitySpike { level: ContinuityLevel; index: number; value: number; positionMm: Vector3; neighbourMax: number; source: "sample" | "native-maximum" }
+export interface ContinuitySampleSummary {
+  /** All 100 samples and the native maxima (corners included). */
+  class: ContinuityReportClass;
+  /** Samples 5..94 (the 5 at each end are the corners), clamped to the overall maxima. */
+  interiorClass: ContinuityReportClass | null;
+  /** All samples except isolated single-sample failures (spikes). */
+  classIgnoringIsolatedSpikes: ContinuityReportClass;
+  spikes: ContinuitySpike[];
+  maximaIgnoringIsolatedSpikes: { g0Mm: number; g1Deg: number; g2Rel: number };
+}
+const SPIKE_NEIGHBOURS = 2;
+/**
+ * The continuity class rule used by plasticity_analyze_surface_continuity and plasticity_continuity_report alike.
+ * class: the maxima over every sample and the native maxima (a native maximum can sit between or beyond the 100
+ * samples, e.g. exactly at a corner vertex). interiorClass: samples 5..94. classIgnoringIsolatedSpikes: a sample is an
+ * isolated spike at a level when it fails that level's tolerance while every sample within 2 indices of it passes (a
+ * corner sample has neighbours on one side only); a native maximum that fails while the samples nearest its position
+ * pass is a spike at that sample index too (source native-maximum). Spike samples are left out of every level, and the
+ * class is taken from what remains. Live 26.1.3: band/side at the stadium corner, a vertex shared with a sharp edge,
+ * reads 90 degrees as the native maximum with every sample below 0.07 degrees.
+ */
+export function continuitySampleSummary(samples: ContinuitySamples, nativeMaxima: { g0Mm: number; g1Deg: number; g2Rel: number; g0AtMm?: Vector3 | undefined; g1AtMm?: Vector3 | undefined; g2AtMm?: Vector3 | undefined }, tolerances: { positionMm: number; normalAngleDeg: number; relativeCurvature: number }): ContinuitySampleSummary {
+  const n = samples.g1Deg.length;
+  if (n === 0 || samples.g0Mm.length !== n || samples.g2Rel.length !== n || samples.pointsMm.length !== n) throw new Error("Continuity samples must be equal-length series");
+  const levels: Array<{ level: ContinuityLevel; values: number[]; tolerance: number; native: number; at?: Vector3 | undefined }> = [
+    { level: "G0", values: samples.g0Mm, tolerance: tolerances.positionMm, native: nativeMaxima.g0Mm, at: nativeMaxima.g0AtMm },
+    { level: "G1", values: samples.g1Deg, tolerance: tolerances.normalAngleDeg, native: nativeMaxima.g1Deg, at: nativeMaxima.g1AtMm },
+    { level: "G2", values: samples.g2Rel.map((value) => Math.min(value, 1)), tolerance: tolerances.relativeCurvature, native: Math.min(nativeMaxima.g2Rel, 1), at: nativeMaxima.g2AtMm },
+  ];
+  const spikes: ContinuitySpike[] = [];
+  const neighbourMax = (values: number[], index: number) => {
+    let max = -Infinity;
+    for (let j = Math.max(0, index - SPIKE_NEIGHBOURS); j <= Math.min(n - 1, index + SPIKE_NEIGHBOURS); j += 1) if (j !== index) max = Math.max(max, values[j]!);
+    return max;
+  };
+  for (const { level, values, tolerance, native, at } of levels) {
+    for (let index = 0; index < n; index += 1) {
+      if (!(values[index]! > tolerance)) continue;
+      const around = neighbourMax(values, index);
+      if (around <= tolerance) spikes.push({ level, index, value: values[index]!, positionMm: samples.pointsMm[index]!, neighbourMax: around, source: "sample" });
+    }
+    const sampledMax = Math.max(...values);
+    if (native > tolerance && sampledMax <= tolerance) {
+      // The native maximum is not one of the samples: it is a spike at the sample nearest its position when the
+      // samples there pass (they all do here).
+      const position = at ?? samples.pointsMm[values.indexOf(sampledMax)]!;
+      let nearest = 0;
+      for (let index = 1; index < n; index += 1) if (distance(samples.pointsMm[index]!, position) < distance(samples.pointsMm[nearest]!, position)) nearest = index;
+      spikes.push({ level, index: nearest, value: native, positionMm: position, neighbourMax: Math.max(values[nearest]!, neighbourMax(values, nearest)), source: "native-maximum" });
+    }
+  }
+  const excluded = new Set(spikes.filter((spike) => spike.source === "sample").map((spike) => spike.index));
+  const keptMax = (values: number[]) => values.reduce((max, value, index) => (excluded.has(index) ? max : Math.max(max, value)), 0);
+  const overall = { g0Mm: Math.max(nativeMaxima.g0Mm, ...samples.g0Mm), g1Deg: Math.max(nativeMaxima.g1Deg, ...samples.g1Deg), g2Rel: Math.min(1, Math.max(nativeMaxima.g2Rel, ...samples.g2Rel)) };
+  // A level whose failing native maximum is a spike keeps only its samples; otherwise its native maximum counts.
+  const nativeSpike = (level: ContinuityLevel) => spikes.some((spike) => spike.level === level && spike.source === "native-maximum");
+  const kept = {
+    g0Mm: nativeSpike("G0") ? keptMax(samples.g0Mm) : Math.max(keptMax(samples.g0Mm), excluded.size === 0 ? nativeMaxima.g0Mm : 0),
+    g1Deg: nativeSpike("G1") ? keptMax(samples.g1Deg) : Math.max(keptMax(samples.g1Deg), excluded.size === 0 ? nativeMaxima.g1Deg : 0),
+    g2Rel: Math.min(1, nativeSpike("G2") ? keptMax(samples.g2Rel) : Math.max(keptMax(samples.g2Rel), excluded.size === 0 ? nativeMaxima.g2Rel : 0)),
+  };
+  const interiorSlice = (values: number[]) => (n === 100 ? Math.max(...values.slice(5, 95)) : null);
+  const interior = interiorSlice(samples.g1Deg) === null ? null : {
+    g0Mm: Math.min(interiorSlice(samples.g0Mm)!, overall.g0Mm), g1Deg: Math.min(interiorSlice(samples.g1Deg)!, overall.g1Deg), g2Rel: Math.min(interiorSlice(samples.g2Rel)!, overall.g2Rel),
+  };
+  return {
+    class: continuityClass(overall.g0Mm, overall.g1Deg, overall.g2Rel, tolerances),
+    interiorClass: interior ? continuityClass(interior.g0Mm, interior.g1Deg, interior.g2Rel, tolerances) : null,
+    classIgnoringIsolatedSpikes: continuityClass(kept.g0Mm, kept.g1Deg, kept.g2Rel, tolerances),
+    spikes,
+    maximaIgnoringIsolatedSpikes: kept,
+  };
+}
+/**
+ * Extended analyze_surface_continuity row: adds interiorContinuity, achievedContinuityIgnoringIsolatedSpikes and spikes
+ * from the per-sample series (continuitySampleSummary), and drops the series unless keepSamples. Rows without series
+ * (arrays that were not 100 samples) are returned as they are.
+ */
+export function withContinuitySummary<T extends Record<string, unknown>>(row: T, tolerances: { positionMm: number; normalAngleDeg: number; relativeCurvature: number }, keepSamples = false): T {
+  const samples = row.samples as ContinuitySamples | undefined;
+  if (!samples) return row;
+  const { samples: _dropped, ...rest } = row as T & { samples?: unknown };
+  const summary = continuitySampleSummary(samples, {
+    g0Mm: Number(row.maximumPositionDeviationMm), g1Deg: Number(row.maximumNormalAngleDeviationDeg), g2Rel: Number(row.maximumRelativeCurvatureDeviation),
+    g0AtMm: row.maximumPositionDeviationAtMm as Vector3 | undefined, g1AtMm: row.maximumNormalAngleDeviationAtMm as Vector3 | undefined, g2AtMm: row.maximumRelativeCurvatureDeviationAtMm as Vector3 | undefined,
+  }, tolerances);
+  return {
+    ...rest,
+    ...(summary.interiorClass ? { interiorContinuity: analyzeClassName(summary.interiorClass) } : {}),
+    achievedContinuityIgnoringIsolatedSpikes: analyzeClassName(summary.classIgnoringIsolatedSpikes),
+    spikes: summary.spikes.map((spike) => ({ level: spike.level, index: spike.index, value: spike.value, positionMm: spike.positionMm, neighbourMax: spike.neighbourMax, source: spike.source })),
+    ...(keepSamples ? { samples } : {}),
+  } as unknown as T;
+}
+/** analyze_surface_continuity spells a gap "discontinuous"; the report spells it "none". */
+export function analyzeClassName(cls: ContinuityReportClass): "G2" | "G1" | "G0" | "discontinuous" { return cls === "none" ? "discontinuous" : cls; }
+function distance(a: Vector3, b: Vector3): number { return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]); }
 
 /**
  * Interior maxima (samples 5..94) can only be at most the overall maxima; float noise in separate reductions must not make
@@ -1964,6 +2189,60 @@ export function wireJunctions(segments: WireSegmentInput[], samples: Map<number,
   return { junctions, segments: segmentReports };
 }
 
+/**
+ * Curvature profile of one Wire segment (phase C, a2-3): n magnitudes evenly spaced over the sample list (linear
+ * interpolation between samples), and the shape of the whole list: monotonic runs and interior local extrema, ignoring
+ * changes smaller than noiseFraction of the largest magnitude (hysteresis), so "rises to one broad maximum" reads
+ * localMaxima 1 and unimodal true.
+ */
+export function curvatureProfile(magnitudes: number[], n: number, noiseFraction = 1e-3): { curvatureSamplesPerMm: number[]; curvatureShape: { monotonicRuns: number; localMaxima: number; localMinima: number; unimodal: boolean } } {
+  if (!Number.isInteger(n) || n < 2) throw new Error("curvatureSamples must be an integer of at least 2");
+  if (magnitudes.length === 0) return { curvatureSamplesPerMm: [], curvatureShape: { monotonicRuns: 0, localMaxima: 0, localMinima: 0, unimodal: false } };
+  const picked = Array.from({ length: n }, (_, i) => {
+    const at = (i * (magnitudes.length - 1)) / (n - 1), lo = Math.floor(at), hi = Math.min(magnitudes.length - 1, lo + 1), f = at - lo;
+    return magnitudes[lo]! * (1 - f) + magnitudes[hi]! * f;
+  });
+  const threshold = Math.max(...magnitudes) * noiseFraction;
+  let trend = 0, runs = 0, maxima = 0, minima = 0, extreme = magnitudes[0]!, high = magnitudes[0]!, low = magnitudes[0]!;
+  for (const value of magnitudes.slice(1)) {
+    if (trend === 0) {
+      high = Math.max(high, value); low = Math.min(low, value);
+      if (high - magnitudes[0]! > threshold) { trend = 1; runs = 1; extreme = high; if (high - value > threshold) { maxima += 1; runs += 1; trend = -1; extreme = value; } }
+      else if (magnitudes[0]! - low > threshold) { trend = -1; runs = 1; extreme = low; if (value - low > threshold) { minima += 1; runs += 1; trend = 1; extreme = value; } }
+      continue;
+    }
+    if (trend === 1) {
+      if (value > extreme) extreme = value;
+      else if (extreme - value > threshold) { maxima += 1; runs += 1; trend = -1; extreme = value; }
+    } else {
+      if (value < extreme) extreme = value;
+      else if (value - extreme > threshold) { minima += 1; runs += 1; trend = 1; extreme = value; }
+    }
+  }
+  return { curvatureSamplesPerMm: picked, curvatureShape: { monotonicRuns: Math.max(runs, 1), localMaxima: maxima, localMinima: minima, unimodal: maxima <= 1 && minima === 0 } };
+}
+
+/**
+ * Shape of a bridge curve from points sampled along it (phase C, friction 6/10): depthMm is the largest distance from
+ * the chord (first to last point), bulge the unit direction from the chord to that point, atFraction where along the
+ * chord it lies (0 at the start). A bridge that bulged the wrong way shows here before a following join fails.
+ */
+export function bridgeDepth(pointsMm: Vector3[]): { chordMm: number; depthMm: number; bulge: Vector3 | null; atFraction: number | null; farthestPointMm: Vector3 | null } {
+  if (pointsMm.length < 2) throw new Error("bridgeDepth needs at least two points");
+  const a = pointsMm[0]!, b = pointsMm[pointsMm.length - 1]!;
+  const chord: Vector3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const chordMm = Math.hypot(...chord);
+  let best = { depth: 0, point: null as Vector3 | null, offset: null as Vector3 | null, at: null as number | null };
+  for (const p of pointsMm) {
+    const r: Vector3 = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
+    const t = chordMm > 0 ? (r[0] * chord[0] + r[1] * chord[1] + r[2] * chord[2]) / (chordMm * chordMm) : 0;
+    const offset: Vector3 = [r[0] - t * chord[0], r[1] - t * chord[1], r[2] - t * chord[2]];
+    const depth = Math.hypot(...offset);
+    if (depth > best.depth) best = { depth, point: p, offset, at: t };
+  }
+  return { chordMm, depthMm: best.depth, bulge: best.offset && best.depth > 1e-9 ? best.offset.map((value) => value / best.depth) as Vector3 : null, atFraction: best.at, farthestPointMm: best.point };
+}
+
 // ---------------------------------------------------------------- Organic tools 2 phase B: split edge, one-body bridge ----------------------------------------------------------------
 type BodyTopology = Pick<RuntimeState["bodies"][number], "id" | "type" | "faces" | "edges" | "vertices">;
 /** Topology entity number of a face or edge ID such as 110e10060 (version 110, entity 10060); stable across edits. */
@@ -1976,6 +2255,8 @@ export const SPLIT_EDGE_POSITION_TOLERANCE_MM = 1e-3;
 
 export interface EdgeSplitRequest { normalizedParameter?: number | undefined; pointMm?: Vector3 | undefined }
 /** Exactly one of normalizedParameter (0 < t < 1, fraction of the edge length from its start) and pointMm (finite). */
+/** split_sheet_edge pointMm: the farthest a point may lie from the edge (phase C, B3). */
+export const SPLIT_EDGE_MAX_PROJECTION_MM = 1;
 export function validateEdgeSplitRequest(request: EdgeSplitRequest): { mode: "parameter"; fraction: number } | { mode: "point"; pointMm: Vector3 } {
   const hasT = request.normalizedParameter !== undefined, hasP = request.pointMm !== undefined;
   if (hasT === hasP) throw new Error("Edge split needs exactly one of normalizedParameter and pointMm");
