@@ -4616,8 +4616,9 @@ function createServerWithCatalog(
   }).strict(), async ({ regionIds: selectedRegions, guideIds, trimGuides, closed, simplify, intent: purpose, revision: current }) =>
     await journaled("loft-regions", purpose, { regionIds: selectedRegions, guideIds, trimGuides, closed, simplify }, () =>
       session.get().loftRegions(selectedRegions, { guideIds, trimGuides, closed, simplify }, current)));
-  tool("plasticity_loft_curves", "Create one independent native loft surface through an ordered list of current Wire profiles while preserving every profile and guide. Optional Wire guides must intersect every profile. Closed mode requires at least three profiles and closes the loft sequence; natural, unconstrained, or clamped native curvature plus positive dimensionless end magnitudes control shape. The operation never joins the result to source bodies; verify the returned Sheet topology and bounds.", z.object({
-    profileIds: z.array(z.number().int().positive()).min(2).max(32).refine((values) => new Set(values).size === values.length, "Curve loft profile IDs must be unique"),
+  tool("plasticity_loft_curves", "Create one independent native loft surface through an ordered list of current Wire profiles while preserving every profile and guide. Instead of profileIds, profiles may mix Wires ({ wireId }) and boundary edges of Sheets or Solids ({ bodyId, edgeId }): an edge profile makes the loft continuous with that edge's face, G0 with curvature natural, G1 with unconstrained (default), G2 with clamped; Wire profiles stay positional. Optional Wire guides must intersect every profile. Closed mode requires at least three profiles and closes the loft sequence; positive dimensionless end magnitudes act as tension. The operation never joins the result to source bodies; join with plasticity_join_sheets and verify with plasticity_analyze_surface_continuity.", z.object({
+    profileIds: z.array(z.number().int().positive()).max(32).refine((values) => new Set(values).size === values.length, "Curve loft profile IDs must be unique").default([]),
+    profiles: z.array(z.union([z.object({ wireId: z.number().int().positive() }).strict(), z.object({ bodyId: z.number().int().positive(), edgeId: z.string().min(1) }).strict()])).min(2).max(32).optional(),
     guideIds: z.array(z.number().int().positive()).max(64).refine((values) => new Set(values).size === values.length, "Curve loft guide IDs must be unique").default([]),
     trimGuides: z.boolean().default(true),
     trimProfiles: z.boolean().default(true),
@@ -4628,9 +4629,9 @@ function createServerWithCatalog(
     endMagnitude: z.number().finite().positive().default(1),
     intent,
     revision,
-  }).strict(), async ({ profileIds, guideIds, trimGuides, trimProfiles, closed, simplify, curvature, startMagnitude, endMagnitude, intent: purpose, revision: current }) =>
-    await journaled("loft-curves", purpose, { profileIds, guideIds, trimGuides, trimProfiles, closed, simplify, curvature, startMagnitude, endMagnitude }, () =>
-      session.get().loftCurves(profileIds, { guideIds, trimGuides, trimProfiles, closed, simplify, curvature, startMagnitude, endMagnitude }, current)));
+  }).strict().refine((value) => (value.profiles === undefined) !== (value.profileIds.length === 0), "Give profileIds (two or more) or profiles, not both"), async ({ profileIds, profiles, guideIds, trimGuides, trimProfiles, closed, simplify, curvature, startMagnitude, endMagnitude, intent: purpose, revision: current }) =>
+    await journaled("loft-curves", purpose, { profileIds, profiles, guideIds, trimGuides, trimProfiles, closed, simplify, curvature, startMagnitude, endMagnitude }, () =>
+      session.get().loftCurves(profileIds, { ...(profiles !== undefined ? { profiles } : {}), guideIds, trimGuides, trimProfiles, closed, simplify, curvature, startMagnitude, endMagnitude }, current)));
   tool("plasticity_loft_faces", "Create one independent native capped loft Solid through an ordered list of exact planar faces from different current Solid or Sheet source bodies while preserving every source. Optional current Wire guides must intersect every profile. Natural, unconstrained, or clamped native end conditions and positive magnitudes control the two ends; verify the returned B-Rep rather than treating magnitude as a millimeter distance.", z.object({
     faces: z.array(faceRef).min(2).max(32),
     guideIds: z.array(z.number().int().positive()).max(64).default([]),

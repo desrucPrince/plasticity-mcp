@@ -212,6 +212,8 @@ interface NativeFaceDraftSamples {
 // Bridge end shaping (probes-2026-11-organic/bridge.ts, 26.1.3): tensionG1Mm/tensionG2Mm write the factory's
 // tensions1/tensions2 ([G1, G2] handle offsets in metres, the dialog's Tension G1/G2 rows; empty arrays are 0);
 // flip toggles the end's sense (the dialog's direction arrow).
+export type LoftProfileItem = { wireId: number } | { bodyId: number; edgeId: string };
+
 export interface BridgeEndShape {
   tensionG1Mm?: number | undefined;
   tensionG2Mm?: number | undefined;
@@ -8565,9 +8567,13 @@ export class PlasticityOperations {
     return await this.state();
   }
 
+  // Profiles are Wire IDs or, with options.profiles, any mix of Wires and Sheet/Solid boundary edges. A Sheet-edge
+  // profile clamps the loft to that edge's face (probes-2026-11-organic/loft.ts, 26.1.3, joined read-back):
+  // curvature natural gives G0 (26.6 deg crease), unconstrained G1 (0 deg), clamped G2. Wire profiles stay free.
   async loftCurves(
     profileIds: number[],
     options: {
+      profiles?: LoftProfileItem[];
       guideIds?: number[];
       trimGuides?: boolean;
       trimProfiles?: boolean;
@@ -8580,11 +8586,23 @@ export class PlasticityOperations {
     revision: string,
   ): Promise<RuntimeState> {
     const state = await this.assertRevision(revision);
-    if (profileIds.length < 2) throw new Error("Curve loft requires at least two ordered Wire profiles");
+    if (options.profiles !== undefined && profileIds.length > 0) throw new Error("Curve loft takes profileIds or profiles, not both");
+    const items: LoftProfileItem[] = options.profiles ?? profileIds.map((wireId) => ({ wireId }));
+    profileIds = items.flatMap((item) => "wireId" in item ? [item.wireId] : []);
+    if (items.length < 2) throw new Error("Curve loft requires at least two ordered profiles");
     if (new Set(profileIds).size !== profileIds.length) throw new Error("Curve loft profile IDs must be unique");
-    if (options.closed && profileIds.length < 3) throw new Error("Closed curve loft requires at least three Wire profiles");
+    const edgeKeys = items.flatMap((item) => "edgeId" in item ? [`${item.bodyId}:${item.edgeId}`] : []);
+    if (new Set(edgeKeys).size !== edgeKeys.length) throw new Error("Curve loft edge profiles must be unique");
+    if (options.closed && items.length < 3) throw new Error("Closed curve loft requires at least three profiles");
     const invalidProfiles = profileIds.filter((id) => state.bodies.find((body) => body.id === id)?.type !== "Wire");
     if (invalidProfiles.length > 0) throw new Error(`Curve loft profiles must be current Wire bodies: ${invalidProfiles.join(", ")}`);
+    for (const item of items) {
+      if (!("edgeId" in item)) continue;
+      const body = state.bodies.find((candidate) => candidate.id === item.bodyId);
+      if ((body?.type !== "Sheet" && body?.type !== "Solid") || !body.edgeIds.includes(item.edgeId)) {
+        throw new Error(`Curve loft edge profile must be a current Sheet or Solid edge: ${item.bodyId}:${item.edgeId}`);
+      }
+    }
     const guideIds = options.guideIds ?? [];
     if (new Set(guideIds).size !== guideIds.length) throw new Error("Curve loft guide IDs must be unique");
     const invalidGuides = guideIds.filter((id) => state.bodies.find((body) => body.id === id)?.type !== "Wire");
@@ -8610,7 +8628,13 @@ export class PlasticityOperations {
       command.execute = async function () {
         try {
           const factory = new Factory(editor).resource(this);
-          factory.profiles = args.profileIds.map(find);
+          factory.profiles = args.profileIds ? args.profileIds.map(find) : args.items.map(item => {
+            if (item.wireId !== undefined) return find(item.wireId);
+            const view = find(item.bodyId);
+            const index = view.high.edges.versionIds.indexOf(item.edgeId);
+            if (index < 0) throw new Error('Stale or unknown loft profile edge: ' + item.bodyId + ':' + item.edgeId);
+            return view.high.edges.get(index);
+          });
           if (args.guideIds.length > 0) factory.guides = args.guideIds.map(find);
           factory.trimGuides = args.trimGuides;
           factory.trimProfiles = args.trimProfiles;
@@ -8626,7 +8650,7 @@ export class PlasticityOperations {
       await editor.exec(command);
       if (failure) throw failure;
     }`, ["CurveLoftFactory", "LoftEdgeCommand", "LoftCurvatureType"], [{
-      profileIds,
+      ...(edgeKeys.length === 0 ? { profileIds } : { items }),
       guideIds,
       trimGuides: options.trimGuides ?? true,
       trimProfiles: options.trimProfiles ?? true,

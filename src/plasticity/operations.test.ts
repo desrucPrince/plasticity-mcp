@@ -4957,7 +4957,7 @@ test("lofts ordered Wire profiles into an independent native surface", async () 
     profileIds: [7, 8], guideIds: [9], trimGuides: false, trimProfiles: false,
     closed: false, simplify: false, curvature: "Clamped", startMagnitude: 1.5, endMagnitude: 0.75,
   }]);
-  assert.match(call?.source ?? "", /factory\.profiles = args\.profileIds\.map\(find\)/);
+  assert.match(call?.source ?? "", /factory\.profiles = args\.profileIds \? args\.profileIds\.map\(find\)/);
   assert.match(call?.source ?? "", /factory\.guides = args\.guideIds\.map\(find\)/);
   assert.match(call?.source ?? "", /factory\.curvature = Curvature\[args\.curvature\]/);
   assert.match(call?.source ?? "", /factory\.join = false/);
