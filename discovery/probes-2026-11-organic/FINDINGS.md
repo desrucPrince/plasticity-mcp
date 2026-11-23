@@ -11,14 +11,16 @@ Driven by the LearnPlasticity "Organic Shapes (Indie)" tutorial rebuild. Scripts
 | Isoparam position | `IsoparamFactory.paramPoint` (default 0.5) | 0.2 split a 40 mm face at 8 mm in u and v | `plasticity_insert_isoparam_edges` parameter (count 1) |
 | Loft end continuity | `CurveLoftFactory.profiles` accepts boundary edges; `LoftCurvatureType` Natural/Unconstrained/Clamped | joined read-back G0 26.6 deg / G1 / G2 | `plasticity_loft_curves` profiles mixing `{wireId}` and `{bodyId, edgeId}` |
 
-Not built: splitting a Sheet edge at a point (`SplitSegmentFactory` has only segment/edge; wires already have
-`plasticity_split_curve_segment`), a one-body surface bridge (`plasticity_bridge_surface` needs two Sheets; the
-seam fix uses isoparam + Indie Patch G1 instead), and a generic command runner. `PLASTICITY_CDP_URL` already
-points the server at any isolated port.
+Not built in phase A: splitting a Sheet edge at a point, a one-body surface bridge, and a generic command runner
+(`PLASTICITY_CDP_URL` already points the server at any isolated port). Phase B (below) built the first two.
+
+- Continuity is applied per neighbouring face (phase A note): wrong, see phase B. G0 is only a minimum: native may
+  come back tangent on a G0 edge where a smooth fill allows it, whatever the neighbour faces.
 
 ## Indie Patch continuity: what makes G1 succeed (tutorial rebuild, 2026-11-23)
-- Continuity is applied per neighbouring face: two arcs of one cylinder rim (one wall face) both read back G1
-  when only one was asked G1 (`patchmap.ts` shows the factory map itself is per edge and correct).
+- (Corrected in phase B.) Two arcs of one cylinder rim (one wall face) both read back G1 when only one was asked
+  G1 (`patchmap.ts` shows the factory map itself is per edge and correct). The cause is not the shared face: see
+  phase B.
 - G1/G2 fails (FillHole errors 22092/22093/22094) when the corner geometry cannot be satisfied. The corner
   tangent-plane part of this was refined by the pre-check runs below: only the angle budget and the edge count
   hold for the default options. Original note: at each corner the faces asked G1 must share one tangent plane
@@ -86,3 +88,67 @@ What this means (the rules in `checkPatchBoundary`):
   is inside. `Face.FindPointNear` clamps to the trimmed face, so projecting first cannot tell inside from outside.
   The kernel's edge tangent follows the curve, which can run against the edge (mirrored edges), so each end's
   tangent is oriented by a step inside the edge.
+
+## Phase B: split sheet edge, one-body bridge, per-edge continuity (organic-tools-2, 2026-11-23, 26.1.3, isolated)
+Scripts: `mutfile.ts` runs a mutating JS file (`js/split-edge-seg.js`, `js/bridge-same.js`, `js/patch-intercept.js`);
+`evalfile.ts` runs read-only ones (`js/kernel-split.js`, `js/bridge-names.js`, `js/fill-names.js`, `js/fho.js`,
+`js/face-methods.js`, `js/vertex-uv.js`, `js/edge-near.js`). Scenes were built with the MCP tools.
+
+| Gap | Native entry point | Result | Tool change |
+|---|---|---|---|
+| Split a Sheet/Solid edge | `SplitSegmentFactory.edge` takes a `ShellEdge`; `_edge.model` is the kernel `Edge`, whose `SplitAt(t)` the factory calls (proxied, as for Wire segments) | rectangle Sheet edge 40 mm at t 0.3: vertex at 12 mm from the edge start (`GetPointAndTangent(0)`), 1e-12 mm off, one Undo step, 1 face, 4 to 5 edges; box Solid edge: valid Solid, 13 edges; a vertex-less cylinder rim (ring) gets one vertex and stays one closed edge, a second split makes two arcs | `plasticity_split_sheet_edge` |
+| One-body surface bridge | `BridgeSurfaceWithPreviewFactory` with two faces of one Sheet (`originalItems` = that Sheet) | trapezoid channel, wall tops, width 30: one 4-face Sheet, both joins G2 (1.2e-6 deg). The two-Sheet limit was only in the tool | `plasticity_bridge_sheet_edges` |
+| Per-edge continuity | `PatchHoleInSheetFactory` calls kernel `SheetBody.FillHole_async(edges, FillHoleOptions)` | G0 is a minimum; no crease on request: see below | pre-check `mixed-continuity` (report only) |
+
+Also found: kernel `Operation.SplitEdges(_async)` (edge ids + normalized parameters; the 26.2 vertex offset uses it),
+`Edge.FindPointNear(p)` returns `{ t, exact }` with t normalized from `GetPointAndTangent(0)`, `Face.FindPointNear`
+returns normalized face `u, v`, and `IsoparamFactory.paramPoint` with `uOrV` true cuts at that normalized u (on the
+cylinder wall u is the angle: 0.75 put the seam through the vertex at (0, -20, 40)).
+
+**Edge split.** The normalized edge parameter is not an arc-length fraction in general, so the tool bisects the
+carrier length (`curve.GetLength` between `Denormalize(0)` and `Denormalize(t)`) for `normalizedParameter`, and
+projects `pointMm` with `Edge.FindPointNear`. Kernel length reads of a near-zero interval throw
+(`PK_ERROR_curve_too_short` 1057, `PK_ERROR_zero_interval` 5028); they are read as 0 and the 0.01 mm minimum piece
+refuses the split.
+
+**Surface bridge.** It is a G2 face blend (`PK_FACE_make_blend`), like a fillet between the two faces' surfaces:
+`width` is the distance between its two contact lines (reference case: a floor and a wall at 90 deg, width 20, contact
+lines 14.14 mm from the corner on each face), it lies on the side both normals point to, and `trimWalls` trims both
+faces back. Failures, all the same with two separate Sheets:
+- 17453: trapezoid walls at width 10 or 20 (contact lines above the wall tops); U channel with parallel walls.
+- 1080 `PK_ERROR_fxf_blend_failed`: floor + back wall + side wall in one Sheet (the blend runs into the back wall);
+  17452 for the same with the side wall unjoined into its own Sheet, so unjoin, bridge, re-join is no composite.
+- `trimWalls: false` commits the blend as a separate Sheet (1 face) with the faces untrimmed: not a join.
+
+**Per-edge continuity (native cannot force a G0 crease).** Intercepting the factory's kernel call (a Proxy on `factory._sheet.model`;
+the embind prototypes are not configurable) shows what it sends: `Smoothness` is always G2 (23154), edges asked G0
+go in `EdgesG0`, G1 in `EdgesG1`, G2 in neither (continuity unset: all in `EdgesG0`). So the per-edge request
+reaches the kernel. Results (cylinder R 20 rim split into two arcs A, B on the one wall face; open box 40 x 40 x 20):
+
+| Case | A / B (box: x0 / others) |
+|---|---|
+| factory, A G1, B G0 | G1 0.028 deg / G1 0.028 deg |
+| same, wall split into two faces by isoparams through both arc vertices (each arc its own neighbour) | G1 / G1 |
+| factory, A G2, B G0 | G2 / G2 |
+| kernel `Smoothness` forced G1, lists kept | G1 / G1 |
+| kernel `Smoothness` forced G0, lists kept | the patch is the tangent hemisphere (Sphere R 20 about (0, 0, 40); probe rays hit z 46.245 at x 19 and z 60 on the axis), so G1 on the whole rim. The continuity sampler reads edge B on that Sphere face as class none with a 40 mm position deviation (the sphere's diameter) on a native-valid Solid: a sampler misread, phase A follow-up |
+| open box, x0 G1, others G0 (factory; also with Smoothness forced G0 or G1) | G1 on all four rim edges, 0 deg |
+| attempt2-E rear closure (copy), G1 bowl and necks, G0 base | G1 edges G1 (one reads G0 only at a corner sample, interior G1); the four G0 base edges G0, interior 57 to 70 deg |
+
+So G0 is a minimum, not a crease request: the kernel keeps every G1/G2 request and comes back tangent on a G0 edge
+where a smooth fill allows it (box, cylinder), and G0 where it does not (rear closure). Splitting the neighbour faces
+changes nothing (the spec's `splitSharedNeighbours` composite would not help, so it was not built), and no factory or
+kernel option tried forces a crease. The pre-check reports `mixed-continuity` (not blocking) with this;
+`plasticity_patch_sheet_hole` defaults are unchanged.
+
+## Phase A review fixes (organic-tools-2 phase B addendum)
+- R1: the more-than-20-edges rule reports, never refuses (evidence: prisms, stars and lenses only).
+- R2/R4: Wire junctions take the curvature sample by end (first at the start, last at the end; the list is read
+  as reversed only when the segment's own t 0.01 point says so) and orient the kernel end tangents by the
+  segment's points at t 0.01 and 0.99. Live after the fix (`work-p2b/wires-final.txt`): polyline corner G0 90 deg,
+  filleted corner two G1 (0 / 0.2 per mm), S curve split at 0.4 one G2 junction and 1 inflection, closed periodic
+  plane curve G2. Plasticity stores a control-point curve that starts and ends at one point as two segments, so a
+  kinked closed single segment could not be made live; the unit test covers it.
+- R3: an angle within 2 deg of 0 or 360 at a vertex makes the angle budget indeterminate (reported), not a refusal.
+- R5: interior maxima are clamped to the overall maxima, relative curvature to 1.
+- R6: a closed plane curve needs three points.

@@ -136,7 +136,7 @@ Names without the `Factory` suffix are Factory classes. "Checked" lists the file
 | Cut curve | gap | #5 |
 | Project | covered | `project_curves_onto_body`, `project_curve_pair`, `create_body_outlines`, `create_body_intersection_curves` |
 | Isoparam | covered | `plasticity_insert_isoparam_edges` |
-| Bridge / blend | covered | `bridge_curves`, `bridge_curve_vertices` (G0-G3), `bridge_shell_edges`, `bridge_surface` |
+| Bridge / blend | covered | `bridge_curves`, `bridge_curve_vertices` (G0-G3), `bridge_shell_edges`, `bridge_surface`, `bridge_sheet_edges` (two boundary edges of one Sheet, joins read back) |
 | Loft with guides | covered | `loft_curves`, `loft_faces`, `loft_regions` take `guideIds` |
 | Sweep variants | partial | `sweep_regions`, `create_pipes`; open-profile / rail / tool missing (#6) |
 | Revolve | covered | `plasticity_revolve_profile` (accepts any Wire; operations.ts:7777) |
@@ -304,7 +304,7 @@ Matching is by name similarity, then by the closest tool when the route differs 
 | `command:bridge-curve` | plasticity_bridge_curves / bridge_curve_vertices |
 | `command:bridge-vertex` | plasticity_bridge_curves / bridge_curve_vertices |
 | `command:bridge-edge` | plasticity_bridge_shell_edges |
-| `command:bridge-surface` | plasticity_bridge_surface |
+| `command:bridge-surface` | plasticity_bridge_surface; plasticity_bridge_sheet_edges (one Sheet) |
 | `command:constrained-surface` | plasticity_create_constrained_surface |
 | `command:center-box` | plasticity_create_box |
 | `command:corner-box` | plasticity_create_box |
@@ -370,7 +370,7 @@ Matching is by name similarity, then by the closest tool when the route differs 
 | `command:raise-degree` | plasticity_raise_curve_degree / raise_surface_degree |
 | `command:insert-knot` | plasticity_insert_curve_knot |
 | `command:subdivide` | plasticity_subdivide_curves |
-| `command:split-segment` | plasticity_split_curve_segment |
+| `command:split-segment` | plasticity_split_curve_segment; plasticity_split_sheet_edge (Sheet/Solid edge at a length fraction or a projected point) |
 | `command:isoparam` | plasticity_insert_isoparam_edges |
 | `command:unwrap-face` | plasticity_unwrap_face |
 | `command:project` | plasticity_project_curves_onto_body |
