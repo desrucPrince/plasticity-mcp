@@ -1711,6 +1711,137 @@ organic tutorial Solid every one of its 33 two-face edges came back, and the
 angle to 0.000 deg; a filleted polyline reads two G1 junctions with 0 and
 0.2/mm (R5), a plain corner G0 at 90 deg, and a NURBS split at 0.3 one G2
 junction.
+**Continuity gate fields** (`plasticity_continuity_report` and
+`plasticity_analyze_surface_continuity`; additive, every field above keeps its
+meaning). `absoluteCurvatureTolerancePerMm` (default 0.001 /mm, the curvature of
+R 1000 mm; it must be finite and greater than 0) sets the mixed G2 rule. At each
+of the 100 samples the server reads the signed normal curvature across the edge
+on both faces (`k1`, `k2`, 1/mm): Euler's formula in the direction n x t, the
+kernel sign turned by the face sense, and side 2 turned to agree with side 1's
+normal. The face API works in the face's normalized parameters, 0 to 1; a
+parameter that the kernel's nearest-point read returns just outside that range
+(by at most 0.01) is clamped onto the boundary first, because the kernel's
+curvatures there are wrong (live: -2.1 against -4.9 /m at u = -9e-6, where a
+finite difference of the normal read 4.9 and the mirrored edge read 4.9). With the clamp, on all 7,400 samples of each desk
+speaker file (`baseline`, `methodB`) no sample passed the relative test by
+k1/k2 while failing it natively; where the two relative values differ by more
+than 0.01, the sample is flat (|k1 - k2| <= 0.001 /mm), fails both, or lies on
+a crease edge (interior normal angle above 30 deg, where the native relative
+value sometimes reads 0 against a plane). A sample passes G2 when `|k1 - k2| <= relativeCurvatureTolerance *
+(|k1| + |k2|)` or when `|k1 - k2| <= absoluteCurvatureTolerancePerMm`. A sample
+that passes only by the absolute term is "flat across": it passes, and it is
+counted as flat. Both sides at exactly 0 count as flat. A sample without both
+curvatures falls back to the native relative value alone. So there is no
+cliff: 0.0009 against 0.0001 /mm and 0.0011 against 0.0001 /mm both pass,
+while 0.077 against 0.0019, R5 against R10 (0.2/0.1) and a plane against R5
+(0/0.2) fail. Per edge:
+- `curvatureAcross { side1MaxAbsPerMm, side2MaxAbsPerMm, interiorMaxAbsDifferencePerMm, flatSamples, measurableSamples }`:
+  side maxima and the two counts over all samples, the difference over samples 5..94.
+- `g2 { status, interiorRelMaxMeasured, interiorAbsDifferenceMaxPerMm, flatSampleCount, measurableSampleCount, failingSampleCount, curvatureMissingSampleCount }`
+  over samples 5..94. `status` is `measured` (no sample passes only by the
+  absolute term), `flat-across` (every sample does and none fails) or
+  `partly-flat`. `interiorRelMaxMeasured` is the largest relative mismatch
+  over the samples that the relative test decides (null when all are flat).
+  `interiorAbsDifferenceMaxPerMm` is always given.
+- `effectiveClass` (report; `effectiveContinuity` in analyze, which spells a
+  gap `discontinuous`): G0 and G1 on every sample and the native maxima, G2 by
+  the mixed rule on every sample and the native G2 maximum (judged with the
+  curvatures read at its location). `effectiveInteriorClass`
+  (`effectiveInteriorContinuity`): the same G0 and G1, G2 by the mixed rule on
+  samples 5..94. A corner-only 0.3 deg normal deviation fails G1 at 0.1 deg in
+  both. `effectiveMaxima { g0Mm, g1Deg }` and `normalAngleInteriorMinDeg` come
+  with them.
+- `g2NotMeasurable: true` and `note: "G2 not measurable (flat across)"` when
+  `g2.status` is `flat-across`. The effective class still reads G2 then.
+- `nativeMaximumCheck { level, native { value, atMm }, dense { max, atMm, count, failingCount }, agrees, alsoChecked? }`:
+  the native-maximum cross-check. It runs only when a native maximum fails its
+  tolerance while all 100 samples pass at that level. The kernel then
+  resamples the edge: 400 points by edge parameter t 0.001 to 0.999, and 101
+  points within 2 mm (arc length) of the native-maximum location, each projected
+  onto both faces (G0 gap, G1 normal angle, G2 mixed rule). `agrees` means the
+  dense maximum also fails. When it does not agree, the effective classes use
+  the dense value; `class` keeps the native one. `nativeMaximumCheckError` says
+  when the resample could not run (the native maximum then stands). Resampled
+  rows (`measurementSource: "resampled"`) are not cross-checked: their maxima
+  are their samples'.
+
+`summary` adds `effectiveCounts`, `effectiveInteriorCounts` and
+`nativeMaximumDisagreements` (edge ids); the report echoes
+`absoluteCurvatureTolerancePerMm`. Live on 26.1.3 (desk speaker
+`out4/baseline.plasticity`, body 317, normal tolerance 0.5 deg): the two
+band/back edges read class G0 (native 90 deg mid-edge, samples at most
+0.058 deg); the cross-check read 501 points with a dense maximum of 0.059 deg,
+`agrees: false`, effective class G2 (flat across). The side/back edges
+(1.8e-5 against 8.4e-4 /mm at the worst sample) read `partly-flat`, with 7
+interior samples at |k1 - k2| up to 0.00118 /mm, so they stay G1. The
+flank/side edges (0.077 against 0.0019 /mm) read `partly-flat` with 30 failing
+samples and stay G1. On `out4/methodB.plasticity` the back centre seam (native
+90 deg at (0, 29.9, 59.8)) read a dense maximum of 0.086 deg, `agrees: false`.
+The report of 74 edges took 0.8 to 1.2 s (0.2 to 0.26 s before the per-sample
+curvature reads and the cross-check).
+`plasticity_check_continuity_plan` is a read-only continuity quality gate for
+one Solid or Sheet. A script says which edges must be G2, G1, G0, sharp or
+anything, and gets pass or fail per edge. Input: `bodyId`, `revision`, `plan`
+(1-256 items in order), `defaults` and `mode`. An item is `{ name?, select,
+target, normalAngleToleranceDeg?, relativeCurvatureTolerance?,
+positionToleranceMm?, region?, allowFlatAcross?, expectCount? }`. `defaults {
+normalAngleToleranceDeg 0.1, relativeCurvatureTolerance 0.05,
+positionToleranceMm 0.01, absoluteCurvatureTolerancePerMm 0.001 }` apply where
+an item gives none. `select` is one of:
+- `{ edgeIds }`: those edges (each a current edge shared by two faces).
+- `{ faceIds: [a, b] }`: the edge shared by exactly those two faces.
+- `{ throughPointMm: [x, y, z], toleranceMm? }`: edges whose 100-sample
+  polyline passes within `toleranceMm` (default 0.5) of the point.
+- `{ betweenPointsMm: [[x, y, z], [x, y, z]], toleranceMm? }`: edges whose two
+  faces each lie within `toleranceMm` (default 0.5) of a different one of the
+  points, by the kernel's distance to the trimmed face.
+- `{ rest: true }`: every two-face edge that no earlier item matched. At most
+  one, and it must be the last item.
+
+An edge matched by two items is an error. `expectCount` different from the
+number matched fails the item, so a script sees topology drift. A selector
+that is not `rest` and matches no edge fails, unless `expectCount` is 0.
+`target`, judged with the item's tolerances on `effectiveInteriorClass`
+(`region: "interior"`, the default) or `effectiveClass` (`region: "all"`):
+- `G2` passes on G2. When `g2Status` is `flat-across` it passes only with
+  `allowFlatAcross` (default true), and `achieved` reads
+  `"G2 (not measurable: flat across)"`, so a report never counts it as a
+  measured G2.
+- `G1` passes on G1 or G2; `G0` on G0, G1 or G2.
+- `sharp` passes when the interior normal angle minimum is at least 1 deg (a
+  designed crease all along).
+- `any` always passes; the edge is not measured.
+
+The native-maximum cross-check runs per edge with its item's tolerances, only
+for the levels its target needs (the native G2 maximum only for region all).
+Output: `{ pass, firstFailure: { item, itemIndex, edgeId, target, achieved,
+reason } | null, items: [{ name, index, target, region, matched, pass,
+reason?, edges: [{ edgeId, achieved, pass, normalAngleDegInteriorMax,
+normalAngleDegInteriorMin, relCurvatureInteriorMax, g2Status, reason?,
+nativeMaximumCheck?, nativeMaximumCheckError? }] }], unmatchedTwoFaceEdges,
+seamEdgesNotChecked: { count, edgeIds }, nativeMaximumDisagreements,
+documentToken, revision, bodyId, tolerances: { defaults }, mode }`. An edge's
+`nativeMaximumCheck` has the report's shape (the lowest checked level, other
+levels in `alsoChecked`); `nativeMaximumDisagreements` lists edge ids;
+`tolerances.defaults` echoes the defaults used. Items and edges are in plan
+order, and `firstFailure` is the first failing item check (count) or edge in
+that order. `relCurvatureInteriorMax` is `g2.interiorRelMaxMeasured`.
+`seamEdgesNotChecked` lists the one-face edges of a Solid (a closed face meeting
+itself, such as a revolved surface's seam): the gate cannot measure them.
+`mode: "assert"`: a failing plan returns an MCP error (isError) whose text
+starts `Continuity plan failed:` followed by the first failure (and its JSON).
+In `plasticity_batch` that step throws, so the batch stops there and fails with
+`{ failedStep, toolName, error: "Continuity plan failed: ...", completedSteps }`;
+`undoOnError: true` then undoes the steps before it (the read step itself has
+nothing to undo). A passing assert step, and every `mode: "report"` step, lets
+the batch go on; a report reply over 1,500 bytes is cut to ids in a batch
+unless the step has `return`, such as `["pass", "firstFailure"]`. Live on
+`out4/baseline.plasticity`: a plan with band/side G2 (through (42.0, -5.6,
+101.8) and its mirror), flank/side G2 (through (44.3, -4.28, 29.28) and its
+mirror) and `rest: any` read pass false; band/side passed as
+`"G2 (not measurable: flat across)"`, and `firstFailure` named flank/side
+(edge 1e842, achieved G1, 30 interior samples failing G2). In a batch with
+`mode: "assert"` the batch stopped at step 0 and step 1 did not run.
 `plasticity_probe_surface` reads exact points on a curved Solid or Sheet. Give
 `rays` (1-64 `{ originMm, direction }`) or `gridMm: { axis, at }`: grid rays
 travel along -axis (default `z`) from 1 mm outside the body's bounds, and each
@@ -3201,6 +3332,15 @@ reject structural edges that cannot be removed. Plasticity interprets the
 offset sign using the edge orientation, so the agent must inspect the resulting
 strip instead of mapping the sign to a fixed world direction. All three
 operations rebuild the body and invalidate every prior face and edge reference.
+`plasticity_delete_edges` reads the body back after the native call. Edge ids
+go stale, so a requested edge counts as still there when the body has an edge
+with the same end vertices (either order) within 0.001 mm and the same length
+within 0.001 mm. The reply then says `allRemoved: false` with `remainingEdges
+[{ edgeId (the new id), lengthMm, endpointsMm }]` instead of a silent
+success; `allRemoved: true` when every requested edge is gone, and
+`allRemoved: null` with `deleteCheckNote` when the body could not be read back.
+Live on 26.1.3: deleting one edge of a 20 mm box "succeeded" natively and left
+12 edges; the reply read `allRemoved: false` with the edge under its new id.
 
 The guarded native edge-edit acceptance can be repeated with:
 
@@ -4166,7 +4306,10 @@ reported in `acceptedOptions`; they do not change the boundary rules).
 - `plasticity_continuity_report` `curvatureSamples: n` (with `wireIds`) adds per
   segment `curvatureSamplesPerMm` and `curvatureShape { monotonicRuns,
   localMaxima, localMinima, unimodal }` (wiggles under 0.1 % of the maximum are
-  ignored).
+  ignored). `curvatureRange: [t0, t1]` (with `curvatureSamples`; 0 <= t0 < t1
+  <= 1, fractions of each segment's arc length in its own direction) restricts
+  both to that sub-range, with values interpolated at t0 and t1, and is echoed
+  on each segment.
 - `plasticity_split_sheet_edge` `maxProjectionMm` (default 1): a `pointMm`
   farther from the edge is refused before any change. Checks that run after a
   native commit in `plasticity_split_sheet_edge` and

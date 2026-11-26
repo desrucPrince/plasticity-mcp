@@ -2094,21 +2094,43 @@ export function continuitySampleSummary(samples: ContinuitySamples, nativeMaxima
  * from the per-sample series (continuitySampleSummary), and drops the series unless keepSamples. Rows without series
  * (arrays that were not 100 samples) are returned as they are.
  */
-export function withContinuitySummary<T extends Record<string, unknown>>(row: T, tolerances: { positionMm: number; normalAngleDeg: number; relativeCurvature: number }, keepSamples = false): T {
-  const samples = row.samples as ContinuitySamples | undefined;
+export function withContinuitySummary<T extends Record<string, unknown>>(row: T, tolerances: { positionMm: number; normalAngleDeg: number; relativeCurvature: number }, keepSamples = false, gate?: { absoluteCurvaturePerMm: number; checks?: NativeMaximumCheck[] }): T {
+  const samples = row.samples as ContinuityGateSamples | undefined;
   if (!samples) return row;
   const { samples: _dropped, edgeEndsMm: _ends, ...rest } = row as T & { samples?: unknown; edgeEndsMm?: unknown };
-  const summary = continuitySampleSummary(samples, {
-    g0Mm: Number(row.maximumPositionDeviationMm), g1Deg: Number(row.maximumNormalAngleDeviationDeg), g2Rel: Number(row.maximumRelativeCurvatureDeviation),
-    g0AtMm: row.maximumPositionDeviationAtMm as Vector3 | undefined, g1AtMm: row.maximumNormalAngleDeviationAtMm as Vector3 | undefined, g2AtMm: row.maximumRelativeCurvatureDeviationAtMm as Vector3 | undefined,
-  }, tolerances, Array.isArray(row.edgeEndsMm) ? row.edgeEndsMm as Vector3[] : []);
+  const native = continuityRowNativeMaxima(row);
+  const summary = continuitySampleSummary(samples, native, tolerances, Array.isArray(row.edgeEndsMm) ? row.edgeEndsMm as Vector3[] : []);
+  // Continuity gate (additive): the mixed G2 rule and the native-maximum cross-check; every earlier field is unchanged.
+  const effective = gate ? continuityGateSummary(samples, native, { ...tolerances, absoluteCurvaturePerMm: gate.absoluteCurvaturePerMm }, gate.checks ?? []) : undefined;
   return {
     ...rest,
     ...(summary.interiorClass ? { interiorContinuity: analyzeClassName(summary.interiorClass) } : {}),
     achievedContinuityIgnoringIsolatedSpikes: analyzeClassName(summary.classIgnoringIsolatedSpikes),
     spikes: summary.spikes.map((spike) => ({ level: spike.level, index: spike.index, value: spike.value, positionMm: spike.positionMm, neighbourMax: spike.neighbourMax, source: spike.source })),
+    ...(effective ? gateRowFields(effective) : {}),
     ...(keepSamples ? { samples } : {}),
   } as unknown as T;
+}
+/** The native maxima of an analyze_surface_continuity row (the resampled values on a resampled row). */
+export function continuityRowNativeMaxima(row: Record<string, unknown>): ContinuityNativeMaxima {
+  return {
+    g0Mm: Number(row.maximumPositionDeviationMm), g1Deg: Number(row.maximumNormalAngleDeviationDeg), g2Rel: Number(row.maximumRelativeCurvatureDeviation),
+    g0AtMm: row.maximumPositionDeviationAtMm as Vector3 | undefined, g1AtMm: row.maximumNormalAngleDeviationAtMm as Vector3 | undefined, g2AtMm: row.maximumRelativeCurvatureDeviationAtMm as Vector3 | undefined,
+  };
+}
+/** analyze_surface_continuity spelling of the gate fields; the lowest checked level is nativeMaximumCheck, any others alsoChecked. */
+function gateRowFields(effective: ContinuityGateSummary): Record<string, unknown> {
+  const [first, ...others] = effective.nativeMaximumChecks;
+  return {
+    curvatureAcross: effective.curvatureAcross,
+    g2: effective.g2,
+    effectiveContinuity: analyzeClassName(effective.effectiveClass),
+    effectiveInteriorContinuity: analyzeClassName(effective.effectiveInteriorClass),
+    effectiveMaxima: effective.effectiveMaxima,
+    normalAngleInteriorMinDeg: effective.normalAngleInteriorMinDeg,
+    ...(effective.g2NotMeasurable ? { g2NotMeasurable: true, note: effective.note } : {}),
+    ...(first ? { nativeMaximumCheck: others.length > 0 ? { ...first, alsoChecked: others } : first } : {}),
+  };
 }
 /** analyze_surface_continuity spells a gap "discontinuous"; the report spells it "none". */
 export function analyzeClassName(cls: ContinuityReportClass): "G2" | "G1" | "G0" | "discontinuous" { return cls === "none" ? "discontinuous" : cls; }
@@ -2365,3 +2387,429 @@ export function bridgeOutcome(before: BodyTopology, after: BodyTopology | undefi
 
 /** Advice for a native Surface Bridge (FaceBlend) failure, from the live probes on 26.1.3. */
 export const BRIDGE_FAILURE_ADVICE = "The native bridge is a G2 face blend between the two faces' surfaces: widthMm is the distance between its two contact lines, it lies on the side the face normals point to, and it trims both faces back. It fails (PK_FACE_make_blend 17452/17453, PK_ERROR_fxf_blend_failed 1080) when a contact line falls outside its face (width too small or too large for the angle between the faces), when the faces point away from each other, or when the blend runs into another face of the Sheet; two separate Sheets fail the same way. Try another widthMm, or plasticity_reverse_sheets on a face, or bridge curves and patch instead.";
+
+// ---------------------------------------------------------------- Continuity gate: mixed G2 rule, native-maximum cross-check, plan ----------------------------------------------------------------
+/** Default absolute G2 tolerance: the curvature of R 1000 mm. */
+export const DEFAULT_ABSOLUTE_CURVATURE_TOLERANCE_PER_MM = 0.001;
+/** A designed crease: the interior normal angle minimum is at least this many degrees all along the edge. */
+export const SHARP_MIN_NORMAL_ANGLE_DEG = 1;
+const GATE_INTERIOR_FIRST = 5;
+const GATE_INTERIOR_END = 95;
+export interface ContinuityGateTolerances { positionMm: number; normalAngleDeg: number; relativeCurvature: number; absoluteCurvaturePerMm: number }
+/** Signed normal curvature across the edge at each sample (1/mm; side 2 turned to agree with side 1's normal); null where the kernel gave none. */
+export interface CurvatureAcrossSamples { side1PerMm: Array<number | null>; side2PerMm: Array<number | null> }
+export type ContinuityGateSamples = ContinuitySamples & { curvatureAcross?: CurvatureAcrossSamples; nativeG2CurvaturePerMm?: [number | null, number | null] | null };
+export interface ContinuityNativeMaxima { g0Mm: number; g1Deg: number; g2Rel: number; g0AtMm?: Vector3 | undefined; g1AtMm?: Vector3 | undefined; g2AtMm?: Vector3 | undefined }
+export type MixedG2Verdict = "pass" | "flat" | "fail";
+
+export function requireAbsoluteCurvatureTolerance(value: number): number {
+  if (!(Number.isFinite(value) && value > 0)) throw new Error("absoluteCurvatureTolerancePerMm must be a finite number greater than 0");
+  return value;
+}
+
+/**
+ * One sample of the mixed G2 rule: it passes when |k1 - k2| <= relative * (|k1| + |k2|) (verdict pass, the relative test
+ * decides) or when |k1 - k2| <= absolute (verdict flat: it passes only by the absolute term, "flat across"). Both sides at
+ * exactly zero curvature are flat (the relative test is 0/0 and decides nothing). Without both curvatures the sample falls
+ * back to the native relative value alone (pass or fail, never flat); with neither it fails.
+ */
+export function mixedG2Sample(k1: number | null | undefined, k2: number | null | undefined, relativeTolerance: number, absoluteTolerancePerMm: number, fallbackRelative?: number | null): { verdict: MixedG2Verdict; relative: number | null; absDifferencePerMm: number | null; fallback: boolean } {
+  if (typeof k1 === "number" && typeof k2 === "number" && Number.isFinite(k1) && Number.isFinite(k2)) {
+    const difference = Math.abs(k1 - k2);
+    const sum = Math.abs(k1) + Math.abs(k2);
+    const relative = sum > 0 ? Math.min(1, difference / sum) : null;
+    if (sum > 0 && difference <= relativeTolerance * sum) return { verdict: "pass", relative, absDifferencePerMm: difference, fallback: false };
+    if (difference <= absoluteTolerancePerMm) return { verdict: "flat", relative, absDifferencePerMm: difference, fallback: false };
+    return { verdict: "fail", relative, absDifferencePerMm: difference, fallback: false };
+  }
+  if (typeof fallbackRelative === "number" && Number.isFinite(fallbackRelative)) {
+    const relative = Math.min(1, fallbackRelative);
+    return { verdict: relative <= relativeTolerance ? "pass" : "fail", relative, absDifferencePerMm: null, fallback: true };
+  }
+  return { verdict: "fail", relative: null, absDifferencePerMm: null, fallback: true };
+}
+
+export type G2Status = "measured" | "partly-flat" | "flat-across";
+export interface G2Block {
+  status: G2Status;
+  /** Largest relative mismatch over the interior samples the relative test decides (null when every one is flat). */
+  interiorRelMaxMeasured: number | null;
+  /** Largest |k1 - k2| over the interior samples (1/mm); 0 when no sample has both curvatures. */
+  interiorAbsDifferenceMaxPerMm: number;
+  flatSampleCount: number;
+  measurableSampleCount: number;
+  failingSampleCount: number;
+  /** Interior samples without both curvatures, judged by the native relative value alone. */
+  curvatureMissingSampleCount: number;
+}
+export interface CurvatureAcrossSummary { side1MaxAbsPerMm: number | null; side2MaxAbsPerMm: number | null; interiorMaxAbsDifferencePerMm: number | null; flatSamples: number; measurableSamples: number }
+export type NativeMaximumLevel = "G0" | "G1" | "G2";
+export interface NativeMaximumNeed { level: NativeMaximumLevel; value: number; atMm: Vector3 | null }
+/** Dense resample of an edge (400 points by edge parameter plus 101 points within 2 mm of each native-maximum location). */
+export interface DenseContinuitySamples { g0Mm: Array<number | null>; g1Deg: Array<number | null>; side1PerMm: Array<number | null>; side2PerMm: Array<number | null>; pointsMm: Array<Vector3 | null> }
+export interface NativeMaximumCheck {
+  level: NativeMaximumLevel;
+  native: { value: number; atMm: Vector3 | null };
+  /** max: G0 mm, G1 degrees, G2 the largest relative mismatch the relative test decides (0 when none); count: points read. */
+  dense: { max: number; atMm: Vector3 | null; count: number; failingCount: number; absDifferenceMaxPerMm?: number };
+  /** The dense resample also fails the tolerance at this level, so the native maximum stands. */
+  agrees: boolean;
+}
+export interface ContinuityGateSummary {
+  curvatureAcross: CurvatureAcrossSummary;
+  g2: G2Block;
+  effectiveClass: ContinuityReportClass;
+  effectiveInteriorClass: ContinuityReportClass;
+  /** G0 and G1 maxima behind the effective classes: every sample plus the native maxima (dense values where a cross-check disagreed). */
+  effectiveMaxima: { g0Mm: number; g1Deg: number };
+  normalAngleInteriorMinDeg: number | null;
+  normalAngleInteriorMaxDeg: number | null;
+  g2NotMeasurable: boolean;
+  note?: string;
+  nativeMaximumChecks: NativeMaximumCheck[];
+}
+
+function finiteMax(values: Array<number | null | undefined>): number | null {
+  let best: number | null = null;
+  for (const value of values) if (typeof value === "number" && Number.isFinite(value) && (best === null || value > best)) best = value;
+  return best;
+}
+function gateSampleVerdicts(samples: ContinuityGateSamples, tolerances: ContinuityGateTolerances) {
+  const n = samples.g2Rel.length;
+  return Array.from({ length: n }, (_, index) => mixedG2Sample(samples.curvatureAcross?.side1PerMm[index], samples.curvatureAcross?.side2PerMm[index], tolerances.relativeCurvature, tolerances.absoluteCurvaturePerMm, samples.g2Rel[index]));
+}
+function nativeG2Verdict(samples: ContinuityGateSamples, native: ContinuityNativeMaxima, tolerances: ContinuityGateTolerances): MixedG2Verdict {
+  const [k1, k2] = samples.nativeG2CurvaturePerMm ?? [null, null];
+  return mixedG2Sample(k1, k2, tolerances.relativeCurvature, tolerances.absoluteCurvaturePerMm, native.g2Rel).verdict;
+}
+
+/**
+ * The native-maximum cross-check runs per level only when Plasticity's native maximum fails the tolerance while all of
+ * the samples pass at that level: G0 position, G1 normal angle, G2 by the mixed rule (the native G2 maximum is judged
+ * with the curvatures read at its location; without them by its relative value). Returns the levels to resample densely.
+ */
+export function nativeMaximumChecksNeeded(samples: ContinuityGateSamples, native: ContinuityNativeMaxima, tolerances: ContinuityGateTolerances, levels: NativeMaximumLevel[] = ["G0", "G1", "G2"]): NativeMaximumNeed[] {
+  const needs: NativeMaximumNeed[] = [];
+  const at = (value: Vector3 | null | undefined) => (Array.isArray(value) && value.length === 3 && value.every(Number.isFinite) ? value : null);
+  if (levels.includes("G0") && native.g0Mm > tolerances.positionMm && samples.g0Mm.every((value) => value <= tolerances.positionMm)) needs.push({ level: "G0", value: native.g0Mm, atMm: at(native.g0AtMm) });
+  if (levels.includes("G1") && native.g1Deg > tolerances.normalAngleDeg && samples.g1Deg.every((value) => value <= tolerances.normalAngleDeg)) needs.push({ level: "G1", value: native.g1Deg, atMm: at(native.g1AtMm) });
+  if (levels.includes("G2") && nativeG2Verdict(samples, native, tolerances) === "fail" && gateSampleVerdicts(samples, tolerances).every((sample) => sample.verdict !== "fail")) needs.push({ level: "G2", value: Math.min(1, native.g2Rel), atMm: at(native.g2AtMm) });
+  return needs;
+}
+
+/** agree/disagree for one level: agrees when the dense resample also fails the tolerance there (or read nothing). */
+export function nativeMaximumCheckOutcome(need: NativeMaximumNeed, dense: DenseContinuitySamples, tolerances: ContinuityGateTolerances): NativeMaximumCheck {
+  const native = { value: need.value, atMm: need.atMm };
+  if (need.level === "G2") {
+    let count = 0, failingCount = 0, max = 0, absMax = 0;
+    let atMm: Vector3 | null = null;
+    for (let index = 0; index < dense.side1PerMm.length; index += 1) {
+      const k1 = dense.side1PerMm[index], k2 = dense.side2PerMm[index];
+      if (!(typeof k1 === "number" && typeof k2 === "number" && Number.isFinite(k1) && Number.isFinite(k2))) continue;
+      count += 1;
+      const sample = mixedG2Sample(k1, k2, tolerances.relativeCurvature, tolerances.absoluteCurvaturePerMm);
+      absMax = Math.max(absMax, sample.absDifferencePerMm ?? 0);
+      if (sample.verdict === "fail") failingCount += 1;
+      if (sample.verdict !== "flat" && sample.relative !== null && (atMm === null || sample.relative > max)) { max = sample.relative; atMm = dense.pointsMm[index] ?? null; }
+    }
+    return { level: "G2", native, dense: { max, atMm, count, failingCount, absDifferenceMaxPerMm: absMax }, agrees: count === 0 || failingCount > 0 };
+  }
+  const values = need.level === "G0" ? dense.g0Mm : dense.g1Deg;
+  const tolerance = need.level === "G0" ? tolerances.positionMm : tolerances.normalAngleDeg;
+  let count = 0, failingCount = 0, max = 0;
+  let atMm: Vector3 | null = null;
+  values.forEach((value, index) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) return;
+    count += 1;
+    if (value > tolerance) failingCount += 1;
+    if (atMm === null || value > max) { max = value; atMm = dense.pointsMm[index] ?? null; }
+  });
+  return { level: need.level, native, dense: { max, atMm, count, failingCount }, agrees: count === 0 || max > tolerance };
+}
+
+/**
+ * Effective continuity of one edge (the continuity gate). G0 and G1: every sample plus the native maxima, where a native
+ * maximum whose dense cross-check disagrees is replaced by the dense maximum (it stays in class). G2 by the mixed rule
+ * (mixedG2Sample): effectiveInteriorClass on samples 5..94, effectiveClass on every sample and the native G2 maximum
+ * (unless its cross-check disagrees). g2.status: measured when no interior sample passes only by the absolute term,
+ * flat-across when every interior sample does and none fails (then g2NotMeasurable: the class still reads G2), partly-flat
+ * otherwise.
+ */
+export function continuityGateSummary(samples: ContinuityGateSamples, native: ContinuityNativeMaxima, tolerances: ContinuityGateTolerances, checks: NativeMaximumCheck[] = []): ContinuityGateSummary {
+  const n = samples.g1Deg.length;
+  if (n === 0 || samples.g0Mm.length !== n || samples.g2Rel.length !== n) throw new Error("Continuity samples must be equal-length series");
+  if (samples.curvatureAcross && (samples.curvatureAcross.side1PerMm.length !== n || samples.curvatureAcross.side2PerMm.length !== n)) throw new Error("Curvature-across samples must match the continuity samples");
+  const verdicts = gateSampleVerdicts(samples, tolerances);
+  const interiorRange = n === 100 ? [GATE_INTERIOR_FIRST, GATE_INTERIOR_END] : [0, n];
+  const interior = verdicts.slice(interiorRange[0], interiorRange[1]);
+  const flatSampleCount = interior.filter((sample) => sample.verdict === "flat").length;
+  const failingSampleCount = interior.filter((sample) => sample.verdict === "fail").length;
+  const measurable = interior.filter((sample) => sample.verdict !== "flat");
+  const status: G2Status = flatSampleCount === 0 ? "measured" : measurable.length === 0 ? "flat-across" : "partly-flat";
+  const g2: G2Block = {
+    status,
+    interiorRelMaxMeasured: finiteMax(measurable.map((sample) => sample.relative)),
+    interiorAbsDifferenceMaxPerMm: finiteMax(interior.map((sample) => sample.absDifferencePerMm)) ?? 0,
+    flatSampleCount,
+    measurableSampleCount: measurable.length,
+    failingSampleCount,
+    curvatureMissingSampleCount: interior.filter((sample) => sample.fallback).length,
+  };
+  const side = (values: Array<number | null> | undefined) => (values ? finiteMax(values.map((value) => (typeof value === "number" ? Math.abs(value) : null))) : null);
+  const curvatureAcross: CurvatureAcrossSummary = {
+    side1MaxAbsPerMm: side(samples.curvatureAcross?.side1PerMm),
+    side2MaxAbsPerMm: side(samples.curvatureAcross?.side2PerMm),
+    interiorMaxAbsDifferencePerMm: finiteMax(interior.map((sample) => sample.absDifferencePerMm)),
+    flatSamples: verdicts.filter((sample) => sample.verdict === "flat").length,
+    measurableSamples: verdicts.filter((sample) => sample.verdict !== "flat").length,
+  };
+  const disagrees = (level: NativeMaximumLevel) => checks.find((check) => check.level === level && !check.agrees);
+  const nativeOr = (level: NativeMaximumLevel, value: number) => { const check = disagrees(level); return check ? check.dense.max : value; };
+  const effectiveMaxima = {
+    g0Mm: Math.max(nativeOr("G0", native.g0Mm), ...samples.g0Mm),
+    g1Deg: Math.max(nativeOr("G1", native.g1Deg), ...samples.g1Deg),
+  };
+  const g2All = verdicts.every((sample) => sample.verdict !== "fail") && (disagrees("G2") !== undefined || nativeG2Verdict(samples, native, tolerances) !== "fail");
+  const g2Interior = failingSampleCount === 0;
+  const classOf = (g2Passes: boolean): ContinuityReportClass => {
+    if (!(effectiveMaxima.g0Mm <= tolerances.positionMm)) return "none";
+    if (!(effectiveMaxima.g1Deg <= tolerances.normalAngleDeg)) return "G0";
+    return g2Passes ? "G2" : "G1";
+  };
+  const interiorAngles = samples.g1Deg.slice(interiorRange[0], interiorRange[1]);
+  const g2NotMeasurable = status === "flat-across";
+  return {
+    curvatureAcross,
+    g2,
+    effectiveClass: classOf(g2All),
+    effectiveInteriorClass: classOf(g2Interior),
+    effectiveMaxima,
+    normalAngleInteriorMinDeg: interiorAngles.length > 0 ? Math.min(...interiorAngles) : null,
+    normalAngleInteriorMaxDeg: interiorAngles.length > 0 ? Math.max(...interiorAngles) : null,
+    g2NotMeasurable,
+    ...(g2NotMeasurable ? { note: "G2 not measurable (flat across)" } : {}),
+    nativeMaximumChecks: checks,
+  };
+}
+
+export type ContinuityPlanSelector =
+  | { edgeIds: string[] }
+  | { faceIds: [string, string] }
+  | { throughPointMm: Vector3; toleranceMm?: number | undefined }
+  | { betweenPointsMm: [Vector3, Vector3]; toleranceMm?: number | undefined }
+  | { rest: true };
+export type ContinuityPlanTarget = "G2" | "G1" | "G0" | "sharp" | "any";
+export interface ContinuityPlanItem {
+  name?: string | undefined;
+  select: ContinuityPlanSelector;
+  target: ContinuityPlanTarget;
+  normalAngleToleranceDeg?: number | undefined;
+  relativeCurvatureTolerance?: number | undefined;
+  positionToleranceMm?: number | undefined;
+  region?: "interior" | "all" | undefined;
+  allowFlatAcross?: boolean | undefined;
+  expectCount?: number | undefined;
+}
+export interface ContinuityPlanDefaults { normalAngleToleranceDeg?: number | undefined; relativeCurvatureTolerance?: number | undefined; positionToleranceMm?: number | undefined; absoluteCurvatureTolerancePerMm?: number | undefined }
+export const CONTINUITY_PLAN_DEFAULTS = { normalAngleToleranceDeg: 0.1, relativeCurvatureTolerance: 0.05, positionToleranceMm: 0.01, absoluteCurvatureTolerancePerMm: DEFAULT_ABSOLUTE_CURVATURE_TOLERANCE_PER_MM } as const;
+/** throughPointMm and betweenPointsMm match within this distance unless the item gives toleranceMm. */
+export const CONTINUITY_PLAN_POINT_TOLERANCE_MM = 0.5;
+
+/** The item's tolerances: its own, else the plan defaults, else CONTINUITY_PLAN_DEFAULTS. */
+export function planItemTolerances(item: ContinuityPlanItem, defaults: ContinuityPlanDefaults = {}): ContinuityGateTolerances {
+  return {
+    positionMm: item.positionToleranceMm ?? defaults.positionToleranceMm ?? CONTINUITY_PLAN_DEFAULTS.positionToleranceMm,
+    normalAngleDeg: item.normalAngleToleranceDeg ?? defaults.normalAngleToleranceDeg ?? CONTINUITY_PLAN_DEFAULTS.normalAngleToleranceDeg,
+    relativeCurvature: item.relativeCurvatureTolerance ?? defaults.relativeCurvatureTolerance ?? CONTINUITY_PLAN_DEFAULTS.relativeCurvatureTolerance,
+    absoluteCurvaturePerMm: defaults.absoluteCurvatureTolerancePerMm ?? CONTINUITY_PLAN_DEFAULTS.absoluteCurvatureTolerancePerMm,
+  };
+}
+/** Native-maximum levels an item's verdict depends on (the native G2 maximum counts only for region all). */
+export function planItemCheckLevels(item: ContinuityPlanItem): NativeMaximumLevel[] {
+  const all = item.region === "all";
+  switch (item.target) {
+    case "G2": return all ? ["G0", "G1", "G2"] : ["G0", "G1"];
+    case "G1": return ["G0", "G1"];
+    case "G0": return ["G0"];
+    default: return [];
+  }
+}
+
+export interface ContinuityPlanEdge { edgeId: string; faceIds: string[]; polylineMm: Vector3[] }
+function pointToPolylineMm(point: Vector3, polyline: Vector3[]): number {
+  if (polyline.length === 0) return Infinity;
+  if (polyline.length === 1) return distance(point, polyline[0]!);
+  let best = Infinity;
+  for (let index = 0; index + 1 < polyline.length; index += 1) {
+    const a = polyline[index]!, b = polyline[index + 1]!;
+    const ab: Vector3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const length2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+    const t = length2 > 0 ? Math.max(0, Math.min(1, ((point[0] - a[0]) * ab[0] + (point[1] - a[1]) * ab[1] + (point[2] - a[2]) * ab[2]) / length2)) : 0;
+    best = Math.min(best, distance(point, [a[0] + t * ab[0], a[1] + t * ab[1], a[2] + t * ab[2]]));
+  }
+  return best;
+}
+/** A human label for an item: its name, else "#index". */
+export function planItemLabel(item: ContinuityPlanItem, index: number): string { return item.name ?? `#${index}`; }
+
+/**
+ * Edges per plan item, in plan order. edgeIds: those edges (each must be a current two-face edge); faceIds: the edge(s)
+ * shared by exactly those two faces; throughPointMm: edges whose sample polyline passes within toleranceMm (default
+ * 0.5 mm) of the point; betweenPointsMm: edges whose two faces each lie within toleranceMm of a different one of the
+ * points (faceDistanceMm: the kernel's distance to the trimmed face); rest: every two-face edge no earlier item matched
+ * (at most one, last). An edge matched by two items that are not rest is an error.
+ */
+export function matchContinuityPlan(plan: ContinuityPlanItem[], edges: ContinuityPlanEdge[], options: { seamEdgeIds?: string[]; faceDistanceMm?: (itemIndex: number, pointIndex: 0 | 1, faceId: string) => number | null } = {}): string[][] {
+  const restIndex = plan.findIndex((item) => "rest" in item.select);
+  if (restIndex >= 0 && restIndex !== plan.length - 1) throw new Error("A rest selector must be the last plan item");
+  if (plan.filter((item) => "rest" in item.select).length > 1) throw new Error("At most one plan item may select rest");
+  const byId = new Map(edges.map((edge) => [edge.edgeId, edge]));
+  const seams = new Set(options.seamEdgeIds ?? []);
+  const owner = new Map<string, number>();
+  const matches = plan.map((item, index): string[] => {
+    const select = item.select;
+    if ("rest" in select) return edges.filter((edge) => !owner.has(edge.edgeId)).map((edge) => edge.edgeId);
+    let found: string[];
+    if ("edgeIds" in select) {
+      for (const edgeId of select.edgeIds) {
+        if (seams.has(edgeId)) throw new Error(`Plan item ${planItemLabel(item, index)}: edge ${edgeId} is a seam (both sides are one face); it cannot be measured`);
+        if (!byId.has(edgeId)) throw new Error(`Plan item ${planItemLabel(item, index)}: ${edgeId} is not a current edge shared by two faces of this body`);
+      }
+      found = [...new Set(select.edgeIds)];
+    } else if ("faceIds" in select) {
+      const wanted = new Set(select.faceIds);
+      found = edges.filter((edge) => edge.faceIds.length === 2 && edge.faceIds.every((faceId) => wanted.has(faceId)) && new Set(edge.faceIds).size === wanted.size).map((edge) => edge.edgeId);
+    } else if ("throughPointMm" in select) {
+      const tolerance = select.toleranceMm ?? CONTINUITY_PLAN_POINT_TOLERANCE_MM;
+      found = edges.filter((edge) => pointToPolylineMm(select.throughPointMm, edge.polylineMm) <= tolerance).map((edge) => edge.edgeId);
+    } else {
+      const tolerance = select.toleranceMm ?? CONTINUITY_PLAN_POINT_TOLERANCE_MM;
+      const near = (point: 0 | 1, faceId: string) => { const value = options.faceDistanceMm?.(index, point, faceId); return typeof value === "number" && value <= tolerance; };
+      found = edges.filter((edge) => {
+        const [a, b] = edge.faceIds;
+        return a !== undefined && b !== undefined && a !== b && ((near(0, a) && near(1, b)) || (near(1, a) && near(0, b)));
+      }).map((edge) => edge.edgeId);
+    }
+    for (const edgeId of found) {
+      const earlier = owner.get(edgeId);
+      if (earlier !== undefined) throw new Error(`Edge ${edgeId} is matched by plan items ${planItemLabel(plan[earlier]!, earlier)} and ${planItemLabel(item, index)}; an edge may belong to one item only (narrow a selector or use edgeIds)`);
+      owner.set(edgeId, index);
+    }
+    return found;
+  });
+  return matches;
+}
+
+export interface ContinuityPlanEdgeResult { edgeId: string; achieved: string; pass: boolean; normalAngleDegInteriorMax: number | null; normalAngleDegInteriorMin: number | null; relCurvatureInteriorMax: number | null; g2Status: G2Status | null; reason?: string }
+export interface ContinuityPlanItemResult { name: string; index: number; target: ContinuityPlanTarget; region: "interior" | "all"; matched: number; pass: boolean; reason?: string; edges: ContinuityPlanEdgeResult[] }
+export interface ContinuityPlanFailure { item: string; itemIndex: number; edgeId: string | null; target: ContinuityPlanTarget; achieved: string | null; reason: string }
+export interface ContinuityPlanResult { pass: boolean; firstFailure: ContinuityPlanFailure | null; items: ContinuityPlanItemResult[]; unmatchedTwoFaceEdges: number; seamEdgesNotChecked: { count: number; edgeIds: string[] } }
+
+const fmtGate = (value: number | null | undefined) => (typeof value === "number" && Number.isFinite(value) ? Number(value.toPrecision(3)).toString() : "n/a");
+/** The achieved label: the effective class, or "G2 (not measurable: flat across)" when G2 holds only by the absolute term. */
+export function planAchievedLabel(cls: ContinuityReportClass, g2Status: G2Status | null): string {
+  return cls === "G2" && g2Status === "flat-across" ? "G2 (not measurable: flat across)" : cls;
+}
+
+/** One edge against its item's target. gate is computed with the item's tolerances. */
+export function evaluatePlanEdge(item: ContinuityPlanItem, edgeId: string, gate: ContinuityGateSummary | undefined, tolerances: ContinuityGateTolerances): ContinuityPlanEdgeResult {
+  const base = (achieved: string, pass: boolean, reason?: string): ContinuityPlanEdgeResult => ({
+    edgeId, achieved, pass,
+    normalAngleDegInteriorMax: gate?.normalAngleInteriorMaxDeg ?? null,
+    normalAngleDegInteriorMin: gate?.normalAngleInteriorMinDeg ?? null,
+    relCurvatureInteriorMax: gate?.g2.interiorRelMaxMeasured ?? null,
+    g2Status: gate?.g2.status ?? null,
+    ...(reason !== undefined ? { reason } : {}),
+  });
+  if (item.target === "any") return base("not checked (target any)", true);
+  if (!gate) return base("not measured", false, "no continuity measurement for this edge");
+  const region = item.region ?? "interior";
+  const cls = region === "all" ? gate.effectiveClass : gate.effectiveInteriorClass;
+  const achieved = planAchievedLabel(cls, gate.g2.status);
+  const rank: Record<ContinuityReportClass, number> = { none: 0, G0: 1, G1: 2, G2: 3 };
+  const lowReason = (): string => {
+    if (cls === "none") return `position gap ${fmtGate(gate.effectiveMaxima.g0Mm)} mm > ${fmtGate(tolerances.positionMm)} mm`;
+    if (cls === "G0") return `normal angle ${fmtGate(gate.effectiveMaxima.g1Deg)} deg > ${fmtGate(tolerances.normalAngleDeg)} deg`;
+    const interiorText = `${gate.g2.failingSampleCount} interior samples fail G2: relative mismatch up to ${fmtGate(gate.g2.interiorRelMaxMeasured)} > ${fmtGate(tolerances.relativeCurvature)} and |k1 - k2| up to ${fmtGate(gate.g2.interiorAbsDifferenceMaxPerMm)} /mm > ${fmtGate(tolerances.absoluteCurvaturePerMm)} /mm`;
+    return region === "all" && gate.g2.failingSampleCount === 0 ? "G2 fails at the edge ends or at the native G2 maximum (region all)" : interiorText;
+  };
+  switch (item.target) {
+    case "sharp": {
+      const minimum = gate.normalAngleInteriorMinDeg;
+      if (minimum !== null && minimum >= SHARP_MIN_NORMAL_ANGLE_DEG) return base("sharp", true);
+      return base(achieved, false, `interior normal angle minimum ${fmtGate(minimum)} deg < ${SHARP_MIN_NORMAL_ANGLE_DEG} deg (not a crease all along)`);
+    }
+    case "G2": {
+      if (cls !== "G2") return base(achieved, false, lowReason());
+      if (gate.g2.status === "flat-across" && item.allowFlatAcross === false) return base(achieved, false, "G2 not measurable (flat across) and allowFlatAcross is false");
+      return base(achieved, true);
+    }
+    case "G1": return rank[cls] >= rank.G1 ? base(achieved, true) : base(achieved, false, lowReason());
+    case "G0": return rank[cls] >= rank.G0 ? base(achieved, true) : base(achieved, false, lowReason());
+  }
+}
+
+/**
+ * Evaluate a matched plan in plan order. An item fails when an edge fails its target, when expectCount differs from the
+ * number matched (topology drift), or when a selector that is not rest matches no edge and no expectCount was given.
+ * firstFailure is the first failing item-level check or edge in that order.
+ */
+export function evaluateContinuityPlan(plan: ContinuityPlanItem[], matches: string[][], gateOf: (itemIndex: number, edgeId: string) => ContinuityGateSummary | undefined, context: { twoFaceEdgeIds: string[]; seamEdgeIds: string[]; defaults?: ContinuityPlanDefaults }): ContinuityPlanResult {
+  if (matches.length !== plan.length) throw new Error("Plan matches must have one entry per item");
+  let firstFailure: ContinuityPlanFailure | null = null;
+  const matchedIds = new Set(matches.flat());
+  const items = plan.map((item, index): ContinuityPlanItemResult => {
+    const name = planItemLabel(item, index);
+    const tolerances = planItemTolerances(item, context.defaults);
+    const matched = matches[index]!;
+    let reason: string | undefined;
+    if (item.expectCount !== undefined && item.expectCount !== matched.length) reason = `expected ${item.expectCount} edges, matched ${matched.length}`;
+    else if (item.expectCount === undefined && matched.length === 0 && !("rest" in item.select)) reason = "the selector matched no edge (give expectCount: 0 if that is intended)";
+    if (reason !== undefined && firstFailure === null) firstFailure = { item: name, itemIndex: index, edgeId: null, target: item.target, achieved: null, reason };
+    const edges = matched.map((edgeId) => evaluatePlanEdge(item, edgeId, gateOf(index, edgeId), tolerances));
+    for (const edge of edges) if (!edge.pass && firstFailure === null) firstFailure = { item: name, itemIndex: index, edgeId: edge.edgeId, target: item.target, achieved: edge.achieved, reason: edge.reason ?? "fails its target" };
+    return { name, index, target: item.target, region: item.region ?? "interior", matched: matched.length, pass: reason === undefined && edges.every((edge) => edge.pass), ...(reason !== undefined ? { reason } : {}), edges };
+  });
+  return {
+    pass: items.every((item) => item.pass),
+    firstFailure,
+    items,
+    unmatchedTwoFaceEdges: context.twoFaceEdgeIds.filter((edgeId) => !matchedIds.has(edgeId)).length,
+    seamEdgesNotChecked: { count: context.seamEdgeIds.length, edgeIds: context.seamEdgeIds },
+  };
+}
+/** The assert-mode error text: starts "Continuity plan failed:" then the first failure. */
+export function continuityPlanFailureMessage(result: ContinuityPlanResult): string {
+  const failure = result.firstFailure;
+  if (!failure) return "Continuity plan failed: no failing item recorded";
+  return `Continuity plan failed: item ${failure.item}${failure.edgeId ? `, edge ${failure.edgeId}` : ""}, target ${failure.target}${failure.achieved ? `, achieved ${failure.achieved}` : ""}: ${failure.reason} ${JSON.stringify({ firstFailure: failure })}`;
+}
+
+/**
+ * Curvature magnitudes of one Wire segment restricted to [t0, t1], fractions of the segment's arc length (measured along
+ * the sample polyline, in the order given): the samples inside plus values interpolated at t0 and t1, so the profile of a
+ * sub-range starts and ends exactly there (continuity gate C2).
+ */
+export function curvatureRangeSlice(positionsMm: Vector3[], magnitudes: number[], range: [number, number]): number[] {
+  const [t0, t1] = range;
+  if (!(Number.isFinite(t0) && Number.isFinite(t1) && t0 >= 0 && t1 <= 1 && t0 < t1)) throw new Error("curvatureRange must be [t0, t1] with 0 <= t0 < t1 <= 1");
+  if (positionsMm.length !== magnitudes.length) throw new Error("curvatureRange needs one position per curvature sample");
+  if (magnitudes.length < 2) return magnitudes.slice();
+  const arc = [0];
+  for (let index = 1; index < positionsMm.length; index += 1) arc.push(arc[index - 1]! + distance(positionsMm[index - 1]!, positionsMm[index]!));
+  const total = arc[arc.length - 1]!;
+  if (!(total > 0)) return magnitudes.slice();
+  const fraction = arc.map((value) => value / total);
+  const at = (t: number) => {
+    for (let index = 1; index < fraction.length; index += 1) {
+      if (t <= fraction[index]!) {
+        const span = fraction[index]! - fraction[index - 1]!;
+        const f = span > 0 ? (t - fraction[index - 1]!) / span : 0;
+        return magnitudes[index - 1]! * (1 - f) + magnitudes[index]! * f;
+      }
+    }
+    return magnitudes[magnitudes.length - 1]!;
+  };
+  const inside = magnitudes.filter((_, index) => fraction[index]! > t0 && fraction[index]! < t1);
+  return [at(t0), ...inside, at(t1)];
+}
