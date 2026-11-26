@@ -156,7 +156,7 @@ def apply_template(top, bot, tpl, inside, exact=None):
     FITLOG.append(dict(s=tpl['s'],fitErrMm=round(err,3)))
     return plane_curve({'originMm':T,'uAxis':ch,'vAxis':o},ctrl,mode='control')
 INSIDE_SHELL=(0,15,70); INSIDE_WRAP=(0,-30,30)
-NCTRL=6; FITLOG=[]; SHELL_S=(0.33,0.67); USE_FAMILY=False; FAMFIT='chord'; LOFTKW={}; TMIN=0.03; BANDCUT=0.0; FACEPLANE=None; BANDCUT_MM=26.0
+NCTRL=6; FITLOG=[]; SHELL_S=(0.33,0.67); USE_FAMILY=False; FAMFIT='chord'; LOFTKW={}; TMIN=0.03; WRAP_SECTIONS=True; BANDCUT=0.0; FACEPLANE=None; BANDCUT_MM=26.0
 TPL=json.load(open(TEMPL)) if os.path.exists(TEMPL) else None
 def sim2(P0,E0,P,E,q):
     """2D similarity that maps P0->P, E0->E, applied to q."""
@@ -333,6 +333,7 @@ def build_v2(p):
     flL=mirror_copy([flR])[0]
     # guides
     topw=guide_from_edge(face,F['c2'],mx(F['c2'])); wtopw=guide_from_edge(face,F['c1'],mx(F['c1']))
+    F['top']=apex_x0(topw); F['O']=apex_x0(wtopw)   # the real cap apexes (cap depth depends on the bridge)
     l3R=pl([hw,0],[hw,sy]); l4=pl([fx,hd],[-fx,hd]); l3L=pl([-hw,sy],[-hw,0])
     botw=join_curves([l3R,bridge_g2(l3R,l4),l4,bridge_g2(l4,l3L),l3L])[0]
     l1=pl([fx,-hd],[-fx,-hd])
@@ -362,7 +363,7 @@ def build_v2(p):
         midsR,midsL=half_sections(topw,botw,F['c2'],[hw,0,ZB],shell_t,INSIDE_SHELL)
     fe=edge_by_ends(flR,F['c2'],[hw,0,ZB],True,tol=0.05); fl_e=edge_by_ends(flL,mx(F['c2']),[-hw,0,ZB],True,tol=0.05)
     shell=g2_loft([(flR,fe['id'])]+midsR+[cen]+midsL[::-1]+[(flL,fl_e['id'])],guides=[topw,botw],**LOFTKW)
-    wR,wL=half_sections(wtopw,wbotw,F['c1'],[hw,-sy,ZB],TPL['wrap'],INSIDE_WRAP)
+    wR,wL=half_sections(wtopw,wbotw,F['c1'],[hw,-sy,ZB],TPL['wrap'],INSIDE_WRAP) if WRAP_SECTIONS else ([],[])
     wcen=plane_curve('yz',front_profile(p,F))
     fe=edge_by_ends(flR,F['c1'],[hw,-sy,ZB],True,tol=0.05); fl_e=edge_by_ends(flL,mx(F['c1']),[-hw,-sy,ZB],True,tol=0.05)
     wrap=g2_loft([(flR,fe['id'])]+wR+[wcen]+wL[::-1]+[(flL,fl_e['id'])],guides=[wtopw,wbotw])
@@ -450,6 +451,11 @@ def design_sections(p,F,topw,botw,ct,cb,ht,hb,flR,cen):
     pf=wire_poly(fw); pc=wire_poly(cen); delete([fw])
     _,_,_,_,o0,_=section_frame(ht,hb,0.0,INSIDE_SHELL); _,_,_,_,o1,_=section_frame(ht,hb,0.999,INSIDE_SHELL)
     hf=to_th(pf,F['c2'],[hw,0,ZB],o0); hc=to_th(pc,F['top'],[0,p['baseHD'],ZB],o1)
+    af=to_th_arc(pf,F['c2'],[hw,0,ZB],o0); ac=to_th_arc(pc,F['top'],[0,p['baseHD'],ZB],o1)
+    pcs=pc if math.dist(pc[0],F['top'])<math.dist(pc[-1],F['top']) else pc[::-1]
+    Lc=[0.0]
+    for a_,b_ in zip(pcs,pcs[1:]): Lc.append(Lc[-1]+math.dist(a_,b_))
+    nk=min((i for i,q in enumerate(pcs) if 30<q[2]<90),key=lambda i:pcs[i][1]); un=Lc[nk]/Lc[-1]
     out=[]
     import bspline
     mx=lambda q:[-q[0],q[1],q[2]]
@@ -459,8 +465,40 @@ def design_sections(p,F,topw,botw,ct,cb,ht,hb,flR,cen):
         _,_,_,_,o,_=section_frame(ht,hb,s_,INSIDE_SHELL)
         c=[Bq[i]-T[i] for i in range(3)]; cl=math.sqrt(dot(c,c)); ch=[x/cl for x in c]
         o=unitv([o[i]-dot(o,ch)*ch[i] for i in range(3)])
-        h=[DESIGN['amp']*((1-w)*a+w*b) for a,b in zip(hf,hc)]; h[0]=0.0; h[-1]=0.0
-        ctrl,err=bspline.fit_param(TGRID,[[t*cl,hh*cl] for t,hh in zip(TGRID,h)],NCTRL)
+        if DESIGN.get('arc'):
+            nn=len(af); P_=DESIGN.get('pinch',0.0)*math.sin(math.pi*s_)
+            pts=[[((1-w)*a[0]+w*b[0])*cl,DESIGN['amp']*((1-w)*a[1]+w*b[1])*cl-P_*math.exp(-((k/(nn-1)-un)/DESIGN.get('pw',0.15))**2)] for k,(a,b) in enumerate(zip(af,ac))]; pts[0]=[0,0]; pts[-1]=[cl,0]
+            ctrl,err=bspline.fit(pts,NCTRL)
+        else:
+            h=[DESIGN['amp']*((1-w)*a+w*b) for a,b in zip(hf,hc)]; h[0]=0.0; h[-1]=0.0
+            ctrl,err=bspline.fit_param(TGRID,[[t*cl,hh*cl] for t,hh in zip(TGRID,h)],NCTRL)
         FITLOG.append(dict(s=s_,w=round(w,3),fitErrMm=round(err,3)))
         out.append((plane_curve({'originMm':T,'uAxis':ch,'vAxis':o},ctrl,mode='control'),plane_curve({'originMm':mx(T),'uAxis':mx(ch),'vAxis':mx(o)},ctrl,mode='control')))
     return [a for a,_ in out],[b for _,b in out]
+
+def to_th_arc(poly, T, B, o, n=41):
+    c=[B[i]-T[i] for i in range(3)]; cl=math.sqrt(dot(c,c)); ch=[x/cl for x in c]
+    o=unitv([o[i]-dot(o,ch)*ch[i] for i in range(3)])
+    if math.dist(poly[0],T)>math.dist(poly[-1],T): poly=poly[::-1]
+    L=[0.0]
+    for a,b in zip(poly,poly[1:]): L.append(L[-1]+math.dist(a,b))
+    out=[]
+    for k in range(n):
+        x=L[-1]*k/(n-1); i=max(1,next((j for j in range(1,len(L)) if L[j]>=x),len(L)-1)); f=(x-L[i-1])/max(L[i]-L[i-1],1e-12)
+        q=[poly[i-1][j]+f*(poly[i][j]-poly[i-1][j]) for j in range(3)]
+        v=[q[j]-T[j] for j in range(3)]; out.append((dot(v,ch)/cl, dot(v,o)/cl))
+    return out
+
+def apex_x0(wire):
+    """Exact point where a symmetric Wire crosses x = 0 (bisection on the native parameter)."""
+    ch=wire_param_poly(wire,40)
+    for a,b in zip(ch,ch[1:]):
+        if a[1]==b[1] and a[0][0]*b[0][0]<=0:
+            lo,hi=a[2],b[2]; xlo=a[0][0]
+            for _ in range(40):
+                m=(lo+hi)/2
+                q=call('plasticity_evaluate_curve_segments',{'samples':[{'bodyId':wire,'segmentEntityId':a[1],'normalizedParameter':m}],'revision':rev()})['samples'][0]['positionMm']
+                if (q[0]>0)==(xlo>0): lo,xlo=m,q[0]
+                else: hi=m
+            return q
+    raise RuntimeError('wire does not cross x = 0')

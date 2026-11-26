@@ -5,7 +5,9 @@ from blocks import *
 NAME='s4_speaker'
 DEFAULT=dict(S.DEFAULT); DEFAULT['band']=0.0
 NO_SWEEP=('zb','capT','details','band'); SWEEP={'tiltDeg':(-3,3)}
-S.SHELL_S=(0.25,0.6); S.NCTRL=7; S.BANDCUT_MM=26.0
+import os
+S.WRAP_SECTIONS=os.environ.get('WRAPSEC','0')!='0'   # the probed wrap section was fragile (faceLen +5 %)
+S.SHELL_S=(0.33,0.67); S.NCTRL=9; S.DESIGN.update(on=True,gamma=0.7,pinch=4.0,arc=True,pw=0.15)
 KEY=json.load(open(S.REF))['sil'] if os.path.exists(S.REF) else None
 def build(p): return S.build_v2(p)
 def plan(p):
@@ -22,6 +24,6 @@ def dims(p, body):
         dev={'x=%s %s'%(x,k):round(abs(s[x][k]-KEY[x][k]),2) for x in s for k in ('headY','neckY','pinch')}
         out['deviationFromAttempt3Mm']=dev; out['worstMm']=max(dev.values())
         out['centrelineWorstMm']=max(v for k,v in dev.items() if k.startswith('x=0 '))
-        out['ok']=out['centrelineWorstMm']<=0.5   # off-centre dims are information: option A removed the band
+        out["ok"]=out["worstMm"]<=1.5   # key dims of the out3 table (option A removed the band; 1.5 mm budget)
     out['fairness']=S.fairness(body)
     return out

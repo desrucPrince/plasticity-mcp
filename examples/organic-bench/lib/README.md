@@ -27,7 +27,9 @@ A loft is G2 only across its two end profiles. Its two other sides (guides) are 
 | `plane_curve(plane, pts, **ends)` | 2D control or interpolate curve. `startTangent` and `startCurvatureZero` give G2-ready ends. |
 | `bspline.fit(points, n)` | Least-squares cubic B-spline (fixed ends) for a smooth section from probed points. |
 
-`gate.py`: `evaluate(body, plan)` checks a body against a per-edge continuity plan. Selectors are `zRing`, `xPlaneEdge`, `vertical`, `nearPointMm`, `endsNearMm`, `edgeIds` and `rest`. Targets are `G2`, `G1`, `G0`, `sharp` and `any`. It returns pass/fail per edge and the first failure. When the server has `plasticity_check_continuity_plan` (branch `feat/surface-consistency`), use that instead: it carries the mixed G2 tolerance and the native-maximum cross-check.
+`gate.py`: `evaluate(body, plan)` checks a body against a per-edge continuity plan. Selectors are `zRing`, `xPlaneEdge`, `vertical`, `nearPointMm`, `endsNearMm`, `edgeIds` and `rest`. Targets are `G2`, `G1`, `G0`, `sharp` and `any`. It returns pass/fail per edge and the first failure. When the server has `plasticity_check_continuity_plan` (branch `feat/surface-consistency`), `evaluate` resolves the selectors to edge ids and lets that tool judge them (mixed G2 tolerance, native-maximum cross-check); otherwise it falls back to the local evaluator.
+
+`run_fresh.sh LABEL PORT [MCP_ROOT]` starts a fresh isolated Plasticity window, runs the whole sweep (`run_bench.py --sweep`) and closes the window.
 
 ## Recipes (`../shapes`)
 
@@ -38,7 +40,9 @@ A loft is G2 only across its two end profiles. Its two other sides (guides) are 
 | `s3_bottle` | body/shoulder/neck, G2 by a G2 meridian, revolved | passes, ±5 % sweep |
 | `s5_dome` | ring/dome, Indie patch g2 on a circular hole | passes, ±5 % sweep |
 | `s0*` | negative controls: curvature jump, 0.3° crease, old speaker flank/side | gate fails them, as required |
-| `s4_speaker` | flank, symmetric shell and wrap lofts | see `../REPORT.md` |
+| `s4_speaker_bench` (option A, no band) | flank↔shell and flank↔wrap G2 by clamped lofts; one shell loft (no centre seam); sections are a generated family (`DESIGN`), not fits | passes ±5 % and ±3° tilt, 3 fresh runs |
+
+Recipe rule learned the hard way: generate shaping sections from design curves (blends, offsets). Sections fitted to a frozen model rippled or broke native lofts under ±5 % changes.
 
 ## Known native limits (26.1.3)
 
