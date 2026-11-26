@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -22,6 +23,8 @@ import {
   type DenseContinuitySamples,
   type Vector3,
 } from "./surfacing.ts";
+import { CROSS_EDGE_EVALUATOR_SOURCE, FACE_PARAMETER_CLAMP_SOURCE, PlasticityOperations } from "./operations.ts";
+import type { PlasticityRuntime } from "./runtime.ts";
 
 // Continuity gate (spec bench/specs/gate.md): the mixed G2 rule, effective classes, the native-maximum cross-check and the
 // plan evaluation, on synthetic samples.
@@ -394,4 +397,106 @@ test("C2: curvatureRangeSlice keeps [t0, t1] of the arc length with values inter
   const uneven: Vector3[] = [[0, 0, 0], [1, 0, 0], [9, 0, 0], [10, 0, 0]];
   assert.deepEqual(curvatureRangeSlice(uneven, [0, 1, 2, 3], [0.05, 0.95]).map((value) => Number(value.toFixed(9))), [0.5, 1, 2, 2.5]);
   for (const bad of [[0.5, 0.5], [-0.1, 0.5], [0.2, 1.1], [0.6, 0.4]] as Array<[number, number]>) assert.throws(() => curvatureRangeSlice(positions, magnitudes, bad), /curvatureRange must be/);
+});
+
+// ---------------------------------------------------------------- review follow-ups ----------------------------------------------------------------
+test("follow-up 1: on a resampled row the samples are the measurement, so effectiveClass has no native G2 term", () => {
+  // The reviewer's case: 100 samples 1.8e-5 vs 8.4e-4 /mm, relative 0.958, no curvature at a native location.
+  const s = samples(1.8e-5, 8.4e-4, { g2Rel: () => 0.958, nativeK: null });
+  delete (s as { nativeG2CurvaturePerMm?: unknown }).nativeG2CurvaturePerMm;
+  const native = { g0Mm: 0, g1Deg: 0, g2Rel: 0.958 };
+  // Without the flag the relative maximum stands in for the native G2 term: G1 although every sample passes.
+  assert.equal(continuityGateSummary(s, native, TOL).effectiveClass, "G1");
+  const resampled = continuityGateSummary(s, native, TOL, [], { samplesAreMeasurement: true });
+  assert.equal(resampled.effectiveClass, "G2");
+  assert.equal(resampled.effectiveInteriorClass, "G2");
+  assert.equal(resampled.g2.status, "flat-across");
+  // withContinuitySummary sets the flag from measurementSource.
+  const row = { measurementSource: "resampled", maximumPositionDeviationMm: 0, maximumNormalAngleDeviationDeg: 0, maximumRelativeCurvatureDeviation: 0.958, samples: s };
+  const summarized = withContinuitySummary(row, TOL, false, { absoluteCurvaturePerMm: 0.001 }) as Record<string, unknown>;
+  assert.equal(summarized.effectiveContinuity, "G2");
+  assert.equal(summarized.g2NotMeasurable, true);
+  // A real mismatch on a resampled row still fails.
+  const bad = samples(0.077, 0.0019, { nativeK: null });
+  assert.equal(continuityGateSummary(bad, nativeOf(bad), TOL, [], { samplesAreMeasurement: true }).effectiveClass, "G1");
+});
+
+test("follow-up 3: without the +-2 mm window (no location, or a read error) agrees false never overrides the native maximum", () => {
+  const tol = { ...TOL, normalAngleDeg: 0.5 };
+  const s = samples(1e-5, 3e-4, { g1Deg: () => 0.058 });
+  const native = nativeOf(s, { g1Deg: 90, g1AtMm: [31, 19, 125] });
+  const need = nativeMaximumChecksNeeded(s, native, tol)[0]!;
+  const quiet = dense([0.059, 0.02]);
+  const ok = nativeMaximumCheckOutcome(need, quiet, tol);
+  assert.deepEqual([ok.agrees, ok.overrides, ok.localWindowMissing, ok.error], [false, true, undefined, undefined]);
+  const failed = nativeMaximumCheckOutcome(need, quiet, tol, { error: "window read failed" });
+  assert.deepEqual([failed.agrees, failed.overrides, failed.error], [false, false, "window read failed"]);
+  const noLocation = nativeMaximumCheckOutcome({ ...need, atMm: null }, quiet, tol);
+  assert.deepEqual([noLocation.agrees, noLocation.overrides, noLocation.localWindowMissing], [false, false, true]);
+  assert.equal(nativeMaximumCheckOutcome(need, quiet, tol, { missing: true }).overrides, false);
+  // The native 90 degrees stands in the effective classes when the check cannot override.
+  assert.equal(continuityGateSummary(s, native, tol, [ok]).effectiveClass, "G2");
+  for (const check of [failed, noLocation]) {
+    const g = continuityGateSummary(s, native, tol, [check]);
+    assert.equal(g.effectiveClass, "G0");
+    assert.equal(g.effectiveMaxima.g1Deg, 90);
+  }
+});
+
+test("follow-up 2: the face parameter clamp moves a parameter just outside the face's parameter bounds onto them, and nothing else", () => {
+  // The Face API's parameters are normalized over face.GetSurface() uMin..uMax / vMin..vMax (live: raw = uMin + u (uMax - uMin)).
+  const make = (0, eval)(FACE_PARAMETER_CLAMP_SOURCE) as (face: unknown) => (u: number, v: number) => [number, number];
+  const face = (bounds: Record<string, number>) => ({ GetSurface: () => bounds });
+  const clamp = make(face({ uMin: -14.547, uMax: -0.023, vMin: 0, vMax: 4 }));
+  // Inside: unchanged, exactly.
+  assert.deepEqual(clamp(0.3, 0.999), [0.3, 0.999]);
+  assert.deepEqual(clamp(0, 1), [0, 1]);
+  // Within 1e-3 of the range outside: onto the bound (u -9e-6 and -3.7e-4 were live cases).
+  assert.deepEqual(clamp(-9e-6, 1 + 5e-5), [0, 1]);
+  assert.deepEqual(clamp(-3.7e-4, 1 + 9e-4), [0, 1]);
+  // Farther out than 1e-3 of the range: unchanged (not a boundary rounding).
+  assert.deepEqual(clamp(-0.005, 1.01), [-0.005, 1.01]);
+  // Bounds unreadable or degenerate: unchanged.
+  assert.deepEqual(make(face({ uMin: Number.NaN, uMax: 1, vMin: 0, vMax: 1 }))(-9e-6, 0.5), [-9e-6, 0.5]);
+  assert.deepEqual(make({ GetSurface: () => { throw new Error("no surface"); } })(-9e-6, 0.5), [-9e-6, 0.5]);
+  assert.deepEqual(make(face({ uMin: 0, uMax: 0, vMin: 0, vMax: 1 }))(-9e-6, 0.5), [-9e-6, 0.5]);
+  // Every continuity EvalBasis read goes through it: the shared evaluator, the resample block and the absolute-curvature read.
+  assert.match(CROSS_EDGE_EVALUATOR_SOURCE, /face\.EvalBasis\(\.\.\.clamps\[k\]\(near\.u, near\.v\)\)/);
+  assert.doesNotMatch(CROSS_EDGE_EVALUATOR_SOURCE, /EvalBasis\(near\.u, near\.v\)/);
+  const source = readFileSync(new URL("./operations.ts", import.meta.url), "utf8");
+  const calls = source.match(/EvalBasis\([^;]*;/g) ?? [];
+  assert.equal(calls.length, 3, calls.join("\n"));
+  assert.ok(calls.every((call) => /clamps\[k\]|clampsAB\[k\]|FACE_PARAMETER_CLAMP_SOURCE/.test(call)), calls.join("\n"));
+});
+
+test("follow-up 3 wiring: nativeMaximumChecks reads each need's +-2 mm window from the dense read (error, empty, good)", async () => {
+  const tol = { ...TOL, normalAngleDeg: 0.5 };
+  const at: Vector3 = [31, 19, 125];
+  const row = (edgeId: string) => ({
+    edge: { bodyId: 317, edgeId }, adjacentFaces: [{ faceId: "fa" }, { faceId: "fb" }], bodyVersionId: 9,
+    maximumPositionDeviationMm: 0, maximumNormalAngleDeviationDeg: 90, maximumRelativeCurvatureDeviation: 1, maximumNormalAngleDeviationAtMm: at,
+    samples: samples(1e-5, 3e-4, { g1Deg: () => 0.058 }),
+  });
+  const series = (edgeId: string, local: unknown[], windowPoints: Array<Vector3 | null>) => ({
+    edgeId, g0Mm: [0, 0, ...windowPoints.map(() => 0)], g1Deg: [0.05, 0.02, ...windowPoints.map((p) => (p ? 0.03 : null))],
+    side1PerMm: [0, 0, ...windowPoints.map(() => 0)], side2PerMm: [0, 0, ...windowPoints.map(() => 0)], pointsMm: [[0, 0, 0], [1, 0, 0], ...windowPoints], local,
+  });
+  let sent: any;
+  const runtime = { async readNative(_source: string, _bindings: string[], values: unknown[]) {
+    sent = values[0];
+    return [
+      series("e-error", [{ atMm: at, error: "kernel refused" }], []),
+      series("e-empty", [{ atMm: at, startIndex: 2, count: 2 }], [null, null]),
+      series("e-good", [{ atMm: at, startIndex: 2, count: 2 }], [[30, 19, 125], [31, 19, 125]]),
+    ];
+  } } as unknown as PlasticityRuntime;
+  const operations = new PlasticityOperations(runtime);
+  const out = await operations.nativeMaximumChecks(["e-error", "e-empty", "e-good"].map((edgeId) => ({ row: row(edgeId), tolerances: tol })));
+  assert.deepEqual(sent.edges.map((edge: { locationsMm: Vector3[] }) => edge.locationsMm), [[at], [at], [at]]);
+  const [error, empty, good] = out.map((entry) => entry.checks[0]!);
+  assert.deepEqual([error!.agrees, error!.overrides], [false, false]);
+  assert.match(error!.error!, /could not be read: kernel refused/);
+  assert.deepEqual([empty!.agrees, empty!.overrides], [false, false]);
+  assert.match(empty!.error!, /read no points/);
+  assert.deepEqual([good!.agrees, good!.overrides, good!.error], [false, true, undefined]);
 });

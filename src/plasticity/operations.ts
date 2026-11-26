@@ -6,7 +6,7 @@ import { basename, dirname, extname, join, resolve } from "node:path";
 
 import { NATIVE_VIEWPORT_CAPTURE } from "./viewport-capture.ts";
 import { CONTINUITY_PLAN_DEFAULTS, continuityGateSummary, evaluateContinuityPlan, matchContinuityPlan, planItemCheckLevels, planItemTolerances, type ContinuityGateSummary, type ContinuityPlanDefaults, type ContinuityPlanEdgeResult, type ContinuityPlanItem } from "./surfacing.ts";
-import { DEFAULT_ABSOLUTE_CURVATURE_TOLERANCE_PER_MM, curvatureRangeSlice, continuityRowNativeMaxima, nativeMaximumCheckOutcome, nativeMaximumChecksNeeded, requireAbsoluteCurvatureTolerance, type ContinuityGateSamples, type ContinuityGateTolerances, type DenseContinuitySamples, type NativeMaximumCheck, type NativeMaximumLevel } from "./surfacing.ts";
+import { DEFAULT_ABSOLUTE_CURVATURE_TOLERANCE_PER_MM, curvatureRangeSlice, continuityRowNativeMaxima, nativeMaximumCheckOutcome, nativeMaximumChecksNeeded, requireAbsoluteCurvatureTolerance, type ContinuityGateSamples, type ContinuityGateTolerances, type DenseContinuitySamples, type NativeMaximumCheck, type NativeMaximumLevel, type NativeMaximumNeed } from "./surfacing.ts";
 import { BRIDGE_FAILURE_ADVICE, SPLIT_EDGE_MIN_PIECE_MM, SPLIT_EDGE_MAX_PROJECTION_MM, withContinuitySummary, curvatureProfile, bridgeEdgePair, checkSplitPieces, bridgeOutcome, clampContinuityMaxima, continuityClass, planeCurveWorldPoints, applyCurveEndConstraints, requireSplitEdge, splitEdgeOutcome, validateEdgeSplitRequest, resolveCurvePlane, wireJunctions, worstFirst, type ContinuityReportClass, type CurvatureSampleInput, type CurvePlaneName } from "./surfacing.ts";
 import { checkPatchBoundary, describePatchPrecheck, PATCH_BOUNDARY_SOURCE, PATCH_HOLE_ERROR_ADVICE, patchHoleErrorCode, patchPrecheckInputFromNative, type NativePatchBoundary, type PatchPrecheckResult } from "./surfacing.ts";
 import { boundsExactness, CAMERA_RESTORE_TOLERANCE, PENDING_VIEW_SAME_POSE, PROBE_SURFACE_COLLECT_ABOVE_MB, PROBE_SURFACE_HEAP_CHECK_EVERY_RAYS, exactBounds, explainXNurbsError, probeSurface, SCREENSHOT_VIEW_SOURCE, type ScreenshotViewRestored, SQUARE_ENDS_SOURCE, squareClosureProblem, SURFACE_ALIGN_CONTINUITY, SURFACE_ALIGN_COINCIDENCE_MM, SURFACE_ALIGN_DRIVE, SURFACE_ALIGN_FALLBACK_WAIT_MS, SURFACE_ALIGN_READBACK_SOURCE, SURFACE_ALIGN_READY_MS, SURFACE_ALIGN_TIMEOUTS, type AlignReadBackNative, type SurfaceAlignContinuity, readSupportBounds, supportBounds, validateScreenshotView, withScreenshotView, type ExactBoundsEvidence, type ProbeSurfaceEvidence, type ProbeSurfaceRequest, type ScreenshotViewOptions } from "./surfacing.ts";
@@ -684,6 +684,37 @@ export const FACE_DISTANCES_SOURCE = nativeFunction`function (pk_default, args) 
   return { distances };
 }`;
 
+// Face parameter clamp (continuity gate follow-up 2), shared by every EvalBasis read of the continuity tools. The Face
+// API (FindPointNear, GetPoint, EvalBasis) takes parameters normalized over the face's parameter bounds, the
+// face.GetSurface() uMin..uMax / vMin..vMax that plasticity_inspect_surface_structure reports as faceParameterBounds:
+// live 26.1.3 on all 28 faces of a body (planes, B-surfaces, a cylinder), the carrier surface's own GetPoint at
+// uMin + u (uMax - uMin) matched face.GetPoint(u, v) within 3e-14 mm, while GetPoint(u, v) on the carrier did not. At a
+// face boundary FindPointNear can return a parameter just outside those bounds (u -9e-6), where EvalBasis extrapolates
+// and its curvatures are wrong (-2.1 against -4.9 /m; a finite difference of the normal and the mirrored edge read 4.9).
+// So a parameter outside the bounds by at most 1e-4 of their range is moved onto the bound; inside, or farther out, it is
+// passed on unchanged, as it is when the bounds cannot be read. A JavaScript expression (face) => (u, v) => [u, v].
+// The window, as a fraction of each parameter range (one edit to change it).
+export const FACE_PARAMETER_CLAMP_WINDOW = 1e-3;
+export const FACE_PARAMETER_CLAMP_SOURCE = `((face) => {
+  let bounds = null;
+  try {
+    const carrier = face.GetSurface();
+    const b = [Number(carrier.uMin), Number(carrier.uMax), Number(carrier.vMin), Number(carrier.vMax)];
+    if (b.every(Number.isFinite) && b[1] > b[0] && b[3] > b[2]) bounds = b;
+  } catch (error) { bounds = null; }
+  // Normalized parameter x of the range [lo, hi]: raw = lo + x (hi - lo); the window is FACE_PARAMETER_CLAMP_WINDOW of the range.
+  const into = (x, lo, hi) => {
+    const raw = lo + x * (hi - lo), slack = ${FACE_PARAMETER_CLAMP_WINDOW} * (hi - lo);
+    const clamped = raw < lo && raw >= lo - slack ? lo : raw > hi && raw <= hi + slack ? hi : raw;
+    return clamped === raw ? x : (clamped - lo) / (hi - lo);
+  };
+  return (u, v) => {
+    const nu = Number(u), nv = Number(v);
+    if (!bounds || !Number.isFinite(nu) || !Number.isFinite(nv)) return [u, v];
+    return [into(nu, bounds[0], bounds[1]), into(nv, bounds[2], bounds[3])];
+  };
+})`;
+
 // Continuity gate (shared by the per-sample read in analyzeSurfaceContinuity and the dense native-maximum resample): an
 // evaluator over the two faces of an edge. Given an edge point and tangent (kernel units, metres) it projects the point
 // onto both faces (FindPointNear, EvalBasis) and returns the G0 gap (mm), the angle between the face normals (degrees) and
@@ -696,17 +727,12 @@ export const CROSS_EDGE_EVALUATOR_SOURCE = `((faces) => {
   const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   const senses = faces.map(face => { try { return face.GetSurface?.()?.orientation === false ? -1 : 1; } catch (error) { return 1; } });
-  // Face.FindPointNear / EvalBasis use the face's normalized parameters, 0..1 (live 26.1.3: every edge point of 28 faces
-  // of two bodies projected inside the unit square, whatever the surface's own uMin..vMax). At a face boundary the
-  // nearest point can come back just outside it (u -9e-6), where EvalBasis extrapolates and its curvatures are wrong
-  // (-2.1 against -4.9 /m; a finite difference of the normal and the mirrored edge read 4.9). Such a parameter, within
-  // 0.01 outside 0..1, is clamped onto the boundary before EvalBasis.
-  const into = x => (x < 0 && x >= -0.01 ? 0 : x > 1 && x <= 1.01 ? 1 : x);
+  const clamps = faces.map(face => (${FACE_PARAMETER_CLAMP_SOURCE})(face));
   return (position, tangentVector) => {
     const t = unit(read(tangentVector));
     const sides = faces.map((face, k) => {
       const near = face.FindPointNear(position);
-      const basis = face.EvalBasis(into(Number(near.u)), into(Number(near.v)));
+      const basis = face.EvalBasis(...clamps[k](near.u, near.v));
       const n = unit(read(basis.normal));
       const u = unit(read(basis.uDirection)), w = unit(read(basis.vDirection));
       const d = n && t ? unit(cross3(n, t)) : null;
@@ -2889,7 +2915,7 @@ export class PlasticityOperations {
               const face = faces.find(candidate => Number(candidate.Id()) === Number(topologyId));
               if (!face) return null;
               const near = face.FindPointNear(onEdge.exact);
-              const basis = face.EvalBasis(near.u, near.v);
+              const basis = face.EvalBasis(...(${FACE_PARAMETER_CLAMP_SOURCE})(face)(near.u, near.v));
               const u = unit(basis.uDirection), w = unit(basis.vDirection);
               if (!u || !w || !(tl > 0)) return null;
               const cosU = Math.abs(u[0] * t[0] + u[1] * t[1] + u[2] * t[2]) / tl, cosV = Math.abs(w[0] * t[0] + w[1] * t[1] + w[2] * t[2]) / tl;
@@ -2955,6 +2981,7 @@ export class PlasticityOperations {
               const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
               const sense = face => { try { return face.GetSurface?.()?.orientation === false ? -1 : 1; } catch (error) { return 1; } };
               const senses = [sense(faceA), sense(faceB)];
+              const clampsAB = [faceA, faceB].map(face => (${FACE_PARAMETER_CLAMP_SOURCE})(face));
               const g0 = [], g1 = [], g2 = [], points = [], kA = [], kB = [];
               let offFace = 0;
               for (let i = 0; i < 100; i += 1) {
@@ -2963,7 +2990,7 @@ export class PlasticityOperations {
                 const t = unit(read(at.tangent));
                 const sides = [faceA, faceB].map((face, k) => {
                   const near = face.FindPointNear(at.position);
-                  const basis = face.EvalBasis(near.u, near.v);
+                  const basis = face.EvalBasis(...clampsAB[k](near.u, near.v));
                   const n = unit(read(basis.normal));
                   const u = unit(read(basis.uDirection)), w = unit(read(basis.vDirection));
                   const d = n && t ? unit(cross3(n, t)) : null;
@@ -3098,7 +3125,18 @@ export class PlasticityOperations {
     requests.forEach((request, k) => {
       const series = dense[k]!;
       if (series.edgeId !== request.edgeId) throw new Error("Plasticity returned dense continuity samples for an unexpected edge");
-      out[request.index] = { checks: needs[request.index]!.map((need) => nativeMaximumCheckOutcome(need, series, entries[request.index]!.tolerances)) };
+      // The +-2 mm window of each need (follow-up 3): without it the dense value never overrides the native maximum.
+      const windows = (series as unknown as { local?: Array<{ atMm: Vector3; startIndex?: number; count?: number; error?: string }> }).local ?? [];
+      const windowOf = (need: NativeMaximumNeed): { missing?: boolean; error?: string } => {
+        if (!need.atMm) return { missing: true };
+        const entry = windows.find((candidate) => Array.isArray(candidate.atMm) && candidate.atMm.every((value, axis) => Math.abs(value - need.atMm![axis]!) < 1e-6));
+        if (!entry) return { missing: true };
+        if (entry.error !== undefined) return { error: `the +-2 mm window around the native maximum could not be read: ${entry.error}` };
+        const start = entry.startIndex ?? -1, count = entry.count ?? 0;
+        const read = start >= 0 ? series.pointsMm.slice(start, start + count).filter((point) => point !== null).length : 0;
+        return read > 0 ? {} : { error: "the +-2 mm window around the native maximum read no points" };
+      };
+      out[request.index] = { checks: needs[request.index]!.map((need) => nativeMaximumCheckOutcome(need, series, entries[request.index]!.tolerances, windowOf(need))) };
     });
     return out;
   }
@@ -3152,7 +3190,7 @@ export class PlasticityOperations {
     entries.forEach((entry, k) => {
       const samples = entry.row.samples as ContinuityGateSamples | undefined;
       checksByKey.set(entry.key, checked[k]!);
-      if (samples) gates.set(entry.key, continuityGateSummary(samples, continuityRowNativeMaxima(entry.row), entry.tolerances, checked[k]!.checks));
+      if (samples) gates.set(entry.key, continuityGateSummary(samples, continuityRowNativeMaxima(entry.row), entry.tolerances, checked[k]!.checks, { samplesAreMeasurement: entry.row.measurementSource === "resampled" }));
     });
     const result = evaluateContinuityPlan(request.plan, matches, (itemIndex, edgeId) => gates.get(`${itemIndex}:${edgeId}`), { twoFaceEdgeIds: twoFace.map((edge) => edge.id), seamEdgeIds, defaults });
     // Per edge, the cross-check where it ran (additive to the spec's edge row), in the report's shape: the lowest
@@ -3170,7 +3208,7 @@ export class PlasticityOperations {
       revision: state.revision,
       bodyId: body.id,
       ...result,
-      nativeMaximumDisagreements: [...checksByKey.entries()].filter(([, value]) => value.checks.some((check) => !check.agrees)).map(([key]) => key.slice(key.indexOf(":") + 1)),
+      nativeMaximumDisagreements: [...checksByKey.entries()].filter(([, value]) => value.checks.some((check) => check.overrides)).map(([key]) => key.slice(key.indexOf(":") + 1)),
       tolerances: { defaults: { ...CONTINUITY_PLAN_DEFAULTS, ...Object.fromEntries(Object.entries(defaults).filter(([, value]) => value !== undefined)) } },
     };
   }
@@ -3281,7 +3319,7 @@ export class PlasticityOperations {
       const effectiveInteriorCounts = { G2: 0, G1: 0, G0: 0, none: 0 } as Record<ContinuityReportClass, number>;
       for (const edge of edges) { counts[edge.class] += 1; if (edge.interiorClass) interiorCounts[edge.interiorClass] += 1; ignoringSpikesCounts[edge.classIgnoringIsolatedSpikes ?? edge.class] += 1; }
       for (const edge of edges) { if (edge.effectiveClass) effectiveCounts[edge.effectiveClass] += 1; if (edge.effectiveInteriorClass) effectiveInteriorCounts[edge.effectiveInteriorClass] += 1; }
-      const disagrees = (check: unknown) => { const own = check as (NativeMaximumCheck & { alsoChecked?: NativeMaximumCheck[] }) | undefined; return own !== undefined && [own, ...(own.alsoChecked ?? [])].some((entry) => !entry.agrees); };
+      const disagrees = (check: unknown) => { const own = check as (NativeMaximumCheck & { alsoChecked?: NativeMaximumCheck[] }) | undefined; return own !== undefined && [own, ...(own.alsoChecked ?? [])].some((entry) => entry.overrides); };
       edgeReport = {
         bodyId: body.id,
         twoFaceEdgeCount: twoFace.length,

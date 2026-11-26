@@ -2101,7 +2101,7 @@ export function withContinuitySummary<T extends Record<string, unknown>>(row: T,
   const native = continuityRowNativeMaxima(row);
   const summary = continuitySampleSummary(samples, native, tolerances, Array.isArray(row.edgeEndsMm) ? row.edgeEndsMm as Vector3[] : []);
   // Continuity gate (additive): the mixed G2 rule and the native-maximum cross-check; every earlier field is unchanged.
-  const effective = gate ? continuityGateSummary(samples, native, { ...tolerances, absoluteCurvaturePerMm: gate.absoluteCurvaturePerMm }, gate.checks ?? []) : undefined;
+  const effective = gate ? continuityGateSummary(samples, native, { ...tolerances, absoluteCurvaturePerMm: gate.absoluteCurvaturePerMm }, gate.checks ?? [], { samplesAreMeasurement: row.measurementSource === "resampled" }) : undefined;
   return {
     ...rest,
     ...(summary.interiorClass ? { interiorContinuity: analyzeClassName(summary.interiorClass) } : {}),
@@ -2454,6 +2454,12 @@ export interface NativeMaximumCheck {
   dense: { max: number; atMm: Vector3 | null; count: number; failingCount: number; absDifferenceMaxPerMm?: number };
   /** The dense resample also fails the tolerance at this level, so the native maximum stands. */
   agrees: boolean;
+  /** The dense maximum replaces the native one in the effective classes: it disagrees and the +-2 mm window around the native location was read. */
+  overrides: boolean;
+  /** The native maximum had no location, so no +-2 mm window was read: the native value stands. */
+  localWindowMissing?: true;
+  /** The +-2 mm window could not be read: the native value stands. */
+  error?: string;
 }
 export interface ContinuityGateSummary {
   curvatureAcross: CurvatureAcrossSummary;
@@ -2497,8 +2503,19 @@ export function nativeMaximumChecksNeeded(samples: ContinuityGateSamples, native
   return needs;
 }
 
-/** agree/disagree for one level: agrees when the dense resample also fails the tolerance there (or read nothing). */
-export function nativeMaximumCheckOutcome(need: NativeMaximumNeed, dense: DenseContinuitySamples, tolerances: ContinuityGateTolerances): NativeMaximumCheck {
+/**
+ * agree/disagree for one level: agrees when the dense resample also fails the tolerance there (or read nothing). The
+ * dense value overrides the native maximum only when it disagrees AND the +-2 mm window around the native location was
+ * read (local: missing when the native maximum has no location, error when the window read failed); otherwise the native
+ * value stands and the check says why.
+ */
+export function nativeMaximumCheckOutcome(need: NativeMaximumNeed, dense: DenseContinuitySamples, tolerances: ContinuityGateTolerances, local: { missing?: boolean; error?: string } = {}): NativeMaximumCheck {
+  const decided = nativeMaximumDenseDecision(need, dense, tolerances);
+  const missing = local.missing === true || need.atMm === null;
+  const windowFields = { ...(missing ? { localWindowMissing: true as const } : {}), ...(local.error !== undefined ? { error: local.error } : {}) };
+  return { ...decided, overrides: !decided.agrees && !missing && local.error === undefined, ...windowFields };
+}
+function nativeMaximumDenseDecision(need: NativeMaximumNeed, dense: DenseContinuitySamples, tolerances: ContinuityGateTolerances): Omit<NativeMaximumCheck, "overrides"> {
   const native = { value: need.value, atMm: need.atMm };
   if (need.level === "G2") {
     let count = 0, failingCount = 0, max = 0, absMax = 0;
@@ -2535,7 +2552,7 @@ export function nativeMaximumCheckOutcome(need: NativeMaximumNeed, dense: DenseC
  * flat-across when every interior sample does and none fails (then g2NotMeasurable: the class still reads G2), partly-flat
  * otherwise.
  */
-export function continuityGateSummary(samples: ContinuityGateSamples, native: ContinuityNativeMaxima, tolerances: ContinuityGateTolerances, checks: NativeMaximumCheck[] = []): ContinuityGateSummary {
+export function continuityGateSummary(samples: ContinuityGateSamples, native: ContinuityNativeMaxima, tolerances: ContinuityGateTolerances, checks: NativeMaximumCheck[] = [], options: { samplesAreMeasurement?: boolean } = {}): ContinuityGateSummary {
   const n = samples.g1Deg.length;
   if (n === 0 || samples.g0Mm.length !== n || samples.g2Rel.length !== n) throw new Error("Continuity samples must be equal-length series");
   if (samples.curvatureAcross && (samples.curvatureAcross.side1PerMm.length !== n || samples.curvatureAcross.side2PerMm.length !== n)) throw new Error("Curvature-across samples must match the continuity samples");
@@ -2563,13 +2580,15 @@ export function continuityGateSummary(samples: ContinuityGateSamples, native: Co
     flatSamples: verdicts.filter((sample) => sample.verdict === "flat").length,
     measurableSamples: verdicts.filter((sample) => sample.verdict !== "flat").length,
   };
-  const disagrees = (level: NativeMaximumLevel) => checks.find((check) => check.level === level && !check.agrees);
+  const disagrees = (level: NativeMaximumLevel) => checks.find((check) => check.level === level && check.overrides);
   const nativeOr = (level: NativeMaximumLevel, value: number) => { const check = disagrees(level); return check ? check.dense.max : value; };
   const effectiveMaxima = {
     g0Mm: Math.max(nativeOr("G0", native.g0Mm), ...samples.g0Mm),
     g1Deg: Math.max(nativeOr("G1", native.g1Deg), ...samples.g1Deg),
   };
-  const g2All = verdicts.every((sample) => sample.verdict !== "fail") && (disagrees("G2") !== undefined || nativeG2Verdict(samples, native, tolerances) !== "fail");
+  // On a resampled row the samples are the measurement (its "native" maxima are the samples' own), so there is no
+  // separate native G2 maximum to judge (follow-up 1: it fell back to the relative maximum and read G1 when every sample passed).
+  const g2All = verdicts.every((sample) => sample.verdict !== "fail") && (options.samplesAreMeasurement === true || disagrees("G2") !== undefined || nativeG2Verdict(samples, native, tolerances) !== "fail");
   const g2Interior = failingSampleCount === 0;
   const classOf = (g2Passes: boolean): ContinuityReportClass => {
     if (!(effectiveMaxima.g0Mm <= tolerances.positionMm)) return "none";

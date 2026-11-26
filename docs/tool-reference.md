@@ -1718,16 +1718,32 @@ R 1000 mm; it must be finite and greater than 0) sets the mixed G2 rule. At each
 of the 100 samples the server reads the signed normal curvature across the edge
 on both faces (`k1`, `k2`, 1/mm): Euler's formula in the direction n x t, the
 kernel sign turned by the face sense, and side 2 turned to agree with side 1's
-normal. The face API works in the face's normalized parameters, 0 to 1; a
-parameter that the kernel's nearest-point read returns just outside that range
-(by at most 0.01) is clamped onto the boundary first, because the kernel's
-curvatures there are wrong (live: -2.1 against -4.9 /m at u = -9e-6, where a
-finite difference of the normal read 4.9 and the mirrored edge read 4.9). With the clamp, on all 7,400 samples of each desk
-speaker file (`baseline`, `methodB`) no sample passed the relative test by
-k1/k2 while failing it natively; where the two relative values differ by more
-than 0.01, the sample is flat (|k1 - k2| <= 0.001 /mm), fails both, or lies on
-a crease edge (interior normal angle above 30 deg, where the native relative
-value sometimes reads 0 against a plane). A sample passes G2 when `|k1 - k2| <= relativeCurvatureTolerance *
+normal. The face API (`FindPointNear`, `GetPoint`, `EvalBasis`) takes
+parameters normalized over the face's parameter bounds, the
+`face.GetSurface()` uMin..uMax and vMin..vMax that
+`plasticity_inspect_surface_structure` reports as `faceParameterBounds` (live:
+on all 28 faces of a body, the carrier surface's point at
+uMin + u (uMax - uMin) matched the face's point within 3e-14 mm). A parameter
+that the nearest-point read returns outside those bounds by at most 1e-4 of
+their range is moved onto the bound before `EvalBasis`, because the kernel's
+curvatures outside are wrong (live: -2.1 against -4.9 /m at u = -9e-6, where a
+finite difference of the normal read 4.9 and the mirrored edge read 4.9).
+Inside the bounds, farther out, or without readable bounds, the parameter is
+used unchanged. The same clamp applies to the older reads: `absoluteCurvature`
+and the G0 resample. The window is `FACE_PARAMETER_CLAMP_WINDOW` (1e-3; live excursions on the attempt-3 speaker reached 3.7e-4 of the range, where the unclamped kernel curvature was wrong) in
+`src/plasticity/operations.ts`. Live on 26.1.3: on `methodB` every excursion
+was within it (largest 2.8e-5 of the range); on `baseline` 40 of 602 samples
+that lie outside lie beyond it (largest 3.7e-4 of the range, 0.004 mm), and
+there the kernel's curvature stays wrong (u = -2.4e-4: 14.2 unclamped against
+18.2 /m by finite difference and 18.7 clamped), so edge 1e2794 (71.4 mm) reads
+14 failing interior samples and effectiveInteriorClass G1 where a 0.01 window
+read G2. Over all 7,400 samples of each file no sample passed the relative test
+by k1/k2 while failing it natively, so the narrow window can only add G2
+failures, never hide one. Where the two relative values differ by more than
+0.01, the sample is flat (|k1 - k2| <= 0.001 /mm), fails both, lies on a
+crease edge (interior normal angle above 30 deg, where the native relative
+value sometimes reads 0 against a plane), or is one of those boundary samples.
+A sample passes G2 when `|k1 - k2| <= relativeCurvatureTolerance *
 (|k1| + |k2|)` or when `|k1 - k2| <= absoluteCurvatureTolerancePerMm`. A sample
 that passes only by the absolute term is "flat across": it passes, and it is
 counted as flat. Both sides at exactly 0 count as flat. A sample without both
@@ -1753,17 +1769,23 @@ while 0.077 against 0.0019, R5 against R10 (0.2/0.1) and a plane against R5
   with them.
 - `g2NotMeasurable: true` and `note: "G2 not measurable (flat across)"` when
   `g2.status` is `flat-across`. The effective class still reads G2 then.
-- `nativeMaximumCheck { level, native { value, atMm }, dense { max, atMm, count, failingCount }, agrees, alsoChecked? }`:
+- `nativeMaximumCheck { level, native { value, atMm }, dense { max, atMm, count, failingCount }, agrees, overrides, localWindowMissing?, error?, alsoChecked? }`:
   the native-maximum cross-check. It runs only when a native maximum fails its
   tolerance while all 100 samples pass at that level. The kernel then
   resamples the edge: 400 points by edge parameter t 0.001 to 0.999, and 101
   points within 2 mm (arc length) of the native-maximum location, each projected
   onto both faces (G0 gap, G1 normal angle, G2 mixed rule). `agrees` means the
-  dense maximum also fails. When it does not agree, the effective classes use
-  the dense value; `class` keeps the native one. `nativeMaximumCheckError` says
-  when the resample could not run (the native maximum then stands). Resampled
-  rows (`measurementSource: "resampled"`) are not cross-checked: their maxima
-  are their samples'.
+  dense maximum also fails. `overrides` is true when it does not agree and the
+  +-2 mm window around the native location was read; only then do the
+  effective classes use the dense value (`class` keeps the native one). Without
+  that window the native maximum stands: `localWindowMissing: true` when the
+  native maximum had no location, `error` when the window could not be read
+  or read no points. `nativeMaximumCheckError` says when the resample could not
+  run at all (the native maximum then stands). `nativeMaximumDisagreements`
+  lists the edges where a check overrides. Resampled rows
+  (`measurementSource: "resampled"`) are not cross-checked: their samples are
+  the measurement, so their effective classes have no separate native G2 term
+  either.
 
 `summary` adds `effectiveCounts`, `effectiveInteriorCounts` and
 `nativeMaximumDisagreements` (edge ids); the report echoes
@@ -3338,7 +3360,10 @@ with the same end vertices (either order) within 0.001 mm and the same length
 within 0.001 mm. The reply then says `allRemoved: false` with `remainingEdges
 [{ edgeId (the new id), lengthMm, endpointsMm }]` instead of a silent
 success; `allRemoved: true` when every requested edge is gone, and
-`allRemoved: null` with `deleteCheckNote` when the body could not be read back.
+`allRemoved: null` with `deleteCheckNote` when the body could not be read back
+or the check itself failed. The check uses the journal's own before and after
+reads (no extra state read), and its failure never turns a completed native
+delete into an error.
 Live on 26.1.3: deleting one edge of a 20 mm box "succeeded" natively and left
 12 edges; the reply read `allRemoved: false` with the edge under its new id.
 

@@ -233,3 +233,24 @@ test("C2: plasticity_continuity_report curvatureRange needs curvatureSamples, is
     }
   });
 });
+
+test("follow-up 4: a removal check that fails after a completed native delete returns allRemoved null with a note, not an error", async () => {
+  const good = { ...state("r1"), bodies: [{ id: 7, versionId: 70, type: "Solid", name: null, boundsMm: null, faceIds: [], edgeIds: ["e1"], faces: [], edges: [{ id: "e1", lengthMm: 10, centerMm: [0, 0, 0], faceIds: ["f1", "f2"], vertexIds: [1, 2] }], vertices: [] }] } as unknown as RuntimeState;
+  // After the delete the body reads back with edges the check cannot use (vertexIds missing): it throws inside.
+  const broken = { ...state("r2"), bodies: [{ id: 7, versionId: 71, type: "Solid", name: null, boundsMm: null, faceIds: [], edgeIds: ["e5"], faces: [], edges: [{ id: "e5", lengthMm: 10, centerMm: [0, 0, 0], faceIds: ["f1", "f2"] }] }] } as unknown as RuntimeState;
+  let current = good;
+  let reads = 0;
+  await withClient({
+    async state() { reads += 1; return current; },
+    async deleteEdges() { current = broken; return current; },
+  }, async (client) => {
+    const reply = await client.callTool({ name: "plasticity_delete_edges", arguments: { edges: [{ bodyId: 7, edgeId: "e1" }], revision: "r1" } });
+    assert.notEqual(reply.isError, true, text(reply));
+    const value = JSON.parse(text(reply));
+    assert.equal(value.allRemoved, null);
+    assert.match(value.deleteCheckNote, /removal check failed after the native delete completed/);
+    assert.equal(value.revision, "r2");
+  });
+  // The check uses the journal's before and after reads: no state read of its own.
+  assert.equal(reads, 2);
+});
